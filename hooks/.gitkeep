@@ -1,2 +1,0 @@
-# Hooks land here in #614 (S3): guard_append_only.py, ported from
-# agentfluent .claude/hooks/ and referenced via ${CLAUDE_PLUGIN_ROOT}/hooks/.
