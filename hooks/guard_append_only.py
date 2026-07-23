@@ -65,7 +65,10 @@ sandboxed; a bad pattern degrades to no-protection-with-a-warning, never a crash
 Emits a JSON decision on stdout and exits 0 (the modern pattern); exit 2 + stderr
 is the fail-closed fallback for an unparseable event.
 
-Cross-platform: stdlib only, no shell dependencies.
+The hook logic is stdlib-only with no shell dependencies. Note the manifest
+(`hooks/hooks.json`) launches it via `python3`, which assumes a POSIX
+environment where that name is on PATH (the loop is a bash/git/`gh` workflow);
+on Windows the launcher, not this script, is the portability limit.
 """
 
 from __future__ import annotations
@@ -152,6 +155,17 @@ def load_registry(project_dir: str | None) -> list[tuple[str, re.Pattern[str]]]:
             pattern = re.compile(pattern_src, re.MULTILINE)
         except re.error as e:
             warn(f"{sidecar} entry {i} id_pattern is not a valid regex: {e}; skipping")
+            continue
+        # The contract is "the first capture group is the entry ID". Enforce it:
+        # a 0-group pattern would capture whole heading lines (ID + prose); a
+        # >=2-group pattern makes re.findall return tuples, which downstream ID
+        # comparison cannot join -- a latent crash that, uncaught, would fail the
+        # guard OPEN. Reject anything but exactly one group, warn-and-skip.
+        if pattern.groups != 1:
+            warn(
+                f"{sidecar} entry {i} id_pattern must have exactly one capture "
+                f"group (the entry ID); found {pattern.groups}; skipping"
+            )
             continue
         registry.append((normalize(suffix), pattern))
     return registry
@@ -263,7 +277,20 @@ def main() -> int:
         )
         return 2
 
-    blocked, reason = check(event)
+    try:
+        blocked, reason = check(event)
+    except Exception as e:  # noqa: BLE001 -- fail closed on ANY unexpected error
+        # A guard against data loss must never let an internal error silently
+        # allow the write. Deny with the generic reason so the user sees a
+        # deliberate block rather than a non-blocking hook crash (exit 1).
+        print(
+            f"guard_append_only: internal error while evaluating the write, "
+            f"denying by default: {e}",
+            file=sys.stderr,
+        )
+        emit_decision("deny", DENY_REASON)
+        return 0
+
     if blocked:
         emit_decision("deny", reason)
     return 0

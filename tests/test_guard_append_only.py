@@ -186,9 +186,52 @@ class LoadRegistryTests(unittest.TestCase):
         import tempfile
 
         payload = json.dumps([{"suffix": SUFFIX}, {"id_pattern": SIDECAR_ID_PATTERN}])
-        with tempfile.TemporaryDirectory() as td, mock.patch.object(sys, "stderr", io.StringIO()):
+        with tempfile.TemporaryDirectory() as td, mock.patch.object(sys, "stderr", io.StringIO()) as err:
             self._sidecar(Path(td), payload)
             self.assertEqual(guard.load_registry(td), [])
+            # The "loud" half of fail-open-but-loud: both bad entries warn.
+            self.assertIn("no valid 'id_pattern'", err.getvalue())
+            self.assertIn("no valid 'suffix'", err.getvalue())
+
+    def test_non_dict_entry_is_skipped_loudly(self) -> None:
+        import tempfile
+
+        payload = json.dumps([123, "not-an-object"])
+        with tempfile.TemporaryDirectory() as td, mock.patch.object(sys, "stderr", io.StringIO()) as err:
+            self._sidecar(Path(td), payload)
+            self.assertEqual(guard.load_registry(td), [])
+            self.assertIn("is not an object", err.getvalue())
+
+    def test_multi_group_pattern_is_rejected_loudly(self) -> None:
+        # Regression: a >=2 capture-group pattern makes re.findall return tuples,
+        # which downstream would crash and fail the guard OPEN. It must be
+        # skipped at load time with a warning, never reach evaluate().
+        import tempfile
+
+        two_groups = "^##\\s+(D\\d+)(?:-([A-Za-z0-9]+))?"
+        payload = json.dumps([{"suffix": SUFFIX, "id_pattern": two_groups}])
+        with tempfile.TemporaryDirectory() as td, mock.patch.object(sys, "stderr", io.StringIO()) as err:
+            self._sidecar(Path(td), payload)
+            self.assertEqual(guard.load_registry(td), [])
+            self.assertIn("exactly one capture group", err.getvalue())
+
+    def test_zero_group_pattern_is_rejected_loudly(self) -> None:
+        import tempfile
+
+        no_groups = "^##\\s+D\\d+"  # matches, but captures nothing
+        payload = json.dumps([{"suffix": SUFFIX, "id_pattern": no_groups}])
+        with tempfile.TemporaryDirectory() as td, mock.patch.object(sys, "stderr", io.StringIO()) as err:
+            self._sidecar(Path(td), payload)
+            self.assertEqual(guard.load_registry(td), [])
+            self.assertIn("exactly one capture group", err.getvalue())
+
+    def test_empty_list_config_loads_as_inert(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td, mock.patch.object(sys, "stderr", io.StringIO()) as err:
+            self._sidecar(Path(td), "[]")
+            self.assertEqual(guard.load_registry(td), [])
+            self.assertEqual(err.getvalue(), "")  # a valid empty config is silent
 
 
 class CheckTests(unittest.TestCase):
@@ -302,6 +345,24 @@ class MainTests(unittest.TestCase):
                     mock.patch.object(sys, "stdin", io.StringIO(json.dumps(event))), \
                     mock.patch.object(sys, "stdout", out):
                 rc = guard.main()
+        self.assertEqual(rc, 0)
+        payload = json.loads(out.getvalue())
+        self.assertEqual(payload["hookSpecificOutput"]["permissionDecision"], "deny")
+
+    def test_fails_closed_on_unexpected_internal_error(self) -> None:
+        # Belt-and-suspenders: if check() raises for any reason, main must DENY
+        # (emit a decision), never let the write through via a non-blocking crash.
+        event = _write_event("/x/.claude/specs/decisions.md", _doc("001"))
+        out = io.StringIO()
+
+        def _boom(_event: dict) -> tuple[bool, str]:
+            raise RuntimeError("simulated internal failure")
+
+        with mock.patch.object(guard, "check", _boom), \
+                mock.patch.object(sys, "stdin", io.StringIO(json.dumps(event))), \
+                mock.patch.object(sys, "stdout", out), \
+                mock.patch.object(sys, "stderr", io.StringIO()):
+            rc = guard.main()
         self.assertEqual(rc, 0)
         payload = json.loads(out.getvalue())
         self.assertEqual(payload["hookSpecificOutput"]["permissionDecision"], "deny")
