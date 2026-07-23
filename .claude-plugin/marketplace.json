@@ -1,0 +1,13 @@
+{
+  "name": "claude-code-loop",
+  "owner": {
+    "name": "Frederick Douglas Pearce"
+  },
+  "plugins": [
+    {
+      "name": "dev-loop",
+      "source": "./",
+      "description": "Supervised dev-loop engine -- one routed issue per invocation with human gates and a durable ledger."
+    }
+  ]
+}

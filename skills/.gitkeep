@@ -1,0 +1,4 @@
+# Skills land here in #614 (S3): SKILL.md (thin orchestrator) + loop-engine.md
+# (generic engine doc), ported from agentfluent .claude/skills/release-loop/
+# with paths rewritten to ${CLAUDE_PLUGIN_ROOT} / ${CLAUDE_PROJECT_DIR}.
+# The ported skill is renamed release-loop -> dev-loop as part of #614.

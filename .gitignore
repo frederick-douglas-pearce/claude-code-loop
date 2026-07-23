@@ -1,0 +1,14 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Python (guard hook tooling, if any local runs)
+__pycache__/
+*.py[cod]
+.venv/
+
+# NOTE: the loop ledger (queue.md / progress.md / issue-<N>.plan.md) lives in the
+# CONSUMING project under its LEDGER_ROOT, NOT in this plugin repo -- nothing to
+# ignore here for it.
