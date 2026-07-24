@@ -36,16 +36,19 @@ Let `TARGET = ${CLAUDE_PROJECT_DIR}` throughout. Artifacts:
 
 Resolve `TARGET` (fall back to `git -C . rev-parse --show-toplevel` if `${CLAUDE_PROJECT_DIR}` is
 unset). Confirm it is a git repo; if not, STOP and tell the human `/init-loop` expects a git repo
-root. `mkdir -p "$TARGET/.claude"`. Record which of `CONFIG`, `GUARD`, `SETTINGS`, `LEDGER`, and
-`$TARGET/.gitignore` already exist — this drives idempotency below.
+root. **If `${CLAUDE_PROJECT_DIR}` was unset, `export CLAUDE_PROJECT_DIR="$TARGET"`** so the
+deterministic blocks in Steps 6–7 (which reference `${CLAUDE_PROJECT_DIR}`) resolve to the repo
+root rather than `/`. `mkdir -p "$TARGET/.claude"`. Record which of `CONFIG`, `GUARD`, `SETTINGS`,
+`LEDGER`, and `$TARGET/.gitignore` already exist — this drives idempotency below.
 
 ## Step 1 — Idempotency gate
 
 If `CONFIG` exists: **do not regenerate it.** Report that the repo already has a `loop.config.md`,
 and ask whether to (a) leave it and only run the additive steps (5–7), or (b) write a fresh
-inference to `CONFIG` + `.init-new` for the human to diff/merge by hand. Either way, still run the
-additive steps (ledger dir, `.gitignore`, `settings.json`) — they are safe to repeat. Skip the
-generate path (Steps 2–4) unless the human opts into the `.init-new` refresh.
+inference **only to a `loop.config.md.init-new` sibling — never to `CONFIG` itself** — for the
+human to diff and merge by hand. Either way, still run the additive steps (ledger dir,
+`.gitignore`, `settings.json`) — they are safe to repeat. Skip the generate path (Steps 2–4)
+unless the human opts into the `.init-new` refresh.
 
 ## Step 2 — Inference pass (best-effort)
 
@@ -69,6 +72,7 @@ column (e.g. "from pyproject `[tool.pytest]`"); leave anything you cannot infer 
 | `PR_TEMPLATE` | `.github/PULL_REQUEST_TEMPLATE.md` (note "must replicate" if present) |
 | `MERGE_METHOD` | CONTRIBUTING / repo settings; default `TODO(init-loop)` |
 | `BACKLOG_SOURCE` | GitHub milestone/label if a GitHub remote exists; else a local `TODO.md`; else `TODO(init-loop)` |
+| `PRIORITY_LABELS` | `gh label list` for `priority:*` labels (GitHub host); else CONTRIBUTING/CLAUDE.md; else `TODO(init-loop)` |
 | `RELEASE_SCHEME` | release-please / semantic-release config, `pyproject`/`package.json` version + publish; else "no release cycle" |
 | `SCOPE_AGENT` / `DESIGN_AGENT` | user-global subagents — cannot be inferred from the repo; default `TODO(init-loop): name a scope/design subagent, or remove if none` |
 
@@ -137,7 +141,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `COMMIT_CONV` | <inferred / TODO(init-loop)> | |
 | `PR_TEMPLATE` | <inferred / — if none> | replicate in the PR body if the repo enforces it |
 | `MERGE_METHOD` | <inferred / TODO(init-loop)> | e.g. squash, `--delete-branch`, explicit `--subject` scope |
-| `APPEND_ONLY_FILES` | protected files are declared for the guard hook in `.claude/loop.append-guard.json` (the machine SSOT) — see §"append-guard" below; `TODO(init-loop)` if this repo protects none | do **not** restate paths here |
+| `APPEND_ONLY_FILES` | protected files are declared for the guard hook in `.claude/loop.append-guard.json` (the machine SSOT); `TODO(init-loop)` if this repo protects none | do **not** restate paths here — the sidecar is authoritative |
 | `PERMISSION_POSTURE` | <TODO(init-loop): e.g. background agents validate-only → parent implements> | shapes fan-out |
 | `LEDGER_ROOT` | `.claude/loop/` | **gitignored** — local working state, never committed |
 | `RELEASE_SCHEME` | <inferred / "no release cycle"> | merge gate reads "≤ patch bump or no bump" |
@@ -172,7 +176,8 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 
 ## Step 5 — Write the append-guard sidecar (only if Step 3 found a file)
 
-Write `GUARD` as a JSON array — this is the SSOT the config's `APPEND_ONLY_FILES` row points at:
+`GUARD` is a JSON array of `{ "suffix", "id_pattern" }` entries — the SSOT the config's
+`APPEND_ONLY_FILES` row points at:
 
 ~~~json
 [
@@ -180,8 +185,15 @@ Write `GUARD` as a JSON array — this is the SSOT the config's `APPEND_ONLY_FIL
 ]
 ~~~
 
+**Do not blindly overwrite an existing `GUARD`** (it may protect files this run didn't detect):
+- If `GUARD` does **not** exist → write it with the single entry from Step 3.
+- If `GUARD` **already exists** → read it, and **merge** the Step 3 entry in, de-duplicated on
+  `suffix` (keep every existing entry; add the new one only if its `suffix` isn't already present).
+  Report what you kept vs. added; never drop an existing entry.
+
 Do not also write the path into `loop.config.md` — the pointer row already references this file.
-If Step 3 found nothing, skip this step (the config keeps its `TODO(init-loop)` row).
+If Step 3 found nothing, skip this step entirely (leave any existing `GUARD` untouched; the config
+keeps its `TODO(init-loop)` row).
 
 ## Step 6 — Ledger dir + `.gitignore` (deterministic)
 
@@ -211,7 +223,7 @@ try:
     data = json.loads(p.read_text())
     assert isinstance(data, dict)
 except Exception:
-    print("SKIP: settings.json is not a plain JSON object — add this manually:")
+    print("SKIP: settings.json is not a plain JSON object -- add this manually:")
     print(json.dumps({"enabledPlugins": {key: True}}, indent=2))
     sys.exit(0)
 ep = data.get("enabledPlugins")
@@ -219,10 +231,10 @@ if ep is None:
     data["enabledPlugins"] = {key: True}
 elif isinstance(ep, dict):
     if ep.get(key) is True:
-        print("already enabled — no change"); sys.exit(0)
+        print("already enabled -- no change"); sys.exit(0)
     ep[key] = True
 else:
-    print("SKIP: enabledPlugins is not an object — add this manually:")
+    print("SKIP: enabledPlugins is not an object -- add this manually:")
     print(json.dumps({key: True}, indent=2)); sys.exit(0)
 p.write_text(json.dumps(data, indent=2) + "\n")
 print("enabled dev-loop@claude-code-loop")
