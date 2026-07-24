@@ -7,19 +7,18 @@ ran the v0.10.x / v0.11.0 releases). Install it once, drop a small per-project
 `loop.config.md` into a target repo, and run your backlog as a loop: one routed
 issue per invocation, with human gates on uncertainty and durable ledger state.
 
-> **Status: engine ported, onboarding pending.** The generic engine is now in
-> place — the `dev-loop` skill (`SKILL.md` + `loop-engine.md`) and the
+> **Status: engine ported + `/init-loop` scaffolder landed.** The generic engine
+> is in place — the `dev-loop` skill (`SKILL.md` + `loop-engine.md`) and the
 > append-only guard hook (wired via `hooks/hooks.json`) — ported from AgentFluent
 > in [#614](https://github.com/frederick-douglas-pearce/agentfluent/issues/614)
-> (S3). Still to come: the `/init-loop` scaffolder
-> ([#615](https://github.com/frederick-douglas-pearce/agentfluent/issues/615)), a
-> real dogfood/parity run
+> (S3), and the `/init-loop` onboarding command
+> ([#615](https://github.com/frederick-douglas-pearce/agentfluent/issues/615), S4)
+> now generates a starter `loop.config.md` for you. Still to come: a real
+> dogfood/parity run
 > ([#616](https://github.com/frederick-douglas-pearce/agentfluent/issues/616)),
 > and the full docs / porting guide
 > ([#617](https://github.com/frederick-douglas-pearce/agentfluent/issues/617)).
-> Until `/init-loop` lands, adopting the loop means hand-writing the per-project
-> `loop.config.md` (and, if you protect an append-only log, a
-> `loop.append-guard.json` — see below). Tracked under epic
+> Tracked under epic
 > [#611](https://github.com/frederick-douglas-pearce/agentfluent/issues/611).
 
 ## What "loop engineering" means here
@@ -47,7 +46,8 @@ claude-code-loop/
 │   ├── guard_append_only.py # append-only guard (config-driven; stdlib only)
 │   └── loop.append-guard.example.json  # sample per-project protection registry
 ├── tests/                   # stdlib unittest for the guard hook
-├── commands/                # /init-loop scaffolder lands here (#615)
+├── commands/
+│   └── init-loop.md         # /init-loop onboarding scaffolder (#615)
 ├── LICENSE
 └── README.md
 ```
@@ -63,16 +63,41 @@ claude-code-loop/
 - `claude-code-loop` is the marketplace id (from `marketplace.json` `name`).
 
 The plugin ships the engine and the guard hook; it does nothing until the
-consuming repo supplies the per-project config below (until `/init-loop` lands in
-#615, that config is written by hand).
+consuming repo supplies the per-project config below. Run `/init-loop` to
+generate that config (or write it by hand).
+
+## Onboard a repo — `/init-loop`
+
+From inside the target repo, after installing the plugin:
+
+```
+/init-loop
+```
+
+The command reads the repo's own conventions (`CLAUDE.md`, `pyproject.toml` /
+`package.json` / `Cargo.toml` / `Makefile`, the PR template, CI workflows, branch
+naming) and:
+
+- generates a pre-filled `${CLAUDE_PROJECT_DIR}/.claude/loop.config.md` — inferred
+  values in place, clearly-marked `TODO(init-loop)` blanks for anything it can't
+  infer (correctness is yours to confirm at first-run review);
+- if it finds a decision-log-style append-only file, generates a
+  `loop.append-guard.json` sidecar (the machine SSOT) and echoes the entry IDs it
+  matched so you can confirm the guard is live;
+- adds the ledger dir (`.claude/loop/`) to `.gitignore` and creates it;
+- wires `enabledPlugins: { "dev-loop@claude-code-loop": true }` into
+  `.claude/settings.json` (or prints the snippet to paste if the file isn't a
+  plain JSON object).
+
+It is **safe to re-run**: it never overwrites an existing `loop.config.md` without
+asking, and the `.gitignore` / `settings.json` / ledger steps are additive.
 
 ## Per-project config
 
 Each consuming repo keeps a small `${CLAUDE_PROJECT_DIR}/.claude/loop.config.md`
 (the ~40-line binding seam: `BACKLOG_SOURCE`, `SCOPE_AGENT`, `DESIGN_AGENT`,
 `LINT_CMD`/`TYPE_CMD`/`TEST_CMD`, `BRANCH_FMT`, `COMMIT_CONV`, `MERGE_METHOD`, …).
-The generic engine is never edited per-project — only the config. `/init-loop`
-generates that config for a new repo (#615).
+The generic engine is never edited per-project — only the config.
 
 ### Optional: `loop.append-guard.json` (append-only protection)
 

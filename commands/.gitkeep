@@ -1,2 +1,0 @@
-# Commands land here in #615 (S4): /init-loop scaffolder that generates a
-# target repo's loop.config.md, ledger .gitignore entry, and enabledPlugins snippet.
