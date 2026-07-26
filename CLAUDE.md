@@ -106,6 +106,30 @@ redirection are out of scope. Keep it **stdlib-only** (it runs via bare `python3
   project's `LEDGER_ROOT` and is gitignored there. Nothing ledger-related belongs in this repo.
 - Commits follow Conventional Commits (`feat:`, `fix:`, `chore:`).
 
+## Branching & PR flow
+
+**Default: work happens on a branch and lands via PR.** (Adopted 2026-07-26; commits before that
+date went directly to `main`, so git history predates this rule.) Enforcement — branch protection
+with the CI check required — lands after the repo goes public, since protected branches need a
+public repo on the free plan (see #3).
+
+**The one exception: simple documentation updates may be pushed straight to `main`.** Scope it
+narrowly — the boundary is *what the file does*, not its extension:
+
+| Direct to `main` | Must go through a PR |
+|---|---|
+| `README.md`, `CLAUDE.md`, `LICENSE` | anything in `skills/`, `commands/`, `hooks/`, `.claude-plugin/`, `tests/`, `.github/` |
+| typo / link / formatting fixes anywhere | any change to runtime behavior |
+
+`skills/dev-loop/loop-engine.md`, `skills/dev-loop/SKILL.md`, and `commands/init-loop.md` are
+markdown, but they are **the product** — an agent executes them at runtime. Editing them is a
+behavior change and takes the PR path, however prose-like the diff looks. When unsure which side a
+change falls on, open the PR.
+
+This exception is for ad-hoc human/interactive edits. It does **not** apply to the `dev-loop` skill
+working a routed issue: the engine's `docs` route still goes through commit → PR → light review
+(step 8/9), and the loop must never bypass its own gates.
+
 ## Issue tracking
 
 **All future issue work for the plugin is tracked in *this* repo** (`frederick-douglas-pearce/claude-code-loop`),
