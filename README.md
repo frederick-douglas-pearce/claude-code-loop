@@ -7,19 +7,26 @@ ran the v0.10.x / v0.11.0 releases). Install it once, drop a small per-project
 `loop.config.md` into a target repo, and run your backlog as a loop: one routed
 issue per invocation, with human gates on uncertainty and durable ledger state.
 
-> **Status: engine ported + `/init-loop` scaffolder landed.** The generic engine
-> is in place — the `dev-loop` skill (`SKILL.md` + `loop-engine.md`) and the
-> append-only guard hook (wired via `hooks/hooks.json`) — ported from AgentFluent
-> in [#614](https://github.com/frederick-douglas-pearce/agentfluent/issues/614)
-> (S3), and the `/init-loop` onboarding command
-> ([#615](https://github.com/frederick-douglas-pearce/agentfluent/issues/615), S4)
-> now generates a starter `loop.config.md` for you. Still to come: a real
-> dogfood/parity run
-> ([#616](https://github.com/frederick-douglas-pearce/agentfluent/issues/616)),
-> and the full docs / porting guide
-> ([#617](https://github.com/frederick-douglas-pearce/agentfluent/issues/617)).
-> Tracked under epic
-> [#611](https://github.com/frederick-douglas-pearce/agentfluent/issues/611).
+> **Status — v0.0.1, working and in use, not yet stable.** All three pieces are in
+> place: the `dev-loop` skill (`SKILL.md` + `loop-engine.md`), the `/init-loop`
+> onboarding command, and the append-only guard hook. The engine has run beyond the
+> repo it was built in — first external adoption is
+> [us-presidential-vote-analysis](https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis),
+> alongside the ongoing AgentFluent dogfood.
+>
+> Findings from those real runs accumulate in
+> [#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1) and land as
+> one batch in
+> [v0.0.2](https://github.com/frederick-douglas-pearce/claude-code-loop/milestone/1).
+> Expect rough edges in porting to a repo unlike the two above; that is exactly what
+> #1 collects.
+>
+> **Issues for this plugin live in
+> [this repo's tracker](https://github.com/frederick-douglas-pearce/claude-code-loop/issues).**
+> The AgentFluent links in this README are **provenance, not the live backlog** — the
+> extraction stories (S2–S4, under epic
+> [#611](https://github.com/frederick-douglas-pearce/agentfluent/issues/611)) were filed
+> there before this repo existed.
 
 ## What "loop engineering" means here
 
@@ -45,12 +52,63 @@ claude-code-loop/
 │   ├── hooks.json           # wires the PreToolUse guard via ${CLAUDE_PLUGIN_ROOT}
 │   ├── guard_append_only.py # append-only guard (config-driven; stdlib only)
 │   └── loop.append-guard.example.json  # sample per-project protection registry
-├── tests/                   # stdlib unittest for the guard hook
 ├── commands/
-│   └── init-loop.md         # /init-loop onboarding scaffolder (#615)
+│   └── init-loop.md         # /init-loop onboarding scaffolder
+├── tests/                   # stdlib unittest suite (no pytest, no dependencies)
+├── .github/workflows/       # CI: the suite on Python 3.9-3.13
 ├── LICENSE
 └── README.md
 ```
+
+## What the loop can do to your repo
+
+Worth reading before you install. This plugin drives a real development workflow on
+your behalf: it creates branches, commits, opens pull requests, runs your project's
+lint/type/test commands, merges, and deletes the merged branch. Here is the posture it
+takes while doing that.
+
+**The default is human-gated.** The loop runs in `mode: calibration` unless you change
+it, and in that mode **the human approves every merge — it never auto-merges.**
+Auto-merge exists only under the opt-in `escalation-only` mode, and even there it is
+per-route, limited to routes you have explicitly *graduated*, and withheld for feature
+or breaking changes, risky or irreversible changes, anything touching a security
+surface, and contested review findings. Independently of mode, the loop stops and asks
+you mid-pipeline when it hits ambiguous acceptance criteria, risk, agent disagreement,
+or genuine uncertainty. Wherever eligibility is unclear the rule is **default-deny**:
+fall back to the human.
+
+**Hard limits the engine commits to:**
+
+- **One PR at a time** — no stacked PRs.
+- **Never force-push.**
+- **Never bypass failing CI** — no admin-merge, never merge red.
+- **Only `--delete-branch` the PR's own branch.**
+- **Never `git add` unrelated pre-existing working-tree changes** in your working tree.
+- **Never edit your user-global subagent definitions.**
+
+**The ledger is local and never committed.** Working state (`queue.md`, `progress.md`,
+`issue-<N>.plan.md`) is written under `.claude/loop/` in your repo, which `/init-loop`
+adds to `.gitignore`. It lives on disk so a fresh invocation resumes correctly after a
+`/clear`, and it stays out of your history.
+
+**It runs your commands, not ours.** `LINT_CMD` / `TYPE_CMD` / `TEST_CMD` /
+`CI_STATUS_CMD` are whatever your own `loop.config.md` names — the plugin ships no
+commands of its own and executes what that file tells it to.
+
+**How the limits are enforced.** Be clear-eyed about this: the human gates and the
+append-only guard hook are *enforced backstops*, while the rest of the list above is
+**instruction the orchestrating agent is bound by, not a sandbox**. If you want a hard
+boundary rather than a diligent one, use Claude Code's own permission settings — the
+skill deliberately runs with the full session toolset, because an orchestrator needs
+git, `gh`, and subagents to do the job at all.
+
+**The guard hook's trust model.** The bundled hook compiles `id_pattern` from
+repo-local, committed config — the same trust level as a Makefile or a git hook, not
+attacker-controlled input. Its scope is deliberately bounded: it protects **entry
+existence against full-file `Write`s only**. It does not guard `Edit`, and it does not
+cover `Bash` redirection (`cat > file`, `tee`, `sed -i`), which an agent with Bash could
+still use to clobber a file. It is a durable guard against one specific data-loss mode,
+not an any-tool guarantee.
 
 ## Install
 

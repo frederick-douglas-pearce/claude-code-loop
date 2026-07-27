@@ -157,5 +157,17 @@ findings as one batch, bump `.claude-plugin/plugin.json` to `0.0.2`, then re-ins
 (AgentFluent + the vote repo). This milestone is gated on the AgentFluent v0.12 release and is
 **not** a blocker for going public.
 
-When the v0.0.2 batch lands, update the `README.md` status block in the same PR (see #2) rather than
-leaving it to rot until someone notices.
+### Standing convention: the README status block ships with the version bump
+
+**Any PR that bumps `.claude-plugin/plugin.json` must update the `README.md` status block in the
+same PR.** Not just the v0.0.2 batch — every bump, permanently. The status block names the current
+version, what actually works, where the live backlog is, and which repos have adopted it; all four
+rot silently, and the recurring failure mode is that nobody notices until a reader does. Treat it as
+part of "done" for a release, not a separate chore.
+
+The README's **trust-model section** ("What the loop can do to your repo") has the same property for
+a different trigger: it restates the engine's gating posture and hard limits, so a change to the
+merge gate, the mode semantics, or the guard hook's scope must update it in the same PR. **#1 / F2
+is the live example** — making the plan gate unconditional under `calibration` changes what that
+section says about mid-pipeline stops. The section is worded to survive that change, but re-read it
+when F2 lands.
