@@ -8,7 +8,8 @@ A **Claude Code plugin** (`dev-loop`, distributed via the `claude-code-loop` mar
 packages a supervised dev-loop engine originally built and hardened in
 [AgentFluent](https://github.com/frederick-douglas-pearce/agentfluent). The deliverable is almost
 entirely **prompt artifacts** (markdown read by an agent at runtime) plus **one Python hook**. There
-is no build, no package, no dependency manifest, and no CI.
+is no build, no package, and no dependency manifest. CI is a single GitHub Actions workflow that
+runs the stdlib test suite — nothing is installed, and nothing should need to be.
 
 Consequence: most "code" here is instructions a future agent will execute. Precision of wording,
 internal consistency of cross-references, and the fail-safe posture of each instruction *are* the
@@ -17,13 +18,37 @@ correctness properties — review changes to `.md` files as carefully as code.
 ## Commands
 
 ```bash
-python3 -m unittest discover -s tests        # full suite (stdlib unittest only; no pytest, no CI)
-python3 tests/test_guard_append_only.py      # same suite, direct
+python3 -m unittest discover -s tests        # full suite (stdlib unittest only; no pytest, no deps)
+python3 tests/test_guard_append_only.py      # one module, direct
 python3 -m unittest tests.test_guard_append_only.CheckTests.test_blocks_dropping_entries   # one test
 ```
 
-Only `hooks/guard_append_only.py` is testable code. The markdown artifacts are validated by
-review + dogfooding, not tests.
+Stdlib `unittest` only — **never add pytest or any dependency.** The guard hook runs under bare
+`python3` in a consumer's environment, so the suite must run there too. CI
+(`.github/workflows/test.yml`) runs `discover` on Python **3.9–3.13** for `push` to `main` and every
+PR; the aggregate **`test-suite`** job is the stable name for branch protection to require, so the
+matrix can change without editing the protection rule. A need for `pip install` in CI means the
+stdlib-only constraint was broken — fix the code, not the workflow.
+
+### What is and isn't covered
+
+Two modules, and the split between them matters:
+
+- **`tests/test_guard_append_only.py`** — behavior of the one piece of executable code.
+- **`tests/test_repo_consistency.py`** — **mechanical** checks on the markdown/JSON deliverable:
+  the shipped example sidecar still loads through the real `load_registry`; the composed
+  `plugin@marketplace` identifier still matches every hand-written call site; and engine `CAPS` ⊆
+  the `/init-loop` skeleton (see the three-layer split below — this is that contract, enforced).
+
+**Prompt *semantics* remain validated by review + dogfooding, and that is deliberate** — the
+consistency module tests couplings, never whether an instruction is *right*. Do not try to grow it
+into a semantic test of the engine.
+
+Two habits it depends on. First: these checks **pass against the tree they were written for**, so a
+green run proves nothing by itself — when you change one, mutate the thing it guards and confirm it
+actually fails. Second: `CapsVocabularyTests.ALLOWED_NON_BINDINGS` is an escape hatch (currently two
+env vars and the meta-term `CAPS`). Adding to it is almost always the wrong fix — a growing
+allow-list means the test is being worked around rather than the vocabulary kept in sync.
 
 ## Architecture — the three-layer split
 
@@ -51,6 +76,12 @@ A fourth file participates: `commands/init-loop.md` embeds a **skeleton of `loop
 you add or rename a `CAPS` parameter in `loop-engine.md`, the `/init-loop` skeleton (§1 binding
 table) and its inference map must be updated in the same change, or newly-onboarded repos will be
 missing the binding the engine now reads.
+
+**`CapsVocabularyTests` enforces the half of that a test can reach**: it fails if the engine (or
+`SKILL.md`) names a `CAPS` parameter the skeleton does not offer. It cannot check that the
+*inference map* gained a row, or that the Notes column makes sense — so a red run means you forgot
+the binding table, and a green run does **not** mean the skeleton update is complete. The check is
+one-directional by design: skeleton-only names are fine, engine-only names are the bug.
 
 ## Engine semantics worth knowing before editing
 
@@ -94,7 +125,16 @@ The **fail posture is a deliberate asymmetry** — preserve it in any change:
 Also fixed by design: `id_pattern` must have **exactly one capture group** (0 groups captures whole
 heading lines; ≥2 makes `re.findall` return tuples, a latent crash that would fail the guard open).
 The guard protects *entry existence*, not body content, and covers `Write` only — `Edit` and `Bash`
-redirection are out of scope. Keep it **stdlib-only** (it runs via bare `python3`, no venv).
+redirection are out of scope. Keep it **stdlib-only** (it runs via bare `python3`, no venv). These
+bounds and the trust level of `id_pattern` (repo-local committed config, not attacker input) are
+also stated in `README.md` → "What the loop can do to your repo" — change both together.
+
+**Tightening `load_registry`'s validation can invalidate the shipped example.**
+`hooks/loop.append-guard.example.json` is the template every consuming project copies, and the
+loader fails *open* — so a rule that rejects the example produces no error here, just consuming
+projects whose guard silently protects nothing. `ExampleSidecarTests` loads the real file through
+the real loader and asserts **zero stderr warnings**, which is the assertion that catches this;
+"one entry loaded" alone would not.
 
 ## Repo conventions
 

@@ -173,6 +173,33 @@ which files to protect and the regex that identifies each file's entry IDs (see
 a malformed sidecar → it allows writes but warns on stderr (so a typo can't
 silently disable protection).
 
+## Development
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+No install step, no virtualenv, no dependencies — the suite is **stdlib `unittest`
+only**, because the guard hook runs under bare `python3` in a consumer's
+environment and the tests have to run wherever it does. CI runs exactly that
+command on Python 3.9–3.13 for every pull request.
+
+Two modules, covering deliberately different things:
+
+- `test_guard_append_only.py` — behavior of the guard hook: drop detection, the
+  suffix matcher, the config loader, and each direction of the fail posture.
+- `test_repo_consistency.py` — mechanical checks on the shipped artifacts: that
+  the example sidecar still loads through the real loader, that the
+  `dev-loop@claude-code-loop` identifier still matches the manifests it is
+  composed from, and that every `CAPS` parameter the engine reads is offered by
+  the `/init-loop` skeleton.
+
+What the suite does **not** test is whether the prompt artifacts say the *right*
+thing. The engine is ~600 lines of instructions an agent executes at runtime, and
+its correctness properties — precision of wording, internal consistency,
+fail-safe posture — are validated by review and by running the loop on real
+backlogs. The second module guards couplings between files, not semantics.
+
 ## License
 
 MIT © 2026 Frederick Douglas Pearce
