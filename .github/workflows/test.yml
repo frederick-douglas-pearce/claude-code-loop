@@ -1,0 +1,56 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A superseded run tells us nothing; only the tip of a branch matters.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  unittest:
+    name: unittest (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The hook is launched by bare `python3` from hooks/hooks.json, so it runs
+        # on whatever the CONSUMING environment provides. This matrix is the only
+        # place that pins that reality -- widen it, don't narrow it. 3.8 is EOL.
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # No dependency install step, deliberately: the hook and its tests are
+      # stdlib-only (see CLAUDE.md -> the append-only guard hook). If this job
+      # ever needs `pip install`, that is a signal the stdlib-only constraint
+      # was broken -- fix the code, don't extend the workflow.
+      - name: Run the test suite
+        run: python3 -m unittest discover -s tests --verbose
+
+  # Single stable check name for branch protection to require. The matrix job
+  # names carry the Python version, so requiring them directly would need a
+  # protection-rule edit every time the matrix changes.
+  test-suite:
+    name: test-suite
+    runs-on: ubuntu-latest
+    needs: unittest
+    if: always()
+    steps:
+      - name: Fail unless every matrix job succeeded
+        run: |
+          if [ "${{ needs.unittest.result }}" != "success" ]; then
+            echo "unittest matrix result: ${{ needs.unittest.result }}"
+            exit 1
+          fi
+          echo "All matrix jobs passed."
