@@ -66,6 +66,11 @@ The plugin ships the engine and the guard hook; it does nothing until the
 consuming repo supplies the per-project config below. Run `/init-loop` to
 generate that config (or write it by hand).
 
+**Requirements: Python 3.9+**, and only for the optional append-only guard hook
+— the engine itself is pure prompt artifacts and needs nothing installed. The
+hook is launched with bare `python3`, uses the standard library only, and is
+tested on 3.9 through 3.13 in CI.
+
 ## Onboard a repo — `/init-loop`
 
 From inside the target repo, after installing the plugin:
