@@ -14,12 +14,14 @@ issue per invocation, with human gates on uncertainty and durable ledger state.
 > [us-presidential-vote-analysis](https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis),
 > alongside the ongoing AgentFluent dogfood.
 >
-> Findings from those real runs accumulate in
-> [#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1) and land as
-> one batch in
-> [v0.0.2](https://github.com/frederick-douglas-pearce/claude-code-loop/milestone/1).
-> Expect rough edges in porting to a repo unlike the two above; that is exactly what
-> #1 collects.
+> Findings from those real runs are indexed in
+> [#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1) (F1–F21) and
+> scoped into
+> [v0.2.0](https://github.com/frederick-douglas-pearce/claude-code-loop/milestone/1) —
+> a hardening release that makes the acceptance gate adversarial, moves it last so it
+> certifies the commit that actually merges, and reverses the plan-gate default under
+> `calibration`. Expect rough edges in porting to a repo unlike the two above; that is
+> exactly what #1 collects.
 >
 > **Issues for this plugin live in
 > [this repo's tracker](https://github.com/frederick-douglas-pearce/claude-code-loop/issues).**

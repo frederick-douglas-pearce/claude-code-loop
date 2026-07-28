@@ -98,8 +98,9 @@ even though nothing will fail loudly:
   `CODE_REVIEW` is the live example: a skill marked `disable-model-invocation` cannot be invoked by
   the orchestrator, so binding one makes the gate **silently inert** — it does not error, it just
   never runs. The shipped `/init-loop` skeleton bound `/code-review` that way for the whole of
-  v0.0.1 (#1 / F7). Any new gate binding gets the same scrutiny: name something the orchestrator can
-  actually execute.
+  v0.0.1 (F7, fixed in #10; consumer configs still carry it, see #36 / AC5). Any new gate binding
+  gets the same scrutiny: name something the orchestrator can actually execute. F14 (#21) generalizes
+  this to the whole class — an unbound or `TODO(init-loop)` binding never means "skip the gate."
 - **Three resting-state classes** — terminal (`RUN COMPLETE`), resting-non-terminal (`RUN PARKED`,
   awaiting an external event, released only by explicit human un-park), and held/pending (no
   sentinel). `progress.md` is append-only and the **most recent** sentinel wins.
@@ -155,9 +156,11 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
 ## Branching & PR flow
 
 **Default: work happens on a branch and lands via PR.** (Adopted 2026-07-26; commits before that
-date went directly to `main`, so git history predates this rule.) Enforcement — branch protection
-with the CI check required — lands after the repo goes public, since protected branches need a
-public repo on the free plan (see #3).
+date went directly to `main`, so git history predates this rule.) **Enforcement is live** (#3, and
+the repo went public 2026-07-28): `main` is protected and requires the aggregate **`test-suite`**
+check, strict — branches must be up to date with `main` before merging. Admin enforcement is
+deliberately **off**, which is the only reason the documentation exception below still works as a
+direct push; it is not an invitation to route anything else around the gate.
 
 **The one exception: simple documentation updates may be pushed straight to `main`.** Scope it
 narrowly — the boundary is *what the file does*, not its extension:
@@ -183,37 +186,43 @@ not in AgentFluent. The early extraction stories (S2–S4, epic
 [#611](https://github.com/frederick-douglas-pearce/agentfluent/issues/611)) were filed in AgentFluent
 before this repo existed; those links in `README.md` are history, not the live backlog.
 
-Work is split across **two deliberately decoupled milestones** — they move independently, so do not
-let one block the other:
+**`public-readiness` — complete, closed out 2026-07-28.** The repo is public, CI runs on PRs with
+`test-suite` required on `main` (#3), the mechanical consistency checks ship (#4), the README status
+block (#2) and trust-model section (#5) landed, and the clean-machine install smoke test (#6)
+certified the public install path end-to-end. Kept here as history; nothing in it is live work.
 
-**`public-readiness`** — everything required before flipping this repo from private to public, which
-is the current priority. Covers CI + branch protection (#3), mechanical consistency checks for the
-markdown deliverable (#4), the README status block (#2) and trust-model section (#5), and a
-clean-machine install smoke test (#6). #2 and #5 both touch the README front door and will likely
-land in one PR, but close independently.
+**`v0.2.0`** — the live milestone, and **not** the `v0.0.2` this file used to name. The batch grew
+past a patch bump: it renumbers the pipeline, adds an `in-acceptance` status, rewrites Resume, and
+reverses a multi-site invariant, so it is a minor bump.
 
-**`v0.0.2`** — the hardening batch, currently
-[#1 — Plugin hardening backlog](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1)
-alone. It is an **accumulator issue**: findings surfaced by real loop runs (the first external
-adoption [us-presidential-vote-analysis](https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis),
-and the AgentFluent dogfood) are appended as checklist items `F1`, `F2`, … Each records where it
-surfaced, the gap, a *generic* fix (removing the AgentFluent-ism rather than special-casing), and a
-severity. Working convention: **do not cut per-finding PRs — batch them.** Implement the accumulated
-findings as one batch, bump `.claude-plugin/plugin.json` to `0.0.2`, then re-install in the consumers
-(AgentFluent + the vote repo). This milestone is gated on the AgentFluent v0.12 release and is
-**not** a blocker for going public.
+[#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1) is now the **findings
+index (F1–F21), not a work item** — "no PR should ever be opened for #1." Findings surfaced by real
+runs (the first external adoption
+[us-presidential-vote-analysis](https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis),
+the AgentFluent dogfood, and #6's smoke test) are recorded there with where they surfaced, the gap, a
+*generic* fix (removing the AgentFluent-ism rather than special-casing), and a severity; the detail
+lives in its comments, which are the only copy. They are scoped into **seven epics and ~21 stories**
+under the milestone, and #1 closes when the last child does.
+
+**The batching convention was superseded 2026-07-28: batch the *release*, not the PRs.** One version
+bump and one consumer re-install, but multiple coherent PRs. The old "never cut per-finding PRs" rule
+existed to avoid re-installing per finding — a release cost, not a PR cost.
+
+**`v0.3.0`** — two deferrals scoped out of v0.2.0 rather than dropped: the `TEST_EFFICACY_AGENT`
+binding (#37) and `REVIEW_TIERS` (#38). Both wait on corpus, not on effort.
 
 ### Standing convention: the README status block ships with the version bump
 
 **Any PR that bumps `.claude-plugin/plugin.json` must update the `README.md` status block in the
-same PR.** Not just the v0.0.2 batch — every bump, permanently. The status block names the current
+same PR.** Not just the v0.2.0 release — every bump, permanently. The status block names the current
 version, what actually works, where the live backlog is, and which repos have adopted it; all four
 rot silently, and the recurring failure mode is that nobody notices until a reader does. Treat it as
 part of "done" for a release, not a separate chore.
 
 The README's **trust-model section** ("What the loop can do to your repo") has the same property for
 a different trigger: it restates the engine's gating posture and hard limits, so a change to the
-merge gate, the mode semantics, or the guard hook's scope must update it in the same PR. **#1 / F2
-is the live example** — making the plan gate unconditional under `calibration` changes what that
+merge gate, the mode semantics, or the guard hook's scope must update it in the same PR. **F2 (#28 +
+#29) is the live example** — making the plan gate unconditional under `calibration` changes what that
 section says about mid-pipeline stops. The section is worded to survive that change, but re-read it
-when F2 lands.
+when F2 lands. #36 / AC3 carries this for the release, and F5 (#31), F8 (#25) and F16 (#26/#27)
+change it too.
