@@ -212,8 +212,10 @@ Advance the row to `in-review`. Run `CODE_REVIEW` on the diff.
 that works in practice — is **parallel finder subagents over `git diff main...HEAD`, plus a pass
 that confirms each finding**, journaled under the gate's name. A review skill marked
 `disable-model-invocation` is **user-triggered only and cannot be invoked from here at all**: if
-`CODE_REVIEW` is bound to one, the gate is unsatisfiable and silently does nothing. Treat such a
-skill as a *human* escalation and rebind the gate to the finder procedure.
+`CODE_REVIEW` is bound to one, the gate is unsatisfiable and silently does nothing. Such a skill is
+a *human* escalation, never a binding. On finding one bound here: run the finder procedure for this
+issue, journal the misbinding and the rebind you recommend, and surface it to the human — **do not
+edit `loop.config.md` yourself** (Tool surface).
 
 **Give every finder the issue's acceptance criteria alongside the diff.** You cannot judge whether
 code is *right* without knowing what it was meant to do; a finder holding the ACs catches "this
@@ -296,8 +298,10 @@ an orchestrator needs Write/Edit, Bash(git+gh+tests), Agent (`SCOPE_AGENT`/`DESI
 AC-verifier), and the built-in review skills. With that power come hard limits — never force-push;
 never bypass failing CI (no admin-merge, never merge red); only `--delete-branch` the PR's own
 branch; never `git add` unrelated pre-existing working-tree changes; never edit the
-user-global `SCOPE_AGENT`/`DESIGN_AGENT` definitions. The C1 append-only guard and the
-human/merge gates are the enforced backstops; the rest of this list is your contract.
+user-global `SCOPE_AGENT`/`DESIGN_AGENT` definitions; **never edit `loop.config.md`** — a binding
+that looks wrong is a finding you journal and hand to the human, because a gate you rebind to match
+your own reading entrenches your misreading instead of correcting it. The C1 append-only guard and
+the human/merge gates are the enforced backstops; the rest of this list is your contract.
 
 ---
 

@@ -85,6 +85,8 @@ fall back to the human.
 - **Only `--delete-branch` the PR's own branch.**
 - **Never `git add` unrelated pre-existing working-tree changes** in your working tree.
 - **Never edit your user-global subagent definitions.**
+- **Never edit its own `loop.config.md`** — a binding that looks wrong gets journalled and handed to
+  you, so the loop can't quietly rewrite its own gates to match its reading of them.
 
 **The ledger is local and never committed.** Working state (`queue.md`, `progress.md`,
 `issue-<N>.plan.md`) is written under `.claude/loop/` in your repo, which `/init-loop`
