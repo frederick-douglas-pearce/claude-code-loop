@@ -206,9 +206,28 @@ the body; make the Security-review choice up front. Advance the row to `in-pr` a
 PR number. Wait for CI; fix until green.
 
 ### 9. Code review
-Advance the row to `in-review`. Run `CODE_REVIEW` on the diff. Implement viable findings;
-decline others with a one-line rationale; **verify recs were applied**. Bounded to 2 rounds —
-contested findings escalate to the human, do not loop. Commit fixes.
+Advance the row to `in-review`. Run `CODE_REVIEW` on the diff.
+
+`CODE_REVIEW` names a **procedure you run, not a command you call**. The default — and the pattern
+that works in practice — is **parallel finder subagents over `git diff main...HEAD`, plus a pass
+that confirms each finding**, journaled under the gate's name. A review skill marked
+`disable-model-invocation` is **user-triggered only and cannot be invoked from here at all**: if
+`CODE_REVIEW` is bound to one, the gate is unsatisfiable and silently does nothing. Treat such a
+skill as a *human* escalation and rebind the gate to the finder procedure.
+
+**Give every finder the issue's acceptance criteria alongside the diff.** You cannot judge whether
+code is *right* without knowing what it was meant to do; a finder holding the ACs catches "this
+doesn't actually do AC-3", a class the diff alone cannot reveal. (This does not make step 7
+redundant — the acceptance gate still runs independently.)
+
+**Pick finder angles from the diff's risk surface, not from a fixed list.** Distinct lenses —
+correctness; robustness/IO/network/filesystem; reuse/conventions/integration;
+production-readiness — overlap far less than repeated passes of the same one, and single-angle
+review misses most of what a diff carries. Scale the count with the surface: one light pass on
+`docs`, more when the diff touches a production or public-API path.
+
+Implement viable findings; decline others with a one-line rationale; **verify recs were applied**.
+Bounded to 2 rounds — contested findings escalate to the human, do not loop. Commit fixes.
 
 ### 10. Security review (by route)
 Run `SECURITY_REVIEW` per the routing in `loop.config.md` (the local-skill-vs-label choice and any
@@ -559,7 +578,7 @@ Gate table:
 | Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure | issue comment |
 | Human (plan) | user | only if uncertain/irreversible | approve/redirect |
 | AC-verify | fresh subagent (+`VERIFY`) | every code/research issue | done/not-done + gaps |
-| Code review | `CODE_REVIEW` | every code issue | findings → fixes |
+| Code review | `CODE_REVIEW` (parallel finders you run — step 9) | every code issue | findings → fixes |
 | Security | `SECURITY_REVIEW` (local or label) | by route | clean/findings |
 | Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI+security green | `MERGE_METHOD` |
 

@@ -94,6 +94,12 @@ even though nothing will fail loudly:
   stage anchor. The ledger is gitignored in consuming repos, so it can be stale.
 - **Route and Status are separate columns.** `blocked`/`parked`/`hold` are Status overlays that
   retain their semantic Route (`code`/`research`/`docs`/`stub-defer`).
+- **Gate parameters that name a *procedure* must never be bound to a user-triggered skill.**
+  `CODE_REVIEW` is the live example: a skill marked `disable-model-invocation` cannot be invoked by
+  the orchestrator, so binding one makes the gate **silently inert** — it does not error, it just
+  never runs. The shipped `/init-loop` skeleton bound `/code-review` that way for the whole of
+  v0.0.1 (#1 / F7). Any new gate binding gets the same scrutiny: name something the orchestrator can
+  actually execute.
 - **Three resting-state classes** — terminal (`RUN COMPLETE`), resting-non-terminal (`RUN PARKED`,
   awaiting an external event, released only by explicit human un-park), and held/pending (no
   sentinel). `progress.md` is append-only and the **most recent** sentinel wins.
