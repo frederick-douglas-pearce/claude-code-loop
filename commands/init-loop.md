@@ -127,7 +127,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `BACKLOG_SOURCE` | <inferred / TODO(init-loop)> | GitHub milestone/label, or a local `TODO.md` |
 | `SCOPE_AGENT` | <TODO(init-loop): user-global subagent, or remove if none> | answers scope/priority/requirements questions |
 | `DESIGN_AGENT` | <TODO(init-loop): user-global subagent, or remove if none> | reviews plans pre-implementation |
-| `CODE_REVIEW` | `/code-review` (Claude Code built-in) | independent post-impl review; confirm this repo uses it |
+| `CODE_REVIEW` | parallel finder subagents over `git diff main...HEAD` **+ the issue's acceptance criteria**, angles chosen per the diff's risk surface (engine step 9), then a pass confirming each finding | the orchestrator runs this itself. Do **not** bind a `disable-model-invocation` skill (e.g. `/code-review`) — those are user-triggered only, so the gate would silently do nothing; keep them as a human escalation |
 | `SECURITY_REVIEW` | <TODO(init-loop): local `/security-review` and/or a labeled workflow> | see §4 |
 | `VERIFY` | `/verify` (built-in) | runtime behavior check when an AC needs proof-by-running |
 | `PRIORITY_LABELS` | <inferred / TODO(init-loop)> | drives selection order; e.g. `priority:high > medium > low`, tiebreak issue number asc |
