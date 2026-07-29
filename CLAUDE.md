@@ -150,8 +150,36 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
 - `${CLAUDE_PLUGIN_ROOT}` (this installed plugin) and `${CLAUDE_PROJECT_DIR}` (the consuming repo)
   are not interchangeable — the engine and hook both depend on the distinction.
 - The loop ledger (`queue.md`, `progress.md`, `issue-<N>.plan.md`) lives under the *consuming*
-  project's `LEDGER_ROOT` and is gitignored there. Nothing ledger-related belongs in this repo.
+  project's `LEDGER_ROOT` and is gitignored there. **As of 2026-07-28 this repo is also a consumer**
+  (see "Dogfooding this repo" below), so a ledger does live here, under `.claude/loop/` and
+  gitignored. It is still never committed. `.claude/loop.config.md` — the binding seam — *is*
+  committed, like any consumer's.
 - Commits follow Conventional Commits (`feat:`, `fix:`, `chore:`).
+
+## Dogfooding this repo
+
+**This repo runs the loop it develops** (onboarded 2026-07-28, milestone `v0.2.0`). Two facts about
+that arrangement are easy to forget mid-run and change what the evidence means:
+
+**The loop executes the *installed* plugin, not the working tree.** The engine driving a run comes
+from `~/.claude/plugins/cache/claude-code-loop/dev-loop/<version>/`; edits to `skills/` and
+`commands/` here do not take effect until re-install (#36). This is a **safety property** — a run
+cannot mutate the engine driving it — but it also means the loop keeps exhibiting the defects we are
+fixing. Known ones to journal rather than silently work around: **#19/F15** (the AC-verifier diffs
+`main...HEAD` at step 7, *before* the step-8 commit, so an uncommitted branch certifies an empty
+diff) and **#21/F14** (an unbound binding skips its gate silently instead of erroring).
+
+**The window between an in-tree fix and a consumer re-install is when new consumers get onboarded
+with the old bug.** Demonstrated at this repo's own onboarding: the installed v0.0.1 `/init-loop`
+skeleton still binds `CODE_REVIEW` to `/code-review`, the `disable-model-invocation` misbinding #10
+fixed in-tree — so following the skill literally would have produced a silently-inert review gate
+here. `.claude/loop.config.md` deviates deliberately and records why.
+
+**Why this consumer is worth the overhead:** its deliverable is *markdown an agent executes*, which
+neither AgentFluent nor the vote repo produces. That breaks the router's assumption that markdown
+implies the `docs` route — so `.claude/loop.config.md` §3 carries a binding override sending
+`loop-engine.md`, `SKILL.md`, and `init-loop.md` to the `code` route. Findings unique to this shape
+are logged in that file's §5, and graduate to #1 once confirmed.
 
 ## Branching & PR flow
 
@@ -167,8 +195,13 @@ narrowly — the boundary is *what the file does*, not its extension:
 
 | Direct to `main` | Must go through a PR |
 |---|---|
-| `README.md`, `CLAUDE.md`, `LICENSE` | anything in `skills/`, `commands/`, `hooks/`, `.claude-plugin/`, `tests/`, `.github/` |
+| `README.md`, `CLAUDE.md`, `LICENSE` | anything in `skills/`, `commands/`, `hooks/`, `.claude-plugin/`, `tests/`, `.github/`, `.claude/` |
 | typo / link / formatting fixes anywhere | any change to runtime behavior |
+
+`.claude/loop.config.md` is on the PR side for the same reason the engine is: it binds the gates the
+loop runs in this repo, so editing it is a behavior change. Note the engine separately forbids the
+orchestrator from editing its own config mid-run — config changes are human work, landed outside a
+loop iteration.
 
 `skills/dev-loop/loop-engine.md`, `skills/dev-loop/SKILL.md`, and `commands/init-loop.md` are
 markdown, but they are **the product** — an agent executes them at runtime. Editing them is a

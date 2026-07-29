@@ -10,5 +10,9 @@ __pycache__/
 .venv/
 
 # NOTE: the loop ledger (queue.md / progress.md / issue-<N>.plan.md) lives in the
-# CONSUMING project under its LEDGER_ROOT, NOT in this plugin repo -- nothing to
-# ignore here for it.
+# CONSUMING project under its LEDGER_ROOT. As of 2026-07-28 this repo is ALSO a
+# consumer -- it dogfoods the plugin it develops -- so a ledger does live here and
+# is ignored below. `.claude/loop.config.md` (the binding seam) IS committed.
+
+# dev-loop ledger (local working state, never committed)
+.claude/loop/
