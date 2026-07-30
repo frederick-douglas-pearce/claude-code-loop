@@ -134,6 +134,32 @@ The host is GitHub. There is **no labeled security workflow** in this repo (`.gi
 contains only `test.yml`), so the labeled path from the engine's step 10 does not exist here and the
 local path is the whole story.
 
+> ### ⛔ Precondition — `origin/HEAD` must be set, or this gate dies before it runs
+>
+> `/security-review` opens by shelling out to `` !`git diff --name-only origin/HEAD...` ``. On a
+> **fresh clone `origin/HEAD` is unset**, so the gate exits with
+> `fatal: ambiguous argument 'origin/HEAD...'` and reviews nothing.
+>
+> **Repair (idempotent, safe to re-run):**
+> ```bash
+> git symbolic-ref -q refs/remotes/origin/HEAD >/dev/null || git remote set-head origin -a
+> ```
+>
+> Set here 2026-07-29 (`origin/HEAD → refs/remotes/origin/main`). It can be lost again by a
+> re-clone or a mirror push, so **treat a `fatal: ambiguous argument` from this gate as a missing
+> ref, not a broken review** — and per [F22](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1#issuecomment-5115966313),
+> **an erroring gate is not a passing gate**: escalate, never journal it as clean.
+>
+> This precondition belongs in the *generator*, not here — `loop-engine.md:548` already says the
+> "`origin/HEAD` incantation" lives in `loop.config.md`, but `/init-loop` was never told to emit it,
+> so every newly-onboarded repo hits this. Filed as F22; #21's AC1 is being widened to cover
+> execution failure as a third route to a skipped gate. **Delete this block once the generator sets
+> the ref itself.**
+
+**Confirmed 2026-07-29: `/security-review` *is* model-invocable** — the orchestrator can run it
+directly. It is **not** an F7-class binding, and needs no inline fan-out (unlike `CODE_REVIEW`).
+Tested by invoking it; it loaded and executed, failing only on the `origin/HEAD` precondition above.
+
 - **Run the local `/security-review`** when the diff touches `hooks/` — `guard_append_only.py` parses
   untrusted-shaped input (a hook event on stdin) and compiles regexes from a config file. That is the
   repo's only executable attack surface.
@@ -158,6 +184,22 @@ and the running list of **dogfood findings this repo surfaces that the other two
   a silently-inert review gate. This config deviates deliberately. **Generic lesson:** a fix that
   lands in the working tree is not a fix for consumers until re-install (#36) — and the window
   between them is exactly when new consumers get onboarded with the old bug.
+
+- **F22 — the security gate's `origin/HEAD` precondition is stranded in AgentFluent's config
+  (2026-07-29).** Filed as [F22](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1#issuecomment-5115966313).
+  `loop-engine.md:548` names the "`origin/HEAD` incantation" and delegates it to `loop.config.md`,
+  but `commands/init-loop.md` never mentions it — so the generator emits a security gate that dies
+  on first use in every newly-onboarded repo. **Same class as F7, found at onboarding time two days
+  later:** knowledge that lives in one consumer's hand-patched config instead of in the thing that
+  writes configs. Suggests a mechanical audit for #40 — grep the engine for host-specifics it
+  delegates, confirm the skeleton emits each one. Also drove a scope extension on
+  [#21](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/21#issuecomment-5115977369):
+  a gate that *errors* is a third route to a skipped gate, alongside unbound and `TODO`-valued.
+
+- **Negative result — `/security-review` is model-invocable; `SECURITY_REVIEW` needs no fan-out
+  (2026-07-29).** The reasonable prior after F7 was that both built-in review skills are
+  `disable-model-invocation`. Tested directly: `/security-review` loads and executes; `/code-review`
+  does not. Recorded so it is not re-litigated.
 
 - **Candidate finding — `PRIORITY_LABELS` assumes labels.** This backlog encodes selection order as
   a `**Delivery order:** PR <n>` line in the issue *body*, with `Depends on:` / `Blocks:` lines
