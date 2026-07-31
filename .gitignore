@@ -16,3 +16,6 @@ __pycache__/
 
 # dev-loop ledger (local working state, never committed)
 .claude/loop/
+
+# social/marketing drafts (local working state, never committed)
+social/
