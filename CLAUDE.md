@@ -37,8 +37,15 @@ Two modules, and the split between them matters:
 - **`tests/test_guard_append_only.py`** — behavior of the one piece of executable code.
 - **`tests/test_repo_consistency.py`** — **mechanical** checks on the markdown/JSON deliverable:
   the shipped example sidecar still loads through the real `load_registry`; the composed
-  `plugin@marketplace` identifier still matches every hand-written call site; and engine `CAPS` ⊆
-  the `/init-loop` skeleton (see the three-layer split below — this is that contract, enforced).
+  `plugin@marketplace` identifier still matches every hand-written call site; engine `CAPS` ⊆
+  the `/init-loop` skeleton (see the three-layer split below — this is that contract, enforced);
+  and `PipelineStepOrderTests` — the pipeline's **step *ordering*** agrees across the three
+  artifacts that restate it (`loop-engine.md`'s `### N.` headings, `SKILL.md`'s numbered chain,
+  and `plugin.json`'s published marketplace description). It checks numbering and label
+  correspondence **only** — never whether a step belongs at that position, and never the pipeline's
+  *status* vocabulary (`in-acceptance` and friends live in the ledger format, not in headings).
+  `plugin.json` is pinned loosely, by ordered subsequence: the marketplace copy may keep omitting
+  internal steps, but it may not reorder them.
 
 **Prompt *semantics* remain validated by review + dogfooding, and that is deliberate** — the
 consistency module tests couplings, never whether an instruction is *right*. Do not try to grow it
