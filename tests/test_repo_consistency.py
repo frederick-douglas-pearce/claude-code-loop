@@ -4,7 +4,7 @@
 The bulk of this repo is prompt artifacts an agent executes at runtime, so
 semantics stay validated by review + dogfooding (CLAUDE.md -> "What this repo
 is"). These tests deliberately do **not** attempt that. They cover only the
-three couplings that a reader cannot see and a reviewer reliably forgets:
+four couplings that a reader cannot see and a reviewer reliably forgets:
 
 1. the shipped example sidecar still loads through the real ``load_registry``;
 2. the ``plugin@marketplace`` identifier hardcoded in prose still matches the
@@ -234,89 +234,70 @@ class CapsVocabularyTests(unittest.TestCase):
 
 
 class PipelineStepOrderTests(unittest.TestCase):
-    """The pipeline's step order is written down three times; nothing else catches drift.
+    """Three restatements of the pipeline's step order, checked against each other.
 
     The order lives in ``loop-engine.md``'s ``### N. <name>`` headings, is
     restated with numbers in ``SKILL.md``'s arrow chain, and is spelled out
-    again -- unnumbered -- in ``plugin.json``'s ``description``, which is the
-    **published marketplace copy** a prospective user reads before installing.
-    Drift there ships.
+    again -- unnumbered -- in ``plugin.json``'s ``description``, which is
+    published with the plugin. Drift there ships.
 
-    **Scope -- what this does and does not guard.** It guards step *heading
-    numbering* and the engine<->SKILL label/number coupling. It does **not**
-    cover the pipeline's *status* vocabulary (``in-acceptance`` and friends
-    live in the ledger format, not in ``### N.`` headings), and it does **not**
-    force ``plugin.json`` to change when a step is renumbered or inserted --
-    the description carries no numbers and is matched loosely (below). This is
-    an ordering/coupling check, never a check on whether a step is *right*.
+    Those three are not string-identical and cannot be made so: the engine has
+    13 numbered headings, SKILL.md restates all 13 with numbers, and the
+    description gives 11 unnumbered labels -- omitting the two internal steps
+    (load/resume, commit/PR) and saying ``review`` where the engine says ``Code
+    review``. So correspondence is by normalised word overlap: two labels
+    correspond when their content words intersect, and each label binds to its
+    *best*-overlapping candidate rather than its first (see ``_assign`` and
+    ``test_skill_labels_match_their_engine_headings`` for why first-match
+    binding is unsound when two headings share a word).
 
-    The three sources are not string-identical and cannot be made so: the
-    engine has 13 numbered headings, SKILL.md restates all 13 with numbers, and
-    the marketplace description gives 11 unnumbered labels -- omitting the two
-    internal steps (load/resume, commit/PR) and saying ``review`` where the
-    engine says ``Code review``. So correspondence is by normalised word
-    overlap, at two different strictnesses:
+    **Scope -- what this does NOT guard**, because a green run here is easy to
+    over-read as "the renumber is done":
 
-    * **SKILL.md gets positional-argmax uniqueness.** A label's overlap with
-      its positional counterpart must be strictly greater than its overlap
-      with every other heading. Mere intersection is too weak: ``Code review``
-      / ``Security review`` share ``review`` and ``Architect gate`` / ``Human
-      gate`` share ``gate``, so a swap of the pair would be caught only by the
-      accident that SKILL.md currently abbreviates step 10 to bare
-      ``security``. Harmonising that to ``security review`` -- a plausible
-      copy-edit -- would silently blind the check for exactly the swaps it
-      exists to catch. Argmax catches them regardless of wording.
-    * **plugin.json gets an order-preserving subsequence.** Deliberately
-      loose: it is marketing copy, and requiring it to enumerate
-      ``load/resume`` for the test's convenience would invert the dependency.
-      Reorderings are still caught, because relocating a label leaves a
-      distinctive one unmatchable.
-
-    Failure messages name the source, the step index, and both labels. That
-    matters more here than elsewhere: an engine 9/10 swap surfaces at position
-    **10**, not at the 9 the human edited.
+    * The pipeline's *status* vocabulary (the ``queued -> routed -> ...`` chain
+      in the ledger format) -- these are ``### N.`` headings only.
+    * Whether a step is the *right* thing to do at that point. This is an
+      ordering and coupling check, never a semantic one.
+    * ``plugin.json`` changing when a step is renumbered or inserted: the
+      description carries no numbers and may keep omitting internal steps. Its
+      reorderings are caught only *among the labels it lists* -- a swap
+      involving a step it omits is invisible here and rests on the SKILL.md
+      check.
+    * Two further restatements that a renumber also breaks: ``SKILL.md``'s
+      **frontmatter** ``description`` chain, and the engine's ~37 in-prose
+      ``step N`` cross-references. Tracked in #44; until then they are
+      hand-checked.
     """
 
-    # `### 9. Code review` -> (9, "Code review")
-    _ENGINE_HEADING = re.compile(r"^### (\d+)\. (.+)$", re.MULTILINE)
-    # SKILL.md's parenthesised chain: "(step 0 load/resume -> 1 select -> ...)".
-    # Only the opening is matched by regex; the close is found by counting
-    # depth, so a parenthesised aside inside the chain ("5 human gate
-    # (conditional)") does not silently truncate the parse to six steps.
-    _SKILL_CHAIN_OPEN = re.compile(r"\(step\s+0\b", re.DOTALL)
-    # plugin.json's parenthesised chain, the only parenthesis holding arrows.
-    _PLUGIN_CHAIN = re.compile(r"\(([^()]*->[^()]*)\)")
+    # `### 9. Code review` -> (9, "Code review"); `### Guardrails` -> not a step.
+    _ANY_H3 = re.compile(r"^### (.+)$", re.MULTILINE)
+    _NUMBERED_H3 = re.compile(r"^(\d+)\. (.+)$")
+    _FENCED_BLOCK = re.compile(r"^```.*?^```", re.MULTILINE | re.DOTALL)
+    # The chains in SKILL.md and plugin.json. Only the OPENING is matched by
+    # regex; the close is found by counting paren depth, so a parenthesised
+    # aside inside a chain ("5 human gate (conditional)") does not silently
+    # truncate the parse. The openers require an arrow to be present, so an
+    # unrelated earlier paren -- prose in SKILL.md, a different aside in the
+    # marketplace copy -- cannot hijack the parse and be reported as drift.
+    _SKILL_CHAIN_OPEN = re.compile(r"\(step\s+0\s+[^)]*?→")
+    _PLUGIN_CHAIN_OPEN = re.compile(r"\((?=[^()]*->[^()]*->)")
 
     # Dropped so that "Load or initialize state" and "load/resume" compare on
     # content words. Parenthesised asides are stripped before this applies.
     _STOPWORDS = frozenset({"a", "an", "and", "by", "in", "of", "or", "the", "to"})
 
-    @staticmethod
-    def _words(label: str) -> frozenset:
-        """Normalise a step label to its content words.
+    def _balanced_chain(self, text: str, opening, source: str) -> str:
+        """Return the contents of the parenthesis `opening` starts, by depth.
 
-        Parenthesised asides go first -- the engine qualifies headings with
-        "(conditional)", "(by route)", "(you, the parent thread)", none of
-        which the short restatements carry.
+        Shared by both chain parsers: the marketplace copy is as entitled to a
+        nested aside as SKILL.md is, and hardening only one of them is how the
+        plugin-side parser ended up the fragile one.
         """
-        stripped = re.sub(r"\([^()]*\)", " ", label)
-        tokens = re.split(r"[^a-z0-9]+", stripped.lower())
-        return frozenset(t for t in tokens if t and t not in PipelineStepOrderTests._STOPWORDS)
-
-    def _engine_steps(self) -> list:
-        """[(number, heading)] in file order, from loop-engine.md."""
-        text = _ENGINE.read_text(encoding="utf-8")
-        return [(int(n), h.strip()) for n, h in self._ENGINE_HEADING.findall(text)]
-
-    def _skill_steps(self) -> list:
-        """[(number, label)] in file order, from SKILL.md's arrow chain."""
-        text = _SKILL.read_text(encoding="utf-8")
-        opening = self._SKILL_CHAIN_OPEN.search(text)
         self.assertIsNotNone(
             opening,
-            "SKILL.md no longer contains a parenthesised pipeline chain starting "
-            "'(step 0 ...'; the restatement moved or was reworded, so this check "
-            "can no longer verify it against loop-engine.md",
+            f"{source} no longer contains a parenthesised, arrow-separated "
+            "pipeline chain; the restatement moved or was reworded, so this "
+            "check can no longer verify it against loop-engine.md",
         )
         depth, end = 0, None
         for i in range(opening.start(), len(text)):
@@ -327,10 +308,92 @@ class PipelineStepOrderTests(unittest.TestCase):
                 if depth == 0:
                     end = i
                     break
-        self.assertIsNotNone(
-            end, "SKILL.md's '(step 0 ...' chain has no matching closing parenthesis"
+        self.assertIsNotNone(end, f"{source}'s pipeline chain has no closing parenthesis")
+        return text[opening.start() + 1 : end].replace("\n", " ")
+
+    def _assign(
+        self, labels: list[str], engine: list[tuple[int, str]], source: str, ordered: bool
+    ) -> None:
+        """Bind each label to its BEST-overlapping engine heading, then assert.
+
+        Binding to the *best* match rather than the first non-zero one is what
+        makes the word collisions (``Code review``/``Security review``,
+        ``Architect gate``/``Human gate``) safe: with first-match binding, a
+        label carrying only the shared word latches onto the wrong heading and
+        its swapped partner then still fits, so a genuine reversal passes.
+
+        Two failure modes are reported separately, because they call for
+        opposite fixes: a label that matches *no* heading anywhere is a wording
+        problem, while a label that matches out of position is an ordering
+        problem. Collapsing them into one message sends the reader after the
+        wrong thing.
+        """
+        unmatched = [lbl for lbl in labels if not any(self._words(lbl) & self._words(h) for _, h in engine)]
+        self.assertEqual(
+            unmatched,
+            [],
+            f"{source} uses step label(s) {unmatched} that share no word with ANY "
+            f"loop-engine.md heading. This is a WORDING mismatch, not an ordering "
+            f"one -- either reword the label or rename the heading so the two "
+            f"artifacts remain mechanically comparable. Engine headings: "
+            f"{[h for _, h in engine]}",
         )
-        chain = text[opening.start() + 1 : end].replace("\n", " ")
+        if not ordered:
+            return
+        cursor = 0
+        for label in labels:
+            words = self._words(label)
+            # Ties resolve to the earliest heading (-i maximised).
+            scored = [(len(words & self._words(engine[i][1])), -i, i) for i in range(cursor, len(engine))]
+            score, _, index = max(scored, default=(0, 0, len(engine)))
+            self.assertGreater(
+                score,
+                0,
+                f"{source} lists {label!r}, but no loop-engine.md heading at or "
+                f"after step {cursor} corresponds to it, so the chain is OUT OF "
+                f"ORDER. Remaining engine headings: {[h for _, h in engine[cursor:]]}. "
+                "NOTE: the walk reports the first label it cannot PLACE, which is "
+                "often a downstream casualty rather than the label that actually "
+                "moved -- read the whole chain, not just the one named here.",
+            )
+            cursor = index + 1
+
+    @staticmethod
+    def _words(label: str) -> frozenset[str]:
+        """Normalise a step label to its content words.
+
+        Parenthesised asides go first -- the engine qualifies headings with
+        "(conditional)", "(by route)", "(you, the parent thread)", none of
+        which the short restatements carry.
+        """
+        stripped = re.sub(r"\([^()]*\)", " ", label)
+        tokens = re.split(r"[^a-z0-9]+", stripped.lower())
+        return frozenset(t for t in tokens if t and t not in PipelineStepOrderTests._STOPWORDS)
+
+    def _engine_steps(self) -> list[tuple[int, str]]:
+        """[(number, heading)] in file order, from loop-engine.md.
+
+        Scoped to the pipeline section: fenced blocks are stripped first (the
+        engine embeds a ``issue-<N>.plan.md`` template that already carries
+        markdown headings), and the scan stops at the first unnumbered ``###``
+        after the numbered run -- ``### Escalation rubric`` and the sections
+        below it are not pipeline steps.
+        """
+        text = self._FENCED_BLOCK.sub("", _ENGINE.read_text(encoding="utf-8"))
+        steps = []
+        for heading in self._ANY_H3.findall(text):
+            match = self._NUMBERED_H3.match(heading.strip())
+            if match is None:
+                if steps:  # the numbered run has ended
+                    break
+                continue  # not into the pipeline section yet
+            steps.append((int(match.group(1)), match.group(2).strip()))
+        return steps
+
+    def _skill_steps(self) -> list[tuple[int, str]]:
+        """[(number, label)] in file order, from SKILL.md's arrow chain."""
+        text = _SKILL.read_text(encoding="utf-8")
+        chain = self._balanced_chain(text, self._SKILL_CHAIN_OPEN.search(text), "SKILL.md")
         steps = []
         for segment in chain.split("→"):
             segment = segment.strip()
@@ -345,17 +408,12 @@ class PipelineStepOrderTests(unittest.TestCase):
             steps.append((int(m.group(1)), m.group(2).strip()))
         return steps
 
-    def _plugin_labels(self) -> list:
+    def _plugin_labels(self) -> list[str]:
         """[label] in order, from plugin.json's description. No numbers."""
         description = json.loads(_PLUGIN_MANIFEST.read_text(encoding="utf-8"))["description"]
-        match = self._PLUGIN_CHAIN.search(description)
-        self.assertIsNotNone(
-            match,
-            "plugin.json's description no longer contains a parenthesised "
-            "'->'-separated step chain; the published marketplace copy changed "
-            "shape and is no longer pinned to the engine's step order",
-        )
-        return [seg.strip() for seg in match.group(1).split("->") if seg.strip()]
+        match = self._PLUGIN_CHAIN_OPEN.search(description)
+        chain = self._balanced_chain(description, match, "plugin.json's description")
+        return [seg.strip() for seg in chain.split("->") if seg.strip()]
 
     def test_the_extractors_actually_find_steps(self) -> None:
         # Guards against the whole class passing vacuously because a reword
@@ -389,61 +447,63 @@ class PipelineStepOrderTests(unittest.TestCase):
         )
 
     def test_skill_labels_match_their_engine_headings(self) -> None:
-        """Positional-argmax uniqueness -- see the class docstring.
+        """Positional argmax, checked in BOTH directions.
 
-        Asserting the *best-overlapping* heading is the positional one (not
-        merely that they overlap) is what makes a Code-review/Security-review
-        or Architect-gate/Human-gate swap detectable no matter how either side
-        abbreviates.
+        Each label must overlap its positional heading at least as well as any
+        other heading, *and* each heading must overlap its positional label at
+        least as well as any other label. The two-sided form is what allows the
+        comparison to be non-strict: requiring a strict win would fail an
+        order-preserving reword whose overlap merely ties with a word-colliding
+        neighbour ("human gate" -> "approval gate" ties with "Architect gate"
+        on ``gate``), reporting an ordering problem that does not exist. The
+        reverse pass is what keeps every genuine swap caught anyway.
         """
         engine = self._engine_steps()
-        engine_words = [(n, h, self._words(h)) for n, h in engine]
-        for index, (number, label) in enumerate(self._skill_steps()):
-            if index >= len(engine_words):  # covered by the number-sequence test
+        skill = self._skill_steps()
+        engine_words = [self._words(h) for _, h in engine]
+        label_words = [self._words(lbl) for _, lbl in skill]
+        for index, (number, label) in enumerate(skill):
+            if index >= len(engine):  # covered by the number-sequence test
                 break
             with self.subTest(step=number, label=label):
-                scores = [(len(self._words(label) & w), n, h) for n, h, w in engine_words]
-                own = scores[index]
-                best_other = max(scores[:index] + scores[index + 1 :], default=(0, -1, ""))
-                self.assertGreater(
-                    own[0],
-                    best_other[0],
-                    f"SKILL.md step {number} {label!r} does not best-match the engine "
-                    f"heading at that position ('{engine[index][1]}', overlap "
-                    f"{own[0]}); it matches engine step {best_other[1]} "
-                    f"('{best_other[2]}') at least as well (overlap {best_other[0]}). "
-                    "The two artifacts disagree about the pipeline's order or "
-                    "about what a step is called.",
+                fwd = [len(label_words[index] & w) for w in engine_words]
+                best_other = max(fwd[:index] + fwd[index + 1 :], default=0)
+                self.assertGreaterEqual(
+                    fwd[index],
+                    best_other,
+                    f"SKILL.md step {number} {label!r} matches engine step "
+                    f"{fwd.index(best_other)} better than the heading at its own "
+                    f"position ('{engine[index][1]}', overlap {fwd[index]} vs "
+                    f"{best_other}). The two artifacts disagree about the "
+                    "pipeline's order or about what a step is called.",
+                )
+                rev = [len(engine_words[index] & w) for w in label_words]
+                best_other = max(rev[:index] + rev[index + 1 :], default=0)
+                self.assertGreaterEqual(
+                    rev[index],
+                    best_other,
+                    f"loop-engine.md step {number} ('{engine[index][1]}') matches "
+                    f"SKILL.md's label at position {rev.index(best_other)} better "
+                    f"than its own ({label!r}, overlap {rev[index]} vs "
+                    f"{best_other}). The two artifacts disagree about the "
+                    "pipeline's order.",
                 )
 
     def test_plugin_description_is_an_ordered_subsequence_of_the_engine(self) -> None:
         """The marketplace copy may omit internal steps, never reorder them.
 
-        Greedy earliest-match is exact for the subsequence-exists predicate,
-        so a failure here is a genuine order violation, not an artifact of the
-        matching strategy.
+        Each label binds to its *best*-overlapping remaining heading, not the
+        first one it overlaps at all. First-match binding is unsound here: with
+        ``Code review``/``Security review`` sharing ``review``, a label carrying
+        only the shared word latches onto the wrong heading and its swapped
+        partner still fits, so a reversed chain passes.
         """
-        engine = self._engine_steps()
-        labels = self._plugin_labels()
-        cursor = 0
-        for label in labels:
-            words = self._words(label)
-            start = cursor
-            while cursor < len(engine) and not (words & self._words(engine[cursor][1])):
-                cursor += 1
-            self.assertLess(
-                cursor,
-                len(engine),
-                f"plugin.json's published description lists {label!r}, but no "
-                f"loop-engine.md step heading at or after step {start} corresponds "
-                f"to it. Remaining engine headings: "
-                f"{[h for _, h in engine[start:]]}. The marketplace copy and the "
-                "engine disagree about the pipeline's order. NOTE: a subsequence "
-                "walk reports the first label it cannot PLACE, which is often a "
-                "downstream casualty rather than the label that actually moved — "
-                "read the whole chain, not just the one named here.",
-            )
-            cursor += 1
+        self._assign(
+            self._plugin_labels(),
+            self._engine_steps(),
+            "plugin.json's published description",
+            ordered=True,
+        )
 
 
 if __name__ == "__main__":
