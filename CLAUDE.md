@@ -37,8 +37,22 @@ Two modules, and the split between them matters:
 - **`tests/test_guard_append_only.py`** — behavior of the one piece of executable code.
 - **`tests/test_repo_consistency.py`** — **mechanical** checks on the markdown/JSON deliverable:
   the shipped example sidecar still loads through the real `load_registry`; the composed
-  `plugin@marketplace` identifier still matches every hand-written call site; and engine `CAPS` ⊆
-  the `/init-loop` skeleton (see the three-layer split below — this is that contract, enforced).
+  `plugin@marketplace` identifier still matches every hand-written call site; engine `CAPS` ⊆
+  the `/init-loop` skeleton (see the three-layer split below — this is that contract, enforced);
+  and `PipelineStepOrderTests` — the pipeline's **step *ordering*** agrees across the three
+  artifacts that restate it (`loop-engine.md`'s `### N.` headings, `SKILL.md`'s numbered chain,
+  and `plugin.json`'s `description`, published with the plugin). It checks numbering and label
+  correspondence **only** — never whether a step is the *right* thing to do at that point, and
+  never the pipeline's *status* vocabulary (the `queued → routed → …` chain lives in the ledger
+  format, not in headings). `plugin.json` is pinned loosely, by ordered subsequence: it may keep
+  omitting internal steps, and reorderings are caught only *among the labels it lists* — a swap
+  involving a step it omits is invisible there and rests on the `SKILL.md` check.
+
+  **Two restatements it does NOT guard**, both of which a pipeline renumber breaks: `SKILL.md`'s
+  **frontmatter `description`** (`plan→architect→implement→review→merge` — the string the model
+  reads when deciding to invoke the skill), and the engine's ~37 in-prose `step N` cross-references
+  (`grep -c 'step [0-9]' skills/dev-loop/loop-engine.md`). A green run is **not** evidence that a
+  renumber is complete; those two are still hand-checked.
 
 **Prompt *semantics* remain validated by review + dogfooding, and that is deliberate** — the
 consistency module tests couplings, never whether an instruction is *right*. Do not try to grow it
@@ -49,6 +63,8 @@ green run proves nothing by itself — when you change one, mutate the thing it 
 actually fails. Second: `CapsVocabularyTests.ALLOWED_NON_BINDINGS` is an escape hatch (currently two
 env vars and the meta-term `CAPS`). Adding to it is almost always the wrong fix — a growing
 allow-list means the test is being worked around rather than the vocabulary kept in sync.
+`PipelineStepOrderTests._STOPWORDS` has the identical property: padding it is the easy way to make a
+failing label comparison pass, and it is just as much a worked-around test.
 
 ## Architecture — the three-layer split
 
