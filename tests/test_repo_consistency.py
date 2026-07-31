@@ -279,8 +279,11 @@ class PipelineStepOrderTests(unittest.TestCase):
 
     # `### 9. Code review` -> (9, "Code review")
     _ENGINE_HEADING = re.compile(r"^### (\d+)\. (.+)$", re.MULTILINE)
-    # SKILL.md's parenthesised chain: "(step 0 load/resume -> 1 select -> ...)"
-    _SKILL_CHAIN = re.compile(r"\(step\s+0\b.*?\)", re.DOTALL)
+    # SKILL.md's parenthesised chain: "(step 0 load/resume -> 1 select -> ...)".
+    # Only the opening is matched by regex; the close is found by counting
+    # depth, so a parenthesised aside inside the chain ("5 human gate
+    # (conditional)") does not silently truncate the parse to six steps.
+    _SKILL_CHAIN_OPEN = re.compile(r"\(step\s+0\b", re.DOTALL)
     # plugin.json's parenthesised chain, the only parenthesis holding arrows.
     _PLUGIN_CHAIN = re.compile(r"\(([^()]*->[^()]*)\)")
 
@@ -308,14 +311,26 @@ class PipelineStepOrderTests(unittest.TestCase):
     def _skill_steps(self) -> list:
         """[(number, label)] in file order, from SKILL.md's arrow chain."""
         text = _SKILL.read_text(encoding="utf-8")
-        match = self._SKILL_CHAIN.search(text)
+        opening = self._SKILL_CHAIN_OPEN.search(text)
         self.assertIsNotNone(
-            match,
+            opening,
             "SKILL.md no longer contains a parenthesised pipeline chain starting "
             "'(step 0 ...'; the restatement moved or was reworded, so this check "
             "can no longer verify it against loop-engine.md",
         )
-        chain = match.group(0).strip("()").replace("\n", " ")
+        depth, end = 0, None
+        for i in range(opening.start(), len(text)):
+            if text[i] == "(":
+                depth += 1
+            elif text[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        self.assertIsNotNone(
+            end, "SKILL.md's '(step 0 ...' chain has no matching closing parenthesis"
+        )
+        chain = text[opening.start() + 1 : end].replace("\n", " ")
         steps = []
         for segment in chain.split("→"):
             segment = segment.strip()
@@ -323,7 +338,9 @@ class PipelineStepOrderTests(unittest.TestCase):
             segment = re.sub(r"^step\s+", "", segment)
             m = re.match(r"(\d+)\s+(.+)$", segment)
             self.assertIsNotNone(
-                m, f"SKILL.md chain segment {segment!r} is not '<number> <label>'"
+                m,
+                f"SKILL.md chain segment {segment!r} is not '<number> <label>'. The "
+                "chain must stay a '→'-separated list of '<number> <label>' steps.",
             )
             steps.append((int(m.group(1)), m.group(2).strip()))
         return steps
@@ -421,7 +438,10 @@ class PipelineStepOrderTests(unittest.TestCase):
                 f"loop-engine.md step heading at or after step {start} corresponds "
                 f"to it. Remaining engine headings: "
                 f"{[h for _, h in engine[start:]]}. The marketplace copy and the "
-                "engine disagree about the pipeline's order.",
+                "engine disagree about the pipeline's order. NOTE: a subsequence "
+                "walk reports the first label it cannot PLACE, which is often a "
+                "downstream casualty rather than the label that actually moved — "
+                "read the whole chain, not just the one named here.",
             )
             cursor += 1
 
