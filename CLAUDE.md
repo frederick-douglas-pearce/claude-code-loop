@@ -39,20 +39,30 @@ Two modules, and the split between them matters:
   the shipped example sidecar still loads through the real `load_registry`; the composed
   `plugin@marketplace` identifier still matches every hand-written call site; engine `CAPS` ⊆
   the `/init-loop` skeleton (see the three-layer split below — this is that contract, enforced);
-  and `PipelineStepOrderTests` — the pipeline's **step *ordering*** agrees across the three
-  artifacts that restate it (`loop-engine.md`'s `### N.` headings, `SKILL.md`'s numbered chain,
-  and `plugin.json`'s `description`, published with the plugin). It checks numbering and label
-  correspondence **only** — never whether a step is the *right* thing to do at that point, and
-  never the pipeline's *status* vocabulary (the `queued → routed → …` chain lives in the ledger
-  format, not in headings). `plugin.json` is pinned loosely, by ordered subsequence: it may keep
-  omitting internal steps, and reorderings are caught only *among the labels it lists* — a swap
-  involving a step it omits is invisible there and rests on the `SKILL.md` check.
+  and `PipelineStepOrderTests` — the pipeline's **step *ordering*** agrees across the **five**
+  artifacts that restate it: `loop-engine.md`'s `### N.` headings, `SKILL.md`'s numbered chain,
+  `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
+  `description`** (`plan→architect→implement→review→merge` — the string the model reads when
+  deciding to invoke the skill, so a behavior surface, not prose), and the engine's ~49 in-prose
+  `step N` cross-references. It checks numbering and label correspondence **only** — never whether a
+  step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
+  `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
+  frontmatter chain are both pinned loosely, by ordered subsequence: they may keep omitting internal
+  steps, and reorderings are caught only *among the labels each lists* — a swap involving a step one
+  omits is invisible there and rests on the `SKILL.md` numbered-chain check. The frontmatter's
+  **label count is pinned** (`_EXPECTED_FRONTMATTER_LABELS`) because a *shortened* chain is still a
+  valid subsequence and would otherwise pass while checking less.
 
-  **Two restatements it does NOT guard**, both of which a pipeline renumber breaks: `SKILL.md`'s
-  **frontmatter `description`** (`plan→architect→implement→review→merge` — the string the model
-  reads when deciding to invoke the skill), and the engine's ~37 in-prose `step N` cross-references
-  (`grep -c 'step [0-9]' skills/dev-loop/loop-engine.md`). A green run is **not** evidence that a
-  renumber is complete; those two are still hand-checked.
+  **What a renumber still slips past** — the coverage claim is deliberately narrow, so read it
+  before assuming #31 is done. The cross-reference check asserts **resolvability only**: every
+  referenced N is a real heading number. It cannot know that `step 9` still *means* code review —
+  that is semantics, which this module does not do. So it catches a renumber that leaves references
+  **dangling** (a step removed, or the run rebased off zero), and it does **not** catch (a) a
+  renumber that only *appends* steps, which leaves every existing reference resolvable, or (b) a
+  reference that stays in range but now points at the wrong step. Both were confirmed by mutation
+  (#44): appending a step and updating `SKILL.md` passes the whole suite, as does rewriting a
+  `(step 9)` to `(step 7)`. **A green run is not evidence that the ~49 cross-references were
+  correctly renumbered** — that remains hand-checked.
 
 **Prompt *semantics* remain validated by review + dogfooding, and that is deliberate** — the
 consistency module tests couplings, never whether an instruction is *right*. Do not try to grow it
