@@ -11,8 +11,8 @@ four couplings that a reader cannot see and a reviewer reliably forgets:
    manifests it is composed from;
 3. every ``CAPS`` parameter the engine reads is offered by the ``/init-loop``
    skeleton, so a newly-onboarded repo is never missing a binding;
-4. the pipeline's step order, restated in five artifacts, still agrees with
-   itself.
+4. the pipeline's step order, restated five times across four files, still
+   agrees with itself.
 
 Each failure here is silent rot in the shipped product, not a style nit.
 
@@ -245,21 +245,25 @@ class PipelineStepOrderTests(unittest.TestCase):
     breaks: ``SKILL.md``'s **frontmatter** ``description`` chain -- the string
     the model reads when deciding whether to invoke the skill, so a behavior
     surface rather than internal prose -- and the engine's in-prose ``step N``
-    / ``Stages N/M`` cross-references (49 reference sites, 53 numbers once
-    ``/``- and dash-separated runs are expanded)::
+    / ``Stages N/M`` cross-references: **51 reference sites, 55 numbers** once
+    ``/``- and dash-separated runs are expanded. This grep finds 49 of the 51::
 
         grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' \\
             skills/dev-loop/loop-engine.md | wc -l
 
+    The 2 it misses are line-wrapped (``(step\\n   1)``, ``(step\\n10)``) --
+    which is the point: a one-line grep cannot see them, ``_STEP_REFERENCE``'s
+    newline branch can, and before review caught it neither could.
+
     A **sixth** restatement is still unguarded: ``commands/init-loop.md``'s
     ``(engine step 9)`` in the ``CODE_REVIEW`` skeleton row, which every
     consuming repo copies into its own ``loop.config.md``. It cannot reuse
-    ``_STEP_REFERENCE`` -- that file has ~17 other ``Step N`` matches which are
-    its *own* onboarding steps, not pipeline steps, so the matcher would need
-    to anchor on the literal "engine step". Tracked in #45; hand-checked until
-    then.
+    ``_STEP_REFERENCE`` -- that file has 16 other ``Step N`` matches (17
+    including this one) which are its *own* onboarding steps, not pipeline
+    steps, so the matcher would need to anchor on the literal "engine step".
+    Tracked in #45; hand-checked until then.
 
-    Those three are not string-identical and cannot be made so: the engine has
+    The original three are not string-identical and cannot be made so: the engine has
     13 numbered headings, SKILL.md restates all 13 with numbers, and the
     description gives 11 unnumbered labels -- omitting the two internal steps
     (load/resume, commit/PR) and saying ``review`` where the engine says ``Code
@@ -284,15 +288,21 @@ class PipelineStepOrderTests(unittest.TestCase):
     * **What a renumber does to the cross-references.** The cross-reference
       check asserts *resolvability only* -- that every referenced N is a real
       heading number. It cannot know that ``step 9`` still means *code review*;
-      that is semantics, which this module does not do. It therefore fires only
-      when the heading range **shrinks** or is rebased off zero. Stated
-      bluntly, for whoever implements #31: **inserting a step mid-pipeline and
-      renumbering everything after it leaves all 53 references pointing at the
-      wrong step with the whole suite green.** A green run is not evidence the
-      cross-references were correctly renumbered.
-    * **What the frontmatter check is sensitive to.** Order and label count
-      only. A renumber that preserves the relative order of plan / architect /
-      implement / review / merge does not disturb it.
+      that is semantics, which this module does not do. It fires when a
+      reference goes **out of range** -- whether because someone edited it to a
+      number no heading defines, or because the heading run shrank or was
+      rebased off zero. Stated bluntly, for whoever implements #31: **inserting
+      a step mid-pipeline and renumbering everything after it leaves all 55
+      references pointing at the wrong step with the whole suite green.** A
+      green run is not evidence the cross-references were correctly renumbered.
+    * **What the frontmatter check is sensitive to.** Order, label count, and
+      that each label still word-overlaps some engine heading. A renumber that
+      preserves the relative order of the steps the chain names does not
+      disturb it. Nor does a same-length RELABEL that stays ordered: swapping
+      ``review`` out for ``route`` still binds (to ``2. Triage / route``) and
+      still passes, while quietly dropping review from the model-facing
+      description. Pinning the label *set* would catch that, at the cost of
+      failing every legitimate reword; the count pin is the compromise.
     """
 
     # `### 9. Code review` -> (9, "Code review"); `### Guardrails` -> not a step.
@@ -337,16 +347,32 @@ class PipelineStepOrderTests(unittest.TestCase):
     # The engine's in-prose cross-references, in every form it actually uses:
     # `step 9`, `Step 11`, `step-1`, `step 0.1`, `step 0/1`, `steps 0–1`,
     # `Stages 4/7/10`. The trailing run picks up `/`- and dash-separated lists.
+    #
+    # The newline branch is load-bearing, not defensive: the engine is
+    # hard-wrapped, and TWO references sit astride a wrap today ("(step\n   1)"
+    # and "(step\n10)"). A separator of plain `[ -]` silently missed both --
+    # found by review, and exactly the invisible-coverage failure this check
+    # exists to prevent.
+    #
+    # Separators inside a run are NOT space-padded, deliberately. Allowing
+    # `\s*` there made an ordinary prose aside -- "(step 12 — 40 lines max)" --
+    # parse as a run of 12 and 40 and report a dangling "step 40" nobody wrote.
+    # All three real runs (`0–1`, `0/1`, `4/7/10`) are tight, so the padding
+    # bought nothing and cost a false failure.
     _STEP_REFERENCE = re.compile(
-        r"\b(?:[Ss]teps?|[Ss]tages?)[ -](\d+(?:\.\d+)?(?:\s*[/–—-]\s*\d+(?:\.\d+)?)*)"
+        r"\b(?:[Ss]teps?|[Ss]tages?)(?:[ -]|[ \t]*\n[ \t]*)"
+        r"(\d+(?:\.\d+)?(?:[/–—-]\d+(?:\.\d+)?)*)"
     )
-    _REFERENCE_SEPARATORS = re.compile(r"\s*[/–—-]\s*")
-    # Well below the 53 numbers present when this landed (49 reference sites,
+    _REFERENCE_SEPARATORS = re.compile(r"[/–—-]")
+    # Well below the 55 numbers present when this landed (51 reference sites,
     # some listing several), so ordinary prose edits never trip it, and well
     # above zero, so a regex broken by a reword fails here instead of passing on
-    # an empty list. The 13 of slack is deliberate slack, not a measurement.
-    # Raising it as the engine grows is fine; lowering it to make a red run
-    # green is working around the check (cf. _STOPWORDS, ALLOWED_NON_BINDINGS).
+    # an empty list. The 15 of headroom is a deliberate choice, not a
+    # measurement -- and note its cost: a reword that breaks only PART of the
+    # matcher (say, `Stages 4/7/10` -> `Stages 4, 7 and 10`, a form this regex
+    # does not match) drops a few numbers and still clears the floor. Raising
+    # this as the engine grows is fine; lowering it to make a red run green is
+    # working around the check (cf. _STOPWORDS, ALLOWED_NON_BINDINGS).
     _MIN_STEP_REFERENCES = 40
 
     def _balanced_chain(self, text: str, opening, source: str) -> str:
@@ -375,7 +401,12 @@ class PipelineStepOrderTests(unittest.TestCase):
         return text[opening.start() + 1 : end].replace("\n", " ")
 
     def _assign(
-        self, labels: list[str], engine: list[tuple[int, str]], source: str, ordered: bool
+        self,
+        labels: list[str],
+        engine: list[tuple[int, str]],
+        source: str,
+        ordered: bool,
+        latest_tie: bool = False,
     ) -> None:
         """Bind each label to its BEST-overlapping engine heading, then assert.
 
@@ -406,8 +437,14 @@ class PipelineStepOrderTests(unittest.TestCase):
         cursor = 0
         for label in labels:
             words = self._words(label)
-            # Ties resolve to the earliest heading (-i maximised).
-            scored = [(len(words & self._words(engine[i][1])), -i, i) for i in range(cursor, len(engine))]
+            # Ties resolve to the earliest heading (-i maximised) by default;
+            # `latest_tie` flips that to the LAST equally-good heading. Which is
+            # right depends on whether the chain collapses several headings into
+            # one label -- see the two callers.
+            tie = (lambda i: i) if latest_tie else (lambda i: -i)
+            scored = [
+                (len(words & self._words(engine[i][1])), tie(i), i) for i in range(cursor, len(engine))
+            ]
             score, _, index = max(scored, default=(0, 0, len(engine)))
             self.assertGreater(
                 score,
@@ -503,7 +540,9 @@ class PipelineStepOrderTests(unittest.TestCase):
             "split the parse in two, which would silently shrink what is checked. "
             "If you deliberately added a SECOND, unrelated arrow chain to the "
             "description, this parser needs a way to tell them apart -- widening "
-            "_ARROW_CHAIN to just take the first match is not it.",
+            "_ARROW_CHAIN to just take the first match is not it. If the count "
+            "is 0 and the chain looks fine, check whether the description was "
+            "reflowed onto several lines: only the first is read.",
         )
         return [segment.strip() for segment in chains[0].split("→")]
 
@@ -660,16 +699,28 @@ class PipelineStepOrderTests(unittest.TestCase):
         description does, so the subsequence matcher is the right one: it must
         never REORDER the steps it does list. Same caveat as there -- a swap
         involving a step the chain omits is invisible to this check.
+
+        ``latest_tie=True`` is the one difference, and it closes a false pass
+        review found: this chain says ``review`` ONCE while the engine has two
+        review steps (9 Code review, 10 Security review). Under the default
+        earliest-tie rule, ``review`` binds to whichever comes first, so moving
+        the OTHER review step after ``Merge`` satisfied the chain and passed --
+        a pipeline where code review runs after merge, certified green. Binding
+        to the LAST equally-good heading is the correct reading of a label that
+        collapses both: every review step must precede merge. ``plugin.json``'s
+        chain keeps the default because it lists review and security
+        separately, so its labels are not collapsed.
         """
         self._assign(
             self._skill_frontmatter_labels(),
             self._engine_steps(),
             "SKILL.md's frontmatter description",
             ordered=True,
+            latest_tie=True,
         )
 
     def test_every_engine_step_reference_resolves_to_a_real_heading(self) -> None:
-        """Restatement #5: 49 in-prose `step N` sites. RESOLVABILITY ONLY.
+        """Restatement #5: 51 in-prose `step N` sites. RESOLVABILITY ONLY.
 
         This asserts that every referenced N is a real heading number -- not
         that it still points at the step it meant. `step 9` continuing to
@@ -682,18 +733,21 @@ class PipelineStepOrderTests(unittest.TestCase):
         removed, or the run rebased off zero). It does NOT catch a renumber
         that only adds steps, nor a reference that shifted meaning while
         staying in range -- including the case that matters most, inserting a
-        step mid-pipeline, which leaves all 53 references pointing one step off
+        step mid-pipeline, which leaves all 55 references pointing one step off
         and every test green.
+
+        Nor does it see reference FORMS the regex does not match: `steps 3 and
+        7`, `steps 3, 7`, and `step #7` are all invisible. None is used in the
+        engine today, and each was left out deliberately -- matching `,` or
+        `and` as run separators re-introduces the false failure that space-
+        padded separators caused ("step 12 — 40 lines max" parsing as a run).
         """
         valid = {number for number, _ in self._engine_steps()}
         # Sorted numerically, not lexically: ['10', '9'] reads as a typo.
-        dangling = [
-            literal
-            for literal in sorted(
-                {literal for literal, number in self._step_references() if number not in valid},
-                key=lambda lit: (int(lit.split(".")[0]), lit),
-            )
-        ]
+        dangling = sorted(
+            {literal for literal, number in self._step_references() if number not in valid},
+            key=lambda lit: (int(lit.split(".")[0]), lit),
+        )
         self.assertEqual(
             dangling,
             [],
