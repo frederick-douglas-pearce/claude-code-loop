@@ -43,8 +43,9 @@ Two modules, and the split between them matters:
   artifacts that restate it: `loop-engine.md`'s `### N.` headings, `SKILL.md`'s numbered chain,
   `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
   `description`** (`plan→architect→implement→review→merge` — the string the model reads when
-  deciding to invoke the skill, so a behavior surface, not prose), and the engine's ~49 in-prose
-  `step N` cross-references. It checks numbering and label correspondence **only** — never whether a
+  deciding to invoke the skill, so a behavior surface, not prose), and the engine's in-prose
+  `step N` cross-references (49 sites, 53 numbers — `grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]'
+  skills/dev-loop/loop-engine.md | wc -l`). It checks numbering and label correspondence **only** — never whether a
   step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
   `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
   frontmatter chain are both pinned loosely, by ordered subsequence: they may keep omitting internal
@@ -56,13 +57,18 @@ Two modules, and the split between them matters:
   **What a renumber still slips past** — the coverage claim is deliberately narrow, so read it
   before assuming #31 is done. The cross-reference check asserts **resolvability only**: every
   referenced N is a real heading number. It cannot know that `step 9` still *means* code review —
-  that is semantics, which this module does not do. So it catches a renumber that leaves references
-  **dangling** (a step removed, or the run rebased off zero), and it does **not** catch (a) a
-  renumber that only *appends* steps, which leaves every existing reference resolvable, or (b) a
-  reference that stays in range but now points at the wrong step. Both were confirmed by mutation
-  (#44): appending a step and updating `SKILL.md` passes the whole suite, as does rewriting a
-  `(step 9)` to `(step 7)`. **A green run is not evidence that the ~49 cross-references were
-  correctly renumbered** — that remains hand-checked.
+  that is semantics, which this module does not do. It therefore fires only when the heading range
+  **shrinks** or is rebased off zero. Stated bluntly, because this is the case #31 will actually
+  hit: **insert a step mid-pipeline, renumber everything after it, and all 53 references point at
+  the wrong step with the whole suite green.** Confirmed by mutation (#44), along with the milder
+  shapes — appending a step and updating `SKILL.md` passes, as does rewriting a `(step 9)` to
+  `(step 7)`. **A green run is not evidence the cross-references were correctly renumbered.**
+
+  **A sixth restatement is still unguarded:** `commands/init-loop.md`'s `(engine step 9)` in the
+  `CODE_REVIEW` skeleton row — which every consuming repo copies into its own `loop.config.md`
+  (this repo's is at `.claude/loop.config.md:43`). It can't reuse the engine's matcher: that file
+  carries ~17 other `Step N` references that are its *own* onboarding steps, so a checker there has
+  to anchor on the literal "engine step". Filed as #45; hand-checked until it lands.
 
 **Prompt *semantics* remain validated by review + dogfooding, and that is deliberate** — the
 consistency module tests couplings, never whether an instruction is *right*. Do not try to grow it

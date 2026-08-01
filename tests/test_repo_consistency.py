@@ -244,8 +244,20 @@ class PipelineStepOrderTests(unittest.TestCase):
     Two more restatements were added by #44, both of which #31's renumber
     breaks: ``SKILL.md``'s **frontmatter** ``description`` chain -- the string
     the model reads when deciding whether to invoke the skill, so a behavior
-    surface rather than internal prose -- and the engine's ~49 in-prose
-    ``step N`` / ``Stages N/M`` cross-references.
+    surface rather than internal prose -- and the engine's in-prose ``step N``
+    / ``Stages N/M`` cross-references (49 reference sites, 53 numbers once
+    ``/``- and dash-separated runs are expanded)::
+
+        grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' \\
+            skills/dev-loop/loop-engine.md | wc -l
+
+    A **sixth** restatement is still unguarded: ``commands/init-loop.md``'s
+    ``(engine step 9)`` in the ``CODE_REVIEW`` skeleton row, which every
+    consuming repo copies into its own ``loop.config.md``. It cannot reuse
+    ``_STEP_REFERENCE`` -- that file has ~17 other ``Step N`` matches which are
+    its *own* onboarding steps, not pipeline steps, so the matcher would need
+    to anchor on the literal "engine step". Tracked in #45; hand-checked until
+    then.
 
     Those three are not string-identical and cannot be made so: the engine has
     13 numbered headings, SKILL.md restates all 13 with numbers, and the
@@ -272,11 +284,12 @@ class PipelineStepOrderTests(unittest.TestCase):
     * **What a renumber does to the cross-references.** The cross-reference
       check asserts *resolvability only* -- that every referenced N is a real
       heading number. It cannot know that ``step 9`` still means *code review*;
-      that is semantics, which this module does not do. Two consequences, both
-      aimed at whoever implements #31: a reference that stays in range but now
-      points at the wrong step is **not** caught, and a renumber that only
-      *adds* steps leaves every existing reference resolvable, so **a green run
-      is not evidence the ~49 cross-references were correctly updated.**
+      that is semantics, which this module does not do. It therefore fires only
+      when the heading range **shrinks** or is rebased off zero. Stated
+      bluntly, for whoever implements #31: **inserting a step mid-pipeline and
+      renumbering everything after it leaves all 53 references pointing at the
+      wrong step with the whole suite green.** A green run is not evidence the
+      cross-references were correctly renumbered.
     * **What the frontmatter check is sensitive to.** Order and label count
       only. A renumber that preserves the relative order of plan / architect /
       implement / review / merge does not disturb it.
@@ -308,7 +321,11 @@ class PipelineStepOrderTests(unittest.TestCase):
     # a reword to MULTI-word segments ("plan → architect gate → implement")
     # splits into two matches and trips the exactly-one rule below, rather than
     # silently truncating -- the same failure mode PR #43's review caught in the
-    # body-chain parser.
+    # body-chain parser. Known false-failure, accepted: adding a SECOND,
+    # unrelated arrow chain to the description (e.g. a status chain
+    # "queued→routed→done") also trips the rule, though nothing has drifted.
+    # That is the fail-safe direction -- a loud red run whose message says what
+    # to do, rather than a parser guessing which chain is the pipeline one.
     _ARROW_CHAIN = re.compile(r"[\w./+-]+(?:\s*→\s*[\w./+-]+)+")
     # Pinned, not floored: the frontmatter is a behavior surface, so ANY change
     # to the chain's length should be a deliberate, reviewed edit that updates
@@ -324,11 +341,12 @@ class PipelineStepOrderTests(unittest.TestCase):
         r"\b(?:[Ss]teps?|[Ss]tages?)[ -](\d+(?:\.\d+)?(?:\s*[/–—-]\s*\d+(?:\.\d+)?)*)"
     )
     _REFERENCE_SEPARATORS = re.compile(r"\s*[/–—-]\s*")
-    # Well below the 49 references present when this landed, so ordinary prose
-    # edits never trip it, and well above zero, so a regex broken by a reword
-    # fails here instead of passing on an empty list. Raising it as the engine
-    # grows is fine; lowering it to make a red run green is working around the
-    # check (cf. _STOPWORDS, ALLOWED_NON_BINDINGS).
+    # Well below the 53 numbers present when this landed (49 reference sites,
+    # some listing several), so ordinary prose edits never trip it, and well
+    # above zero, so a regex broken by a reword fails here instead of passing on
+    # an empty list. The 13 of slack is deliberate slack, not a measurement.
+    # Raising it as the engine grows is fine; lowering it to make a red run
+    # green is working around the check (cf. _STOPWORDS, ALLOWED_NON_BINDINGS).
     _MIN_STEP_REFERENCES = 40
 
     def _balanced_chain(self, text: str, opening, source: str) -> str:
@@ -482,7 +500,10 @@ class PipelineStepOrderTests(unittest.TestCase):
             f"frontmatter description, found {len(chains)}: {chains}. The chain "
             "must stay a single run of single-token labels "
             "('plan→architect→implement→review→merge') -- multi-word segments "
-            "split the parse in two, which would silently shrink what is checked.",
+            "split the parse in two, which would silently shrink what is checked. "
+            "If you deliberately added a SECOND, unrelated arrow chain to the "
+            "description, this parser needs a way to tell them apart -- widening "
+            "_ARROW_CHAIN to just take the first match is not it.",
         )
         return [segment.strip() for segment in chains[0].split("→")]
 
@@ -648,7 +669,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         )
 
     def test_every_engine_step_reference_resolves_to_a_real_heading(self) -> None:
-        """Restatement #5: ~49 in-prose `step N` refs. RESOLVABILITY ONLY.
+        """Restatement #5: 49 in-prose `step N` sites. RESOLVABILITY ONLY.
 
         This asserts that every referenced N is a real heading number -- not
         that it still points at the step it meant. `step 9` continuing to
@@ -660,10 +681,19 @@ class PipelineStepOrderTests(unittest.TestCase):
         So: this catches a renumber that leaves references DANGLING (steps
         removed, or the run rebased off zero). It does NOT catch a renumber
         that only adds steps, nor a reference that shifted meaning while
-        staying in range.
+        staying in range -- including the case that matters most, inserting a
+        step mid-pipeline, which leaves all 53 references pointing one step off
+        and every test green.
         """
         valid = {number for number, _ in self._engine_steps()}
-        dangling = sorted({literal for literal, number in self._step_references() if number not in valid})
+        # Sorted numerically, not lexically: ['10', '9'] reads as a typo.
+        dangling = [
+            literal
+            for literal in sorted(
+                {literal for literal, number in self._step_references() if number not in valid},
+                key=lambda lit: (int(lit.split(".")[0]), lit),
+            )
+        ]
         self.assertEqual(
             dangling,
             [],
