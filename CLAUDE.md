@@ -39,20 +39,44 @@ Two modules, and the split between them matters:
   the shipped example sidecar still loads through the real `load_registry`; the composed
   `plugin@marketplace` identifier still matches every hand-written call site; engine `CAPS` ⊆
   the `/init-loop` skeleton (see the three-layer split below — this is that contract, enforced);
-  and `PipelineStepOrderTests` — the pipeline's **step *ordering*** agrees across the three
-  artifacts that restate it (`loop-engine.md`'s `### N.` headings, `SKILL.md`'s numbered chain,
-  and `plugin.json`'s `description`, published with the plugin). It checks numbering and label
-  correspondence **only** — never whether a step is the *right* thing to do at that point, and
-  never the pipeline's *status* vocabulary (the `queued → routed → …` chain lives in the ledger
-  format, not in headings). `plugin.json` is pinned loosely, by ordered subsequence: it may keep
-  omitting internal steps, and reorderings are caught only *among the labels it lists* — a swap
-  involving a step it omits is invisible there and rests on the `SKILL.md` check.
+  and `PipelineStepOrderTests` — the pipeline's **step *ordering*** agrees across the **five**
+  restatements of it (in four files): `loop-engine.md`'s `### N.` headings, `SKILL.md`'s numbered chain,
+  `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
+  `description`** (`plan→architect→implement→review→merge` — the string the model reads when
+  deciding to invoke the skill, so a behavior surface, not prose), and the engine's in-prose
+  `step N` cross-references — **51 sites, 55 numbers**. That grep
+  (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) reports
+  only 49: the other two are line-wrapped, which is exactly how they went unguarded until review
+  caught it. It checks numbering and label correspondence **only** — never whether a
+  step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
+  `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
+  frontmatter chain are both pinned loosely, by ordered subsequence: they may keep omitting internal
+  steps, and reorderings are caught only *among the labels each lists* — a swap involving a step one
+  omits is invisible there and rests on the `SKILL.md` numbered-chain check. The frontmatter's
+  **label count is pinned** (`_EXPECTED_FRONTMATTER_LABELS`) because a *shortened* chain is still a
+  valid subsequence and would otherwise pass while checking less.
 
-  **Two restatements it does NOT guard**, both of which a pipeline renumber breaks: `SKILL.md`'s
-  **frontmatter `description`** (`plan→architect→implement→review→merge` — the string the model
-  reads when deciding to invoke the skill), and the engine's ~37 in-prose `step N` cross-references
-  (`grep -c 'step [0-9]' skills/dev-loop/loop-engine.md`). A green run is **not** evidence that a
-  renumber is complete; those two are still hand-checked.
+  **What a renumber still slips past** — the coverage claim is deliberately narrow, so read it
+  before assuming #31 is done. The cross-reference check asserts **resolvability only**: every
+  referenced N is a real heading number. It cannot know that `step 9` still *means* code review —
+  that is semantics, which this module does not do. It fires when a reference goes **out of range** —
+  whether edited to a number no heading defines, or left behind when the heading run shrank or was
+  rebased off zero. Stated bluntly, because this is the case #31 will actually hit: **insert a step
+  mid-pipeline, renumber everything after it, and all 55 references point at the wrong step with the
+  whole suite green.** Confirmed by mutation (#44), along with the milder shapes — appending a step
+  and updating `SKILL.md` passes, as does rewriting a `(step 9)` to `(step 7)`. **A green run is not
+  evidence the cross-references were correctly renumbered.** Reference *forms* the regex does not
+  match (`steps 3 and 7`, `steps 3, 7`, `step #7`) are invisible too; none is used today, and each
+  is excluded deliberately — treating `,`/`and` as separators makes ordinary prose ("step 12 — 40
+  lines max") parse as a step range and fail.
+
+  **A sixth restatement is still unguarded:** `commands/init-loop.md`'s `(engine step 9)` in the
+  `CODE_REVIEW` skeleton row — which every consuming repo copies into its own `loop.config.md`
+  (this repo's copy is at `.claude/loop.config.md:43`; that file carries five further engine-step
+  references of its own, which no check reaches because consumer configs are outside the shipped
+  plugin). It can't reuse the engine's matcher: that file carries 16 other `Step N` references that
+  are its *own* onboarding steps, so a checker there has to anchor on the literal "engine step".
+  Filed as #45; hand-checked until it lands.
 
 **Prompt *semantics* remain validated by review + dogfooding, and that is deliberate** — the
 consistency module tests couplings, never whether an instruction is *right*. Do not try to grow it
