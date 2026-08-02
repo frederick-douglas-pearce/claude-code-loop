@@ -501,8 +501,9 @@ Route is retained so the row resumes as that route once the dependency clears, s
 ## AC-verifier
 Default: **compose existing tools**, don't mint an agent.
 1. After implementation, spawn a fresh subagent with ONLY: the issue's acceptance criteria
-   (verbatim) + the `$BASE` SHA resolved below — and nothing from your own plan, narrative, or
-   claims. The verifier **runs the read commands itself** so that it reports what it actually saw
+   (verbatim) + the `$BASE` SHA resolved below + the commands under **Verifier runs** — and nothing
+   from your own plan, narrative, or claims (the "ONLY" excludes your *conclusions*, not the
+   instructions it needs). The verifier **runs the read commands itself** so it reports what it saw
    rather than what it was handed. Define its input **without assuming a commit exists** — this
    gate must certify the same work whether or not the branch has been committed yet.
 
@@ -515,8 +516,8 @@ Default: **compose existing tools**, don't mint an agent.
    ```
    (`main` is the assumed base branch; a project whose trunk is named otherwise adjusts it here —
    parameterizing it is a pending change.) **If `$BASE` is empty** — the base ref does not resolve,
-   or the histories are unrelated, which exits non-zero with *no* stderr at all — STOP and escalate **to
-   the human**. That is an environment fault, not an AC gap, so it does **not** consume one of this
+   or the histories are unrelated, which exits non-zero with *no* stderr at all — STOP and escalate
+   **to the human**. That is an environment fault, not an AC gap, so it does **not** consume one of this
    gate's two rounds; journal the failing command and do NOT run the diff.
 
    **Verifier runs** (from the repo root — prefix with `git -C "$(git rev-parse --show-toplevel)"`
@@ -546,9 +547,11 @@ Default: **compose existing tools**, don't mint an agent.
    these acceptance criteria. If the input is empty or absent — no diff, AND no untracked file that
    plausibly IS the work these criteria describe — that is a FINDING: report not-done and say so;
    never read an empty diff as 'nothing to object to'. Then, for each acceptance criterion, state
-   met/not-met with the file:line or test that satisfies it, citing only work that will actually
-   merge. Verify the diff actually does this; do not assume. Return a checklist + overall
-   done/not-done."*
+   met/not-met with the file:line or test that satisfies it, citing only work that belongs to THIS
+   change and never an unrelated pre-existing edit. Uncommitted work that implements a criterion IS
+   valid evidence — diffing the working tree is the whole point; 'not yet committed' is never a
+   reason to call a criterion unmet. Verify the diff actually does this; do not assume. Return a
+   checklist + overall done/not-done."*
 2. For behavior that needs runtime proof, also run `VERIFY` (runs the app).
 3. `CODE_REVIEW` (step 9) provides the adversarial bug pass.
 Promote to a dedicated `ac-verifier` agent only if the composed approach proves too loose.
