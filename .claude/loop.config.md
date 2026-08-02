@@ -21,8 +21,14 @@ See `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/loop-engine.md` for the operating pro
 >    than silently working around it — this repo's runs are the evidence base for v0.2.0:
 >    - **#19 (F15)** — the AC-verifier is specified on `git diff main...HEAD` at step 7, *before* the
 >      step-8 commit. On an uncommitted branch that diff is **empty** and the gate certifies nothing.
->      Workaround until the reorder lands: commit before invoking the AC-verifier, and require the
->      verifier to state the diff it actually received.
+>      **Fixed in-tree by #48**, not by the #31 reorder this note used to credit: the spec now
+>      resolves `BASE=$(git merge-base main HEAD)`, diffs merge-base → **working tree** (covering all
+>      three commit states), reads untracked files separately, and treats an empty input as a
+>      **finding** rather than a pass. **Still live in the installed 0.0.1 until the plugin is
+>      re-installed (#36)** — so the workaround still applies to runs driven by the installed engine:
+>      commit before invoking the AC-verifier, and require the verifier to state the diff it actually
+>      received. Better, run the #48 procedure directly, as this repo's own #19 iteration did — that
+>      is what produced the evidence that the old spec certifies 0 files pre-commit.
 >    - **#21 (F14)** — an unbound or `TODO(init-loop)` binding does not error; it silently skips the
 >      gate. Every `TODO` below is therefore a **live inert gate**, not a harmless blank.
 >    - **F7 (#10, fixed in-tree, still shipped in 0.0.1)** — the 0.0.1 `/init-loop` skeleton binds
