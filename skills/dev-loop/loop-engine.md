@@ -210,7 +210,9 @@ Advance the row to `in-review`. Run `CODE_REVIEW` on the diff.
 
 `CODE_REVIEW` names a **procedure you run, not a command you call**. The default — and the pattern
 that works in practice — is **parallel finder subagents over `git diff main...HEAD`, plus a pass
-that confirms each finding**, journaled under the gate's name. A review skill marked
+that confirms each finding**, journaled under the gate's name. (`main...HEAD` is the right form
+*here*: the commit has already happened by this gate. The acceptance gate deliberately diffs the
+working tree instead, because it runs before the commit — do not "fix" one to match the other.) A review skill marked
 `disable-model-invocation` is **user-triggered only and cannot be invoked from here at all**: if
 `CODE_REVIEW` is bound to one, the gate is unsatisfiable and silently does nothing. Such a skill is
 a *human* escalation, never a binding. On finding one bound here: run the finder procedure for this
@@ -499,9 +501,57 @@ Route is retained so the row resumes as that route once the dependency clears, s
 ## AC-verifier
 Default: **compose existing tools**, don't mint an agent.
 1. After implementation, spawn a fresh subagent with ONLY: the issue's acceptance criteria
-   (verbatim) + `git diff main...HEAD`. Prompt: *"For each acceptance criterion, state
-   met/not-met with the file:line or test that satisfies it. Verify the diff actually does
-   this; do not assume. Return a checklist + overall done/not-done."*
+   (verbatim) + the `$BASE` SHA resolved below + the commands under **Verifier runs** — and nothing
+   from your own plan, narrative, or claims (the "ONLY" excludes your *conclusions*, not the
+   instructions it needs). The verifier **runs the read commands itself** so it reports what it saw
+   rather than what it was handed. Define its input **without assuming a commit exists** — this
+   gate must certify the same work whether or not the branch has been committed yet.
+
+   **Orchestrator, before spawning — resolve the fork point.** Run it as ONE command and **quote**
+   the result: shell variables do not survive between tool calls, and an *unquoted* empty `$BASE`
+   makes `git diff` silently degrade to **unstaged-only** — a plausible-but-wrong input rather than
+   a visible failure. Quoted, the same mistake fails loudly instead.
+   ```bash
+   BASE=$(git merge-base main HEAD) && git diff "$BASE" --stat
+   ```
+   (`main` is the assumed base branch; a project whose trunk is named otherwise adjusts it here —
+   parameterizing it is a pending change.) **If `$BASE` is empty** — the base ref does not resolve,
+   or the histories are unrelated, which exits non-zero with *no* stderr at all — STOP and escalate
+   **to the human**. That is an environment fault, not an AC gap, so it does **not** consume one of this
+   gate's two rounds; journal the failing command and do NOT run the diff.
+
+   **Verifier runs** (from the repo root — prefix with `git -C "$(git rev-parse --show-toplevel)"`
+   if the working directory may be elsewhere):
+   - **`git diff "$BASE"`**, plus `--stat` for the file and insertion counts it is asked to report
+     — merge-base → **working tree**, covering all three commit states in one command: **fully
+     committed** (equivalent to the old `main...HEAD`, though only on an otherwise-clean tree),
+     **partially committed** (the still-uncommitted remainder is included, staged and unstaged
+     alike), and **wholly uncommitted** (the entire branch's work is included — the case where
+     `main...HEAD` yields an EMPTY diff and the gate certifies nothing).
+     **Over-inclusion is the price of that coverage, and it is a real failure mode:** the working
+     tree also carries any *unrelated* pre-existing edits, which the implement step forbids staging
+     but not merely having — so they will never merge. The verifier must name them separately and
+     must never accept them as AC evidence; a `file:line` citation has to land in the merge
+     candidate. (Under-inclusion certifies nothing; over-inclusion certifies the wrong thing.)
+   - **`git ls-files --others --exclude-standard`** — **untracked files, which no diff ever shows.**
+     A brand-new file is among the commonest forms of AC evidence; read the contents of those the
+     acceptance criteria implicate and list the rest by path only. Two traps: the command is scoped
+     to the **current directory**, so from a subdirectory it silently omits everything above it; and
+     it lists stray scratch files belonging to no branch, which must not be mistaken for the work.
+   If the diff plus that content will not fit one context window, report `input-too-large` and
+   not-done rather than silently reading a truncated subset.
+
+   Prompt: *"Run the commands above yourself against base `<SHA>`; do not rely on anything I tell
+   you the input contains. State the input you retrieved — base commit, file count, insertions, and
+   any untracked files — BEFORE answering, and name separately anything that looks unrelated to
+   these acceptance criteria. If the input is empty or absent — no diff, AND no untracked file that
+   plausibly IS the work these criteria describe — that is a FINDING: report not-done and say so;
+   never read an empty diff as 'nothing to object to'. Then, for each acceptance criterion, state
+   met/not-met with the file:line or test that satisfies it, citing only work that belongs to THIS
+   change and never an unrelated pre-existing edit. Uncommitted work that implements a criterion IS
+   valid evidence — diffing the working tree is the whole point; 'not yet committed' is never a
+   reason to call a criterion unmet. Verify the diff actually does this; do not assume. Return a
+   checklist + overall done/not-done."*
 2. For behavior that needs runtime proof, also run `VERIFY` (runs the app).
 3. `CODE_REVIEW` (step 9) provides the adversarial bug pass.
 Promote to a dedicated `ac-verifier` agent only if the composed approach proves too loose.

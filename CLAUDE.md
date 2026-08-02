@@ -207,7 +207,8 @@ from `~/.claude/plugins/cache/claude-code-loop/dev-loop/<version>/`; edits to `s
 cannot mutate the engine driving it — but it also means the loop keeps exhibiting the defects we are
 fixing. Known ones to journal rather than silently work around: **#19/F15** (the AC-verifier diffs
 `main...HEAD` at step 7, *before* the step-8 commit, so an uncommitted branch certifies an empty
-diff) and **#21/F14** (an unbound binding skips its gate silently instead of erroring).
+diff — **fixed in-tree by #48, still live in the installed 0.0.1 until the #36 re-install**) and
+**#21/F14** (an unbound binding skips its gate silently instead of erroring).
 
 **The window between an in-tree fix and a consumer re-install is when new consumers get onboarded
 with the old bug.** Demonstrated at this repo's own onboarding: the installed v0.0.1 `/init-loop`
