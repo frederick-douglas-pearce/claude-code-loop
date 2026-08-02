@@ -499,9 +499,31 @@ Route is retained so the row resumes as that route once the dependency clears, s
 ## AC-verifier
 Default: **compose existing tools**, don't mint an agent.
 1. After implementation, spawn a fresh subagent with ONLY: the issue's acceptance criteria
-   (verbatim) + `git diff main...HEAD`. Prompt: *"For each acceptance criterion, state
-   met/not-met with the file:line or test that satisfies it. Verify the diff actually does
-   this; do not assume. Return a checklist + overall done/not-done."*
+   (verbatim) + the resolved `$BASE` SHA below — and nothing from your own plan, narrative, or
+   claims. The **orchestrator resolves `$BASE`; the verifier then reads the branch's complete work
+   so far by running the commands below itself**, so that it reports what it actually saw rather
+   than what it was handed. Define that input **without assuming a commit exists** — this gate must
+   certify the same work whether or not the branch has been committed yet:
+   - **Resolve the fork point first:** `BASE=$(git merge-base main HEAD)`. **If it is empty** — the
+     base ref does not resolve, or the histories are unrelated — STOP and escalate; do NOT run the
+     diff. A bare `git diff` after an empty expansion silently degrades to *unstaged-only*, which is
+     a plausible-but-wrong input rather than a visible failure.
+   - **`git diff $BASE`** — merge-base → **working tree**, which covers all three commit states in
+     one command: **fully committed** (identical to the old `main...HEAD`), **partially committed**
+     (the still-uncommitted remainder is included, staged and unstaged alike), and **wholly
+     uncommitted** (the entire branch's work is included — the case where `main...HEAD` yields an
+     EMPTY diff and the gate certifies nothing).
+   - **`git ls-files --others --exclude-standard`** — **untracked files, which no diff ever shows.**
+     A brand-new file is among the commonest forms of AC evidence; read its contents alongside the
+     diff or the gate silently cannot see it.
+
+   Prompt: *"State the input you actually received — base commit, file count, insertions, and any
+   untracked files — BEFORE answering. If the input as a whole — diff AND untracked files — is
+   empty or absent, that is a FINDING: report not-done and say so; never read an empty diff as
+   'nothing to object to'. (A branch whose entire work is a new file has an empty diff and a
+   non-empty untracked list — that is a real input, not an empty one.) Then, for each
+   acceptance criterion, state met/not-met with the file:line or test that satisfies it. Verify the
+   diff actually does this; do not assume. Return a checklist + overall done/not-done."*
 2. For behavior that needs runtime proof, also run `VERIFY` (runs the app).
 3. `CODE_REVIEW` (step 9) provides the adversarial bug pass.
 Promote to a dedicated `ac-verifier` agent only if the composed approach proves too loose.
