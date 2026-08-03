@@ -275,8 +275,8 @@ progress.md):
 `wall-clock=<elapsed, includes gate-wait — not a cap input>` · `tokens=deferred` (computed
 post-hoc from the loop's own JSONL by an out-of-band analyzer, not inside the skill; the named
 slot keeps the line forward-stable) — **plus any of the optional slots below**. Those four are
-**required**; write the whole thing as **one physical line, never wrapped** (a wrapped line defeats
-the `subagent-cap` check that reads it).
+**required**; write the whole thing as **one physical line, never wrapped** (every reader of this
+line is line-based, so a wrap strands whichever slots fall past the break).
 
 **Say why, not just how much.** Counts alone cannot tell a justified high-stakes iteration from
 review thrash, which is the distinction the human needs when deciding whether to loosen a gate. So:
@@ -508,12 +508,16 @@ repo's own step-order references went unguarded for a release precisely because 
 line-wrapped, and every reader of this line is line-based. **No slot value and no note may contain
 the `·` separator**, and a note's parentheses must be balanced: a reader splits `gate-rounds` on
 commas **outside** parentheses, which is what keeps `code-review=2(correctness,robustness)` one
-sub-slot rather than three.
+sub-slot rather than three. A slot is split from its value on the **first** `=`, never on a later
+one — `gate-rounds=architect=0` depends on this, and so does any note containing an `=`. Every slot
+uses `=`, including where prose would reach for something softer: write
+`wall-clock=≈2h`, never `wall-clock≈2h`, or the slot parses as a nameless fragment and is lost.
 
 **Forward stability.** The four slots in the chain the journal step prescribes (`subagent-runs`,
-`gate-rounds`, `wall-clock`, `tokens`) are **required** — the `subagent-cap` check reads the first
-of them, and an
-absent one would leave that check undefined and silently inert. Every slot beyond those four is
+`gate-rounds`, `wall-clock`, `tokens`) are **required**: `subagent-runs` because the `subagent-cap`
+check reads it and an absent one leaves that check undefined and silently inert, and the other three
+because every line in the existing corpus carries them — a reader comparing iterations needs the
+same spine on each. Every slot beyond those four is
 **optional**, order-insignificant, and a reader ignores names it does not recognise — the
 `tokens=deferred` precedent generalised from one reserved name to a rule, so a later release adds
 slots without invalidating existing lines. One constraint on reading them: **an absent slot does not
