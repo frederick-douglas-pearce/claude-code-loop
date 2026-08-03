@@ -274,24 +274,33 @@ progress.md):
 `subagent-runs=<n>` · `gate-rounds=architect=<a>,code-review=<c>,ac-verify=<v>` ·
 `wall-clock=<elapsed, includes gate-wait — not a cap input>` · `tokens=deferred` (computed
 post-hoc from the loop's own JSONL by an out-of-band analyzer, not inside the skill; the named
-slot keeps the line forward-stable).
+slot keeps the line forward-stable) — **plus any of the optional slots below**. Those four are
+**required**; write the whole thing as **one physical line, never wrapped** (a wrapped line defeats
+the `subagent-cap` check that reads it).
 
 **Say why, not just how much.** Counts alone cannot tell a justified high-stakes iteration from
 review thrash, which is the distinction the human needs when deciding whether to loosen a gate. So:
 - **Note any slot** by putting a short free-text parenthetical **after** its value —
   `subagent-runs=4 (Explore map + architect + 2 finders)`,
-  `gate-rounds=architect=0(discharged by a pre-existing review)`. The note goes *after* the number so
-  the number stays machine-readable (the cap check reads it); never put the `·` separator inside one.
+  `gate-rounds=architect=0(discharged by a pre-existing review)`. A space before the `(` is optional.
+  On `gate-rounds` a note attaches to the **immediately preceding sub-slot**, never to the slot as a
+  whole — to annotate the whole iteration, use `justification=`.
 - **On the code-review count, the parenthetical records the lenses that fired** —
   `code-review=2(correctness,robustness)`. Instrumenting which angles actually catch things is what
   lets a review-tier matrix later be chosen from corpus rather than intuition.
-- **Add `justification=<short reason>` whenever the iteration exceeded the single-pass baseline** —
-  any `gate-rounds` value above 1, a re-plan, or an extra fan-out. It is *permitted* on any line;
-  write it whenever the spend would otherwise look unexplained.
+- **Add `justification=<short reason>` whenever any `gate-rounds` value exceeds 1** — the single-pass
+  baseline. It is *permitted* on any line; write it whenever the spend would otherwise look
+  unexplained.
 - **Record the acceptance gate's result classes separately** — `ac-findings=<n>` for criteria the
-  gate found unmet, `mutation-survivors=<n>` for seeded defects it failed to catch, and
-  `post-gate-survivors=<n>` for defects found *after* the gate certified. Collapsing them loses the
-  distinction between a gate that found nothing and a gate that missed something.
+  gate found unmet, **counted cumulatively across all of that gate's rounds, not as the final
+  round's residue** (a final-round count is 0 on every iteration that merged, which erases the
+  signal), and `post-gate-survivors=<n>` for defects that escaped it and surfaced later in this
+  iteration. Collapsing them loses the distinction between a gate that found nothing and a gate that
+  missed something.
+
+**Two constraints that keep the line parseable.** No slot value and no note may contain the `·`
+separator, and notes must keep their parentheses balanced — a reader splits `gate-rounds` on commas
+**outside** parentheses, so the lens list above stays one sub-slot rather than three.
 
 Set the `queue.md` row to `done` (or `blocked`/`deferred` with reason); note newly-unblocked
 issues. The ledger is gitignored — do NOT commit it (Ledger format → lifecycle). STOP. (Driver
@@ -444,7 +453,8 @@ belongs to no round at all.
 Fields:
 - **`subagent-runs`** — the proxy cost signal the orchestrator can count for free. **One run = one
   subagent invocation**, so N parallel finders count as N, not as the one gate round they serve
-  (the cap check below reads this number, so an under-count silently loosens the cap). Its blind
+  (the `subagent-cap` check above reads this number, so an under-count silently loosens
+  the cap; it reads the leading integer and ignores any parenthetical). Its blind
   spot: parent-thread token burn (a long implement step spawns no subagent yet can be the largest
   consumer) is invisible to run-count — which is precisely what the deferred `tokens` field
   eventually fixes.
@@ -455,17 +465,26 @@ Fields:
   this slot signals *thrash* — having to run a gate again.
 - **`justification=<short reason>`** — why the spend was warranted. Counts alone cannot separate a
   justified high-stakes iteration from review thrash, which is exactly the distinction the human
-  needs when deciding whether to loosen a gate. **Expected whenever the iteration exceeded the
-  single-pass baseline** — any `gate-rounds` value above 1, a re-plan, or an extra fan-out — and
-  *permitted* on any line. The baseline is the engine's own shape, not a per-project number, so it
+  needs when deciding whether to loosen a gate. **Expected whenever any `gate-rounds` value exceeds
+  1** — the single-pass baseline — and *permitted* on any line. The trigger is deliberately the one
+  thing decidable from the same line: it is the engine's own shape, not a per-project number, so it
   needs no binding and cannot drift upward as a run gets more expensive.
-- **`ac-findings` / `mutation-survivors` / `post-gate-survivors`** — the acceptance gate's result
-  classes, recorded **separately**: criteria the gate found unmet; seeded defects it failed to catch;
-  and defects found *after* it certified. Collapsed into one number they cancel out — a gate that
-  found nothing and a gate that missed something read identically, and two stories measuring opposite
-  signals off this line would each think they were confirmed. These are top-level slots, not nested
-  in `gate-rounds`, because they count **outcomes rather than runs** — and because a post-gate
-  survivor is by definition discovered after the gate's last round.
+- **`ac-findings` / `post-gate-survivors`** — the acceptance gate's result classes, recorded
+  **separately**: criteria the gate found unmet, **counted cumulatively across all of that gate's
+  rounds** (the final round's count is 0 on every iteration that merged, so a final-round reading
+  erases the signal); and defects that escaped the gate and surfaced later in the same iteration —
+  in code review, security, or at the merge gate, the window running from the gate to this journal
+  entry. A survivor found in a *later* iteration is recorded on that iteration's line, naming the
+  one it escaped; this journal is append-only and is never rewritten to add it. Collapsed into one
+  number these cancel out — a gate that found nothing and a gate that missed something read
+  identically, and two stories measuring opposite signals off this line would each think they were
+  confirmed. They are top-level slots, not nested in `gate-rounds`, because they count **outcomes
+  rather than runs**.
+- **`mutation-survivors`** — seeded defects the acceptance gate failed to catch. **Reserved, in the
+  same sense as `tokens=deferred`: this engine has no defect-seeding step yet**, so there is nothing
+  to count and the slot is **omitted — never written as `0`**, which would assert that a mutation
+  pass ran and caught everything. It becomes writable when the AC-verifier gains a mutation pass;
+  naming it now makes that an addition rather than a format change.
 - **`wall-clock`** — elapsed time including human gate-wait; recorded for the dogfood corpus, **not
   a cap input** (an iteration that waited overnight for approval is not "expensive").
 - **`tokens=deferred`** — a reserved, named slot. Per-iteration token/cost is computed **post-hoc
@@ -476,18 +495,30 @@ Fields:
 
 **Notes on any slot.** A short free-text parenthetical may follow **any** slot's value —
 `subagent-runs=4 (Explore map + architect + 2 finders)`,
-`gate-rounds=architect=0(discharged by a pre-existing review)`. It goes *after* the value so the
-value stays machine-readable, and must not contain the `·` separator. On the **code-review** count
-the parenthetical specifically records **the lenses that fired**
-(`code-review=2(correctness,robustness)`) — instrumenting which angles actually catch things is what
-lets a review-tier matrix later be chosen from corpus rather than from intuition. A note annotates;
-it never replaces a slot.
+`gate-rounds=architect=0(discharged by a pre-existing review)`; the space before `(` is optional. It
+goes *after* the value so the value stays machine-readable. On `gate-rounds`, a note attaches to the
+**immediately preceding sub-slot**, never to the slot as a whole — annotate the whole iteration with
+`justification=` instead. On the **code-review** count the parenthetical specifically records **the
+lenses that fired** (`code-review=2(correctness,robustness)`) — instrumenting which angles actually
+catch things is what lets a review-tier matrix later be chosen from corpus rather than from
+intuition. A note annotates; it never replaces a slot.
 
-**Forward stability.** Slots are optional, order-insignificant, and a reader ignores names it does
-not recognise — the `tokens=deferred` precedent generalised from one reserved name to a rule, so a
-later release adds slots without invalidating existing lines. One constraint on reading them: **an
-absent slot does not mean zero.** A missing `ac-findings` says nothing about how many findings there
-were; only `ac-findings=0` does.
+**Writing it so it can be read back.** The line is **one physical line, never wrapped** — this
+repo's own step-order references went unguarded for a release precisely because two of them were
+line-wrapped, and every reader of this line is line-based. **No slot value and no note may contain
+the `·` separator**, and a note's parentheses must be balanced: a reader splits `gate-rounds` on
+commas **outside** parentheses, which is what keeps `code-review=2(correctness,robustness)` one
+sub-slot rather than three.
+
+**Forward stability.** The four slots in the chain the journal step prescribes (`subagent-runs`,
+`gate-rounds`, `wall-clock`, `tokens`) are **required** — the `subagent-cap` check reads the first
+of them, and an
+absent one would leave that check undefined and silently inert. Every slot beyond those four is
+**optional**, order-insignificant, and a reader ignores names it does not recognise — the
+`tokens=deferred` precedent generalised from one reserved name to a rule, so a later release adds
+slots without invalidating existing lines. One constraint on reading them: **an absent slot does not
+mean zero.** A missing `ac-findings` says nothing about how many findings there were; only
+`ac-findings=0` does — which is why a slot with no producing procedure is omitted rather than zeroed.
 
 ### `issue-<N>.plan.md` — per-issue plan (architect-reviewed, human-approved)
 ```markdown
