@@ -122,6 +122,14 @@ See `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/loop-engine.md` for the operating pro
 
 The binding table. The engine names each parameter in `CAPS`; the values here are this repo's.
 
+> ⚠ **A `TODO(init-loop)` is a blank that escalates — not a switch that turns its gate off.** The
+> engine journals a gate as passed only with the gate's own verdict as evidence (**no verdict ⇒ not
+> passed**), so an unfilled binding does not quietly skip the gate: it falls back to the engine's
+> inline composition where one is defined, and otherwise **stops the run and asks you**. That is the
+> rule for the rows naming a **gate**; the rest of the table is read where it is used, so a `TODO`
+> there fails later, at the command that needed it. Where a parameter genuinely does not **apply**,
+> write `—` plus the reason — a deliberate "not applicable", which is not the same as a blank.
+
 | Parameter | Value | Notes |
 |-----------|-------|-------|
 | `BACKLOG_SOURCE` | <inferred / TODO(init-loop)> | GitHub milestone/label, or a local `TODO.md` |
@@ -255,4 +263,6 @@ Report, concisely:
   (e.g. "matched D001…D060 — guard is live"; "0 matches — the regex protects nothing, fix
   `id_pattern`"). If none, say the guard is inert (no sidecar).
 - **Next steps:** review `CONFIG` (resolve TODOs), then run the `dev-loop` skill to work the first
-  issue. Note that the plugin does nothing until the config's blanks are filled.
+  issue. Note that an unresolved **gate** binding does not disable its gate — the loop falls back to
+  a built-in equivalent where it has one (code review) and otherwise stops and asks you. Non-gate
+  blanks fail later, at whatever step needed the value.

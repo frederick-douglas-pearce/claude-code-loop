@@ -44,9 +44,9 @@ Two modules, and the split between them matters:
   `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
   `description`** (`plan→architect→implement→review→merge` — the string the model reads when
   deciding to invoke the skill, so a behavior surface, not prose), and the engine's in-prose
-  `step N` cross-references — **51 sites, 55 numbers**. That grep
+  `step N` cross-references — **55 sites, 59 numbers**. That grep
   (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) reports
-  only 49: the other two are line-wrapped, which is exactly how they went unguarded until review
+  only 53: the other two are line-wrapped, which is exactly how they went unguarded until review
   caught it. It checks numbering and label correspondence **only** — never whether a
   step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
   `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
@@ -72,7 +72,7 @@ Two modules, and the split between them matters:
 
   **A sixth restatement is still unguarded:** `commands/init-loop.md`'s `(engine step 9)` in the
   `CODE_REVIEW` skeleton row — which every consuming repo copies into its own `loop.config.md`
-  (this repo's copy is at `.claude/loop.config.md:43`; that file carries five further engine-step
+  (this repo's copy is at `.claude/loop.config.md:49`; that file carries five further engine-step
   references of its own, which no check reaches because consumer configs are outside the shipped
   plugin). It can't reuse the engine's matcher: that file carries 16 other `Step N` references that
   are its *own* onboarding steps, so a checker there has to anchor on the literal "engine step".
@@ -208,7 +208,8 @@ cannot mutate the engine driving it — but it also means the loop keeps exhibit
 fixing. Known ones to journal rather than silently work around: **#19/F15** (the AC-verifier diffs
 `main...HEAD` at step 7, *before* the step-8 commit, so an uncommitted branch certifies an empty
 diff — **fixed in-tree by #48, still live in the installed 0.0.1 until the #36 re-install**) and
-**#21/F14** (an unbound binding skips its gate silently instead of erroring).
+**#21/F14** (an unbound binding skips its gate silently instead of erroring — **fixed in-tree by
+the gate-outcome invariant, still live in the installed 0.0.1 until the #36 re-install**).
 
 **The window between an in-tree fix and a consumer re-install is when new consumers get onboarded
 with the old bug.** Demonstrated at this repo's own onboarding: the installed v0.0.1 `/init-loop`
