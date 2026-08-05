@@ -86,7 +86,9 @@ that gate's own output as evidence: **no verdict means not passed**. A binding y
 equivalent where one exists, and otherwise stop and ask you. A gate that ran and *errored* never
 falls back at all — the loop will not substitute a check of its own devising and call it clean; it
 escalates. (A gate the route legitimately skips is journalled as *skipped*, which is also not a
-pass.)
+pass.) **Upgrading from an earlier version:** if a previous `/init-loop` told you to *delete* a
+binding row that didn't apply to your repo, restore it as `—` plus a reason — an absent row now
+reads the same as a blank one, and blanks escalate.
 
 **Hard limits the engine commits to:**
 
@@ -156,7 +158,9 @@ naming) and:
 
 - generates a pre-filled `${CLAUDE_PROJECT_DIR}/.claude/loop.config.md` — inferred
   values in place, clearly-marked `TODO(init-loop)` blanks for anything it can't
-  infer (correctness is yours to confirm at first-run review);
+  infer, and an explicit `—` plus a reason where a parameter genuinely doesn't
+  apply (correctness is yours to confirm at first-run review). A leftover `TODO`
+  on a gate binding is not inert: see the gating posture above;
 - if it finds a decision-log-style append-only file, generates a
   `loop.append-guard.json` sidecar (the machine SSOT) and echoes the entry IDs it
   matched so you can confirm the guard is live;

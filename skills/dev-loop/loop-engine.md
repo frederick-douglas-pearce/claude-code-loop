@@ -95,7 +95,8 @@ This paragraph is the sub-unit the step-0.1 parked path invokes standalone.
 
 A row is **selectable** if its status is `queued`/`routed`, OR it is `blocked` on an unmet
 dependency that has SINCE cleared (all its `Depends on` issues are now `done` — re-route it via
-step 2; this does NOT apply to a `blocked: too-large` park, which waits on a split). A `parked` row
+step 2; this does NOT apply to a `blocked: too-large` park, which waits on a split, nor to a
+`gate-error:` block, which waits on a config repair). A `parked` row
 is never selectable here — it is released only by explicit human un-park (step 0.1). Among
 selectable rows pick by `PRIORITY_LABELS` order, tiebreak issue-number ascending. If none are
 selectable, determine the resting state from the remaining non-terminal rows (test in this order):
@@ -216,8 +217,9 @@ working tree instead, because it runs before the commit — do not "fix" one to 
 `disable-model-invocation` is **user-triggered only and cannot be invoked from here at all**: if
 `CODE_REVIEW` is bound to one, the gate is unsatisfiable and silently does nothing. Such a skill is
 a *human* escalation, never a binding. On finding one bound here: run the finder procedure for this
-issue, journal the misbinding and the rebind you recommend, and surface it to the human — **do not
-edit `loop.config.md` yourself** (Tool surface).
+issue, journal the misbinding as a `- gate-fallback:` line (Gate-outcome invariant) along with the
+rebind you recommend, and surface it to the human — **do not edit `loop.config.md` yourself**
+(Tool surface).
 
 **Give every finder the issue's acceptance criteria alongside the diff.** You cannot judge whether
 code is *right* without knowing what it was meant to do; a finder holding the ACs catches "this
@@ -321,10 +323,10 @@ to inline composition where one is defined; a dynamic failure escalates to the h
 One PR at a time (no stacked PRs). **Stuck = the same error SIGNATURE recurs** — grep the FULL
 `progress.md` (not just the tail) for the signature: an identical CI failure, or the same
 tool+args failing again — NOT merely re-entering a status (a legitimate `/clear`-resume
-re-enters `implementing` and must not be flagged). **A `gate-fallback:` line is likewise not a stuck
+re-enters `implementing` and must not be flagged). **A `- gate-fallback:` line is likewise not a stuck
 signature** — a standing misbinding recurs by design until the human repairs the config (Gate-outcome
 invariant), so exclude those lines from the repeat check and re-surface the config defect instead;
-`gate-error:` lines *are* in scope. On a genuine repeat: stop, escalate, mark
+`- gate-error:` lines *are* in scope. On a genuine repeat: stop, escalate, mark
 `blocked`, move on. Respect any iteration/budget cap (`iteration-cap:`/`subagent-cap:` in the
 `queue.md` header): checked at iteration start (step 1) against the ledger — **advisory in manual
 re-invoke (journaled + surfaced, not gating), halted by the driver**.
@@ -353,8 +355,9 @@ can be Route `research`, Status `blocked`). **Pipeline statuses** — advanced b
 orchestrator as the issue moves through the pipeline, so an interrupted run leaves a non-terminal
 status resume keys on (see Resume): `queued → routed → planning → plan-approved → implementing →
 in-pr → in-review`. **Terminal statuses** — the run converges when every row is terminal:
-`done`; `deferred` (Route `stub-defer`); `blocked` (an unmet in-run dependency, or
-`blocked: too-large` awaiting a split). **Two non-terminal, resting statuses** sit outside both
+`done`; `deferred` (Route `stub-defer`); `blocked` (an unmet in-run dependency; `blocked:
+too-large` awaiting a split; or a recurring `gate-error:` awaiting a config repair — see the
+Gate-outcome invariant). The last two wait on a human, not on another row. **Two non-terminal, resting statuses** sit outside both
 the pipeline and the terminal set: **`hold`** — a durable, human-set merge-hold that survives
 `/clear`; and **`parked`** — a row whose work is gated on an **external event** (a release cut, a
 dogfood window — *not* an in-run dependency), with the awaited condition in Notes as
@@ -449,6 +452,15 @@ This is the audit trail and the resume anchor.
 - Merged: squash #<pr>. Issue #<N> closed.
 - Next: #<M> now unblocked.
 ```
+
+Two further fixed-shape lines are appended **only when a gate produced no verdict** (Gate-outcome
+invariant — that section defines when each applies and what follows):
+- `- gate-fallback: <gate> — <the binding defect> → ran <what you substituted>` — the gate could not
+  run, an inline composition stood in, the iteration continued. A **substitution record**; Guardrails
+  excludes it from the repeat check, so a standing misbinding never reads as *stuck*.
+- `- gate-error: <gate> — <failing tool or command> — <first line of the error>` — the gate was
+  attempted, produced no verdict, and the iteration STOPPED. This one **is** a stuck signature:
+  Guardrails greps for it across rows, so elide volatile arguments (PR numbers, SHAs, paths).
 
 The `- Budget:` line is the per-iteration cost record: a `·`-separated list of `name=value` **slots**.
 
@@ -620,7 +632,8 @@ Default: **compose existing tools**, don't mint an agent.
    parameterizing it is a pending change.) **If `$BASE` is empty** — the base ref does not resolve,
    or the histories are unrelated, which exits non-zero with *no* stderr at all — STOP and escalate
    **to the human**. That is an environment fault, not an AC gap, so it does **not** consume one of this
-   gate's two rounds; journal the failing command and do NOT run the diff.
+   gate's two rounds; journal the failing command as a `- gate-error:` line (Gate-outcome invariant)
+   and do NOT run the diff.
 
    **Verifier runs** (from the repo root — prefix with `git -C "$(git rev-parse --show-toplevel)"`
    if the working directory may be elsewhere):
@@ -738,42 +751,58 @@ Gate table:
 | Security | `SECURITY_REVIEW` (local or label) | by route | clean/findings |
 | Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI+security green | `MERGE_METHOD` |
 
-**Gate-outcome invariant (evidence-bound pass).** Applies to every gate in the table above, **on the
-rows that gate is due on**. Due-ness is decided where it always was — the gate's own step and the
-Routing table — and this invariant does not touch it: a gate the route or its trigger condition never
-made due was never owed a verdict, so journal it as not run (`skipped` / `n/a`) with the reason.
-Not-due is not a pass either, and nothing here claims every gate runs on every row.
+**Gate-outcome invariant (evidence-bound pass).** Applies to every gate in the table above that
+returns a verdict, **on the rows that gate is due on**. Due-ness is decided where it always was —
+this table's When column, the gate's own step, and the Routing table — and this invariant does not
+touch it. A gate the route or its trigger condition never made due was never owed a verdict, so
+journal it as not run (`skipped` / `n/a`) with the reason; not-due is not a pass either. **Where
+those three sources disagree about whether a gate is due, that is a defect in this engine: escalate,
+do not pick one** — silently resolving it is how a gate goes missing.
+
+An explicit `—` **with a stated reason** is a *filled* binding, not a missing one: it is the human's
+recorded finding that this project has no such thing, so the gate it names is **not due** — journal
+`n/a: <the config's stated reason>` and continue. A blank, absent or `TODO`-valued binding asserts
+nothing and is **not** the same thing. (This is the only way a config turns a gate off, and it is
+deliberately expensive: it takes a human editing the config, a written reason, and a journal line
+every iteration. What F14 forbids is *silence*, not a recorded decision.)
 
 For a gate that **is** due: it may be journalled **passed** only with the gate's own verdict as
 evidence — it ran and returned clean/met. **No verdict ⇒ not passed**, and there are two ways that
-happens. The discriminator is **when you find out**: what inspecting the binding tells you *before*
-invoking is static; anything that surfaces only *by* invoking — including a bound command that turns
-out not to exist — is dynamic.
+happens. The discriminator is **what you can see without running it**: your own config and toolset
+are *inspection*, so a binding naming a skill, agent or command absent from them is **static** —
+anything that surfaces only when the thing is actually run is **dynamic**.
 - **Cannot run (static)** — by inspection, the binding is absent, `TODO`-valued, or names something
-  the orchestrator cannot invoke. Fall back to the engine's inline composition where one is defined,
-  otherwise escalate to the human. Step 9 is this branch's worked instance: a `CODE_REVIEW` bound to
-  a `disable-model-invocation` skill is unsatisfiable, so the orchestrator runs the finder procedure
-  itself, journals the misbinding, and surfaces it.
-- **Ran and errored (dynamic)** — the gate was invoked but produced no verdict (e.g.
-  `fatal: ambiguous argument 'origin/HEAD...'`). Do **not** substitute a home-composed check, and
-  do **not** journal it as passed. **Escalate to the human.** The AC-verifier procedure's
-  unresolvable-`$BASE` rule is this branch's worked instance: an environment fault is not an AC gap,
-  so it escalates and does not consume a gate round.
+  missing from your toolset or that you are not permitted to invoke. Fall back to the engine's
+  inline composition where one is defined, otherwise escalate to the human. Step 9 is this branch's
+  worked instance: a `CODE_REVIEW` bound to a `disable-model-invocation` skill is unsatisfiable, so
+  the orchestrator runs the finder procedure itself, journals the misbinding, and surfaces it.
+- **Ran and errored (dynamic)** — the gate was **attempted** — invoked, or its required inputs
+  resolved — and produced no verdict: a non-zero exit, a tool error, a missing precondition. (The
+  host-specific instance this was drawn from lives in `loop.config.md`, per the Routing table's
+  mechanical-discipline note; do not copy a host's error string into this engine.) Do **not**
+  substitute a home-composed check, and do **not** journal it as passed. **Escalate to the human.**
+  The AC-verifier procedure's unresolvable-`$BASE` rule is this branch's worked instance: an
+  environment fault is not an AC gap, so it escalates and does not consume a gate round.
 
 **Either way, journal it** — but the two cases take **different, deliberately distinguishable**
 forms, because only one of them is a recurrence signal:
 - **Fell back and continued** (static, an inline composition exists) → append
-  `gate-fallback: <gate> — <the binding defect> → ran <what you substituted>`. There is no error
+  `- gate-fallback: <gate> — <the binding defect> → ran <what you substituted>`. There is no error
   string to quote; nothing ran. This is a **substitution record, not a stuck signature**: a standing
   misbinding recurs *by design* on every iteration until the human repairs the config, so it must
   never trip the repeat check or mark the row `blocked`. Surface it as a config defect each time.
 - **Stopped and escalated** (dynamic, or static with no fallback defined) → append
-  `gate-error: <gate> — <failing tool or command> — <first line of the error>`, **before** you stop.
-  The fixed shape is the point: Guardrails greps the FULL journal, so the same failure must phrase
-  the same way twice or the recurrence is undetectable and the row re-enters forever. A **first**
-  failure leaves the row at its current pipeline status with **no** terminal status (the step-5
-  plan-gate pattern, so Resume re-enters it); a **recurring** signature is *stuck* (Guardrails) →
-  mark the row `blocked` and escalate.
+  `- gate-error: <gate> — <failing tool or command> — <first line of the error>`, **before** you
+  stop. The fixed shape is the point: Guardrails greps the FULL journal — **across rows, not within
+  one** — so **elide volatile arguments** (PR/issue numbers, SHAs, branch names, temp paths) or the
+  same standing defect signs differently on the next issue and never reads as recurring. Write
+  `no-stderr` where the failure emitted none. A **first** failure leaves the row at its current
+  pipeline status, taking **no** terminal (`done`/`deferred`/`blocked`) **and no resting**
+  (`hold`/`parked`) status — both would put it outside the resume scan, and the point is that Resume
+  re-enters it (the step-5 plan-gate pattern). A **recurring** signature is *stuck* (Guardrails) →
+  mark the row `blocked` with Notes `gate-error: <gate>`. Like `blocked: too-large`, this is **not**
+  a dependency block: step 1 never re-selects it, and it waits on the human. **If that row already
+  has an open PR, do not "move on" to another row** — one PR at a time still binds; report and STOP.
 
 **A gate that did not run — static or dynamic — is never recorded as a gate that passed.**
 

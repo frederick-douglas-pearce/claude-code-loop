@@ -19,7 +19,8 @@ Guards in a prompt are advisory — state them to yourself first so a partial ru
 - **Every mutation is additive / idempotent.** Re-running must never duplicate a `.gitignore`
   line, reorder `settings.json` keys, or wipe an existing artifact. Check presence before writing.
 - **Prefer `TODO(init-loop)` over a guess.** A blank the human must fill beats a plausible-wrong
-  value that runs silently.
+  value that runs silently — and where a parameter genuinely does not apply, an explicit `—` plus a
+  reason beats both, because it records a decision instead of a hole.
 - **Only ever add `enabledPlugins["dev-loop@claude-code-loop"] = true`** to `settings.json`;
   preserve every other key verbatim. If the file is present but not parseable as a JSON object,
   do **not** edit it — emit the snippet and let the human paste.
@@ -64,7 +65,7 @@ column (e.g. "from pyproject `[tool.pytest]`"); leave anything you cannot infer 
 | Parameter | Look here |
 |-----------|-----------|
 | `TEST_CMD` | pyproject/`tox`, `package.json` scripts (`test`), `Makefile` (`test:`), `Cargo.toml`, CI workflow steps |
-| `LINT_CMD` | ruff/flake8/eslint/clippy/golangci config; `lint` script; CI |
+| `LINT_CMD` | ruff/flake8/eslint/clippy/golangci config; `lint` script; CI; else `—` + the reason if the project deliberately has none |
 | `TYPE_CMD` | mypy/pyright config, `tsc`, `package.json` `typecheck`; set `—` + the reason if the language has no separate type step |
 | `CI_STATUS_CMD` | `gh pr checks <PR>` if GitHub host; else the host's equivalent or `TODO(init-loop)` |
 | `BRANCH_FMT` | CLAUDE.md / CONTRIBUTING branch rules; else infer from existing `git branch -a` names |
@@ -72,7 +73,7 @@ column (e.g. "from pyproject `[tool.pytest]`"); leave anything you cannot infer 
 | `PR_TEMPLATE` | `.github/PULL_REQUEST_TEMPLATE.md` (note "must replicate" if present) |
 | `MERGE_METHOD` | CONTRIBUTING / repo settings; default `TODO(init-loop)` |
 | `BACKLOG_SOURCE` | GitHub milestone/label if a GitHub remote exists; else a local `TODO.md`; else `TODO(init-loop)` |
-| `PRIORITY_LABELS` | `gh label list` for `priority:*` labels (GitHub host); else CONTRIBUTING/CLAUDE.md; else `TODO(init-loop)` |
+| `PRIORITY_LABELS` | `gh label list` for `priority:*` labels (GitHub host); else CONTRIBUTING/CLAUDE.md; else `—` + the reason if the backlog has no priority scheme |
 | `RELEASE_SCHEME` | release-please / semantic-release config, `pyproject`/`package.json` version + publish; else "no release cycle" |
 | `SCOPE_AGENT` / `DESIGN_AGENT` | user-global subagents — cannot be inferred from the repo; default `TODO(init-loop): name a scope/design subagent` — or an explicit `—` plus a reason if this project has none |
 
@@ -129,8 +130,11 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 > ⚠ **A `TODO(init-loop)` is a blank that escalates — not a switch that turns its gate off.** The
 > engine journals a gate as passed only with the gate's own verdict as evidence (**no verdict ⇒ not
 > passed**), so an unfilled binding does not quietly skip the gate: it falls back to the engine's
-> inline composition where one is defined, and otherwise **stops the run and asks you**. Every
-> `TODO` left here costs an escalation every iteration it is read.
+> inline composition where one is defined, and otherwise **stops the run and asks you**. That rule
+> covers the rows naming a **gate** (`SECURITY_REVIEW`, `DESIGN_AGENT`, `CODE_REVIEW`, `VERIFY`) —
+> each unfilled one costs an escalation every iteration it is read. The rest of the table is read
+> where it is used, so a `TODO` there fails later and less predictably: at the command that needed
+> it.
 >
 > **Deleting the row does not help** — the engine treats an absent binding exactly as it treats a
 > `TODO`-valued one. There are only two resolutions: **fill it**, or **state the negative
@@ -152,11 +156,11 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `SOURCE_LAYOUT` | see §3 | router uses this; **edit when porting** |
 | `TEST_CMD` | <inferred / TODO(init-loop)> | |
 | `LINT_CMD` | <inferred / TODO(init-loop)> | |
-| `TYPE_CMD` | <inferred / — if none> | |
+| `TYPE_CMD` | <inferred / — + reason if none> | say why if none |
 | `CI_STATUS_CMD` | <inferred / TODO(init-loop)> | |
 | `BRANCH_FMT` | <inferred / TODO(init-loop)> | |
 | `COMMIT_CONV` | <inferred / TODO(init-loop)> | |
-| `PR_TEMPLATE` | <inferred / — if none> | replicate in the PR body if the repo enforces it |
+| `PR_TEMPLATE` | <inferred / — + reason if none> | replicate in the PR body if the repo enforces it |
 | `MERGE_METHOD` | <inferred / TODO(init-loop)> | e.g. squash, `--delete-branch`, explicit `--subject` scope |
 | `APPEND_ONLY_FILES` | protected files are declared for the guard hook in `.claude/loop.append-guard.json` (the machine SSOT); `—` + reason if this repo protects none | do **not** restate paths here — the sidecar is authoritative |
 | `PERMISSION_POSTURE` | <TODO(init-loop): e.g. background agents validate-only → parent implements> | shapes fan-out |
@@ -272,5 +276,6 @@ Report, concisely:
   (e.g. "matched D001…D060 — guard is live"; "0 matches — the regex protects nothing, fix
   `id_pattern`"). If none, say the guard is inert (no sidecar).
 - **Next steps:** review `CONFIG` (resolve TODOs), then run the `dev-loop` skill to work the first
-  issue. Note that an unresolved blank does **not** disable its gate — the loop escalates to the
-  human every time it reads one, so the first run will be noisier the more `TODO`s remain.
+  issue. Note that an unresolved **gate** binding does not disable its gate — the loop falls back to
+  a built-in equivalent where it has one (code review) and otherwise stops and asks you. Non-gate
+  blanks fail later, at whatever step needed the value.
