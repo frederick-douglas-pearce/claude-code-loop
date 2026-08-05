@@ -752,19 +752,12 @@ Gate table:
 | Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI+security green | `MERGE_METHOD` |
 
 **Gate-outcome invariant (evidence-bound pass).** Applies to every gate in the table above that
-returns a verdict, **on the rows that gate is due on**. Due-ness is decided where it always was —
-this table's When column, the gate's own step, and the Routing table — and this invariant does not
-touch it. A gate the route or its trigger condition never made due was never owed a verdict, so
-journal it as not run (`skipped` / `n/a`) with the reason; not-due is not a pass either. **Where
-those three sources disagree about whether a gate is due, that is a defect in this engine: escalate,
-do not pick one** — silently resolving it is how a gate goes missing.
-
-An explicit `—` **with a stated reason** is a *filled* binding, not a missing one: it is the human's
-recorded finding that this project has no such thing, so the gate it names is **not due** — journal
-`n/a: <the config's stated reason>` and continue. A blank, absent or `TODO`-valued binding asserts
-nothing and is **not** the same thing. (This is the only way a config turns a gate off, and it is
-deliberately expensive: it takes a human editing the config, a written reason, and a journal line
-every iteration. What F14 forbids is *silence*, not a recorded decision.)
+returns a verdict, **on the rows that gate is due on** — due-ness is decided where it always was (the
+gate's own step and the Routing table) and this invariant does not touch it. A gate the route or its
+trigger condition never made due was never owed a verdict, so journal it as not run (`skipped` /
+`n/a`) with the reason; not-due is not a pass either. An explicit `—` **plus a reason** in the config
+is a deliberate "not applicable", journalled `n/a: <that reason>` — **not** an absent binding; it is
+the only way a config marks a gate not-due, and it is deliberately visible.
 
 For a gate that **is** due: it may be journalled **passed** only with the gate's own verdict as
 evidence — it ran and returned clean/met. **No verdict ⇒ not passed**, and there are two ways that
