@@ -316,8 +316,8 @@ action is destructive/irreversible, a review finding is contested, or the same s
 
 **A gate that produced no verdict does not get reasoned about here.** Do not weigh whether its
 absence "matters" — apply the **Gate-outcome invariant (evidence-bound pass)** under Gates,
-convergence & resting states, which decides it: no verdict ⇒ not passed; a static absence falls back
-to inline composition where one is defined; a dynamic failure escalates to the human, full stop.
+convergence & resting states, which decides it — including which failures fall back and which
+escalate. Do not paraphrase those branches from memory; they differ, and the difference is the rule.
 
 ### Guardrails
 One PR at a time (no stacked PRs). **Stuck = the same error SIGNATURE recurs** — grep the FULL
@@ -746,8 +746,8 @@ Gate table:
 | Plan | orchestrator | every issue | `issue-<N>.plan.md` |
 | Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure | issue comment |
 | Human (plan) | user | only if uncertain/irreversible | approve/redirect |
-| AC-verify | fresh subagent (+`VERIFY`) | every code/research issue | done/not-done + gaps |
-| Code review | `CODE_REVIEW` (parallel finders you run — step 9) | every code issue | findings → fixes |
+| AC-verify | fresh subagent (+`VERIFY`) | every issue with acceptance criteria (step 7 is unconditional) | done/not-done + gaps |
+| Code review | `CODE_REVIEW` (parallel finders you run — step 9) | every issue; one light pass on `docs` | findings → fixes |
 | Security | `SECURITY_REVIEW` (local or label) | by route | clean/findings |
 | Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI+security green | `MERGE_METHOD` |
 

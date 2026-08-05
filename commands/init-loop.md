@@ -58,7 +58,9 @@ Read whatever exists (skip missing files silently): `CLAUDE.md`, `AGENTS.md`, `C
 `.github/PULL_REQUEST_TEMPLATE.md`. Also run `git remote -v` and `git branch -a` for host + branch
 conventions. Infer the §1 parameters below. Put **how you inferred each value** in the Notes
 column (e.g. "from pyproject `[tool.pytest]`"); leave anything you cannot infer as
-`TODO(init-loop): <what to supply>`.
+`TODO(init-loop): <what to supply>` — but where a parameter genuinely does not **apply** to this
+repo, write `—` plus the reason instead. That is an explicit negative, not a blank; see §1's
+callout for why the difference matters.
 
 **Inference map (cross-ecosystem — do not assume Python/GitHub):**
 
