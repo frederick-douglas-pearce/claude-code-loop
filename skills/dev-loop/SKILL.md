@@ -39,6 +39,10 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   admin-merge, only `--delete-branch` the PR's own branch.
 - **Escalate rather than guess.** Scope/value → `SCOPE_AGENT`; design → `DESIGN_AGENT`; unresolved,
   contested, or irreversible → the human.
+- **A gate that did not run is never recorded as one that passed.** Journal a gate as passed only
+  with its own verdict as evidence — **no verdict ⇒ not passed.** An unbound, `TODO`-valued, or
+  uninvocable binding is not permission to skip the gate, and a gate that errored is not a gate that
+  was clean: escalate.
 - **Never edit the user-global `SCOPE_AGENT`/`DESIGN_AGENT` definitions**, and never `git add`
   unrelated pre-existing working-tree changes.
 - **The ledger is gitignored** — do NOT commit it.

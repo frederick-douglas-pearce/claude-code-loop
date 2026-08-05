@@ -79,6 +79,15 @@ you mid-pipeline when it hits ambiguous acceptance criteria, risk, agent disagre
 or genuine uncertainty. Wherever eligibility is unclear the rule is **default-deny**:
 fall back to the human.
 
+**A gate that did not run is never reported as one that passed.** For every gate the loop
+runs — plan, architect, acceptance, code review, security, merge — it may record a pass only with
+that gate's own output as evidence: **no verdict means not passed**. A binding you left blank in
+`loop.config.md` is not a switch that turns the gate off; it makes the loop fall back to a built-in
+equivalent where one exists, and otherwise stop and ask you. A gate that ran and *errored* never
+falls back at all — the loop will not substitute a check of its own devising and call it clean; it
+escalates. (A gate the route legitimately skips is journalled as *skipped*, which is also not a
+pass.)
+
 **Hard limits the engine commits to:**
 
 - **One PR at a time** — no stacked PRs.
