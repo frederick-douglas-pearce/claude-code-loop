@@ -82,8 +82,9 @@ Two modules, and the split between them matters:
   `Step N` references that are its *own* onboarding steps — and every number they carry is a real
   engine heading too, so an unanchored matcher would find all 17 sites, resolve every one, and pass
   while guarding nothing. `_INIT_LOOP_STEP_REFERENCE` anchors on the literal "engine step"; the
-  possessive is accepted because `the engine's step N` is what the live consumer configs write for 3
-  of their 6 references, so it is what a future editor of the skeleton is likely to write. Everything
+  possessive is accepted because `the engine's step N` is what the live consumer configs write for 4
+  of their 6 engine-anchored references, so it is what a future editor of the skeleton is likely to
+  write. Everything
   after the anchor mirrors the engine's matcher exactly — including the hyphen (`step-9`) and `.N`
   sub-item forms, whose omission would be **invisible to the pin**, since an unmatched site never
   moves the count. The **reference-site count is pinned** (`_EXPECTED_INIT_LOOP_STEP_REFERENCES`,

@@ -312,8 +312,8 @@ class PipelineStepOrderTests(unittest.TestCase):
       references pointing at the wrong step with the whole suite green.** A
       green run is not evidence the cross-references were correctly renumbered.
     * **Consumer configs, for restatement #6.** Every onboarded repo's
-      ``.claude/loop.config.md`` carries step references of its own -- this
-      repo's has six, agentfluent and the vote repo theirs -- and those files
+      ``.claude/loop.config.md`` carries step references of its own -- six here,
+      one in agentfluent, three in the vote repo -- and those files
       are outside the shipped plugin and outside every check here. #45 guards
       the *generator*, the only end of that pipe this repo owns; a green run
       says nothing about any config in the field.
