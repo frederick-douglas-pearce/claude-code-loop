@@ -39,12 +39,16 @@ Two modules, and the split between them matters:
   the shipped example sidecar still loads through the real `load_registry`; the composed
   `plugin@marketplace` identifier still matches every hand-written call site; engine `CAPS` ⊆
   the `/init-loop` skeleton (see the three-layer split below — this is that contract, enforced);
-  and `PipelineStepOrderTests` — the pipeline's **step *ordering*** agrees across the **five**
+  and `PipelineStepOrderTests` — the pipeline's **step *ordering*** agrees across the **six**
   restatements of it (in four files): `loop-engine.md`'s `### N.` headings, `SKILL.md`'s numbered chain,
   `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
   `description`** (`plan→architect→implement→review→merge` — the string the model reads when
-  deciding to invoke the skill, so a behavior surface, not prose), and the engine's in-prose
-  `step N` cross-references — **55 sites, 59 numbers**. That grep
+  deciding to invoke the skill, so a behavior surface, not prose), the engine's in-prose
+  `step N` cross-references — **55 sites, 59 numbers** — and `commands/init-loop.md`'s
+  `engine step N` (below). *"Four files" is newly true, not newly written:* the previous five
+  restatements live in **three** files (`loop-engine.md` ×2, `SKILL.md` ×2, `plugin.json`), so the
+  standing "five restatements in four files" was off by one on the file count; `init-loop.md` is what
+  makes four correct. That grep
   (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) reports
   only 53: the other two are line-wrapped, which is exactly how they went unguarded until review
   caught it. It checks numbering and label correspondence **only** — never whether a
@@ -70,13 +74,25 @@ Two modules, and the split between them matters:
   is excluded deliberately — treating `,`/`and` as separators makes ordinary prose ("step 12 — 40
   lines max") parse as a step range and fail.
 
-  **A sixth restatement is still unguarded:** `commands/init-loop.md`'s `(engine step 9)` in the
-  `CODE_REVIEW` skeleton row — which every consuming repo copies into its own `loop.config.md`
-  (this repo's copy is at `.claude/loop.config.md:49`; that file carries five further engine-step
-  references of its own, which no check reaches because consumer configs are outside the shipped
-  plugin). It can't reuse the engine's matcher: that file carries 16 other `Step N` references that
-  are its *own* onboarding steps, so a checker there has to anchor on the literal "engine step".
-  Filed as #45; hand-checked until it lands.
+  **The sixth restatement — guarded since #45, and the only one that ships into repos this plugin
+  cannot reach.** `commands/init-loop.md`'s `(engine step 9)` sits in the `CODE_REVIEW` skeleton row,
+  which every consuming repo copies into its own `loop.config.md`. Drift in the other five ships a
+  wrong number *in the plugin*, and the next release corrects it; drift here strands one in a config
+  no release touches. It can't reuse the engine's matcher: that file carries 16 other `Step N`
+  references that are its *own* onboarding steps — and every number they carry is a real engine
+  heading too, so an unanchored matcher would find all 17 sites, resolve every one, and pass while
+  guarding nothing. `_INIT_LOOP_STEP_REFERENCE` anchors on the literal "engine step" (possessive
+  accepted, since `the engine's step N` is the form this repo's own config uses 3× and a miss there
+  would be doubly silent), and its **site count is pinned**
+  (`_EXPECTED_INIT_LOOP_STEP_REFERENCES`, currently 1) precisely because a floor cannot catch that
+  failure — 17 sites clears any floor. Write new cross-references in that file as
+  `engine step N`; the requirement is stated beside the skeleton for editors who never read this file.
+
+  **Still unreached: the copies already in the field.** This repo's own `.claude/loop.config.md:49`
+  carries the copied `engine step 9`, and that file holds five further engine-step references of its
+  own; the same is true of every onboarded consumer. No check reaches any of them — consumer configs
+  are outside the shipped plugin. #45 guards the *generator*, which is the only end of that pipe this
+  repo owns; #40 and #36 are where the field copies get addressed.
 
 **Prompt *semantics* remain validated by review + dogfooding, and that is deliberate** — the
 consistency module tests couplings, never whether an instruction is *right*. Do not try to grow it

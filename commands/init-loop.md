@@ -99,6 +99,18 @@ them as stubs with the commented AgentFluent example so the human sees the shape
 **not** GitHub, add a one-line `TODO(init-loop)` note in §4 flagging that every rule there is a
 GitHub-ism to be re-specified.
 
+**Write any pipeline cross-reference inside the skeleton as `engine step N`** — the literal form,
+including the word "engine". The `CODE_REVIEW` row below is the one that uses it today; it is
+deliberately the only place in this file that carries a pipeline step number, so keep new
+references there or expect to update the pinned count named below. The form is required, not
+stylistic: `tests/test_repo_consistency.py` checks that every `engine step N` here resolves to a
+real `loop-engine.md` `### N.` heading, and it anchors on that literal because this file's own
+numbered onboarding headings would otherwise be indistinguishable from pipeline references — and
+they resolve to real heading numbers too, so an unanchored matcher would pass while checking
+nothing. A bare `step N` in the skeleton is invisible to that check — and the skeleton is copied
+into every consuming repo's `loop.config.md`, so a stale number lands in repos this plugin cannot
+reach.
+
 For the `APPEND_ONLY_FILES` row use the **pointer form**, never a duplicated path — the sidecar
 JSON is the single source of truth for which files are protected:
 
