@@ -96,9 +96,10 @@ Two modules, and the split between them matters:
   `CODE_REVIEW` to `/code-review` and contains no `engine step` at all. So the guard lands **before**
   propagation begins, at the #36 re-install — the useful time for it. Do not read the field as
   already carrying it: this repo's own `.claude/loop.config.md:49` has it only as the deliberate
-  hand-written deviation documented in that file's F7 note, and the other two consumers carry bare
-  and hyphenated step references instead. No check reaches any consumer config — they are outside the
-  shipped plugin. #45 guards the *generator*, the only end of that pipe this repo owns; #40 and #36
+  hand-written deviation documented in that file's F7 note, and the vote repo's `:49` likewise
+  hand-writes one in a section the skeleton does not contain. Across the three live configs there
+  are 10 step references, 6 of them engine-anchored, and none arrived from the generator. No check
+  reaches any consumer config — they are outside the shipped plugin. #45 guards the *generator*, the only end of that pipe this repo owns; #40 and #36
   are where the field configs get addressed.
 
 **Prompt *semantics* remain validated by review + dogfooding, and that is deliberate** — the

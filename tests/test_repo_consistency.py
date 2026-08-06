@@ -396,18 +396,23 @@ class PipelineStepOrderTests(unittest.TestCase):
     # is what does the discrimination; note it does so WITHOUT an allow-list,
     # which is the point (cf. _STOPWORDS, ALLOWED_NON_BINDINGS).
     #
-    # Everything AFTER the anchor mirrors _STEP_REFERENCE exactly -- same
-    # separator class (so `engine step-9` matches: `step-1`/`step-3` appear 9
-    # times in the engine and `step-8` in this repo's own config, and the
-    # hyphenated spelling outnumbers the spaced one across the three live
-    # consumer configs), same `.N` sub-item form, same tight `/`- and
-    # dash-separated run tail. An unmatched form is the worst failure available
-    # here: it is not merely unguarded, it is invisible to the pin below, which
-    # only moves when a MATCHED site appears or disappears.
+    # Everything after the anchor mirrors _STEP_REFERENCE's NUMBER handling
+    # exactly -- same separator class (so `engine step-9` matches), same `.N`
+    # sub-item form, same tight `/`- and dash-separated run tail. Both forms are
+    # ones the engine itself writes: 8 hyphenated (`step-0`, `step-1`, `step-3`,
+    # `step-5`, `step-0.1`) and 8 sub-item (`step 0.1`, `step 0.3`), so an editor
+    # of this file is reading them next door. An unmatched form is the worst
+    # failure available here: not merely unguarded but invisible to the pin
+    # below, which only moves when a MATCHED site appears or disappears.
     #
-    # The one addition is the possessive (`the engine's step 9`) -- the form the
-    # three live consumer configs use for 3 of their 6 step references, so it is
-    # what a future editor of this file is likely to write.
+    # One narrowing remains, deliberately: the noun is `[Ss]teps?` only, not the
+    # sibling's `(?:[Ss]teps?|[Ss]tages?)`. This file has no `stage N` form and
+    # the engine's two are internal cross-references, not skeleton content.
+    #
+    # The one addition is the possessive (`the engine's step 9`) -- 4 of the 6
+    # engine-anchored references across the three live consumer configs are
+    # possessive (including agentfluent's only one), so it is what a future
+    # editor of this file is likely to write.
     #
     # The newline branch has no live instance here: the single site is a markdown
     # table cell, where a wrap would break the table. Kept because a future
@@ -418,12 +423,15 @@ class PipelineStepOrderTests(unittest.TestCase):
         r"\b[Ee]ngine(?:'s|’s)?(?:[ \t]+|[ \t]*\n[ \t]*)[Ss]teps?"
         r"(?:[ -]|[ \t]*\n[ \t]*)(\d+(?:\.\d+)?(?:[/–—-]\d+(?:\.\d+)?)*)"
     )
-    # The `~~~`-fenced config skeleton -- the ONLY part of init-loop.md that
-    # /init-loop copies into a consuming repo's loop.config.md. Position is what
-    # makes this restatement different in kind from the other five, so the check
-    # asserts position rather than merely counting (a reference deleted from the
-    # skeleton and re-added in surrounding prose keeps every count identical).
-    _INIT_LOOP_SKELETON = re.compile(r"^~~~.*?^~~~", re.MULTILINE | re.DOTALL)
+    # The `~~~markdown`-fenced config skeleton -- the ONLY part of init-loop.md
+    # that /init-loop copies into a consuming repo's loop.config.md. Position is
+    # what makes this restatement different in kind from the other five, so the
+    # check asserts position rather than merely counting (a reference deleted
+    # from the skeleton and re-added in surrounding prose keeps every count
+    # identical). The `markdown` info-string is load-bearing: a bare `^~~~` also
+    # spans the `~~~json` append-guard block, which ships to a DIFFERENT file, so
+    # a reference living only there would satisfy a laxer span check.
+    _INIT_LOOP_SKELETON = re.compile(r"^~~~markdown$.*?^~~~$", re.MULTILINE | re.DOTALL)
 
     # Pinned, not floored -- and the distinction is the whole guard. A floor
     # cannot catch the failure that matters: drop the `engine` anchor above and
@@ -955,9 +963,10 @@ class PipelineStepOrderTests(unittest.TestCase):
             f"commands/init-loop.md cross-references engine step(s) {dangling} that "
             f"no loop-engine.md '### N.' heading defines (headings are "
             f"{sorted(valid)}). Renumbering the pipeline must update this file in "
-            "the same change -- and note this one is copied into every consuming "
-            "repo's .claude/loop.config.md, so a stale number here ships into repos "
-            "this plugin cannot reach. NOTE: resolvability-only -- a reference that "
+            "the same change -- and note /init-loop copies this row into the config "
+            "of each repo onboarded after the #36 re-install, so a stale number here "
+            "ships into repos this plugin cannot reach. NOTE: resolvability-only -- "
+            "a reference that "
             "stays in range but now points at the wrong step is NOT caught here.",
         )
 

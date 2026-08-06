@@ -105,7 +105,10 @@ GitHub-ism to be re-specified.
 > headings, which resolve to real engine step numbers too, so nothing would catch a stale one. Add
 > references freely in that form, bumping `_EXPECTED_INIT_LOOP_STEP_REFERENCES` in
 > `tests/test_repo_consistency.py` in the same change; write `N` rather than a digit in any
-> illustrative example, which the same count would otherwise pick up.
+> illustrative example, which the same count would otherwise pick up. **At least one reference must
+> stay inside the `~~~markdown` skeleton** — that block is the only part of this file copied into a
+> consuming repo, so a reference that drifts out into surrounding prose stops guarding anything that
+> ships, and a check enforces it.
 
 For the `APPEND_ONLY_FILES` row use the **pointer form**, never a duplicated path — the sidecar
 JSON is the single source of truth for which files are protected:
