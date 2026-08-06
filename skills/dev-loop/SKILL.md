@@ -44,6 +44,12 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   uninvocable binding is not permission to skip the gate: fall back to the engine's inline
   composition where it defines one, otherwise escalate. A gate that ran and *errored* never falls
   back — escalate, and never journal it as clean.
+- **A dirty tree may hold a mutation, not work.** The acceptance gate deliberately breaks production
+  code and restores it, so an interrupted run can leave a mutant beside your uncommitted
+  deliverables. Before reconciling any unexpected change, scan the FULL `progress.md` for a
+  `- mutation-pass: started` with no matching `restored`, and restore that file from the recorded
+  backup. **Never `git restore`/`git checkout` it** — that cannot tell the mutation from the work
+  and destroys both. No backup, no guessing: escalate.
 - **Never edit the user-global `SCOPE_AGENT`/`DESIGN_AGENT` definitions**, and never `git add`
   unrelated pre-existing working-tree changes.
 - **The ledger is gitignored** — do NOT commit it.
