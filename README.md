@@ -88,6 +88,24 @@ falls back at all — the loop will not substitute a check of its own devising a
 escalates. (A gate the route legitimately skips is journalled as *skipped*, which is also not a
 pass.)
 
+**The acceptance gate deliberately breaks your code — briefly, and puts it back.** This is the one
+place the loop modifies your working tree for a reason other than doing the work, so it is worth
+knowing about up front. To check that a test the change added would actually *notice* a regression,
+the gate breaks the production code that test guards, runs your `TEST_CMD`, and expects the suite to
+go red; a test that stays green is reported to you as a finding. Its bounds:
+
+- **Only during the acceptance gate**, and only on `code`-route changes that add or modify a test.
+  A `docs` or `research` route runs no mutation pass at all. If a `code`-route change alters
+  production code and adds no test, there is nothing to mutate — and the loop reports *that* to you
+  rather than passing the change silently.
+- **Never committed.** The gate runs before the loop commits anything, and every mutation is
+  restored from a byte-exact backup kept outside the repository — never with `git checkout`, which
+  cannot tell a mutation from uncommitted work you already had in the tree.
+- **The restore is verified on every path**, including when the test run itself errors. A tree left
+  dirty by this pass stops the loop rather than continuing.
+- **A mutation that fails to apply is an error, never a quiet pass** — an unapplied mutation's test
+  run proves nothing in either direction, so the loop escalates instead of scoring it.
+
 **Hard limits the engine commits to:**
 
 - **One PR at a time** — no stacked PRs.

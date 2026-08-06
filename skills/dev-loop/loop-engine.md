@@ -201,6 +201,14 @@ Run the AC-verifier (below): a fresh check that the diff satisfies EVERY accepta
 criterion — verify state, not your claim. If gaps, fix and re-verify (max 2 rounds, else
 escalate).
 
+The gate returns **two result classes, and they are never summed into one "findings" count**:
+**Class A — AC-satisfaction findings** (a criterion judged not met) and **Class B — mutation
+survivors** (a guard this change adds whose test stays green when the code it protects is broken).
+Class B comes from the **mutation pass**, which is **scoped by risk surface** rather than run
+unconditionally: step 7 itself remains due on every issue with acceptance criteria, but the mutation
+pass *within* it is conditional (AC-verifier → Part 2). **A clean Class B after a dirty one is a
+valid and valuable result** — do not read "no survivors this time" as the gate going soft.
+
 ### 8. Commit + PR
 Commit with correct `COMMIT_CONV` scope. Open the PR; **replicate `PR_TEMPLATE` fully** in
 the body; make the Security-review choice up front. Advance the row to `in-pr` and record the
@@ -293,12 +301,18 @@ review thrash, which is the distinction the human needs when deciding whether to
 - **Add `justification=<short reason>` whenever any `gate-rounds` value exceeds 1** — the single-pass
   baseline. It is *permitted* on any line; write it whenever the spend would otherwise look
   unexplained.
-- **Record the acceptance gate's result classes separately** — `ac-findings=<n>` for criteria the
-  gate found unmet, **counted cumulatively across all of that gate's rounds, not as the final
-  round's residue** (a final-round count is 0 on every iteration that merged, which erases the
-  signal), and `post-gate-survivors=<n>` for defects that escaped it and surfaced later in this
-  iteration. Collapsing them loses the distinction between a gate that found nothing and a gate that
-  missed something.
+- **Record the acceptance gate's two result classes separately — and its escape count separately
+  again.** Three distinct numbers; collapsing any two of them loses the distinction between a gate
+  that found nothing and a gate that missed something:
+  - `ac-findings=<n>` — **Class A**, criteria the gate found unmet, **counted cumulatively across
+    all of that gate's rounds, not as the final round's residue** (a final-round count is 0 on every
+    iteration that merged, which erases the signal).
+  - `mutation-survivors=<n>` — **Class B**, guards whose test survived its own mutation
+    (AC-verifier → Part 2).
+  - `post-gate-survivors=<n>` — **not a gate output at all**: defects that escaped the gate and
+    surfaced later in this iteration. Class A and Class B are what the gate *found*;
+    `post-gate-survivors` is what it *missed*. Keep the three names straight — Class B is
+    `mutation-survivors`, never `post-gate-survivors`.
 
 **Two constraints that keep the line parseable.** No slot value and no note may contain the `·`
 separator, and notes must keep their parentheses balanced — a reader splits `gate-rounds` on commas
@@ -445,10 +459,10 @@ This is the audit trail and the resume anchor.
 - Architect: skipped (research scaffolding, no shared-interface impact).
 - Human gate: plan auto-approved (route=research, low ambiguity).
 - Implemented: <path>; recorded findings in <path>.
-- AC-verify: 3/3 acceptance criteria met.
+- AC-verify: Class A 3/3 acceptance criteria met. Class B: mutation pass not due (research route).
 - PR: #<pr> (chore scope). CI: green.
 - Code-review: 0 findings. Security: n/a (no deps added).
-- Budget: subagent-runs=3 · gate-rounds=architect=0,code-review=1(correctness,robustness),ac-verify=1 · ac-findings=0 · wall-clock=18m · tokens=deferred
+- Budget: subagent-runs=3 · gate-rounds=architect=0,code-review=1(correctness,robustness),ac-verify=1 · ac-findings=0 · mutation-survivors=n/a: research route · wall-clock=18m · tokens=deferred
 - Merged: squash #<pr>. Issue #<N> closed.
 - Next: #<M> now unblocked.
 ```
@@ -489,8 +503,11 @@ Fields:
   1** — the single-pass baseline — and *permitted* on any line. The trigger is deliberately the one
   thing decidable from the same line: it is the engine's own shape, not a per-project number, so it
   needs no binding and cannot drift upward as a run gets more expensive.
-- **`ac-findings` / `post-gate-survivors`** — the acceptance gate's result classes, recorded
-  **separately**: criteria the gate found unmet, **counted cumulatively across all of that gate's
+- **`ac-findings` / `post-gate-survivors`** — what the acceptance gate **found** in Class A, and
+  what **escaped** it, recorded **separately** (Class B is its own slot, `mutation-survivors`,
+  below — the gate's two *result classes* are `ac-findings` and `mutation-survivors`; this pairing
+  is findings-vs-escapes, which is a different axis): criteria the gate found unmet, **counted
+  cumulatively across all of that gate's
   rounds** (the final round's count is 0 on every iteration that merged, so a final-round reading
   erases the signal); and defects that escaped the gate and surfaced later in the same iteration —
   in code review, security, or at the merge gate, the window running from the gate to this journal
@@ -500,11 +517,32 @@ Fields:
   identically, and two stories measuring opposite signals off this line would each think they were
   confirmed. They are top-level slots, not nested in `gate-rounds`, because they count **outcomes
   rather than runs**.
-- **`mutation-survivors`** — seeded defects the acceptance gate failed to catch. **Reserved, in the
-  same sense as `tokens=deferred`: this engine has no defect-seeding step yet**, so there is nothing
-  to count and the slot is **omitted — never written as `0`**, which would assert that a mutation
-  pass ran and caught everything. It becomes writable when the AC-verifier gains a mutation pass;
-  naming it now makes that an addition rather than a format change.
+- **`mutation-survivors`** — **Class B**: guards the change added whose test stayed green when the
+  code it protects was broken (AC-verifier → Part 2). **Writable as of the mutation pass** — it was
+  reserved-and-unwritable before that, and the promised addition has now landed as an addition
+  rather than a format change. It takes **three distinct readings, and the difference between them
+  is the point**:
+  - **`mutation-survivors=<n>`** — `n` Class B findings. Normally that means the pass ran and `n`
+    mutants survived, and **`0` is meaningful and is written**: the pass ran and every mutant was
+    killed. The **limit case** (production code changed, no guard added) also lands here even though
+    no pass could run — the absence *is* the single finding, so write
+    `mutation-survivors=1 (no guard added)` using the ordinary note syntax. Recording it as a count
+    is what stops it reading as clean; the note is what stops it reading as a real survivor.
+  - **`mutation-survivors=n/a: <reason>`** — the pass was **deliberately not due**: the Routing
+    table scoped it out (a `docs`/`research` route), or the change touches no production code and
+    adds no guard, so there was nothing to mutate and nothing at risk. **This is not the limit
+    case:** a `code`-route change that touches production code *while adding no guard* is a Class B
+    **finding** (AC-verifier → Part 2) and is written as a count — writing `n/a` there would erase
+    the finding, which is the one reading this slot must never permit. The `n/a: <reason>` spelling
+    follows the Gate-outcome invariant's not-run vocabulary, and it is deliberately visible.
+  - **omitted** — **unknown**. This is what every line written before the mutation pass existed
+    carries, and those lines keep exactly that meaning. An omission must **never** be read
+    retroactively as "the pass was scoped out": the corpus is append-only and is never rewritten, so
+    the only honest reading of a missing slot is that nothing produced it.
+
+  The three readings exist because collapsing them onto one absent/zero axis would make it
+  impossible to tell a clean pass from a skipped one from a nonexistent one — and the first stories
+  to measure this gate's efficacy read exactly that distinction off this slot.
 - **`wall-clock`** — elapsed time including human gate-wait; recorded for the dogfood corpus, **not
   a cap input** (an iteration that waited overnight for approval is not "expensive").
 - **`tokens=deferred`** — a reserved, named slot. Per-iteration token/cost is computed **post-hoc
@@ -543,6 +581,10 @@ same spine on each. Every slot beyond those four is
 slots without invalidating existing lines. One constraint on reading them: **an absent slot does not
 mean zero.** A missing `ac-findings` says nothing about how many findings there were; only
 `ac-findings=0` does — which is why a slot with no producing procedure is omitted rather than zeroed.
+Where a slot's procedure exists but was **not due** on this row, that is its own reading — write
+`n/a: <reason>` rather than omitting (`mutation-survivors` above is the worked instance; the
+spelling follows the Gate-outcome invariant's not-run vocabulary). So three states stay
+distinguishable: a value, a visible not-due, and an omission that means only "unknown".
 
 ### `issue-<N>.plan.md` — per-issue plan (architect-reviewed, human-approved)
 ```markdown
@@ -614,6 +656,15 @@ Route is retained so the row resumes as that route once the dependency clears, s
 
 ## AC-verifier
 Default: **compose existing tools**, don't mint an agent.
+
+The gate has **two parts** and returns **two result classes**: **Class A — AC-satisfaction
+findings** from Part 1, and **Class B — mutation survivors** from Part 2. They are reported as
+**two counts and never merged into one**. Collapsed, a gate that found nothing reads identically to
+a gate that missed something — and the two classes answer different questions. Class A asks *did we
+build what was asked?*; Class B asks *would we notice if it broke?* A change can pass either while
+failing the other.
+
+**Part 1 — Class A: AC-satisfaction findings.**
 1. After implementation, spawn a fresh subagent with ONLY: the issue's acceptance criteria
    (verbatim) + the `$BASE` SHA resolved below + the commands under **Verifier runs** — and nothing
    from your own plan, narrative, or claims (the "ONLY" excludes your *conclusions*, not the
@@ -671,6 +722,101 @@ Default: **compose existing tools**, don't mint an agent.
 3. `CODE_REVIEW` (step 9) provides the adversarial bug pass.
 Promote to a dedicated `ac-verifier` agent only if the composed approach proves too loose.
 
+**Part 2 — Class B: mutation survivors.** For every **load-bearing guard this change adds** — a test
+whose purpose is to prevent a specific regression — break the production code that guard protects,
+confirm a test fails, restore. **A guard whose test survives its own mutation is a finding, reported
+as prominently as a bug**: it is protection the human believes they have and does not.
+
+*Why a checklist cannot find these* — the mechanism, quoted verbatim from the project retrospective
+that first made it nameable:
+
+> **The mechanism, stated precisely** (round 4 made it nameable): *asserting the outcome is not
+> asserting the mechanism.* A test written from the outcome ("the file is correct afterwards")
+> passes for **every** implementation that reaches that outcome — including the broken one you are
+> guarding against. The atomic-write test is the clean example: `write_bytes` and
+> `mkstemp`+`fsync`+`replace` produce an identical final file, so only a test that observes *which
+> writer runs* can tell them apart. This is a property of the assertion, not of the author's care —
+> which is why it recurs and why only mutation detects it.
+
+"A property of the assertion, not of the author's care" is the whole argument: this is why the
+answer is a mechanical pass and not an instruction to be more careful.
+
+**When it runs — scoped by risk surface, not unconditional.** Cost is this gate's real risk, so the
+pass is due only when **both** hold: the row's Route is `code` (a `docs` route runs **no** mutation
+pass; `research` carries no test-coverage gate, so it has nothing to mutate), **and** the change
+adds or modifies a load-bearing guard. **When you are unsure whether a test is load-bearing, run the
+pass** — the cost of one unnecessary mutation is a suite run; the cost of skipping is the class of
+defect this gate exists to catch.
+
+**The limit case is a finding, not a silent skip.** A `code`-route change that touches production
+code and adds **no** test runs no mutation pass — and must therefore be reported as a Class B
+finding naming that absence, never allowed to read as clean. Nothing to mutate is not the same as
+nothing to worry about; it is the guard-that-guards-nothing at its extreme.
+
+**Who does what.** The split below is this engine's own rule and holds regardless of how (or
+whether) `PERMISSION_POSTURE` is bound; where a project's binding says otherwise, this section wins:
+- **A fresh verifier selects the mutations and judges the results** — spawn a **new** subagent for
+  Part 2 rather than re-contacting Part 1's (which was deliberately given only the ACs and the diff
+  commands). Give it: the acceptance criteria, the guards the change adds, and this procedure.
+  Prompt: *"Name each load-bearing guard this change adds and, for each, the single smallest edit
+  to the production code it protects that should make its test fail. State what you expect to
+  happen. I will apply each edit and return the raw suite output; you then judge killed vs survived
+  and report Class B. Do not assume an edit applied — say what evidence would tell you it did."*
+  Both halves need the independence Part 1 already buys — a parent choosing its own mutations can
+  pick weak ones, which manufactures kills just as effectively as a bad test does.
+- **The parent applies each mutation, runs `TEST_CMD`, and returns the raw output** — unedited, not
+  summarized into a verdict. The parent cannot talk the suite out of going red, so this half is
+  mechanical and safe to keep in-thread.
+- **A read-only subagent must never be asked to apply a mutation.** It cannot write, so it would
+  silently do nothing and report a clean pass — the same manufactured-confidence failure this part
+  exists to catch. (Once mutation agents are isolated from the parent's tree, the verifier can own
+  both halves; until then this split is the whole control.)
+
+**Order of operations — the applied-check comes BEFORE any classification.**
+1. **Baseline green.** `TEST_CMD` must pass before mutating. A red baseline makes every subsequent
+   "the test failed" unearned.
+2. **Back up the target file to a deterministic path OUTSIDE the repository, and journal that path
+   BEFORE mutating.** A backup inside the tree is picked up by this gate's own
+   `git ls-files --others --exclude-standard` read and pollutes the input it is certifying. Append
+   `- mutation-pass: started <file> → <backup path>` to `progress.md` first, and
+   `- mutation-pass: restored <file>` after — in that order. The journal line is not bookkeeping:
+   step 7 has no distinct row status, so **it is the only signal that tells a resuming orchestrator
+   an interrupted mutation pass is what it is looking at**, and the only record of where the backup
+   went once the context that chose it is gone. Never revert a mutation with
+   `git checkout`/`git restore`: step 7 runs **before** the step-8 commit, so the tree holds
+   uncommitted deliverables, and a git-level revert cannot tell the mutation from the work — it
+   silently destroys both.
+3. **Apply the mutation, then confirm it actually applied** — the file must differ from the backup.
+   **A pattern that matched nothing is an ERROR, not a result**: an unapplied mutation's suite run
+   carries no information *in either direction*, so it is never classified as killed or survived.
+   Journal it as a `- gate-error:` line and escalate. This is not a hypothetical — a helper that
+   dropped its arguments once produced four mutations that never applied and reported success
+   anyway, inside the tool built to catch this class. **Count mutations that altered a file, never
+   invocations of the mutate helper.**
+4. **Run `TEST_CMD`.** Suite goes red ⇒ the mutant is **killed**, the guard works. Suite stays green
+   ⇒ **survivor**, a Class B finding.
+5. **Restore byte-exact from the backup and verify the restore** — on **every** path, including
+   when the suite run itself errors. A tree left dirty after this pass is a corrupted merge
+   candidate, not a cleanup nit: treat it as a `- gate-error:` and stop.
+
+**Certifying a fix: a green verdict must prove it can go red.** When this gate certifies a **fix**,
+re-break the thing the fix repaired and confirm the certifying check fires. Without that, "the suite
+is green" is equally consistent with a working guard and a dead one. The mutation discipline applies
+one level up — not only to the guards the change adds, but to the **verification apparatus** relied
+on to certify them.
+
+**A repeated survivor in near-identical code is a de-duplication signal.** When the same survivor
+appears twice in near-identical code, report it **once**, as *one property with two writers — delete
+the duplicate*, rather than twice as two missing tests. One writer means one place for the property
+to be true; emitting the finding twice invites a second near-identical test that entrenches the
+duplication instead of removing it.
+
+**Reporting.** Class A and Class B counts are stated separately and land in separate `- Budget:`
+slots (`ac-findings` and `mutation-survivors` — see progress.md → the Budget line). Say explicitly
+whether the mutation pass ran, and if not, why. Part 2 runs **within** the same step-7 round as
+Part 1 — it does not consume a second one, and `gate-rounds=ac-verify=<n>` counts rounds of the
+whole gate, not parts of it.
+
 ---
 
 ## Initialization procedure (new run)
@@ -709,10 +855,16 @@ Stages 4/7/10 need no distinct status because the surrounding statuses bracket t
 `plan-approved` row re-enters at implement (step 6), so the architect/human gates are NOT re-run.
 The one external-side-effect stage is the architect (step 4) — it posts a comment to the issue —
 so on the rare resume of a `planning` row, check for an existing architect comment and skip
-re-invoking if present (do not double-post). AC-verify (step 7) is side-effect-free; security (step
-10) re-labeling is a no-op. **Working-tree reconciliation:** if a crashed prior attempt left
-uncommitted changes, inspect them before proceeding — keep and continue if they match the plan, or
-`git restore`/stash if they're partial/unrelated. A resumed `implementing` row is NOT "stuck" (stuck
+re-invoking if present (do not double-post). AC-verify (step 7) posts nothing externally, but it is
+**no longer tree-neutral**: its mutation pass (AC-verifier → Part 2) deliberately breaks production
+code and restores it, so a crash mid-pass can leave a mutated file sitting beside your uncommitted
+work. Security (step 10) re-labeling is a no-op. **Working-tree reconciliation:** if a crashed prior
+attempt left uncommitted changes, inspect them before proceeding — keep and continue if they match
+the plan, or `git restore`/stash if they're partial/unrelated. **Exception — a suspected interrupted
+mutation pass:** restore that file from the pass's out-of-tree backup, **never** with
+`git restore`/`git checkout`, which cannot tell the mutation from the uncommitted deliverables
+beside it and destroys both. If no backup survives, STOP and hand the file to the human rather than
+guessing which lines were the mutation. A resumed `implementing` row is NOT "stuck" (stuck
 keys on a repeated error signature, not status re-entry — see Guardrails).
 
 ---
@@ -721,9 +873,9 @@ keys on a repeated error signature, not status re-entry — see Guardrails).
 
 | Route | Pipeline differences |
 |-------|----------------------|
-| `code` | full pipeline, all gates |
-| `research` | lighter plan; **no test-coverage gate**; architect optional; security only if deps added; place outside the package source |
-| `docs` | skip architect + security; light review; `docs:` scope |
+| `code` | full pipeline, all gates; the acceptance gate's **mutation pass** (Class B) runs when the change adds or modifies a load-bearing guard — and when it changes production code and adds **none**, that absence is itself a Class B finding, never a silent skip |
+| `research` | lighter plan; **no test-coverage gate**; architect optional; security only if deps added; place outside the package source. No test-coverage gate means **nothing to mutate** — no mutation pass |
+| `docs` | skip architect + security; light review; `docs:` scope; **no mutation pass** |
 | `stub-defer` | do NOT implement; journal why; leave in backlog (Status `deferred`) |
 
 `blocked` and `parked` are **Status overlays, not Routes**: a row keeps its semantic Route (`code`/
@@ -746,7 +898,7 @@ Gate table:
 | Plan | orchestrator | every issue | `issue-<N>.plan.md` |
 | Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure | issue comment |
 | Human (plan) | user | only if uncertain/irreversible | approve/redirect |
-| AC-verify | fresh subagent (+`VERIFY`) | every issue with acceptance criteria (step 7 is unconditional) | done/not-done + gaps |
+| AC-verify | fresh subagent (+`VERIFY`); the parent applies mutations on its behalf | every issue with acceptance criteria (step 7 is unconditional; the **mutation pass within it** is scoped — Routing table) | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors) |
 | Code review | `CODE_REVIEW` (parallel finders you run — step 9) | every issue; one light pass on `docs` | findings → fixes |
 | Security | `SECURITY_REVIEW` (local or label) | by route | clean/findings |
 | Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI+security green | `MERGE_METHOD` |
