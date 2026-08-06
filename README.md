@@ -205,8 +205,9 @@ Two modules, covering deliberately different things:
 - `test_repo_consistency.py` — mechanical checks on the shipped artifacts: that
   the example sidecar still loads through the real loader, that the
   `dev-loop@claude-code-loop` identifier still matches the manifests it is
-  composed from, and that every `CAPS` parameter the engine reads is offered by
-  the `/init-loop` skeleton.
+  composed from, that every `CAPS` parameter the engine reads is offered by
+  the `/init-loop` skeleton, and that the pipeline's step order still agrees
+  across the six places it is restated.
 
 What the suite does **not** test is whether the prompt artifacts say the *right*
 thing. The engine is ~600 lines of instructions an agent executes at runtime, and

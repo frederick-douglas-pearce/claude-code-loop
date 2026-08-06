@@ -66,33 +66,40 @@ Two modules, and the split between them matters:
   that is semantics, which this module does not do. It fires when a reference goes **out of range** —
   whether edited to a number no heading defines, or left behind when the heading run shrank or was
   rebased off zero. Stated bluntly, because this is the case #31 will actually hit: **insert a step
-  mid-pipeline, renumber everything after it, and all 55 references point at the wrong step with the
-  whole suite green.** Confirmed by mutation (#44), along with the milder shapes — appending a step
+  mid-pipeline, renumber everything after it, and all 55 reference sites (59 numbers) point at the
+  wrong step with the whole suite green.** Confirmed by mutation (#44), along with the milder shapes — appending a step
   and updating `SKILL.md` passes, as does rewriting a `(step 9)` to `(step 7)`. **A green run is not
   evidence the cross-references were correctly renumbered.** Reference *forms* the regex does not
   match (`steps 3 and 7`, `steps 3, 7`, `step #7`) are invisible too; none is used today, and each
   is excluded deliberately — treating `,`/`and` as separators makes ordinary prose ("step 12 — 40
   lines max") parse as a step range and fail.
 
-  **The sixth restatement — guarded since #45, and the only one that ships into repos this plugin
+  **The sixth restatement — guarded since #45, and the only one that will ship into repos this plugin
   cannot reach.** `commands/init-loop.md`'s `(engine step 9)` sits in the `CODE_REVIEW` skeleton row,
-  which every consuming repo copies into its own `loop.config.md`. Drift in the other five ships a
-  wrong number *in the plugin*, and the next release corrects it; drift here strands one in a config
-  no release touches. It can't reuse the engine's matcher: that file carries 16 other `Step N`
-  references that are its *own* onboarding steps — and every number they carry is a real engine
-  heading too, so an unanchored matcher would find all 17 sites, resolve every one, and pass while
-  guarding nothing. `_INIT_LOOP_STEP_REFERENCE` anchors on the literal "engine step" (possessive
-  accepted, since `the engine's step N` is the form this repo's own config uses 3× and a miss there
-  would be doubly silent), and its **site count is pinned**
-  (`_EXPECTED_INIT_LOOP_STEP_REFERENCES`, currently 1) precisely because a floor cannot catch that
-  failure — 17 sites clears any floor. Write new cross-references in that file as
-  `engine step N`; the requirement is stated beside the skeleton for editors who never read this file.
+  which `/init-loop` copies into each newly-onboarded repo's `loop.config.md`. Drift in the other
+  five ships a wrong number *in the plugin*, and the next release corrects it; drift here strands one
+  in a config no release touches. It can't reuse the engine's matcher: that file carries 16 other
+  `Step N` references that are its *own* onboarding steps — and every number they carry is a real
+  engine heading too, so an unanchored matcher would find all 17 sites, resolve every one, and pass
+  while guarding nothing. `_INIT_LOOP_STEP_REFERENCE` anchors on the literal "engine step"; the
+  possessive is accepted because `the engine's step N` is what the live consumer configs write for 3
+  of their 6 references, so it is what a future editor of the skeleton is likely to write. Everything
+  after the anchor mirrors the engine's matcher exactly — including the hyphen (`step-9`) and `.N`
+  sub-item forms, whose omission would be **invisible to the pin**, since an unmatched site never
+  moves the count. The **reference-site count is pinned** (`_EXPECTED_INIT_LOOP_STEP_REFERENCES`,
+  currently 1) precisely because a floor cannot catch the anchor-drop — 17 sites clears any floor —
+  and a separate check asserts the reference is still **inside the `~~~` skeleton**, since only the
+  skeleton ships and a count alone cannot tell prose from product.
 
-  **Still unreached: the copies already in the field.** This repo's own `.claude/loop.config.md:49`
-  carries the copied `engine step 9`, and that file holds five further engine-step references of its
-  own; the same is true of every onboarded consumer. No check reaches any of them — consumer configs
-  are outside the shipped plugin. #45 guards the *generator*, which is the only end of that pipe this
-  repo owns; #40 and #36 are where the field copies get addressed.
+  **Not yet copied anywhere — and that is the point.** The `engine step 9` row entered the skeleton
+  in-tree with #10; the *installed* 0.0.1 that onboarded all three consumers still binds
+  `CODE_REVIEW` to `/code-review` and contains no `engine step` at all. So the guard lands **before**
+  propagation begins, at the #36 re-install — the useful time for it. Do not read the field as
+  already carrying it: this repo's own `.claude/loop.config.md:49` has it only as the deliberate
+  hand-written deviation documented in that file's F7 note, and the other two consumers carry bare
+  and hyphenated step references instead. No check reaches any consumer config — they are outside the
+  shipped plugin. #45 guards the *generator*, the only end of that pipe this repo owns; #40 and #36
+  are where the field configs get addressed.
 
 **Prompt *semantics* remain validated by review + dogfooding, and that is deliberate** — the
 consistency module tests couplings, never whether an instruction is *right*. Do not try to grow it
