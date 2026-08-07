@@ -217,11 +217,44 @@ and the running list of **dogfood findings this repo surfaces that the other two
   whose deliverable is agent-executed markdown hits this. Generic fix: the router should test
   *path/role*, not file extension, before applying the `docs` route's reduced gate set.
 
-- **Open question — what does the mutation pass (#22) mean for a prompt?** You cannot break a
-  paragraph and watch a test go red. The nearest testable surface is the mechanical consistency
-  checks (#18, #39) over the markdown couplings, which suggests the answer is "mutate the artifact
-  the consistency check reads" — precisely #18's AC2. Worth resolving here before #22 ships, since
-  this repo is the only consumer that forces the question.
+- **RESOLVED 2026-08-06 — what a mutation pass means for a prompt: mutate the *coupling*, not the
+  prose.** The standing hypothesis ("mutate the artifact the consistency check reads" — #18's AC2)
+  is now **confirmed by execution rather than argued.** During the #22 iteration a real mutation ran
+  against this repo's own product: `step 7` → `step 77` in `loop-engine.md` made
+  `PipelineStepOrderTests` fail; the file was restored byte-exact from an out-of-tree backup and the
+  suite returned green. So the mutable surface of an agent-executed markdown product is the set of
+  **couplings the mechanical checks read** — step-order references, the `CAPS` vocabulary, the
+  shipped example sidecar — and a mutation is breaking one and confirming the check goes red.
+
+  **The hard limit, which is the more important half of the answer.** This covers couplings
+  **only**. A killed mutant proves a coupling is guarded; it never proves an instruction is *right*.
+  Prompt semantics stay on review + dogfooding permanently — `CLAUDE.md` forbids growing the
+  consistency module into a semantic test of the engine, and nothing here changes that. Read a green
+  mutation result as "this cross-reference cannot silently rot", never as "this procedure is
+  correct."
+
+- **Consequence you will meet on almost every engine PR: the limit case fires here by default.**
+  Walk the engine's three due-ness questions (AC-verifier → Part 2) for a typical prose edit to
+  `loop-engine.md`: Route is `code` (§3's override), it alters behavior (agent-executed artifact),
+  and it adds no test. That is the **limit case** — so the row records
+  `mutation-survivors=1 (no guard added)`, and a Class B finding **blocks**.
+
+  **This is the gate working, not noise, and the standing decision is to disposition it every time
+  rather than silence it.** The finding is *true*: this repo has very little mechanical coverage of
+  its own product, and the running count of these is the honest measure of how little. At the merge
+  gate, take one of two dispositions and journal which:
+  1. **Add or extend a mechanical check** so the coupling this change touched is guarded (#62 is a
+     worked instance; #18/#44/#45 are the precedent), or
+  2. **State that the change touches no mechanically-checkable coupling** and merge on that basis.
+
+  **Do not ask for a fourth `n/a` reason.** The engine permits exactly three on purpose, and an
+  escape hatch an agent can reach for is how the off switch that #22 deliberately designed *out*
+  gets designed back in — the same failure shape `CLAUDE.md` flags for `ALLOWED_NON_BINDINGS` and
+  `_STOPWORDS`. If the recurrence ever becomes genuinely uninformative, that is a finding for #1
+  backed by counts, not a config workaround.
+
+  **Precedent set:** PR #59 (the #22 contract half) hit this limit case, journalled
+  `mutation-survivors=1 (no guard added)`, and merged on disposition 2.
 
 - **Deferred — protect `progress.md` with the append-only guard.** The ledger journal is append-only
   by design and the loop is its only writer, making it the natural `APPEND_ONLY_FILES` target. It
