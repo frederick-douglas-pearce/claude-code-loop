@@ -101,15 +101,17 @@ that means for your repo:
   and is the one case live today — it needs nothing run against your code.
 - **Either kind of finding blocks.** It is treated like an unmet acceptance criterion — fixed and
   re-verified — and a row still carrying one is never eligible for auto-merge.
-- **The re-check is never done by whoever wrote the fix.** When the loop fixes what this gate or
-  code review found, a freshly spawned checker decides whether the fix worked — not the thread that
-  wrote it, and not the checker that raised the finding. The loop gets **one** such re-check; if it
-  comes back dirty the loop stops and asks you, rather than iterating on itself.
 - **The loop does not yet break your code to check.** Deliberately mutating your source and
   restoring it is a real power over your working tree, and it is specified separately, after the
   work that isolates such edits from the tree you are working in. Until then the loop records that
   the check was not run rather than improvising one. **Nothing in this release edits your source to
   test it.**
+
+**A fix is never checked by whoever wrote it.** When the loop fixes what a gate found — the
+acceptance gate above, or code review, on any route — a freshly spawned checker decides whether the
+fix worked: not the thread that wrote it, and not the checker that raised the finding. Each such
+gate gets **one** re-check; if it comes back dirty the loop stops and asks you, rather than
+iterating on itself.
 
 **Hard limits the engine commits to:**
 
