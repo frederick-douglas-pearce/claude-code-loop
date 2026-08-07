@@ -74,7 +74,8 @@ it, and in that mode **the human approves every merge — it never auto-merges.*
 Auto-merge exists only under the opt-in `escalation-only` mode, and even there it is
 per-route, limited to routes you have explicitly *graduated*, and withheld for feature
 or breaking changes, risky or irreversible changes, anything touching a security
-surface, and contested review findings. Independently of mode, the loop stops and asks
+surface, contested review findings, and unresolved acceptance-gate findings of
+either kind. Independently of mode, the loop stops and asks
 you mid-pipeline when it hits ambiguous acceptance criteria, risk, agent disagreement,
 or genuine uncertainty. Wherever eligibility is unclear the rule is **default-deny**:
 fall back to the human.
@@ -87,6 +88,24 @@ equivalent where one exists, and otherwise stop and ask you. A gate that ran and
 falls back at all — the loop will not substitute a check of its own devising and call it clean; it
 escalates. (A gate the route legitimately skips is journalled as *skipped*, which is also not a
 pass.)
+
+**The acceptance gate asks whether your tests would notice a regression.** It reports two kinds of
+finding, kept separate and never added together: a criterion the change did not meet, and a **guard
+that does not guard** — a test that would stay green even if the code it protects broke. The second
+is protection you believe you have and do not, so the loop reports it as prominently as a bug. What
+that means for your repo:
+
+- **It only applies to `code`-route changes that alter behavior.** A `docs` or `research` route is
+  out of scope entirely.
+- **If such a change adds no test at all, the loop tells you.** That is read straight off the diff
+  and is the one case live today — it needs nothing run against your code.
+- **Either kind of finding blocks.** It is treated like an unmet acceptance criterion — fixed and
+  re-verified — and a row still carrying one is never eligible for auto-merge.
+- **The loop does not yet break your code to check.** Deliberately mutating your source and
+  restoring it is a real power over your working tree, and it is specified separately, after the
+  work that isolates such edits from the tree you are working in. Until then the loop records that
+  the check was not run rather than improvising one. **Nothing in this release edits your source to
+  test it.**
 
 **Hard limits the engine commits to:**
 
