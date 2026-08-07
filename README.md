@@ -77,8 +77,8 @@ or breaking changes, risky or irreversible changes, anything touching a security
 surface, contested review findings, and unresolved acceptance-gate findings of
 either kind. Independently of mode, the loop stops and asks
 you mid-pipeline when it hits ambiguous acceptance criteria, risk, agent disagreement,
-or genuine uncertainty. Wherever eligibility is unclear the rule is **default-deny**:
-fall back to the human.
+a gate finding that is still there after one fresh re-check, or genuine uncertainty.
+Wherever eligibility is unclear the rule is **default-deny**: fall back to the human.
 
 **A gate that did not run is never reported as one that passed.** For every gate the loop
 runs — plan, architect, acceptance, code review, security, merge — it may record a pass only with
@@ -106,6 +106,12 @@ that means for your repo:
   work that isolates such edits from the tree you are working in. Until then the loop records that
   the check was not run rather than improvising one. **Nothing in this release edits your source to
   test it.**
+
+**A fix is never checked by whoever wrote it.** When the loop fixes what a gate found — the
+acceptance gate above, or code review, on any route — a freshly spawned checker decides whether the
+fix worked: not the thread that wrote it, and not the checker that raised the finding. Each such
+gate gets **one** re-check; if it comes back dirty the loop stops and asks you, rather than
+iterating on itself.
 
 **Hard limits the engine commits to:**
 
