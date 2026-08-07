@@ -943,19 +943,18 @@ forms, because only one of them is a recurrence signal:
 
 **A gate that did not run — static or dynamic — is never recorded as a gate that passed.**
 
-**Fresh-re-check invariant (a fix is never checked by its author).** Applies to **any gate finding
-you fix inside the pipeline**. Two gates are where it *bites*, because both re-check under a round
-cap: the **acceptance gate** (step 7, *both* result classes) and **code review** (step 9). Where a
-gate carries no cap — security (step 10) — the freshness rule still holds; the absence of a cap is
-the absence of a *bound*, never the absence of the rule. When a gate comes back dirty
+**Fresh-re-check invariant (a fix is never checked by its author).** Applies to the two gates that
+carry a round cap, and so re-check a fix inside the pipeline under a bounded budget: the
+**acceptance gate** (step 7, *both* result classes) and **code review** (step 9). When a gate comes
+back dirty
 and you fix what it found, the re-check is performed by a **fresh instance**. You wrote the fix, so
 you are the one reader who cannot check it: the belief that produced the defect is still present
 while the fix is written. **You are an author of every fix made in this iteration, including one you
 delegated** — directing a fix is authorship for this rule, so handing the writing to a subagent and
 reading it yourself satisfies nothing.
 
-**Read this as a rule about round *two*, and about three clauses in particular** — for the first
-round each gate actually runs today, a fresh spawn is already the rule (step 7 Part 1, step 9's
+**Read this as a rule about round *two*, and about three clauses in particular** — both gates
+already spawn fresh subagents for the first round they actually run today (step 7 Part 1, step 9's
 finders), so the parts that actually bind are narrow:
 - **Step 9's "verify recs were applied" is the sharpest hole it closes.** Confirming your own
   remediation is not a gate; it is the author agreeing with himself. Spawn a checker for it.
