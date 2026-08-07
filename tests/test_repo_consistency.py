@@ -247,8 +247,8 @@ class PipelineStepOrderTests(unittest.TestCase):
     breaks: ``SKILL.md``'s **frontmatter** ``description`` chain -- the string
     the model reads when deciding whether to invoke the skill, so a behavior
     surface rather than internal prose -- and the engine's in-prose ``step N``
-    / ``Stages N/M`` cross-references: **60 reference sites, 64 numbers** once
-    ``/``- and dash-separated runs are expanded. This grep finds 58 of the 60::
+    / ``Stages N/M`` cross-references: **65 reference sites, 69 numbers** once
+    ``/``- and dash-separated runs are expanded. This grep finds 63 of the 65::
 
         grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' \\
             skills/dev-loop/loop-engine.md | wc -l
@@ -444,11 +444,14 @@ class PipelineStepOrderTests(unittest.TestCase):
     # pin. Bump deliberately when init-loop.md gains a genuine second pipeline
     # reference (#40 rewrites that skeleton and may).
     _EXPECTED_INIT_LOOP_STEP_REFERENCES = 1
-    # Well below the 64 numbers currently present (60 reference sites,
+    # Well below the 69 numbers currently present (65 reference sites,
     # some listing several), so ordinary prose edits never trip it, and well
     # above zero, so a regex broken by a reword fails here instead of passing on
-    # an empty list. The 15 of headroom is a deliberate choice, not a
-    # measurement -- and note its cost: a reword that breaks only PART of the
+    # an empty list. The headroom is a deliberate choice, not a
+    # measurement -- stated without a figure on purpose, since a count here
+    # goes stale on any edit that adds a reference (it had already drifted
+    # from 15 to 24 before this line was last touched)
+    # -- and note its cost: a reword that breaks only PART of the
     # matcher (say, `Stages 4/7/10` -> `Stages 4, 7 and 10`, a form this regex
     # does not match) drops a few numbers and still clears the floor. Raising
     # this as the engine grows is fine; lowering it to make a red run green is
@@ -832,7 +835,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         )
 
     def test_every_engine_step_reference_resolves_to_a_real_heading(self) -> None:
-        """Restatement #5: 60 in-prose `step N` sites. RESOLVABILITY ONLY.
+        """Restatement #5: 65 in-prose `step N` sites. RESOLVABILITY ONLY.
 
         This asserts that every referenced N is a real heading number -- not
         that it still points at the step it meant. `step 9` continuing to
@@ -845,7 +848,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         removed, or the run rebased off zero). It does NOT catch a renumber
         that only adds steps, nor a reference that shifted meaning while
         staying in range -- including the case that matters most, inserting a
-        step mid-pipeline, which leaves all 64 references pointing one step off
+        step mid-pipeline, which leaves all 69 references pointing one step off
         and every test green.
 
         Nor does it see reference FORMS the regex does not match: `steps 3 and

@@ -44,6 +44,10 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   uninvocable binding is not permission to skip the gate: fall back to the engine's inline
   composition where it defines one, otherwise escalate. A gate that ran and *errored* never falls
   back — escalate, and never journal it as clean.
+- **A fix for a gate finding is re-checked by a fresh instance, never by its author.** After you fix
+  what a gate found, the re-check is a **new spawn** — not you re-reading your own diff, and not the
+  round-1 agent re-contacted. One fresh re-check (it is round 2 of that gate's existing cap), then
+  escalate; no third round.
 - **Never edit the user-global `SCOPE_AGENT`/`DESIGN_AGENT` definitions**, and never `git add`
   unrelated pre-existing working-tree changes.
 - **The ledger is gitignored** — do NOT commit it.

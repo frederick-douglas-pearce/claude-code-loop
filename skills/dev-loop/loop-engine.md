@@ -199,7 +199,10 @@ working-tree changes.
 ### 7. Verify done (independent, fresh context)
 Run the AC-verifier (below): a fresh check that the diff satisfies EVERY acceptance
 criterion — verify state, not your claim. If gaps, fix and re-verify (max 2 rounds, else
-escalate). **"Gaps" means a finding of either class** — an unmet criterion or a surviving
+escalate) — and **the re-verify is a fresh instance, never the author of the fix**
+(Fresh-re-check invariant, under Gates: a new spawn, not you and not the round-1 agent
+re-contacted; that re-check is round 2 of this cap, not a round on top of it).
+**"Gaps" means a finding of either class** — an unmet criterion or a surviving
 mutant both send you back to fix and re-verify under the same cap.
 
 The gate returns **two result classes, and they are never summed into one "findings" count**:
@@ -242,8 +245,13 @@ production-readiness — overlap far less than repeated passes of the same one, 
 review misses most of what a diff carries. Scale the count with the surface: one light pass on
 `docs`, more when the diff touches a production or public-API path.
 
-Implement viable findings; decline others with a one-line rationale; **verify recs were applied**.
-Bounded to 2 rounds — contested findings escalate to the human, do not loop. Commit fixes.
+Implement viable findings; decline others with a one-line rationale; **verify recs were applied — by
+a fresh checker, never by yourself.** This is the Fresh-re-check invariant's sharpest instance (see
+Gates): you wrote the fixes, so confirming them yourself is the author agreeing with himself, not a
+gate. Spawn **one lighter checker** — the change as it now stands plus the list of what you claimed
+to fix, and none of your conclusions about whether it worked — rather than re-running the full
+finder fan-out. Bounded to 2 rounds (that re-check being round 2) — contested findings, and anything
+the re-check still finds dirty, escalate to the human, do not loop. Commit fixes.
 
 ### 10. Security review (by route)
 Run `SECURITY_REVIEW` per the routing in `loop.config.md` (the local-skill-vs-label choice and any
@@ -789,8 +797,12 @@ the Budget line). Say explicitly whether Class B was due, and if not, why.
 
 **A Class B finding is not merely recorded — it blocks, exactly as a Class A gap does.** Strengthen
 the guard (assert the *mechanism*, per the quote above, not the outcome) and re-verify, within the
-same 2-round cap; past that, escalate. Recording a finding and proceeding is not compliance — a
-finding "reported as prominently as a bug" that no step acts on is a bug report filed into a drawer.
+same 2-round cap; past that, escalate. **That re-verify is a fresh instance, never the author of the
+strengthened guard** (Fresh-re-check invariant, under Gates) — this leg needs saying separately
+because it is the one place a *guard* is what got fixed, and a guard confirmed by the person who
+just wrote it is precisely the defect Class B exists to catch. Recording a finding and proceeding is
+not compliance — a finding "reported as prominently as a bug" that no step acts on is a bug report
+filed into a drawer.
 **An unresolved Class B finding at the merge gate is an always-escalate condition (step 11), so a
 row carrying one is never auto-merge-eligible** however graduated its route.
 
@@ -872,8 +884,8 @@ Gate table:
 | Plan | orchestrator | every issue | `issue-<N>.plan.md` |
 | Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure | issue comment |
 | Human (plan) | user | only if uncertain/irreversible | approve/redirect |
-| AC-verify | fresh subagent (+`VERIFY`) | every issue with acceptance criteria (step 7 is unconditional; the **mutation pass within it** is scoped — Routing table) | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors); **either class blocks** |
-| Code review | `CODE_REVIEW` (parallel finders you run — step 9) | every issue; one light pass on `docs` | findings → fixes |
+| AC-verify | fresh subagent (+`VERIFY`); **any re-check a fresh instance too** (Fresh-re-check invariant) | every issue with acceptance criteria (step 7 is unconditional; the **mutation pass within it** is scoped — Routing table) | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors); **either class blocks** |
+| Code review | `CODE_REVIEW` (parallel finders you run — step 9); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes |
 | Security | `SECURITY_REVIEW` (local or label) | by route | clean/findings |
 | Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI+security green | `MERGE_METHOD` |
 
@@ -924,6 +936,53 @@ forms, because only one of them is a recurrence signal:
   has an open PR, do not "move on" to another row** — one PR at a time still binds; report and STOP.
 
 **A gate that did not run — static or dynamic — is never recorded as a gate that passed.**
+
+**Fresh-re-check invariant (a fix is never checked by its author).** Applies to the two gates whose
+findings you fix and re-check inside the pipeline, both of which carry a round cap: the **acceptance
+gate** (step 7, *both* result classes) and **code review** (step 9). When a gate comes back dirty
+and you fix what it found, the re-check is performed by a **fresh instance**. You wrote the fix, so
+you are the one reader who cannot check it: the belief that produced the defect is still present
+while the fix is written.
+
+**Read this as a rule about round *two*, and about three clauses in particular** — both gates already
+spawn fresh subagents for their *first* round, so the parts that actually bind are narrow:
+- **Step 9's "verify recs were applied" is the sharpest hole it closes.** Confirming your own
+  remediation is not a gate; it is the author agreeing with himself. Spawn a checker for it.
+- **A re-check must not collapse into the parent thread** re-reading its own diff — the commonest
+  shape, because it is the cheapest.
+- **Nor into the round-1 agent re-contacted.** That agent carries its own prior conclusions, which is
+  the same contamination one level up. **"Fresh" means a new spawn**, every time.
+
+**What the fresh checker receives — and it differs by gate.** In both cases it gets **none of your
+conclusions about whether the fix worked**; that is the exclusion Part 1 already draws (it withholds
+your *conclusions*, not the instructions the checker needs).
+- **Acceptance gate (step 7), Class A — re-run Part 1's recipe unchanged:** the acceptance criteria
+  verbatim, the resolved `$BASE`, and the commands under **Verifier runs**, with nothing added. The
+  criteria are the yardstick, so a round-2 checker that re-derives met/not-met from scratch is *more*
+  independent than one handed a list of claimed repairs. **Do not relax Part 1's `ONLY` here** — a
+  claimed-repairs list is a claim, which that list exists to exclude. (What a *Class B* re-check
+  receives is specified with the mutation apparatus, not here — only that it, too, is a fresh
+  instance is fixed above.)
+- **Code review (step 9) — the change as it now stands, plus the list of what you claimed to fix.**
+  Review has no fixed yardstick to re-derive from, so that list is what gives the checker something
+  to test rather than a blank re-review. **One lighter checker**, not a re-run of the full finder
+  fan-out — its question is narrower than round 1's.
+
+**The bound — one fresh re-check, then escalate; there is no ladder.** The fresh re-check **is**
+round 2 of the 2-round cap each gate already carries, never a round on top of it. If round 2 comes
+back dirty, **escalate to the human**; there is no round 3. So the cost this invariant adds is
+bounded at one extra subagent per dirty gate per iteration, and it cannot grow into an
+unbounded re-checking ladder.
+
+**Journalling it.** A fresh re-check is a distinct subagent invocation, so it increments
+`subagent-runs` (one run = one subagent invocation — progress.md → the Budget line).
+**A journal recording a re-check while `subagent-runs` did not move
+records a re-check that did not happen** — the parent re-read its own work and narrated otherwise.
+
+**Why "be more careful" is not the remedy.** In the retrospective that first made this nameable, the
+sharpest instance survived inside a commit **whose own subject line named this defect class**,
+written by an author who had just read the finding and was fixing it. Vigilance is not a control —
+which is why the answer is a different checker rather than a more careful one.
 
 **Convergence & the resting states.** When nothing is selectable, step 1 classifies the run
 into one of four outcomes (tested in order: hold → parked → complete → pending) and appends a
