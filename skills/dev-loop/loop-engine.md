@@ -193,8 +193,18 @@ Otherwise proceed (note "auto-approved" + why in the journal). Route scope/value
 ### 6. Implement (you, the parent thread)
 Advance the row to `implementing`. Create the branch (`BRANCH_FMT`). Implement code + tests +
 docs per the plan. TDD where it fits (write failing tests, commit, do not modify tests later).
-Run `LINT_CMD`, `TYPE_CMD`, `TEST_CMD` until green. Do NOT stage unrelated pre-existing
-working-tree changes.
+Run `LINT_CMD`, `TYPE_CMD`, and `TEST_CMD` — they are **independent signals**. Read **each
+command's output to completion** and fix until every one is green: one command's pass is not
+evidence about the others, and a single command can print an early `all checks passed` line
+*above* a later failure in the same output — so "green" means the end of each output, not its
+first line. Do NOT stage unrelated pre-existing working-tree changes.
+
+**Authoring rule — a comment claiming a protection must name it.** A comment asserting that a
+test, guard, or invariant exists must **name it** (`file:line` or the test name), or must not be
+written. An unnamed claim is worse than no comment: the next reader — human or agent — stops
+looking, so the comment *defeats* the reviewer rather than merely failing to help, and it does so
+most effectively when it sits directly on top of the gap. This is an authoring rule, not a
+binding; step 9's finders check the diff against it.
 
 ### 7. Verify done (independent, fresh context)
 Run the AC-verifier (below): a fresh check that the diff satisfies EVERY acceptance
@@ -239,6 +249,12 @@ rebind you recommend, and surface it to the human — **do not edit `loop.config
 code is *right* without knowing what it was meant to do; a finder holding the ACs catches "this
 doesn't actually do AC-3", a class the diff alone cannot reveal. (This does not make step 7
 redundant — the acceptance gate still runs independently.)
+
+**Every finder also applies one standing check, whatever angle it is working: flag any comment in
+the diff that asserts a test, guard, or invariant exists without naming it** (`file:line` or the
+test name — the step-6 authoring rule). This is a property checked across whatever finders the
+surface warrants, **not an angle of its own**, so it neither adds a review pass nor competes with
+the risk-surface angle selection below.
 
 **Pick finder angles from the diff's risk surface, not from a fixed list.** Distinct lenses —
 correctness; robustness/IO/network/filesystem; reuse/conventions/integration;
