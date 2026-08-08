@@ -990,15 +990,15 @@ your *conclusions*, not the instructions the checker needs).
      here, where the checker cannot see it, so an unprompted checker hedges and the gate reads
      clean.
   **Why a read is a legitimate check here, when Part 2 says only mutation detects a survivor.**
-  Three reasons, each from this engine's own text rather than from the cost of mutating: the defect
+  Two reasons, each from this engine's own text rather than from the cost of mutating: the defect
   is, in the quote's own words, *a property of the assertion* — so it is visible **in the
-  assertion**, to a reader who knows which behavior is at risk, and the limit-case finding named
-  that behavior; the fix side already uses this yardstick without mutating anything ("strengthen the
-  guard — assert the *mechanism*, per the quote above, not the outcome"), so reading whether the
-  mechanism *is* asserted is the symmetric operation; and the quote's objection is explicitly to
-  **the author's care**, which a fresh instance removes by construction. "Cannot tell ⇒ dirty" keeps
-  it fail-safe where an instruction to be careful never is. None of this reopens the deferred
-  apparatus — a *surviving mutant* still requires it.
+  assertion**, to a reader who knows which behavior is at risk, and this checker is handed that
+  behavior (above); and the fix side already applies this yardstick without mutating anything
+  (`Strengthen the guard (assert the *mechanism*, per the quote above, not the outcome)`), so
+  reading whether the mechanism *is* asserted is the symmetric operation. "Cannot tell ⇒ dirty"
+  keeps it fail-safe where an instruction to be careful never is. None of this reopens the deferred
+  apparatus — a *surviving mutant* still requires it, and no argument here is offered against
+  "only mutation detects it."
   (What a re-check of a *surviving mutant* receives is specified with the mutation apparatus, not
   here; only that it, too, is a fresh instance is fixed above.)
 - **Code review (step 9) — the change as it now stands, plus the list of what you claimed to fix.**
