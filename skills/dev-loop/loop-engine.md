@@ -963,7 +963,7 @@ finders), so the parts that actually bind are narrow:
 - **Nor into the round-1 agent re-contacted.** That agent carries its own prior conclusions, which is
   the same contamination one level up. **"Fresh" means a new spawn**, every time.
 
-**What the fresh checker receives — and it differs by gate.** In both cases it gets **none of your
+**What the fresh checker receives — and it differs by gate.** In every case it gets **none of your
 conclusions about whether the fix worked**; that is the exclusion Part 1 already draws (it withholds
 your *conclusions*, not the instructions the checker needs).
 - **Acceptance gate (step 7), Class A — re-run Part 1's recipe unchanged:** the acceptance criteria
@@ -974,8 +974,20 @@ your *conclusions*, not the instructions the checker needs).
 - **Acceptance gate, Class B — the limit case is live today and needs its own recipe.** Where the
   finding was the *absence* of a guard (behavior altered, no test added — read straight off the
   diff, so it needs no apparatus), the re-checker receives the change as it now stands plus the
-  behavior the missing guard was meant to cover, and answers one question: *does a test in this
-  change fail if that behavior is broken?* — with none of your claims about the test you added.
+  behavior the missing guard was meant to cover, and none of your claims about the test you added.
+  It answers **by reading the new test's assertions**: do they pin the *mechanism* that would
+  break, or only an *outcome* a broken implementation would still produce? **If it cannot tell,
+  that is a dirty result, not a clean one.**
+  **The spawn prompt must carry two things the checker would otherwise never see**, since it does
+  not read Part 2: the *asserting the outcome is not asserting the mechanism* distinction **quoted
+  verbatim** — that is the yardstick, and without it the checker has the question but no criterion —
+  and that it **must not edit, break, or execute code to decide**, since the prohibition on
+  improvising a mutation does not otherwise reach it, and a checker that breaks the code to see what
+  fails has done the one thing this gate forbids.
+  Part 2's "only mutation detects it" is **not** in tension with this: that is about *hunting*
+  survivors across a whole suite, where the at-risk behavior is unknown. Here the finding **named
+  the behavior in advance**, so the read is one named behavior against one assertion — bounded, and
+  it does not reopen the deferred apparatus.
   (What a re-check of a *surviving mutant* receives is specified with the mutation apparatus, not
   here; only that it, too, is a fresh instance is fixed above.)
 - **Code review (step 9) — the change as it now stands, plus the list of what you claimed to fix.**
