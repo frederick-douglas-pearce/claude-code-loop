@@ -975,19 +975,30 @@ your *conclusions*, not the instructions the checker needs).
   finding was the *absence* of a guard (behavior altered, no test added — read straight off the
   diff, so it needs no apparatus), the re-checker receives the change as it now stands plus the
   behavior the missing guard was meant to cover, and none of your claims about the test you added.
-  It answers **by reading the new test's assertions**: do they pin the *mechanism* that would
-  break, or only an *outcome* a broken implementation would still produce? **If it cannot tell,
-  that is a dirty result, not a clean one.**
-  **The spawn prompt must carry two things the checker would otherwise never see**, since it does
-  not read Part 2: the *asserting the outcome is not asserting the mechanism* distinction **quoted
-  verbatim** — that is the yardstick, and without it the checker has the question but no criterion —
-  and that it **must not edit, break, or execute code to decide**, since the prohibition on
-  improvising a mutation does not otherwise reach it, and a checker that breaks the code to see what
-  fails has done the one thing this gate forbids.
-  Part 2's "only mutation detects it" is **not** in tension with this: that is about *hunting*
-  survivors across a whole suite, where the at-risk behavior is unknown. Here the finding **named
-  the behavior in advance**, so the read is one named behavior against one assertion — bounded, and
-  it does not reopen the deferred apparatus.
+  Its question is: **do the new test's assertions pin the *mechanism* that would break, or only an
+  *outcome* a broken implementation would still produce?** It answers by **reading them** — never by
+  running or altering anything — and **if it cannot tell, that is a dirty result, not a clean one.**
+  **The spawn prompt must carry three things the checker would otherwise never see**, since it reads
+  neither Part 2 nor this section:
+  1. the **blockquote** under Part 2 — the `write_bytes`-versus-`mkstemp` passage, not the one-line
+     slogan alone — **pasted verbatim**: that is the yardstick, and its worked example is what makes
+     the distinction operable;
+  2. that it **must not edit, break, or execute code to decide**, since the prohibition on
+     improvising a mutation does not otherwise reach it, and a checker that breaks the code to see
+     what fails has done the one thing this gate forbids;
+  3. that it **must say plainly when it cannot tell** — the rule making that a dirty result lives
+     here, where the checker cannot see it, so an unprompted checker hedges and the gate reads
+     clean.
+  **Why a read is a legitimate check here, when Part 2 says only mutation detects a survivor.**
+  Three reasons, each from this engine's own text rather than from the cost of mutating: the defect
+  is, in the quote's own words, *a property of the assertion* — so it is visible **in the
+  assertion**, to a reader who knows which behavior is at risk, and the limit-case finding named
+  that behavior; the fix side already uses this yardstick without mutating anything ("strengthen the
+  guard — assert the *mechanism*, per the quote above, not the outcome"), so reading whether the
+  mechanism *is* asserted is the symmetric operation; and the quote's objection is explicitly to
+  **the author's care**, which a fresh instance removes by construction. "Cannot tell ⇒ dirty" keeps
+  it fail-safe where an instruction to be careful never is. None of this reopens the deferred
+  apparatus — a *surviving mutant* still requires it.
   (What a re-check of a *surviving mutant* receives is specified with the mutation apparatus, not
   here; only that it, too, is a fresh instance is fixed above.)
 - **Code review (step 9) — the change as it now stands, plus the list of what you claimed to fix.**
