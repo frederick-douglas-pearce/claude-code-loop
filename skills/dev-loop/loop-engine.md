@@ -193,18 +193,23 @@ Otherwise proceed (note "auto-approved" + why in the journal). Route scope/value
 ### 6. Implement (you, the parent thread)
 Advance the row to `implementing`. Create the branch (`BRANCH_FMT`). Implement code + tests +
 docs per the plan. TDD where it fits (write failing tests, commit, do not modify tests later).
-Run `LINT_CMD`, `TYPE_CMD`, and `TEST_CMD` — they are **independent signals**. Read **each
-command's output to completion** and fix until every one is green: one command's pass is not
-evidence about the others, and a single command can print an early `all checks passed` line
-*above* a later failure in the same output — so "green" means the end of each output, not its
-first line. Do NOT stage unrelated pre-existing working-tree changes.
+Run `LINT_CMD`, `TYPE_CMD`, and `TEST_CMD` — they are **independent signals**, and **each command's
+exit status is its verdict**: a non-zero exit is not green however the output reads, and one
+command's zero is not evidence about the others. Read each output to completion to find *what*
+failed — a command can print an early `all checks passed` line *above* a later failure, so no
+single line, first or last, is the result. Fix and re-run until every command exits zero. Do NOT
+stage unrelated pre-existing working-tree changes.
 
-**Authoring rule — a comment claiming a protection must name it.** A comment asserting that a
-test, guard, or invariant exists must **name it** (`file:line` or the test name), or must not be
-written. An unnamed claim is worse than no comment: the next reader — human or agent — stops
-looking, so the comment *defeats* the reviewer rather than merely failing to help, and it does so
-most effectively when it sits directly on top of the gap. This is an authoring rule, not a
-binding; step 9's finders check the diff against it.
+**Authoring rule — a comment claiming a protection must name it, and the name must resolve.** A
+comment asserting that a test, guard, or invariant exists **elsewhere** must **name it** — the test
+name, `file:line`, or the invariant's own name where this document defines one — and you must
+**confirm the named thing exists and asserts what you claim** before writing the comment. An
+unnamed claim is worse than no comment: the next reader — human or agent — stops looking, so the
+comment *defeats* the reviewer rather than merely failing to help, and it does so most effectively
+when it sits directly on top of the gap. A **named** claim that does not resolve is worse still: it
+buys that credibility with a citation the reader is now less likely to check. A comment that
+misdescribes the code it sits on is the same defect without the citation — write neither. This is
+an authoring rule, not a binding; step 9's finders check the diff against it.
 
 ### 7. Verify done (independent, fresh context)
 Run the AC-verifier (below): a fresh check that the diff satisfies EVERY acceptance
@@ -250,11 +255,16 @@ code is *right* without knowing what it was meant to do; a finder holding the AC
 doesn't actually do AC-3", a class the diff alone cannot reveal. (This does not make step 7
 redundant — the acceptance gate still runs independently.)
 
-**Every finder also applies one standing check, whatever angle it is working: flag any comment in
-the diff that asserts a test, guard, or invariant exists without naming it** (`file:line` or the
-test name — the step-6 authoring rule). This is a property checked across whatever finders the
-surface warrants, **not an angle of its own**, so it neither adds a review pass nor competes with
-the risk-surface angle selection below.
+**Give every finder one standing check in its prompt too, whatever angle it is working: flag any
+comment or prose claim in the diff that asserts a test, guard, or invariant exists elsewhere
+without naming it, names one that does not resolve, or misdescribes the code it sits on** (the
+step-6 authoring rule; where the deliverable is prose, its claims about the tree are such claims).
+Have them **resolve each name** — a finder holding the repo can, and an unresolvable citation is a
+finding, not a pass. This is a property applied *within* whatever finders the surface warrants,
+**not an angle of its own**: it adds no review pass, does not compete with the risk-surface angle
+selection below, and is **never written into the `code-review=` lens parenthetical** (progress.md →
+the Budget line), which records angles only. Identical hits from several finders are one finding —
+the confirming pass dedupes them.
 
 **Pick finder angles from the diff's risk surface, not from a fixed list.** Distinct lenses —
 correctness; robustness/IO/network/filesystem; reuse/conventions/integration;
