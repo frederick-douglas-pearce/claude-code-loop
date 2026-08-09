@@ -247,8 +247,8 @@ class PipelineStepOrderTests(unittest.TestCase):
     breaks: ``SKILL.md``'s **frontmatter** ``description`` chain -- the string
     the model reads when deciding whether to invoke the skill, so a behavior
     surface rather than internal prose -- and the engine's in-prose ``step N``
-    / ``Stages N/M`` cross-references: **70 reference sites, 74 numbers** once
-    ``/``- and dash-separated runs are expanded. This grep finds 68 of the 70::
+    / ``Stages N/M`` cross-references: **69 reference sites, 73 numbers** once
+    ``/``- and dash-separated runs are expanded. This grep finds 67 of the 69::
 
         grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' \\
             skills/dev-loop/loop-engine.md | wc -l
@@ -444,7 +444,7 @@ class PipelineStepOrderTests(unittest.TestCase):
     # pin. Bump deliberately when init-loop.md gains a genuine second pipeline
     # reference (#40 rewrites that skeleton and may).
     _EXPECTED_INIT_LOOP_STEP_REFERENCES = 1
-    # Well below the 74 numbers currently present (70 reference sites,
+    # Well below the 73 numbers currently present (69 reference sites,
     # some listing several), so ordinary prose edits never trip it, and well
     # above zero, so a regex broken by a reword fails here instead of passing on
     # an empty list. The headroom is a deliberate choice, not a
@@ -835,7 +835,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         )
 
     def test_every_engine_step_reference_resolves_to_a_real_heading(self) -> None:
-        """Restatement #5: 70 in-prose `step N` sites. RESOLVABILITY ONLY.
+        """Restatement #5: 69 in-prose `step N` sites. RESOLVABILITY ONLY.
 
         This asserts that every referenced N is a real heading number -- not
         that it still points at the step it meant. `step 9` continuing to
@@ -848,7 +848,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         removed, or the run rebased off zero). It does NOT catch a renumber
         that only adds steps, nor a reference that shifted meaning while
         staying in range -- including the case that matters most, inserting a
-        step mid-pipeline, which leaves all 74 references pointing one step off
+        step mid-pipeline, which leaves all 73 references pointing one step off
         and every test green.
 
         Nor does it see reference FORMS the regex does not match: `steps 3 and

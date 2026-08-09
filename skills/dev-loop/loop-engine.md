@@ -193,12 +193,12 @@ Otherwise proceed (note "auto-approved" + why in the journal). Route scope/value
 ### 6. Implement (you, the parent thread)
 Advance the row to `implementing`. Create the branch (`BRANCH_FMT`). Implement code + tests +
 docs per the plan. TDD where it fits (write failing tests, commit, do not modify tests later).
-Run each of `LINT_CMD`, `TYPE_CMD`, and `TEST_CMD` that this project binds to a command — they are
-**independent signals**, and **each command's exit status is its verdict**: a non-zero exit is not
-green however the output reads, and one command's zero is not evidence about the others. Read each
-output to completion to find *what* failed — a command can print an early `all checks passed` line
-*above* a later failure, so no single line, first or last, is the result. Fix and re-run until
-**every command that runs** exits zero. Do NOT stage unrelated pre-existing working-tree changes.
+Run `LINT_CMD`, `TYPE_CMD`, and `TEST_CMD` — they are **independent signals**, and **each command's
+exit status is its verdict**: a non-zero exit is not green however the output reads, and one
+command's zero is not evidence about the others. Read each output to completion to find *what*
+failed — a command can print an early `all checks passed` line *above* a later failure, so no
+single line, first or last, is the result. Fix and re-run until each exits zero. Do NOT stage
+unrelated pre-existing working-tree changes.
 
 **Authoring rule — a claim that a protection exists must name it, and the name must resolve.** A
 comment — or, where the deliverable is itself prose an agent executes, any claim the prose makes
@@ -258,13 +258,11 @@ redundant — the acceptance gate still runs independently.)
 
 **Give every finder one standing check in its prompt too, whatever angle it is working: flag any
 comment or prose claim in the diff that asserts a test, guard, or invariant exists elsewhere
-without naming it, or that misdescribes the code it sits on** (the step-6 authoring rule; where the
-deliverable is prose, its claims about the tree are such claims). The finder works from the diff
-and ACs it was given — confirming that a *named* citation truly resolves and asserts what it claims
-is the **author's** duty at step 6, not the finder's; the finder flags what it can see, a claim that
-names nothing or one the diff itself contradicts. This is a property applied *within* whatever
-finders the surface warrants, **not an angle of its own**, and is **never written into the
-`code-review=` lens parenthetical** (progress.md → the Budget line), which records angles only.
+without naming it, names one that does not resolve, or that misdescribes the code it sits on** (the
+step-6 authoring rule; where the deliverable is prose, its claims about the tree are such claims).
+This is a property applied *within* whatever finders the surface warrants, **not an angle of its
+own**, and is **never written into the `code-review=` lens parenthetical** (progress.md → the
+Budget line), which records angles only.
 
 **Pick finder angles from the diff's risk surface, not from a fixed list.** Distinct lenses —
 correctness; robustness/IO/network/filesystem; reuse/conventions/integration;
