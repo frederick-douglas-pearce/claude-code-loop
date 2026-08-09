@@ -243,11 +243,18 @@ was for, and all three are forbidden —
 reading of it. "Once per issue" bounds the *trigger*, never the re-runs a finding forces.
 
 Whether the fix **preserved what the test asserts** is not an exit status, and you are the one
-reader who cannot judge it: you wrote the fix. Send that question to a fresh instance on the
-Fresh-re-check invariant's Class B recipe (reading only, never running or altering anything; cannot
-tell ⇒ dirty), within the same 2-round cap. If a fix cannot preserve the assertion, **escalate to
-the human and STOP** — do not absorb it, and do not merge carrying it (it is an always-escalate
-condition at step 11).
+reader who cannot judge it: you wrote the fix. Send that question to a **fresh instance** — a new
+spawn, not you and not whoever wrote the test — giving it the test as it now stands, the behavior
+the test covered before, and none of your conclusions. It decides by **reading**, never by running
+or altering anything, and **if it cannot tell, that is a dirty answer, not a clean one.**
+
+This borrows the *shape* of the Fresh-re-check invariant without being governed by it: that
+invariant covers the two gates carrying a round cap (steps 7 and 9), and this gate carries none —
+it blocks until green, like any other step-6 command. So there is no round to count and no cap to
+consume. **If the fresh read comes back dirty, or cannot tell, escalate to the human and STOP** —
+do not absorb it, and do not fix-and-re-ask in a loop. A hermetic finding you stop on never reaches
+the merge gate; the always-escalate entry at step 11 is there for the other path, where a row somehow
+arrives carrying one.
 
 **A test added later re-arms the trigger.** Steps 7 and 9 routinely add tests — the Class B limit
 case is fixed by adding one, and review findings often are too. A gate journalled `n/a: no test
@@ -256,8 +263,8 @@ change` at step 6 and then handed a new test at step 7 has left the tier unrun o
 commit the fixes, and let the `- Hermetic:` line record the final state rather than the first
 reading.
 
-**Journal it on every iteration, without exception** — a `- Hermetic:` line in the iteration
-block (Ledger format → progress.md). This gate blocks at this step, so its findings are resolved
+**Every iteration leaves a record of this gate** — a `- Hermetic:` line in the iteration
+block, or, where the gate produced no verdict at all, the `- gate-error:` that carries it instead (Ledger format → progress.md). This gate blocks at this step, so its findings are resolved
 before the acceptance gate ever runs: without the line it leaves **no trace at all**, and "reported
 as prominently as a bug" would be discharged by the blocking alone. **Never record it in
 `mutation-survivors`** — that slot records whether a guard guards, a different question, and its
@@ -272,8 +279,8 @@ ambiguous, and the fail-safe reading has to be written down rather than inferred
 |---|---|
 | a command | due when the trigger above fires; **exit status is the verdict** |
 | `—` **plus a reason** | `n/a: <that reason>` — a project with no hermetic tier is genuinely not gated, and this is the only clean way to say so |
-| `—` with no reason | escalate — the reason is what distinguishes this from a blank |
-| `TODO`-valued, **or the row is absent** | **unknown — which is not the same as not-due.** Static "cannot run" (Gate-outcome invariant); no inline composition exists, so **escalate to the human** |
+| `—` with no reason | a blank, not a "not applicable" — the reason is what distinguishes them; on a row the trigger fired on, escalate |
+| `TODO`-valued, **or the row is absent** | on a row the trigger fired on, **unknown — which is not the same as not-due**: static "cannot run" (Gate-outcome invariant), no inline composition exists, so **escalate to the human**. On a row it did not, write the trigger's own `n/a` reason |
 
 **"The block would not run" is never a reason to proceed.** A namespace tool refused by a hardened
 host, or a blocking plugin that is not installed, produces a non-zero exit — and the tempting
@@ -1054,7 +1061,8 @@ one is a `- gate-error:`. This is what the `mutation-survivors` slot already ass
 the whole class on the rule instead of on that one aside. **Three of the four need no journal slot
 of their own:** `LINT_CMD`/`TYPE_CMD`/`TEST_CMD` run on every issue and the iteration cannot reach
 step 8 until each exits zero, so *the absence of a `- gate-error:` naming one is the record that it
-passed*. `HERMETIC_TEST_CMD` gets the `- Hermetic:` line because it is the only one of the four that
+passed* — and one bound to `—` plus a reason is recorded the same way, by the same absence, since
+nothing ran and nothing failed. `HERMETIC_TEST_CMD` gets the `- Hermetic:` line because it is the only one of the four that
 is **conditionally due**, so for it "no line" would be ambiguous between ran-clean and never-ran.
 
 **One carve-out, for the one gate whose due-ness is knowable only from its binding.** The paragraph

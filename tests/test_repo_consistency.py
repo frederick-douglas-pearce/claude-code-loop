@@ -59,19 +59,33 @@ _README = _REPO_ROOT / "README.md"
 # the step reference sit inside the shipped text?) -- because they must agree on
 # what "the skeleton" means; #39 first wrote a second, laxer copy here, and a
 # mutation adding a CAPS name to the ``~~~json`` block passed against it.
-_INIT_LOOP_SKELETON = re.compile(r"^~~~markdown$.*?^~~~$", re.MULTILINE | re.DOTALL)
-_FENCE_LINE = re.compile(r"(?m)^~~~")
+# Trailing whitespace is tolerated on BOTH the closing anchor and the fence
+# counter, and they must agree. They did not at first: the anchor required a
+# bare `^~~~$` while the counter matched `^~~~`, so a single trailing space on
+# the closing fence kept the parity check happy while the span ran on to the
+# NEXT `~~~` -- growing the "skeleton" from 80 lines to 90 and swallowing the
+# maintainer prose and the ~~~json block. Mutation-verified end to end: with
+# that one space added, deleting the HERMETIC_TEST_CMD skeleton row and naming
+# it only in the swallowed prose left CapsVocabularyTests GREEN. That is the
+# same fail-open this scoping exists to close, re-entering through the anchor
+# instead of the info-string.
+_INIT_LOOP_SKELETON = re.compile(r"^~~~markdown[ \t]*$.*?^~~~[ \t]*$", re.MULTILINE | re.DOTALL)
+_FENCE_LINE = re.compile(r"(?m)^~~~[ \t]*$")
 
 
-def _init_loop_skeleton_text(case: unittest.TestCase) -> str:
-    """The shipped skeleton of init-loop.md, with two ways of lying excluded.
+def _init_loop_skeleton_match(case: unittest.TestCase) -> re.Match:
+    """The shipped skeleton of init-loop.md, with three ways of lying excluded.
 
-    Both guards are mutation-verified, and neither is hypothetical: a fence
-    RENAME empties the span (the check would then pass vacuously), and a fence
-    LOSS silently re-widens it back toward whole-file scope -- deleting one
-    closing fence left the whole suite green while the "skeleton" swallowed the
-    surrounding prose. A rename is the edit a reader notices; a loss is the
-    likelier one.
+    Returns the match, not the text, so callers needing SPANS (the position
+    check) go through the same guards as callers needing the text. Reaching for
+    the bare regex instead is how the position check ended up unguarded while
+    the module comment claimed the span was shared.
+
+    Each guard is mutation-verified and none is hypothetical. A fence RENAME
+    empties the span, and every check scoped to it would then pass vacuously. A
+    fence LOSS silently re-widens it back toward whole-file scope. And a fence
+    that gains TRAILING WHITESPACE does the same while keeping parity intact --
+    the subtlest of the three, and the one that actually got through.
     """
     text = _INIT_LOOP.read_text(encoding="utf-8")
     case.assertEqual(
@@ -81,7 +95,7 @@ def _init_loop_skeleton_text(case: unittest.TestCase) -> str:
         "the skeleton span run on past its block, so checks scoped to it silently "
         "widen toward whole-file scope.",
     )
-    blocks = _INIT_LOOP_SKELETON.findall(text)
+    blocks = list(_INIT_LOOP_SKELETON.finditer(text))
     case.assertEqual(
         len(blocks),
         1,
@@ -89,7 +103,24 @@ def _init_loop_skeleton_text(case: unittest.TestCase) -> str:
         f"found {len(blocks)}. Zero means the fence was renamed and every check "
         f"scoped to the skeleton is now passing vacuously.",
     )
+    # Belt-and-braces against a span that quietly runs on: the skeleton is a
+    # config template of bounded size, so a span far larger than the block is
+    # evidence the closing anchor matched the wrong line, whatever the parity
+    # check thinks. Deliberately generous -- this catches runaway, not growth.
+    lines = blocks[0].group(0).count("\n") + 1
+    case.assertLess(
+        lines,
+        150,
+        f"the ~~~markdown skeleton span is {lines} lines, which is far longer than a "
+        "config template should be -- the closing anchor has almost certainly matched "
+        "a later fence, so checks scoped to the skeleton are now reading prose that "
+        "never ships.",
+    )
     return blocks[0]
+
+
+def _init_loop_skeleton_text(case: unittest.TestCase) -> str:
+    return _init_loop_skeleton_match(case).group(0)
 
 
 def _load_hook() -> ModuleType:
@@ -301,8 +332,8 @@ class PipelineStepOrderTests(unittest.TestCase):
     breaks: ``SKILL.md``'s **frontmatter** ``description`` chain -- the string
     the model reads when deciding whether to invoke the skill, so a behavior
     surface rather than internal prose -- and the engine's in-prose ``step N``
-    / ``Stages N/M`` cross-references: **80 reference sites, 84 numbers** once
-    ``/``- and dash-separated runs are expanded. This grep finds 78 of the 80::
+    / ``Stages N/M`` cross-references: **82 reference sites, 86 numbers** once
+    ``/``- and dash-separated runs are expanded. This grep finds 80 of the 82::
 
         grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' \\
             skills/dev-loop/loop-engine.md | wc -l
@@ -363,7 +394,7 @@ class PipelineStepOrderTests(unittest.TestCase):
       reference goes **out of range** -- whether because someone edited it to a
       number no heading defines, or because the heading run shrank or was
       rebased off zero. Stated bluntly, for whoever implements #31: **inserting
-      a step mid-pipeline and renumbering everything after it leaves all 84
+      a step mid-pipeline and renumbering everything after it leaves all 86 numbers (across 82 sites)
       references pointing at the wrong step with the whole suite green.** A
       green run is not evidence the cross-references were correctly renumbered.
     * **Consumer configs, for restatement #6.** Every onboarded repo's
@@ -506,7 +537,7 @@ class PipelineStepOrderTests(unittest.TestCase):
     # Both are 2 today; they are not required to stay equal, since a deliberate
     # prose reference would raise the total and leave this alone.
     _EXPECTED_SKELETON_STEP_REFERENCES = 2
-    # Well below the 84 numbers currently present (80 reference sites,
+    # Well below the 86 numbers currently present (82 reference sites,
     # some listing several), so ordinary prose edits never trip it, and well
     # above zero, so a regex broken by a reword fails here instead of passing on
     # an empty list. The headroom is a deliberate choice, not a
@@ -723,10 +754,16 @@ class PipelineStepOrderTests(unittest.TestCase):
         count that a compensating edit elsewhere in the file would preserve.
         """
         text = _INIT_LOOP.read_text(encoding="utf-8")
-        skeletons = [m.span() for m in _INIT_LOOP_SKELETON.finditer(text)]
+        # Through the guarded helper, NOT the bare regex: a span that has
+        # silently run on past its block would otherwise report references as
+        # "inside" a skeleton that is really half the file. This check used the
+        # bare regex until the round-2 re-check showed the guards were reaching
+        # only its sibling, so a fence defect went red by luck rather than by
+        # design.
+        start, end = _init_loop_skeleton_match(self).span()
         references = []
         for match in self._INIT_LOOP_STEP_REFERENCE.finditer(text):
-            inside = any(start <= match.start() < end for start, end in skeletons)
+            inside = start <= match.start() < end
             for token in self._REFERENCE_SEPARATORS.split(match.group(1)):
                 references.append((token, int(token.split(".")[0]), inside))
         return references
@@ -897,7 +934,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         )
 
     def test_every_engine_step_reference_resolves_to_a_real_heading(self) -> None:
-        """Restatement #5: 80 in-prose `step N` sites. RESOLVABILITY ONLY.
+        """Restatement #5: 82 in-prose `step N` sites. RESOLVABILITY ONLY.
 
         This asserts that every referenced N is a real heading number -- not
         that it still points at the step it meant. `step 9` continuing to
@@ -910,7 +947,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         removed, or the run rebased off zero). It does NOT catch a renumber
         that only adds steps, nor a reference that shifted meaning while
         staying in range -- including the case that matters most, inserting a
-        step mid-pipeline, which leaves all 84 references pointing one step off
+        step mid-pipeline, which leaves all 86 references pointing one step off
         and every test green.
 
         Nor does it see reference FORMS the regex does not match: `steps 3 and

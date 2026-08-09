@@ -74,8 +74,8 @@ it, and in that mode **the human approves every merge — it never auto-merges.*
 Auto-merge exists only under the opt-in `escalation-only` mode, and even there it is
 per-route, limited to routes you have explicitly *graduated*, and withheld for feature
 or breaking changes, risky or irreversible changes, anything touching a security
-surface, contested review findings, and unresolved acceptance-gate findings of
-either kind. Independently of mode, the loop stops and asks
+surface, contested review findings, unresolved acceptance-gate findings of
+either kind, and an unresolved offline-tier finding. Independently of mode, the loop stops and asks
 you mid-pipeline when it hits ambiguous acceptance criteria, risk, agent disagreement,
 a gate finding that is still there after one fresh re-check, or genuine uncertainty.
 Wherever eligibility is unclear the rule is **default-deny**: fall back to the human.
@@ -111,9 +111,10 @@ that means for your repo:
 **If you bind a command for your offline test tier, the loop runs it and treats a failure as a bug.**
 Where `HERMETIC_TEST_CMD` names one, any `code`-route change that adds or modifies a test runs that
 tier once. A test that passes normally and fails there is reported as a bug rather than as flake —
-either it was passing for the wrong reason, quietly exercising a live resource instead of your
-fixture, or your block could not be applied at all; **the loop cannot tell those apart, so it stops
-and hands you the failure** rather than guessing. You supply the blocking mechanism — the loop reads
+it was passing for the wrong reason, quietly exercising a live resource instead of your fixture —
+and the loop fixes it and re-runs the tier. If instead the **block itself** could not be applied (no
+namespace, tool missing), nothing was learned about your tests, so the loop stops and hands you the
+failure rather than rewriting a test to satisfy a block that never ran. You supply the blocking mechanism — the loop reads
 an exit status and cannot see *how* you blocked, so the requirement that the block be socket-level
 (a proxy still resolves DNS) is one you check once when writing the binding, not one the loop
 enforces. `/init-loop` may draft the value for you and flag it for confirmation; confirming it is
