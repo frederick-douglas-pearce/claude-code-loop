@@ -44,13 +44,13 @@ Two modules, and the split between them matters:
   `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
   `description`** (`plan→architect→implement→review→merge` — the string the model reads when
   deciding to invoke the skill, so a behavior surface, not prose), the engine's in-prose
-  `step N` cross-references — **72 sites, 76 numbers** — and `commands/init-loop.md`'s
+  `step N` cross-references — **80 sites, 84 numbers** — and `commands/init-loop.md`'s
   `engine step N` (below). *"Four files" is newly true, not newly written:* the previous five
   restatements live in **three** files (`loop-engine.md` ×2, `SKILL.md` ×2, `plugin.json`), so the
   standing "five restatements in four files" was off by one on the file count; `init-loop.md` is what
   makes four correct. That grep
   (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) reports
-  only 70: the other two are line-wrapped, which is exactly how they went unguarded until review
+  only 78: the other two are line-wrapped, which is exactly how they went unguarded until review
   caught it. It checks numbering and label correspondence **only** — never whether a
   step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
   `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
@@ -66,7 +66,7 @@ Two modules, and the split between them matters:
   that is semantics, which this module does not do. It fires when a reference goes **out of range** —
   whether edited to a number no heading defines, or left behind when the heading run shrank or was
   rebased off zero. Stated bluntly, because this is the case #31 will actually hit: **insert a step
-  mid-pipeline, renumber everything after it, and all 72 reference sites (76 numbers) point at the
+  mid-pipeline, renumber everything after it, and all 80 reference sites (84 numbers) point at the
   wrong step with the whole suite green.** Confirmed by mutation (#44), along with the milder shapes — appending a step
   and updating `SKILL.md` passes, as does rewriting a `(step 9)` to `(step 7)`. **A green run is not
   evidence the cross-references were correctly renumbered.** Reference *forms* the regex does not
@@ -75,12 +75,13 @@ Two modules, and the split between them matters:
   lines max") parse as a step range and fail.
 
   **The sixth restatement — guarded since #45, and the only one that will ship into repos this plugin
-  cannot reach.** `commands/init-loop.md`'s `(engine step 9)` sits in the `CODE_REVIEW` skeleton row,
-  which `/init-loop` copies into each newly-onboarded repo's `loop.config.md`. Drift in the other
+  cannot reach.** `commands/init-loop.md` carries two — the `CODE_REVIEW` row's `(engine step 9)` and,
+  since #39, the `HERMETIC_TEST_CMD` row's `engine step 6` — both in skeleton rows that `/init-loop`
+  copies into each newly-onboarded repo's `loop.config.md`. Drift in the other
   five ships a wrong number *in the plugin*, and the next release corrects it; drift here strands one
   in a config no release touches. It can't reuse the engine's matcher: that file carries 16 other
   `Step N` references that are its *own* onboarding steps — and every number they carry is a real
-  engine heading too, so an unanchored matcher would find all 17 sites, resolve every one, and pass
+  engine heading too, so an unanchored matcher would find all 18 sites, resolve every one, and pass
   while guarding nothing. `_INIT_LOOP_STEP_REFERENCE` anchors on the literal "engine step"; the
   possessive is accepted because `the engine's step N` is what the live consumer configs write for 4
   of their 6 engine-anchored references, so it is what a future editor of the skeleton is likely to
@@ -88,9 +89,14 @@ Two modules, and the split between them matters:
   after the anchor mirrors the engine's matcher exactly — including the hyphen (`step-9`) and `.N`
   sub-item forms, whose omission would be **invisible to the pin**, since an unmatched site never
   moves the count. The **reference-site count is pinned** (`_EXPECTED_INIT_LOOP_STEP_REFERENCES`,
-  currently 1) precisely because a floor cannot catch the anchor-drop — 17 sites clears any floor —
-  and a separate check asserts the reference is still **inside the `~~~` skeleton**, since only the
-  skeleton ships and a count alone cannot tell prose from product.
+  currently 2) precisely because a floor cannot catch the anchor-drop — 18 sites clears any floor —
+  and a **second count pins how many of them sit inside the `~~~markdown` skeleton**
+  (`_EXPECTED_SKELETON_STEP_REFERENCES`, also 2), since only the skeleton ships and a total alone
+  cannot tell prose from product. That was `any(... inside ...)` until #39: sufficient while exactly
+  one reference existed, but at the second it would have stayed green while either one migrated out
+  to prose. `all()` would have been the wrong correction — this file's own maintainer note invites
+  prose references — so the inside *count* is what is pinned, which catches migration in either
+  direction and still allows a prose reference to be added deliberately.
 
   **Not yet copied anywhere — and that is the point.** The `engine step 9` row entered the skeleton
   in-tree with #10; the *installed* 0.0.1 that onboarded all three consumers still binds
@@ -172,6 +178,12 @@ even though nothing will fail loudly:
   v0.0.1 (F7, fixed in #10; consumer configs still carry it, see #36 / AC5). Any new gate binding
   gets the same scrutiny: name something the orchestrator can actually execute. F14 (#21) generalizes
   this to the whole class — an unbound or `TODO(init-loop)` binding never means "skip the gate."
+- **`HERMETIC_TEST_CMD` is the one gate whose due-ness is knowable only from its own binding**, so
+  the Gate-outcome invariant carries an explicit carve-out for it: an absent or `TODO`-valued row is
+  **unknown, and unknown is due**, never "the trigger never made it due" — which is the fail-open
+  reading the invariant's general wording would otherwise license. The carve-out is scoped to rows
+  the gate's own trigger fired on, so a missing binding never makes a gate due that nothing else
+  made due. Tidying that invariant without preserving both halves silently turns the gate off.
 - **Three resting-state classes** — terminal (`RUN COMPLETE`), resting-non-terminal (`RUN PARKED`,
   awaiting an external event, released only by explicit human un-park), and held/pending (no
   sentinel). `progress.md` is append-only and the **most recent** sentinel wins.

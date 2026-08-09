@@ -50,6 +50,47 @@ _SKILL = _REPO_ROOT / "skills" / "dev-loop" / "SKILL.md"
 _INIT_LOOP = _REPO_ROOT / "commands" / "init-loop.md"
 _README = _REPO_ROOT / "README.md"
 
+# The ``~~~markdown``-fenced config skeleton -- the ONLY part of init-loop.md
+# that /init-loop copies into a consuming repo's loop.config.md. The ``markdown``
+# info-string is load-bearing: a bare ``^~~~`` also spans the ``~~~json``
+# append-guard block, which ships to a DIFFERENT file, so a name living only
+# there would satisfy a laxer span. Shared by the two checks that need it --
+# CapsVocabularyTests (is the binding offered?) and PipelineStepOrderTests (does
+# the step reference sit inside the shipped text?) -- because they must agree on
+# what "the skeleton" means; #39 first wrote a second, laxer copy here, and a
+# mutation adding a CAPS name to the ``~~~json`` block passed against it.
+_INIT_LOOP_SKELETON = re.compile(r"^~~~markdown$.*?^~~~$", re.MULTILINE | re.DOTALL)
+_FENCE_LINE = re.compile(r"(?m)^~~~")
+
+
+def _init_loop_skeleton_text(case: unittest.TestCase) -> str:
+    """The shipped skeleton of init-loop.md, with two ways of lying excluded.
+
+    Both guards are mutation-verified, and neither is hypothetical: a fence
+    RENAME empties the span (the check would then pass vacuously), and a fence
+    LOSS silently re-widens it back toward whole-file scope -- deleting one
+    closing fence left the whole suite green while the "skeleton" swallowed the
+    surrounding prose. A rename is the edit a reader notices; a loss is the
+    likelier one.
+    """
+    text = _INIT_LOOP.read_text(encoding="utf-8")
+    case.assertEqual(
+        len(_FENCE_LINE.findall(text)) % 2,
+        0,
+        "unbalanced ~~~ fences in commands/init-loop.md: an unclosed fence makes "
+        "the skeleton span run on past its block, so checks scoped to it silently "
+        "widen toward whole-file scope.",
+    )
+    blocks = _INIT_LOOP_SKELETON.findall(text)
+    case.assertEqual(
+        len(blocks),
+        1,
+        f"expected exactly one ~~~markdown-fenced skeleton in commands/init-loop.md, "
+        f"found {len(blocks)}. Zero means the fence was renamed and every check "
+        f"scoped to the skeleton is now passing vacuously.",
+    )
+    return blocks[0]
+
 
 def _load_hook() -> ModuleType:
     spec = importlib.util.spec_from_file_location("guard_append_only", _HOOK_PATH)
@@ -222,27 +263,18 @@ class CapsVocabularyTests(unittest.TestCase):
         self.assertGreater(len(found), 10, f"suspiciously few parameters extracted: {found}")
         self.assertIn("BACKLOG_SOURCE", found)
 
-    # Only the ``~~~``-fenced blocks are copied into a consuming repo's
-    # loop.config.md. Everything else in init-loop.md -- the inference map, the
-    # maintainer notes, the prose -- stays in the plugin and reaches no
-    # onboarded project. Scoping the search to those blocks is the same
-    # distinction #45 drew for the step reference ("only the skeleton ships, and
-    # a count alone cannot tell prose from product"); before #39 this test read
-    # the WHOLE file, so a parameter documented only in the inference map
-    # satisfied it while every newly-onboarded repo still got no binding row.
-    # Verified by mutation, which is the only way this would have surfaced:
-    # deleting the skeleton row alone left this test green.
-    _SKELETON_BLOCK = re.compile(r"^~~~.*?^~~~", re.DOTALL | re.MULTILINE)
-
-    def _init_loop_skeleton(self) -> str:
-        text = _INIT_LOOP.read_text(encoding="utf-8")
-        blocks = self._SKELETON_BLOCK.findall(text)
-        # A fence rename would empty this and pass everything below vacuously.
-        self.assertTrue(blocks, "no ~~~-fenced skeleton block found in commands/init-loop.md")
-        return "\n".join(blocks)
-
+    # Scoped to the ``~~~markdown`` skeleton (module-level ``_INIT_LOOP_SKELETON``),
+    # not the whole file: the inference map, the maintainer notes and the prose
+    # stay in the plugin and reach no onboarded project, so a name that appears
+    # only there leaves a consuming repo with no binding row. This is the same
+    # prose-versus-product distinction #45 drew for the step reference, and it
+    # borrows #45's strict span rather than a laxer one of its own.
+    #
+    # Before #39 this read the WHOLE file. That the difference is real was shown
+    # by mutation, which is the only way it could have surfaced: deleting the
+    # skeleton row while leaving the inference-map row left the old check green.
     def test_every_engine_parameter_is_offered_by_the_init_loop_skeleton(self) -> None:
-        skeleton = self._init_loop_skeleton()
+        skeleton = _init_loop_skeleton_text(self)
         missing = sorted(n for n in self._engine_parameters() if n not in skeleton)
         self.assertEqual(
             missing,
@@ -269,8 +301,8 @@ class PipelineStepOrderTests(unittest.TestCase):
     breaks: ``SKILL.md``'s **frontmatter** ``description`` chain -- the string
     the model reads when deciding whether to invoke the skill, so a behavior
     surface rather than internal prose -- and the engine's in-prose ``step N``
-    / ``Stages N/M`` cross-references: **72 reference sites, 76 numbers** once
-    ``/``- and dash-separated runs are expanded. This grep finds 70 of the 72::
+    / ``Stages N/M`` cross-references: **80 reference sites, 84 numbers** once
+    ``/``- and dash-separated runs are expanded. This grep finds 78 of the 80::
 
         grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' \\
             skills/dev-loop/loop-engine.md | wc -l
@@ -293,9 +325,10 @@ class PipelineStepOrderTests(unittest.TestCase):
     #36 re-install, and saying otherwise misleads whoever works #36 or #40 into
     expecting a copied row that is not there. It could not reuse
     ``_STEP_REFERENCE``:
-    that file has 16 other ``Step N`` matches (17 including this one) which are
+    that file has 16 other ``Step N`` matches (18 including the two engine-anchored
+    ones) which are
     its *own* onboarding steps, and every number they carry is also a real
-    engine heading, so an unanchored matcher would find all 17 sites, resolve
+    engine heading, so an unanchored matcher would find all 18 sites, resolve
     every one, and pass while guarding nothing. ``_INIT_LOOP_STEP_REFERENCE``
     anchors on the literal "engine step" instead (possessive accepted), and its
     site count is **pinned** rather than floored so that losing the anchor is a
@@ -330,7 +363,7 @@ class PipelineStepOrderTests(unittest.TestCase):
       reference goes **out of range** -- whether because someone edited it to a
       number no heading defines, or because the heading run shrank or was
       rebased off zero. Stated bluntly, for whoever implements #31: **inserting
-      a step mid-pipeline and renumbering everything after it leaves all 59
+      a step mid-pipeline and renumbering everything after it leaves all 84
       references pointing at the wrong step with the whole suite green.** A
       green run is not evidence the cross-references were correctly renumbered.
     * **Consumer configs, for restatement #6.** Every onboarded repo's
@@ -411,9 +444,9 @@ class PipelineStepOrderTests(unittest.TestCase):
 
     # Restatement #6: `commands/init-loop.md`'s pipeline cross-references.
     #
-    # Anchored on the literal "engine" because that file is 17 step-reference
+    # Anchored on the literal "engine" because that file is 18 step-reference
     # sites deep, and 16 of them are its OWN onboarding steps (`Step 0` ..
-    # `Step 8`). Pointing _STEP_REFERENCE at it would match all 17 -- and pass,
+    # `Step 8`). Pointing _STEP_REFERENCE at it would match all 18 -- and pass,
     # since every one of those numbers is also a real engine heading. The anchor
     # is what does the discrimination; note it does so WITHOUT an allow-list,
     # which is the point (cf. _STOPWORDS, ALLOWED_NON_BINDINGS).
@@ -450,15 +483,14 @@ class PipelineStepOrderTests(unittest.TestCase):
     # what makes this restatement different in kind from the other five, so the
     # check asserts position rather than merely counting (a reference deleted
     # from the skeleton and re-added in surrounding prose keeps every count
-    # identical). The `markdown` info-string is load-bearing: a bare `^~~~` also
-    # spans the `~~~json` append-guard block, which ships to a DIFFERENT file, so
-    # a reference living only there would satisfy a laxer span check.
-    _INIT_LOOP_SKELETON = re.compile(r"^~~~markdown$.*?^~~~$", re.MULTILINE | re.DOTALL)
+    # identical). The span itself is the shared module-level
+    # ``_INIT_LOOP_SKELETON`` -- see the note there on why the `markdown`
+    # info-string is load-bearing, and why both checks must use the same one.
 
     # Pinned, not floored -- and the distinction is the whole guard. A floor
     # cannot catch the failure that matters: drop the `engine` anchor above and
-    # the matcher finds all 17 sites, every number they carry resolving to a real
-    # heading -- so the check goes green while guarding nothing. 17 clears any
+    # the matcher finds all 18 sites, every number they carry resolving to a real
+    # heading -- so the check goes green while guarding nothing. 18 clears any
     # floor; it does not clear a pin. This counts reference SITES, not numbers,
     # so the run form (`engine steps 9/10`) is one, matching how a reader counts
     # them. It counts them across the WHOLE file, so an illustrative example in
@@ -467,7 +499,14 @@ class PipelineStepOrderTests(unittest.TestCase):
     # reference (#40 rewrites that skeleton and may). Bumped 1 -> 2 by #39,
     # which added the `HERMETIC_TEST_CMD` skeleton row citing `engine step 6`.
     _EXPECTED_INIT_LOOP_STEP_REFERENCES = 2
-    # Well below the 76 numbers currently present (72 reference sites,
+    # Of those, how many sit INSIDE the ~~~markdown skeleton -- the only part
+    # that ships into a consuming repo. Pinned separately from the total so the
+    # two failures read differently: the total moving means a reference was
+    # added or removed, this one moving means a reference crossed the fence.
+    # Both are 2 today; they are not required to stay equal, since a deliberate
+    # prose reference would raise the total and leave this alone.
+    _EXPECTED_SKELETON_STEP_REFERENCES = 2
+    # Well below the 84 numbers currently present (80 reference sites,
     # some listing several), so ordinary prose edits never trip it, and well
     # above zero, so a regex broken by a reword fails here instead of passing on
     # an empty list. The headroom is a deliberate choice, not a
@@ -675,7 +714,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         Symmetric with ``_step_references`` -- including the ``.1`` sub-item
         truncation, since only the step resolves -- and fenced blocks are
         likewise NOT stripped. Here that is not a nuance but the entire subject:
-        the one reference sits INSIDE the ``~~~`` config skeleton, which is what
+        both references sit INSIDE the ``~~~markdown`` config skeleton, which is what
         ``/init-loop`` copies into each consuming repo's ``loop.config.md``.
         Stripping fences would skip the only site that ships.
 
@@ -684,7 +723,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         count that a compensating edit elsewhere in the file would preserve.
         """
         text = _INIT_LOOP.read_text(encoding="utf-8")
-        skeletons = [m.span() for m in self._INIT_LOOP_SKELETON.finditer(text)]
+        skeletons = [m.span() for m in _INIT_LOOP_SKELETON.finditer(text)]
         references = []
         for match in self._INIT_LOOP_STEP_REFERENCE.finditer(text):
             inside = any(start <= match.start() < end for start, end in skeletons)
@@ -858,7 +897,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         )
 
     def test_every_engine_step_reference_resolves_to_a_real_heading(self) -> None:
-        """Restatement #5: 72 in-prose `step N` sites. RESOLVABILITY ONLY.
+        """Restatement #5: 80 in-prose `step N` sites. RESOLVABILITY ONLY.
 
         This asserts that every referenced N is a real heading number -- not
         that it still points at the step it meant. `step 9` continuing to
@@ -871,7 +910,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         removed, or the run rebased off zero). It does NOT catch a renumber
         that only adds steps, nor a reference that shifted meaning while
         staying in range -- including the case that matters most, inserting a
-        step mid-pipeline, which leaves all 76 references pointing one step off
+        step mid-pipeline, which leaves all 84 references pointing one step off
         and every test green.
 
         Nor does it see reference FORMS the regex does not match: `steps 3 and
@@ -903,7 +942,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         resolvability failure means a number is wrong, while this one means the
         matcher stopped seeing what it is supposed to see (count 0: the
         reference was reworded into a form the regex misses) or started seeing
-        far too much (count 17: someone dropped the ``engine`` anchor, at which
+        far too much (count 18: someone dropped the ``engine`` anchor, at which
         point every onboarding ``Step N`` resolves and the guard is inert).
         Folding it into the vacuity test also let any earlier assertion there
         short-circuit it.
@@ -923,7 +962,7 @@ class PipelineStepOrderTests(unittest.TestCase):
             "than floored on purpose: that file has 16 further `Step N` sites which "
             "are its own onboarding steps, and every number they carry is a real "
             "engine heading too -- so a matcher that lost its `engine` anchor would "
-            "find all 17, resolve every one, and pass while guarding nothing. A "
+            "find all 18, resolve every one, and pass while guarding nothing. A "
             "count of 0 means the reference was reworded into a form this matcher "
             "does not see, which leaves the restatement unguarded.",
         )
@@ -931,31 +970,48 @@ class PipelineStepOrderTests(unittest.TestCase):
     def test_init_loop_keeps_a_pipeline_reference_inside_the_shipped_skeleton(self) -> None:
         """Position, not just presence -- the reason this restatement exists.
 
-        Only the ``~~~`` skeleton is copied into a consuming repo's
+        Only the ``~~~markdown`` skeleton is copied into a consuming repo's
         ``loop.config.md``; the surrounding prose is instruction to the agent
         running ``/init-loop`` and never ships. So a reference that moves out of
         the skeleton into that prose stops being the thing this check was
         written to protect, while leaving the count and every resolvability
         assertion identical. #40 rewrites this skeleton, which is exactly when
         prose gets reshuffled across the fence.
+
+        Pins the number of references INSIDE the skeleton, rather than asserting
+        merely that one is (``any()``, which is what this was until #39) or that
+        all are. ``any()`` stopped guarding much at the second reference: with
+        two present it stays green while either one migrates out to prose. But
+        ``all()`` would be wrong in the other direction -- this file's own
+        maintainer note permits `engine step N` references in prose and asks only
+        that at least one stay inside the skeleton, so ``all()`` would ban an
+        edit the file invites. A pinned count catches migration in EITHER
+        direction and still lets a prose reference be added deliberately, by
+        bumping the total pin and leaving this one alone.
         """
         references = self._init_loop_step_references()
-        self.assertTrue(
-            any(inside for _, _, inside in references),
-            "commands/init-loop.md has `engine step N` reference(s) "
-            f"{[lit for lit, _, _ in references]}, but NONE of them is inside the "
-            "`~~~` config skeleton -- so the text /init-loop actually copies into "
-            "each consuming repo's .claude/loop.config.md now carries no pipeline "
-            "cross-reference, and this check is guarding prose that never ships. If "
-            "the CODE_REVIEW row's `(engine step N)` was deliberately removed, this "
-            "whole restatement is gone and the checks for it should go too.",
+        inside = [lit for lit, _, is_inside in references if is_inside]
+        self.assertEqual(
+            len(inside),
+            self._EXPECTED_SKELETON_STEP_REFERENCES,
+            f"commands/init-loop.md has {len(inside)} `engine step N` reference(s) "
+            f"inside the `~~~markdown` config skeleton ({inside}), not "
+            f"{self._EXPECTED_SKELETON_STEP_REFERENCES}. The skeleton is the only "
+            "part /init-loop copies into a consuming repo's .claude/loop.config.md, "
+            "so a reference that drifts out into surrounding prose stops guarding "
+            "anything that ships -- while every count and resolvability assertion "
+            "stays green. FEWER means one migrated out or was deleted; MORE means "
+            "one was added, which is fine but must be pinned here deliberately. A "
+            "count of 0 means the skeleton now carries no pipeline cross-reference "
+            "at all and this whole restatement is unguarded.",
         )
 
     def test_every_init_loop_engine_step_reference_resolves_to_a_real_heading(self) -> None:
         """Restatement #6: the one that ships into other people's repos.
 
-        ``commands/init-loop.md``'s ``engine step N`` sits inside the config
-        skeleton, which ``/init-loop`` copies verbatim into a newly-onboarded
+        ``commands/init-loop.md``'s ``engine step N`` references -- the
+        ``CODE_REVIEW`` row's and, since #39, the ``HERMETIC_TEST_CMD`` row's --
+        sit inside the config skeleton, which ``/init-loop`` copies verbatim into a newly-onboarded
         repo's ``.claude/loop.config.md`` -- a file this plugin cannot reach and
         cannot fix afterward. That is what makes this restatement different in
         kind from the other five: drift in the others ships a wrong number in

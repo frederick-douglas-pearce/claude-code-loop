@@ -108,15 +108,18 @@ that means for your repo:
   the check was not run rather than improvising one. **Nothing in this release edits your source to
   test it.**
 
-**If you document an offline test tier, the loop runs it with the network cut.** Where you bind
-`HERMETIC_TEST_CMD`, any change that touches a test runs that tier once with the network cut. A test
-that passes normally and fails under the block is reported as a bug, not as flake — it was passing
-for the wrong reason, quietly exercising a live resource instead of your fixture. You supply the
-blocking mechanism; the loop reads its exit status and cannot verify *how* you blocked, so the
-requirement that the block be socket-level (a proxy still resolves DNS) is one you check once when
-writing the binding. **Declare no such tier and nothing here applies** — bind `—` plus a reason and
-the gate records itself as not applicable. Leaving the binding off entirely is not the same thing:
-the loop cannot tell "no tier" from "a tier I was not told about", so it asks you.
+**If you bind a command for your offline test tier, the loop runs it and treats a failure as a bug.**
+Where `HERMETIC_TEST_CMD` names one, any `code`-route change that adds or modifies a test runs that
+tier once. A test that passes normally and fails there is reported as a bug rather than as flake —
+either it was passing for the wrong reason, quietly exercising a live resource instead of your
+fixture, or your block could not be applied at all; **the loop cannot tell those apart, so it stops
+and hands you the failure** rather than guessing. You supply the blocking mechanism — the loop reads
+an exit status and cannot see *how* you blocked, so the requirement that the block be socket-level
+(a proxy still resolves DNS) is one you check once when writing the binding, not one the loop
+enforces. `/init-loop` may draft the value for you and flag it for confirmation; confirming it is
+yours to do. **No such tier? Say so explicitly** — bind `—` plus a reason and the gate records
+itself as not applicable. Leaving the row off is not the same thing: the loop cannot tell "no tier"
+from "a tier I was not told about", so it asks you.
 
 **A fix is never checked by whoever wrote it.** When the loop fixes what a gate found — the
 acceptance gate above, or code review, on any route — a freshly spawned checker decides whether the
@@ -200,7 +203,11 @@ naming) and:
 - generates a pre-filled `${CLAUDE_PROJECT_DIR}/.claude/loop.config.md` — inferred
   values in place, clearly-marked `TODO(init-loop)` blanks for anything it can't
   infer (correctness is yours to confirm at first-run review). A leftover `TODO`
-  on a gate binding is not inert: see the gating posture above;
+  on a gate binding is not inert: see the gating posture above. **One row is an
+  exception worth checking by hand: `HERMETIC_TEST_CMD` fails *open*** — where it
+  finds no declared offline tier it writes `—`, not a `TODO`, because a tier can
+  be declared in prose the generator never reads, and `—` is read as a clean
+  not-applicable and never asked about again;
 - if it finds a decision-log-style append-only file, generates a
   `loop.append-guard.json` sidecar (the machine SSOT) and echoes the entry IDs it
   matched so you can confirm the guard is live;
