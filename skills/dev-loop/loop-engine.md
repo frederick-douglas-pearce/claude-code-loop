@@ -193,8 +193,24 @@ Otherwise proceed (note "auto-approved" + why in the journal). Route scope/value
 ### 6. Implement (you, the parent thread)
 Advance the row to `implementing`. Create the branch (`BRANCH_FMT`). Implement code + tests +
 docs per the plan. TDD where it fits (write failing tests, commit, do not modify tests later).
-Run `LINT_CMD`, `TYPE_CMD`, `TEST_CMD` until green. Do NOT stage unrelated pre-existing
-working-tree changes.
+Run `LINT_CMD`, `TYPE_CMD`, and `TEST_CMD` — they are **independent signals**, and **each command's
+exit status is its verdict**: a non-zero exit is not green however the output reads, and one
+command's zero is not evidence about the others. Read each output to completion to find *what*
+failed — a command can print an early `all checks passed` line *above* a later failure, so no
+single line, first or last, is the result. Fix and re-run until each exits zero. Do NOT stage
+unrelated pre-existing working-tree changes.
+
+**Authoring rule — a claim that a protection exists must name it, and the name must resolve.** A
+comment — or, where the deliverable is itself prose an agent executes, any claim the prose makes
+about the tree — asserting that a test, guard, or invariant exists **elsewhere** must **name it** —
+the test name, `file:line`, or the invariant's own name where this document defines one — and you
+must **confirm the named thing exists and asserts what you claim** before writing the comment. An
+unnamed claim is worse than no comment: the next reader — human or agent — stops looking, so the
+comment *defeats* the reviewer rather than merely failing to help, and it does so most effectively
+when it sits directly on top of the gap. A **named** claim that does not resolve is worse still: it
+buys that credibility with a citation the reader is now less likely to check. A comment that
+misdescribes the code it sits on is the same defect without the citation — write neither. This is
+an authoring rule, not a binding; step 9's finders check the diff against it.
 
 ### 7. Verify done (independent, fresh context)
 Run the AC-verifier (below): a fresh check that the diff satisfies EVERY acceptance
@@ -239,6 +255,14 @@ rebind you recommend, and surface it to the human — **do not edit `loop.config
 code is *right* without knowing what it was meant to do; a finder holding the ACs catches "this
 doesn't actually do AC-3", a class the diff alone cannot reveal. (This does not make step 7
 redundant — the acceptance gate still runs independently.)
+
+**Give every finder one standing check in its prompt too, whatever angle it is working: flag any
+comment or prose claim in the diff that asserts a test, guard, or invariant exists elsewhere
+without naming it, names one that does not resolve, or that misdescribes the code it sits on** (the
+step-6 authoring rule; where the deliverable is prose, its claims about the tree are such claims).
+This is a property applied *within* whatever finders the surface warrants, **not an angle of its
+own**, and is **never written into the `code-review=` lens parenthetical** (progress.md → the
+Budget line), which records angles only.
 
 **Pick finder angles from the diff's risk surface, not from a fixed list.** Distinct lenses —
 correctness; robustness/IO/network/filesystem; reuse/conventions/integration;
