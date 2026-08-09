@@ -15,7 +15,8 @@ invariants below without them:
 
 1. **`${CLAUDE_PROJECT_DIR}/.claude/loop.config.md`** — the per-project bindings (what
    `BACKLOG_SOURCE`, `SCOPE_AGENT`, `DESIGN_AGENT`, `CODE_REVIEW`, `PRIORITY_LABELS`, `LINT_CMD`/
-   `TYPE_CMD`/`TEST_CMD`, `BRANCH_FMT`, `COMMIT_CONV`, `MERGE_METHOD`, … resolve to for this repo).
+   `TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`, `BRANCH_FMT`, `COMMIT_CONV`, `MERGE_METHOD`, … resolve
+   to for this repo).
 2. **`${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/loop-engine.md`** — the generic engine: the numbered pipeline
    (step 0 load/resume → 1 select → 2 route → 3 plan → 4 architect → 5 human gate → 6 implement →
    7 AC-verify → 8 commit/PR → 9 code-review → 10 security → 11 merge → 12 journal), plus the

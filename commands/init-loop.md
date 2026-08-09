@@ -66,6 +66,7 @@ column (e.g. "from pyproject `[tool.pytest]`"); leave anything you cannot infer 
 | `TEST_CMD` | pyproject/`tox`, `package.json` scripts (`test`), `Makefile` (`test:`), `Cargo.toml`, CI workflow steps |
 | `LINT_CMD` | ruff/flake8/eslint/clippy/golangci config; `lint` script; CI |
 | `TYPE_CMD` | mypy/pyright config, `tsc`, `package.json` `typecheck`; omit (`—`) if the language has no separate type step |
+| `HERMETIC_TEST_CMD` | **first, whether an offline/hermetic tier is *declared* at all** — `CLAUDE.md`/`CONTRIBUTING` wording like "unit tests are offline (no network/DB)", a marker or `addopts` exclusion (`-m 'not integration'`), split `tests/unit` vs `tests/integration` dirs, a tox env or CI job named for it. **If none is declared, emit `—` plus the reason "no offline/hermetic tier declared"** — see the fail-open note below, this is the common case. If one *is* declared, the value is that tier's command wrapped in a socket-level block: prefer an already-present tool (`pytest --disable-socket`), else on a **Linux** host suggest `unshare -rn <the tier's command>`, which needs nothing installed and gives a fresh network namespace — propose it, and say in the Notes that the human must confirm it. If a tier is declared and you can find no workable block, emit `TODO(init-loop)`, **never `—`** |
 | `CI_STATUS_CMD` | `gh pr checks <PR>` if GitHub host; else the host's equivalent or `TODO(init-loop)` |
 | `BRANCH_FMT` | CLAUDE.md / CONTRIBUTING branch rules; else infer from existing `git branch -a` names |
 | `COMMIT_CONV` | CONTRIBUTING / CLAUDE.md; detect Conventional Commits from recent `git log` if unstated |
@@ -75,6 +76,15 @@ column (e.g. "from pyproject `[tool.pytest]`"); leave anything you cannot infer 
 | `PRIORITY_LABELS` | `gh label list` for `priority:*` labels (GitHub host); else CONTRIBUTING/CLAUDE.md; else `TODO(init-loop)` |
 | `RELEASE_SCHEME` | release-please / semantic-release config, `pyproject`/`package.json` version + publish; else "no release cycle" |
 | `SCOPE_AGENT` / `DESIGN_AGENT` | user-global subagents — cannot be inferred from the repo; default `TODO(init-loop): name a scope/design subagent, or remove if none` |
+
+> ⚠ **`HERMETIC_TEST_CMD` is the one row where the generator fails *open*, and the human reviewing
+> this config is the only thing that catches it.** Emitting `—` says "this project declares no
+> hermetic tier", which the engine reads as a clean not-applicable and never asks about again. But
+> the generator cannot distinguish *no tier is declared* from *a tier is declared somewhere I did not
+> look* — the declaration is prose, and it may sit in a README section, a test docstring, or a
+> reviewer's habit rather than in any file listed above. Every other unfillable row escalates; this
+> one goes quiet. **So check this row specifically** rather than skimming it: if your project claims
+> anywhere that some tests run offline, the `—` is wrong and the gate you want is off.
 
 ## Step 3 — Detect an append-only file (for the guard)
 
@@ -155,6 +165,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `TEST_CMD` | <inferred / TODO(init-loop)> | |
 | `LINT_CMD` | <inferred / TODO(init-loop)> | |
 | `TYPE_CMD` | <inferred / — if none> | |
+| `HERMETIC_TEST_CMD` | <the declared offline tier wrapped in a socket-level block / `—` + "no offline/hermetic tier declared"> | runs at engine step 6 when the change touches a test. **The block must be socket-level — a proxy still resolves DNS.** Check the bound command once with a direct-IP connect: under the block, `python3 -c "import socket; socket.create_connection(('1.1.1.1',443),3)"` must fail; without it, connect. A bare `—` with no reason, or a `TODO`, escalates — it is never read as "no tier" |
 | `CI_STATUS_CMD` | <inferred / TODO(init-loop)> | |
 | `BRANCH_FMT` | <inferred / TODO(init-loop)> | |
 | `COMMIT_CONV` | <inferred / TODO(init-loop)> | |

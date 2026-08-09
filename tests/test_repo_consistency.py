@@ -222,16 +222,38 @@ class CapsVocabularyTests(unittest.TestCase):
         self.assertGreater(len(found), 10, f"suspiciously few parameters extracted: {found}")
         self.assertIn("BACKLOG_SOURCE", found)
 
+    # Only the ``~~~``-fenced blocks are copied into a consuming repo's
+    # loop.config.md. Everything else in init-loop.md -- the inference map, the
+    # maintainer notes, the prose -- stays in the plugin and reaches no
+    # onboarded project. Scoping the search to those blocks is the same
+    # distinction #45 drew for the step reference ("only the skeleton ships, and
+    # a count alone cannot tell prose from product"); before #39 this test read
+    # the WHOLE file, so a parameter documented only in the inference map
+    # satisfied it while every newly-onboarded repo still got no binding row.
+    # Verified by mutation, which is the only way this would have surfaced:
+    # deleting the skeleton row alone left this test green.
+    _SKELETON_BLOCK = re.compile(r"^~~~.*?^~~~", re.DOTALL | re.MULTILINE)
+
+    def _init_loop_skeleton(self) -> str:
+        text = _INIT_LOOP.read_text(encoding="utf-8")
+        blocks = self._SKELETON_BLOCK.findall(text)
+        # A fence rename would empty this and pass everything below vacuously.
+        self.assertTrue(blocks, "no ~~~-fenced skeleton block found in commands/init-loop.md")
+        return "\n".join(blocks)
+
     def test_every_engine_parameter_is_offered_by_the_init_loop_skeleton(self) -> None:
-        skeleton = _INIT_LOOP.read_text(encoding="utf-8")
+        skeleton = self._init_loop_skeleton()
         missing = sorted(n for n in self._engine_parameters() if n not in skeleton)
         self.assertEqual(
             missing,
             [],
             "the engine reads parameters that /init-loop does not offer: "
-            f"{missing}. Add them to the §1 binding table (and the inference "
-            "map) in commands/init-loop.md, or add a commented entry to "
-            "ALLOWED_NON_BINDINGS if the name is not a config binding.",
+            f"{missing}. Add them to the §1 binding table INSIDE the ~~~ "
+            "skeleton (and to the inference map) in commands/init-loop.md, or "
+            "add a commented entry to ALLOWED_NON_BINDINGS if the name is not a "
+            "config binding. Note the skeleton, not the whole file, is what "
+            "ships into an onboarded repo -- an inference-map row alone does "
+            "not satisfy this.",
         )
 
 
@@ -247,8 +269,8 @@ class PipelineStepOrderTests(unittest.TestCase):
     breaks: ``SKILL.md``'s **frontmatter** ``description`` chain -- the string
     the model reads when deciding whether to invoke the skill, so a behavior
     surface rather than internal prose -- and the engine's in-prose ``step N``
-    / ``Stages N/M`` cross-references: **69 reference sites, 73 numbers** once
-    ``/``- and dash-separated runs are expanded. This grep finds 67 of the 69::
+    / ``Stages N/M`` cross-references: **72 reference sites, 76 numbers** once
+    ``/``- and dash-separated runs are expanded. This grep finds 70 of the 72::
 
         grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' \\
             skills/dev-loop/loop-engine.md | wc -l
@@ -442,9 +464,10 @@ class PipelineStepOrderTests(unittest.TestCase):
     # them. It counts them across the WHOLE file, so an illustrative example in
     # prose must be written `engine step N`, without a digit, or it inflates the
     # pin. Bump deliberately when init-loop.md gains a genuine second pipeline
-    # reference (#40 rewrites that skeleton and may).
-    _EXPECTED_INIT_LOOP_STEP_REFERENCES = 1
-    # Well below the 73 numbers currently present (69 reference sites,
+    # reference (#40 rewrites that skeleton and may). Bumped 1 -> 2 by #39,
+    # which added the `HERMETIC_TEST_CMD` skeleton row citing `engine step 6`.
+    _EXPECTED_INIT_LOOP_STEP_REFERENCES = 2
+    # Well below the 76 numbers currently present (72 reference sites,
     # some listing several), so ordinary prose edits never trip it, and well
     # above zero, so a regex broken by a reword fails here instead of passing on
     # an empty list. The headroom is a deliberate choice, not a
@@ -835,7 +858,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         )
 
     def test_every_engine_step_reference_resolves_to_a_real_heading(self) -> None:
-        """Restatement #5: 69 in-prose `step N` sites. RESOLVABILITY ONLY.
+        """Restatement #5: 72 in-prose `step N` sites. RESOLVABILITY ONLY.
 
         This asserts that every referenced N is a real heading number -- not
         that it still points at the step it meant. `step 9` continuing to
@@ -848,7 +871,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         removed, or the run rebased off zero). It does NOT catch a renumber
         that only adds steps, nor a reference that shifted meaning while
         staying in range -- including the case that matters most, inserting a
-        step mid-pipeline, which leaves all 73 references pointing one step off
+        step mid-pipeline, which leaves all 76 references pointing one step off
         and every test green.
 
         Nor does it see reference FORMS the regex does not match: `steps 3 and

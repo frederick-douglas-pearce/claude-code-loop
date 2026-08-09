@@ -6,8 +6,8 @@ machinery. It contains **no project-specific values**.
 
 Every name in `CAPS` (`BACKLOG_SOURCE`, `LEDGER_ROOT`, `SCOPE_AGENT`, `DESIGN_AGENT`,
 `CODE_REVIEW`, `PRIORITY_LABELS`, `ARCHITECT_TRIGGERS`, `SOURCE_LAYOUT`, `LINT_CMD`/`TYPE_CMD`/
-`TEST_CMD`, `BRANCH_FMT`, `COMMIT_CONV`, `MERGE_METHOD`, `RELEASE_SCHEME`, …) is bound in the
-per-project **`loop.config.md`**. **Read that config first** — this engine depends on the
+`TEST_CMD`/`HERMETIC_TEST_CMD`, `BRANCH_FMT`, `COMMIT_CONV`, `MERGE_METHOD`, `RELEASE_SCHEME`, …)
+is bound in the per-project **`loop.config.md`**. **Read that config first** — this engine depends on the
 config's parameter *vocabulary*, never its layout.
 
 Cross-references within this doc are by **named section** (e.g. "the Resume procedure below"),
@@ -199,6 +199,73 @@ command's zero is not evidence about the others. Read each output to completion 
 failed — a command can print an early `all checks passed` line *above* a later failure, so no
 single line, first or last, is the result. Fix and re-run until each exits zero. Do NOT stage
 unrelated pre-existing working-tree changes.
+
+**`HERMETIC_TEST_CMD` — the declared-offline tier, run with the network actually cut.** A project
+that documents a hermetic test tier ("unit tests are offline — no network, no DB") holds an
+invariant **no other command checks**: `TEST_CMD` runs with the network up, so a test that quietly
+reaches the internet is green, and green *for the wrong reason* — the live resource silently
+displaces the fixture the test meant to exercise, changing what is under test without changing
+anything that is asserted. A documented invariant nothing enforces is the defect class this engine
+exists to name; where a project binds this parameter, the tier gets run for real.
+
+**Due when** the row's Route is `code` **and** the change adds or modifies **at least one test** —
+any test, not only one you judge to sit in the tier. Once per issue, not per test run. Deciding
+which files the tier covers would mean parsing the bound command, which is the project's business
+and not this engine's; over-running costs one command, under-running is the entire defect. Its exit
+status is its verdict on the same terms as the three commands above.
+
+**What the binding must do — and what this engine cannot check.** The bound command must block the
+network **at socket level**. *A proxy still resolves DNS*, so a proxy-based block can leave a test
+looking offline while it is not — that is the specific trap, and it is why "socket level" is the
+requirement rather than "somehow offline". This engine reads an exit status and **cannot inspect how
+the block was implemented**, so socket-level is a requirement **on the binding's author**, never an
+enforcement this engine performs — do not read or restate it as one. Check it once, when writing the
+binding, with a **direct-IP** connect (direct IP because DNS is exactly what a proxy still services):
+
+```bash
+# under the block: must FAIL. Without it: must connect. If both connect, the block is not socket-level.
+<the block> python3 -c "import socket; socket.create_connection(('1.1.1.1', 443), 3)"
+```
+
+**A test that passes under `TEST_CMD` and fails under `HERMETIC_TEST_CMD` is a finding, reported as
+prominently as a bug** — it is not flake and not an environment problem. It was passing for the
+wrong reason, and the gate has just told you which test and what it was really doing. Fix it, and
+**preserve what it asserts**: three escapes turn the tier green while destroying the thing the tier
+was for, and all three are forbidden —
+1. weakening or removing the block;
+2. moving the test out of the tier without saying so;
+3. **changing what the test asserts** — skipping or xfailing it under the block, or stubbing the
+   fetch so it no longer exercises what it did. This is the likeliest escape and the hardest to see,
+   because it is the incident in reverse: cutting the network *changes what the test exercises*, so
+   a "fix" can green the tier while silently reducing coverage.
+
+If a fix cannot preserve the assertion, that is a finding to surface, not to absorb.
+
+**Journal it on every issue where the gate was reachable** — a `- Hermetic:` line in the iteration
+block (Ledger format → progress.md). This gate blocks at this step, so its findings are resolved
+before the acceptance gate ever runs: without the line it leaves **no trace at all**, and "reported
+as prominently as a bug" would be discharged by the blocking alone. **Never record it in
+`mutation-survivors`** — that slot admits exactly three `n/a` reasons and this is not one of them.
+
+**The four config states — and why this gate needs them spelled out.** Every other gate's due-ness
+is settled by route and trigger *before* its binding is read. This one is different: **whether a
+hermetic tier exists at all is knowable only from the binding**, so a missing row is genuinely
+ambiguous, and the fail-safe reading has to be written down rather than inferred.
+
+| `HERMETIC_TEST_CMD` is… | Outcome |
+|---|---|
+| a command | due when the trigger above fires; **exit status is the verdict** |
+| `—` **plus a reason** | `n/a: <that reason>` — a project with no hermetic tier is genuinely not gated, and this is the only clean way to say so |
+| `—` with no reason | escalate — the reason is what distinguishes this from a blank |
+| `TODO`-valued, **or the row is absent** | **unknown — which is not the same as not-due.** Static "cannot run" (Gate-outcome invariant); no inline composition exists, so **escalate to the human** |
+
+**"The block would not run" is never a reason to proceed.** A namespace tool refused by a hardened
+host, or a blocking plugin that is not installed, produces a non-zero exit or a tool error, and the
+tempting reading — *can't apply the block, so there is nothing to check* — is the silently-skipped
+gate in new clothing. Two rules: a **non-zero exit blocks**, because this engine cannot portably
+tell "the tier is dirty" from "the block could not be applied" and does not guess — over-blocking is
+the safe direction and the human disambiguates; and a **missing or unusable block tool is a
+`- gate-error:` and an escalation** (Gate-outcome invariant), never a pass and never a skip.
 
 **Authoring rule — a claim that a protection exists must name it, and the name must resolve.** A
 comment — or, where the deliverable is itself prose an agent executes, any claim the prose makes
@@ -501,6 +568,7 @@ This is the audit trail and the resume anchor.
 - Architect: skipped (research scaffolding, no shared-interface impact).
 - Human gate: plan auto-approved (route=research, low ambiguity).
 - Implemented: <path>; recorded findings in <path>.
+- Hermetic: n/a: research route.
 - AC-verify: Class A 3/3 acceptance criteria met. Class B: mutation pass not due (research route).
 - PR: #<pr> (chore scope). CI: green.
 - Code-review: 0 findings. Security: n/a (no deps added).
@@ -517,6 +585,26 @@ invariant — that section defines when each applies and what follows):
 - `- gate-error: <gate> — <failing tool or command> — <first line of the error>` — the gate was
   attempted, produced no verdict, and the iteration STOPPED. This one **is** a stuck signature:
   Guardrails greps for it across rows, so elide volatile arguments (PR numbers, SHAs, paths).
+
+The **`- Hermetic:`** line records the declared-offline tier gate (step 6), which is otherwise
+invisible: it blocks at implement time, so by the acceptance gate its findings are already fixed and
+nothing downstream would ever show that it ran or what it caught. Every iteration writes exactly one
+of the first three spellings, or takes the fourth path, which writes none:
+- **`- Hermetic: pass`** — the tier ran under the block and exited zero.
+- **`- Hermetic: finding — <what failed only under the block, and what it was really doing>`** — a
+  test was passing for the wrong reason. This is the line that discharges "reported as prominently
+  as a bug"; blocking alone does not, because blocking leaves no record.
+- **`- Hermetic: n/a: <reason>`** — not due, **and only where the binding is present**: `no test
+  change`, or `<route> route` off a non-`code` row, or the config's own reason where the binding is
+  `—` (e.g. `n/a: no offline/hermetic tier declared`). An **absent or `TODO`-valued** binding is
+  never an `n/a` — it is unknown, unknown is due, and it takes the fourth path below whatever the
+  route and whatever the change touched.
+- **no `- Hermetic:` line at all** — the gate produced no verdict, so a `- gate-error:` carries it
+  instead and the iteration stops. Two states reach here: bound but unable to execute, and absent
+  or `TODO`-valued.
+
+Never fold this into `mutation-survivors`. That slot's `n/a` list is closed at three reasons, and a
+hermetic result is a different question from whether a guard guards.
 
 The `- Budget:` line is the per-iteration cost record: a `·`-separated list of `name=value` **slots**.
 
@@ -914,6 +1002,7 @@ Gate table:
 | Plan | orchestrator | every issue | `issue-<N>.plan.md` |
 | Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure | issue comment |
 | Human (plan) | user | only if uncertain/irreversible | approve/redirect |
+| Build commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`) | orchestrator | step 6, each per its own binding; `HERMETIC_TEST_CMD` additionally requires Route `code` **and** a change that adds or modifies a test | **exit status per command**; non-zero blocks |
 | AC-verify | fresh subagent (+`VERIFY`); **any re-check a fresh instance too** (Fresh-re-check invariant) | every issue with acceptance criteria (step 7 is unconditional; the **mutation pass within it** is scoped — Routing table) | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors); **either class blocks** |
 | Code review | `CODE_REVIEW` (parallel finders you run — step 9); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes |
 | Security | `SECURITY_REVIEW` (local or label) | by route | clean/findings |
@@ -926,6 +1015,20 @@ trigger condition never made due was never owed a verdict, so journal it as not 
 `n/a`) with the reason; not-due is not a pass either. An explicit `—` **plus a reason** in the config
 is a deliberate "not applicable", journalled `n/a: <that reason>` — **not** an absent binding; it is
 the only way a config marks a gate not-due, and it is deliberately visible.
+
+**The step-6 command gates are in the table, so this invariant reaches them by rule, not by
+analogy.** `LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD` are bindings that return a verdict —
+an exit status, the crispest kind — so each is `n/a` only with `—` plus a reason, and an unrunnable
+one is a `- gate-error:`. This is what the `mutation-survivors` slot already assumed in ruling that
+"an unrunnable `TEST_CMD` is a `- gate-error:`" (progress.md → the Budget line); stating it here puts
+the whole class on the rule instead of on that one aside.
+
+**One carve-out, for the one gate whose due-ness is knowable only from its binding.** The paragraph
+above says due-ness is settled before this invariant applies — true of every gate except
+`HERMETIC_TEST_CMD`, where whether a hermetic tier exists *is* the binding. For that gate an absent
+or `TODO`-valued row reads as **unknown, and unknown is due** — never as "the trigger never made it
+due", which is the fail-open reading this invariant's own wording would otherwise license. Its four
+config states are tabulated once, at the gate itself; this is the rule, that is the table.
 
 For a gate that **is** due: it may be journalled **passed** only with the gate's own verdict as
 evidence — it ran and returned clean/met. **No verdict ⇒ not passed**, and there are two ways that

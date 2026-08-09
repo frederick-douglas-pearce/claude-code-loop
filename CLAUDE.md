@@ -44,13 +44,13 @@ Two modules, and the split between them matters:
   `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
   `description`** (`plan→architect→implement→review→merge` — the string the model reads when
   deciding to invoke the skill, so a behavior surface, not prose), the engine's in-prose
-  `step N` cross-references — **69 sites, 73 numbers** — and `commands/init-loop.md`'s
+  `step N` cross-references — **72 sites, 76 numbers** — and `commands/init-loop.md`'s
   `engine step N` (below). *"Four files" is newly true, not newly written:* the previous five
   restatements live in **three** files (`loop-engine.md` ×2, `SKILL.md` ×2, `plugin.json`), so the
   standing "five restatements in four files" was off by one on the file count; `init-loop.md` is what
   makes four correct. That grep
   (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) reports
-  only 67: the other two are line-wrapped, which is exactly how they went unguarded until review
+  only 70: the other two are line-wrapped, which is exactly how they went unguarded until review
   caught it. It checks numbering and label correspondence **only** — never whether a
   step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
   `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
@@ -66,7 +66,7 @@ Two modules, and the split between them matters:
   that is semantics, which this module does not do. It fires when a reference goes **out of range** —
   whether edited to a number no heading defines, or left behind when the heading run shrank or was
   rebased off zero. Stated bluntly, because this is the case #31 will actually hit: **insert a step
-  mid-pipeline, renumber everything after it, and all 69 reference sites (73 numbers) point at the
+  mid-pipeline, renumber everything after it, and all 72 reference sites (76 numbers) point at the
   wrong step with the whole suite green.** Confirmed by mutation (#44), along with the milder shapes — appending a step
   and updating `SKILL.md` passes, as does rewriting a `(step 9)` to `(step 7)`. **A green run is not
   evidence the cross-references were correctly renumbered.** Reference *forms* the regex does not
@@ -129,7 +129,8 @@ and **thin entry point**:
    caps. **Project-agnostic — contains no project-specific values, ever.**
 3. `${CLAUDE_PROJECT_DIR}/.claude/loop.config.md` (lives in the *consuming* repo, not here) — the
    ~40-line binding seam. Every `CAPS` name in the engine (`BACKLOG_SOURCE`, `SCOPE_AGENT`,
-   `DESIGN_AGENT`, `LINT_CMD`/`TYPE_CMD`/`TEST_CMD`, `BRANCH_FMT`, `COMMIT_CONV`, `MERGE_METHOD`,
+   `DESIGN_AGENT`, `LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`, `BRANCH_FMT`,
+   `COMMIT_CONV`, `MERGE_METHOD`,
    `RELEASE_SCHEME`, …) resolves here.
 
 **The contract between layers is the parameter *vocabulary*, never layout.** The engine references
@@ -143,7 +144,12 @@ table) and its inference map must be updated in the same change, or newly-onboar
 missing the binding the engine now reads.
 
 **`CapsVocabularyTests` enforces the half of that a test can reach**: it fails if the engine (or
-`SKILL.md`) names a `CAPS` parameter the skeleton does not offer. It cannot check that the
+`SKILL.md`) names a `CAPS` parameter the skeleton does not offer. **"Skeleton" means the `~~~`-fenced
+blocks only, as of #39** — before that it searched the whole of `init-loop.md`, so a parameter
+documented solely in the inference map satisfied the check while every newly-onboarded repo still
+got no binding row. That is the same prose-versus-product distinction #45 drew for the step
+reference, and it surfaced the only way it could: a mutation deleting the skeleton row left the
+check green. It cannot check that the
 *inference map* gained a row, or that the Notes column makes sense — so a red run means you forgot
 the binding table, and a green run does **not** mean the skeleton update is complete. The check is
 one-directional by design: skeleton-only names are fine, engine-only names are the bug.

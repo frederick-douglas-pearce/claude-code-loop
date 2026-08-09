@@ -81,7 +81,8 @@ a gate finding that is still there after one fresh re-check, or genuine uncertai
 Wherever eligibility is unclear the rule is **default-deny**: fall back to the human.
 
 **A gate that did not run is never reported as one that passed.** For every gate the loop
-runs — plan, architect, acceptance, code review, security, merge — it may record a pass only with
+runs — plan, architect, your build commands, acceptance, code review, security, merge — it may
+record a pass only with
 that gate's own output as evidence: **no verdict means not passed**. A binding you left blank in
 `loop.config.md` is not a switch that turns the gate off; it makes the loop fall back to a built-in
 equivalent where one exists, and otherwise stop and ask you. A gate that ran and *errored* never
@@ -107,6 +108,16 @@ that means for your repo:
   the check was not run rather than improvising one. **Nothing in this release edits your source to
   test it.**
 
+**If you document an offline test tier, the loop runs it with the network cut.** Where you bind
+`HERMETIC_TEST_CMD`, any change that touches a test runs that tier once with the network cut. A test
+that passes normally and fails under the block is reported as a bug, not as flake — it was passing
+for the wrong reason, quietly exercising a live resource instead of your fixture. You supply the
+blocking mechanism; the loop reads its exit status and cannot verify *how* you blocked, so the
+requirement that the block be socket-level (a proxy still resolves DNS) is one you check once when
+writing the binding. **Declare no such tier and nothing here applies** — bind `—` plus a reason and
+the gate records itself as not applicable. Leaving the binding off entirely is not the same thing:
+the loop cannot tell "no tier" from "a tier I was not told about", so it asks you.
+
 **A fix is never checked by whoever wrote it.** When the loop fixes what a gate found — the
 acceptance gate above, or code review, on any route — a freshly spawned checker decides whether the
 fix worked: not the thread that wrote it, and not the checker that raised the finding. Each such
@@ -130,8 +141,15 @@ adds to `.gitignore`. It lives on disk so a fresh invocation resumes correctly a
 `/clear`, and it stays out of your history.
 
 **It runs your commands, not ours.** `LINT_CMD` / `TYPE_CMD` / `TEST_CMD` /
-`CI_STATUS_CMD` are whatever your own `loop.config.md` names — the plugin ships no
-commands of its own and executes what that file tells it to.
+`HERMETIC_TEST_CMD` / `CI_STATUS_CMD` are whatever your own `loop.config.md` names — the
+plugin ships no commands of its own and executes what that file tells it to. One of
+those deserves singling out: **`HERMETIC_TEST_CMD` is the only binding whose value is
+expected to restrict the environment** — it runs your declared offline test tier with
+the network cut, so a plausible value wraps your test command in a sandbox or network
+namespace (`unshare -rn …`, `firejail --net=none …`, a socket-blocking test plugin).
+The loop supplies no blocking mechanism of its own, cannot tell whether the one you
+named blocks at socket level, and will run whatever you wrote. Leave the binding as
+`—` plus a reason and the gate is simply not run.
 
 **How the limits are enforced.** Be clear-eyed about this: the human gates and the
 append-only guard hook are *enforced backstops*, while the rest of the list above is
@@ -198,7 +216,8 @@ asking, and the `.gitignore` / `settings.json` / ledger steps are additive.
 
 Each consuming repo keeps a small `${CLAUDE_PROJECT_DIR}/.claude/loop.config.md`
 (the ~40-line binding seam: `BACKLOG_SOURCE`, `SCOPE_AGENT`, `DESIGN_AGENT`,
-`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`, `BRANCH_FMT`, `COMMIT_CONV`, `MERGE_METHOD`, …).
+`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`, `BRANCH_FMT`, `COMMIT_CONV`,
+`MERGE_METHOD`, …).
 The generic engine is never edited per-project — only the config.
 
 ### Optional: `loop.append-guard.json` (append-only protection)
