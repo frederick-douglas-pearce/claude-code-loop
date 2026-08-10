@@ -649,6 +649,7 @@ This is the audit trail and the resume anchor.
 - Human gate: plan auto-approved (route=research, low ambiguity).
 - Implemented: <path>; recorded findings in <path>.
 - Hermetic: n/a: research route.
+- Restore: n/a: apparatus pending.
 - AC-verify: Class A 3/3 acceptance criteria met. Class B: mutation pass not due (research route).
 - PR: #<pr> (chore scope). CI: green.
 - Code-review: 0 findings. Security: n/a (no deps added).
@@ -1046,10 +1047,10 @@ rather than reinventing it. **None of it authorizes a pass to run yet** — see 
 **Primary — the mutating agent gets its own copy of the tree.** Spawn it with the host's
 worktree-isolation option, so its mutations are *physically incapable* of reaching the parent's
 index. Two duties stay with the **parent**, not the agent:
-- **Never stage the agent's worktree.** Where the host materializes it inside the repository, the
-  parent sees it as an untracked directory — so a blanket `git add -A` stages the whole worktree.
-  That is the very leak isolation exists to prevent, arriving with a *larger* payload rather than
-  no payload. Explicit-path staging (step 6) is what actually covers it; isolation alone does not.
+- **Never stage the agent's copy.** Where the host materializes it inside the repository the parent
+  sees it as an untracked directory, and a blanket `git add` lands it — as a **gitlink**, not as its
+  files, which is the quiet signature described at step 6. Isolation moves the leak rather than
+  closing it; explicit-path staging (step 6) is what actually covers it.
 - **Remove the worktree once the agent is done.** A host that auto-cleans an *unchanged* worktree
   will not clean this one — a mutation agent changes it by definition.
 
@@ -1076,7 +1077,8 @@ leftovers no mutation produced. Under isolation the whole question is moot — n
 was mutated, so there is nothing to restore.
 
 **Journal the restore, whichever path ran.** Whenever a pass applies **≥1 mutation**, it emits the
-fixed-shape `- Restore:` line (Ledger format → progress.md), under isolation as well as in-tree.
+`- Restore:` line in one of its enumerated forms (Ledger format → progress.md), under isolation as
+well as in-tree.
 This is the **only detection mechanism** in the envelope: everything above is prevention, and
 prevention that fails, fails silently — the line is what surfaces a leak instead of waiting for a
 reviewer to notice broken code in a diff. It is therefore **not** conditional on isolation having

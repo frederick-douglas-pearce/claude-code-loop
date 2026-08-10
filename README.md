@@ -116,9 +116,10 @@ that means for your repo:
 **An agent that writes to your tree gets a copy of it, not yours — so the loop may create and remove
 git worktrees under your repository.** This is live now and is not limited to the mutation testing
 above: your working tree holds your uncommitted work, so any subagent that needs to write gets its
-own copy. Two things to expect. The copy is created **inside your repository** by default, so until
-it is removed it shows up as an untracked directory in `git status` — it is not gitignored for you,
-and if you gitignore it yourself, be aware the loop then has one fewer way to notice a stray one. And
+own copy. Two things to expect. The copy is typically created **inside your repository** — where your
+host puts it is the host's choice, not this plugin's — and while it is there it shows up as an
+untracked directory in `git status`. It is not gitignored for you, and if you gitignore it yourself,
+be aware the loop then has one fewer way to notice a stray one. And
 **the loop is responsible for removing it**: your host only auto-cleans a copy the agent never wrote
 to, which is never the case that matters, so removal is an instruction the loop follows rather than a
 guarantee something enforces. An iteration that dies partway can leave one behind; `git worktree
