@@ -200,6 +200,23 @@ failed — a command can print an early `all checks passed` line *above* a later
 single line, first or last, is the result. Fix and re-run until each exits zero. Do NOT stage
 unrelated pre-existing working-tree changes.
 
+**Stage explicit paths; never blanket-stage.** `git add -A` / `git add .` take whatever the tree
+holds at that instant, and from the moment you spawn a subagent until you have cleaned up after it
+that includes files you did not write. The window is **not** "while the agent runs" — an isolated
+worktree outlives the agent that wrote to it (Tool surface), so the exposure runs until the parent
+removes it. So: **name the paths you mean**, and **read `git diff --cached` before every commit**
+rather than trusting what you meant to stage. It applies at every commit boundary — step 8, and the
+fix commits at step 9 — not just the first.
+
+**Know what you are looking for**, because the worst case does not look like the mess it is. A
+blanket `git add` over an isolated worktree nested in the repository does **not** stage its files:
+git records a single **gitlink** entry (mode `160000`, a bare commit SHA) and prints an
+`adding embedded git repository` warning. So `git diff --cached` shows one `Subproject commit` line,
+not the wall of files you might scan for — easy to skim past, and it lands a directory that clones
+empty and points at a commit no remote has. Unstaging it is `git rm --cached <path>`, not a file
+unstage. Deliberately-broken code and scratch files are the loud version of this failure; the
+gitlink is the quiet one.
+
 **`HERMETIC_TEST_CMD` — the declared-offline tier, run with the network actually cut.** A project
 that documents a hermetic test tier ("unit tests are offline — no network, no DB") holds an
 invariant **no other command checks**: `TEST_CMD` runs with the network up, so a test that quietly
@@ -331,7 +348,9 @@ pass *within* it is conditional (AC-verifier → Part 2). **A clean Class B afte
 valid and valuable result** — do not read "no survivors this time" as the gate going soft.
 
 ### 8. Commit + PR
-Commit with correct `COMMIT_CONV` scope. Open the PR; **replicate `PR_TEMPLATE` fully** in
+Commit with correct `COMMIT_CONV` scope — **staging explicit paths and reading `git diff --cached`
+first** (step 6), since this is a commit boundary like any other and the tree may have gained an
+agent's files since you last looked. Open the PR; **replicate `PR_TEMPLATE` fully** in
 the body; make the Security-review choice up front. Advance the row to `in-pr` and record the
 PR number. Wait for CI; fix until green.
 
@@ -497,6 +516,34 @@ that looks wrong is a finding you journal and hand to the human, because a gate 
 your own reading entrenches your misreading instead of correcting it. The C1 append-only guard and
 the human/merge gates are the enforced backstops; the rest of this list is your contract.
 
+**The working tree is parent-owned state; any agent that must write to it gets its own copy.** This
+governs every agent you spawn, not only a mutating one — the tree holds your uncommitted
+deliverables, and a subagent writing to it is writing to your work. Read-only agents need no copy;
+any agent that writes gets one, via the host's worktree-isolation option. Three duties follow, and
+all three are **yours**, because the agent cannot discharge them from inside its own copy:
+- **Never stage its copy.** Where the host materializes the isolated tree inside the repository it
+  shows up in your `git status` as untracked, and a blanket `git add` lands it as a gitlink.
+  Explicit-path staging (step 6) is the control, and that step describes what the mistake looks like.
+- **Collect anything you asked it to produce, then remove the copy.** These are one duty in two
+  parts, and skipping the first destroys work: where the agent's writes **are** the deliverable — a
+  fix you delegated (Fresh-re-check invariant) — the parent takes the diff out of the copy and
+  applies it *before* removing anything. Only a copy whose contents you do not want is discarded
+  unread. Hosts that auto-clean an *unchanged* isolated tree will not clean one the agent wrote to,
+  which is every case this invariant is about, so removal is always yours.
+- **Never let its copy stand in for the change under review.** A file inside an isolated tree is not
+  evidence of anything until you have applied it; cite `file:line` in the merge candidate, never in
+  a copy.
+
+The concrete path an isolated tree appears at is a **host** fact, not a project one, so this engine
+names none. **Get it from `git worktree list`**, which answers whatever the host does or does not
+report back, and answers for a copy left behind by an agent that errored or was interrupted — the
+case where you have no handle at all and the one where the duty matters most. Do not rely on the
+acceptance gate's untracked scan to find a stray copy: it is `git ls-files --others
+--exclude-standard`, so a repo that gitignores the isolation path — which is what a maintainer does
+after seeing one appear — sees nothing, and the scan runs at step 7 while a copy created at step 9
+comes later. `git worktree list` has neither blind spot. A host whose isolated trees land *outside*
+the repository discharges the first duty for free and still owes the other two.
+
 ---
 
 ## Ledger format
@@ -602,6 +649,7 @@ This is the audit trail and the resume anchor.
 - Human gate: plan auto-approved (route=research, low ambiguity).
 - Implemented: <path>; recorded findings in <path>.
 - Hermetic: n/a: research route.
+- Restore: n/a: apparatus pending.
 - AC-verify: Class A 3/3 acceptance criteria met. Class B: mutation pass not due (research route).
 - PR: #<pr> (chore scope). CI: green.
 - Code-review: 0 findings. Security: n/a (no deps added).
@@ -645,6 +693,49 @@ fail-safe, just broken.
 
 Never fold this into `mutation-survivors`. That slot's `n/a` list is closed at three reasons, and a
 hermetic result is a different question from whether a guard guards.
+
+The **`- Restore:`** line records that a mutation pass gave the tree back. It gets its own line for
+the same reason `- Hermetic:` does — everything else about the pass is *prevention*, and prevention
+that fails, fails silently, so without this line a leak waits for a reviewer to notice broken code
+in a diff. It takes the same **enumerated** forms, for the same reason: a single fixed shape whose
+only legal rendering asserts success is a template that pressures you to assert success.
+
+- **`- Restore: <n> mutations applied, <n> restored, git status clean`** — the pass gave everything
+  back. **The two counts describe the tree that was mutated; `git status clean` always describes the
+  parent**, which is what lets one line cover both paths. In-tree, the counts are files snapshotted
+  and restored from those snapshots. Under isolation they are the agent's own copy, restored by
+  discarding it — the parent was never mutated, so its clean status asserts that a tree which should
+  never have changed did not. **The clean-status half is the load-bearing half**: it is the only part
+  verifiable after the fact, and the only part that catches a leak the counts would report as
+  balanced.
+- **`- Restore: finding — <what is still in the tree, and where>`** — the two counts disagree, or the
+  parent is dirty for a reason that is not a leftover copy. Either way a mutation is still live. This
+  is a **blocking finding, reported as prominently as a bug**: repair from the snapshot, re-check,
+  and **do not commit while it stands**. If the snapshot itself is what went missing, you have lost
+  the safe repair — escalate to the human rather than reaching for `git checkout`/`git restore`,
+  which is the move that destroys uncommitted work (AC-verifier → Part 2).
+- **`- Restore: n/a: <reason>`** — no mutation was applied, so there was nothing to give back:
+  `n/a: apparatus pending` on every iteration today, since the pass is deferred (AC-verifier →
+  Part 2); `n/a: no mutation applied` once it is not.
+- **no `- Restore:` line at all** — **unknown, and unknown is not clean.** Once a producer exists,
+  absence cannot distinguish "no mutation ran" from "a pass applied mutations and died before it
+  could journal" — and the second is precisely the leak this line exists to catch. That is why the
+  not-due case is written visibly as `n/a:` rather than omitted, exactly as the Gate-outcome
+  invariant requires of any gate whose absence would otherwise read as a pass. **A missing line on an
+  iteration that ran a pass is treated as a possible leak: check `git status` and `git worktree list`
+  before doing anything else.**
+
+Two ordering rules, because both are easy to get backwards:
+- **Remove the agent's copy before asserting the parent is clean.** Where the host places an isolated
+  tree inside the repository the parent is *not* clean while that copy is there, so the assertion
+  made in the wrong order either certifies clean against a tree still holding the agent's files or
+  reports dirty for a reason that is not a leak. Clean up first (Tool surface), then look.
+- **`git status` is not sufficient on its own.** A repo that gitignores the isolation path reports
+  clean with a copy still present, so pair it with `git worktree list` (Tool surface).
+
+The line is **defined now and emitted later** — no pass produces it until the apparatus lands, so
+until then the only form written is `n/a: apparatus pending`, and no consistency check should pin
+either the line's presence or its shape until a real pass produces one.
 
 The `- Budget:` line is the per-iteration cost record: a `·`-separated list of `name=value` **slots**.
 
@@ -701,7 +792,11 @@ Fields:
   - **`mutation-survivors=n/a: <reason>`** — Class B was **not assessed**, for one of exactly
     three reasons: the route scoped it out
     (`n/a: docs route`), the change alters no behavior (`n/a: no behavior change`), or the mutation
-    apparatus is not yet specified (`n/a: apparatus pending` — see AC-verifier → Part 2). **No other
+    apparatus — **the actor split and the applied-check** — is not yet specified
+    (`n/a: apparatus pending` — see AC-verifier → Part 2). Read that reason precisely: the *safety
+    envelope* around a pass (isolation, the fallback ladder, snapshot-restore) **is** specified, and
+    specifying it did not lift this — what is still missing is the confirmation that a mutation
+    actually broke the artifact, without which a clean result means nothing. **No other
     reason is a legal `n/a`.** In particular: a change that alters behavior *while adding no test*
     is the limit case — a Class B **finding**, written as a count; and an unrunnable `TEST_CMD` is a
     `- gate-error:`. Writing `n/a` for either would erase a finding or excuse an unbound binding,
@@ -876,6 +971,11 @@ failing the other.
      acceptance criteria implicate and list the rest by path only. Two traps: the command is scoped
      to the **current directory**, so from a subdirectory it silently omits everything above it; and
      it lists stray scratch files belonging to no branch, which must not be mistaken for the work.
+     A third, distinct from those: an **isolated agent tree** the host placed inside the repository
+     is neither stray scratch nor AC evidence but an artifact the parent still owes cleanup on
+     (Tool surface) — never cite a `file:line` inside one. Its presence here says it was not
+     removed; its **absence here says nothing**, since this scan honors `.gitignore` and runs before
+     any copy a later step creates. `git worktree list` is what actually answers that question.
    If the diff plus that content will not fit one context window, report `input-too-large` and
    not-done rather than silently reading a truncated subset.
 
@@ -926,7 +1026,8 @@ off switch an agent can always reach for:
    only when nothing executable moved at all, and record `mutation-survivors=n/a: no behavior
    change`.
 3. **Does it add or modify at least one test?** If **no**, see the limit case below. If **yes**, the
-   mutation apparatus applies — see the deferral immediately below.
+   mutation apparatus applies — but it is **deferred**, so read the fence at the end of this part
+   before the safety envelope that precedes it: nothing below authorizes a pass today.
 
 Questions 1 and 2 are the only ways out, and both are recorded visibly. **When any answer is
 unclear, treat Class B as due** — the cost of looking is small; the cost of a wrong skip is the
@@ -938,16 +1039,69 @@ never allowed to read as clean. It is read straight off the diff, so it is live 
 onward. Nothing to mutate is not the same as nothing to worry about; it is the
 guard-that-guards-nothing at its extreme.
 
-**⚠ The mutation apparatus itself is deliberately NOT specified here.** Actually breaking production
-code and restoring it safely — the actor split, the backup and byte-exact restore, the
-applied-check, and the interrupted-pass recovery — is specified separately, on top of the isolation
-work that removes most of its hazards. **Until that lands, this gate does not mutate the working
-tree**: where question 3 answers yes, record `mutation-survivors=n/a: apparatus pending` and say so.
-**Do NOT improvise a mutation procedure.** A hand-rolled one edits production code beside your
-uncommitted deliverables with no restore guarantee, which is the one way this gate can destroy work
-rather than protect it — and an improvised pass that reports a clean result is precisely the
-manufactured confidence the whole idea exists to prevent. An honest `n/a` is the fail-safe reading;
-an invented pass is not.
+**The safety envelope — where a mutation runs, and how the tree survives it.** A mutation pass
+deliberately breaks working code, so the tree it breaks must not be the one holding your
+deliverables. The envelope is specified here so the apparatus deferred below lands *on top of* it
+rather than reinventing it. **None of it authorizes a pass to run yet** — see the fence at the end.
+
+**Primary — the mutating agent gets its own copy of the tree.** Spawn it with the host's
+worktree-isolation option, so its mutations are *physically incapable* of reaching the parent's
+index. Two duties stay with the **parent**, not the agent:
+- **Never stage the agent's copy.** Where the host materializes it inside the repository the parent
+  sees it as an untracked directory, and a blanket `git add` lands it — as a **gitlink**, not as its
+  files, which is the quiet signature described at step 6. Isolation moves the leak rather than
+  closing it; explicit-path staging (step 6) is what actually covers it.
+- **Remove the worktree once the agent is done.** A host that auto-cleans an *unchanged* worktree
+  will not clean this one — a mutation agent changes it by definition.
+
+**Its precondition, which often fails: `TEST_CMD` must be green *in the copy*.** A bare copy carries
+none of the environment a suite needs — installed dependencies, build artifacts, an activated
+environment — so a suite that passes in the parent can be unrunnable beside it. Confirm it green in
+the copy **before** the mutating run begins.
+
+**If it cannot be made green, the fallback is in-tree mutation with BOTH compensating controls —
+explicit-path staging (step 6) **and** the restore journal (below) — and never in-tree mutation
+alone.** But **do not take that rung on your own judgement.** It moves a deliberately-destructive
+operation onto the tree holding the human's uncommitted work, which is a destructive and
+irreversible action, so the Escalation rubric applies: **escalate to the human and let them choose
+it.** Recording `mutation-survivors=n/a` and stopping is always available and is the safe answer;
+"the copy could not run the tests" is otherwise an off switch that silently upgrades its own
+blast radius, the shape Part 2's three questions are deliberately written to exclude.
+
+**Restore from a pre-mutation copy of the file, never from the index.** On the in-tree path, copy
+each file before mutating it and restore from that copy. **Never `git checkout`/`git restore` a file
+to undo a mutation** — the index does not know about work in progress, so restoring from it silently
+destroys uncommitted work the mutation never touched. This prohibition is scoped to *undoing a
+mutation*: Resume's working-tree reconciliation uses `git restore`/stash legitimately, on crash
+leftovers no mutation produced. Under isolation the whole question is moot — nothing in the parent
+was mutated, so there is nothing to restore.
+
+**Journal the restore, whichever path ran.** Whenever a pass applies **≥1 mutation**, it emits the
+`- Restore:` line (Ledger format → progress.md), under isolation as well as in-tree.
+This is the **only detection mechanism** in the envelope: everything above is prevention, and
+prevention that fails, fails silently — the line is what surfaces a leak instead of waiting for a
+reviewer to notice broken code in a diff. It is therefore **not** conditional on isolation having
+worked.
+
+**⚠ The mutation apparatus itself is deliberately NOT specified here — and what stays deferred is
+now narrower than the envelope above.** Isolation, the fallback ladder, and safe restore are
+specified; three things are **not**, and are specified separately: the **actor split**, the
+**applied-check** — the confirmation that the artifact *actually broke* before a still-green test is
+read as a survivor — and **interrupted-pass recovery**, what a later iteration does when it finds a
+tree holding live mutations, or snapshots with no pass to own them. The applied-check is the
+load-bearing residue: without it a pass can report a clean result having mutated nothing, which is
+exactly the manufactured confidence this idea exists to prevent. Recovery stays deferred rather than
+being absorbed here because the envelope specifies how to take a snapshot, not how a *different*
+invocation finds one — and a hazard on neither register is a hazard nobody owns.
+
+**Until that lands, this gate does not mutate any tree — isolated or in-tree.** Where question 3
+answers yes, record `mutation-survivors=n/a: apparatus pending` and say so. **The envelope above is
+dormant**: it states how a pass *will* run once the apparatus lands, and is not a licence to run one
+now. **Do NOT improvise a mutation procedure** — an improvised pass reporting a clean result is the
+defect named in the paragraph above, and a hand-rolled one on the in-tree path edits production code
+beside your uncommitted deliverables with no restore guarantee, which is the one way this gate can
+destroy work rather than protect it. An honest `n/a` is the fail-safe reading; an invented pass is
+not.
 
 **Reporting, and what a survivor actually does.** Class A and Class B counts are stated separately
 and land in separate `- Budget:` slots (`ac-findings` and `mutation-survivors` — see progress.md →
@@ -1008,7 +1162,15 @@ so on the rare resume of a `planning` row, check for an existing architect comme
 re-invoking if present (do not double-post). AC-verify (step 7) is side-effect-free; security (step
 10) re-labeling is a no-op. Security (step 10) re-labeling is a no-op. **Working-tree reconciliation:** if a crashed prior
 attempt left uncommitted changes, inspect them before proceeding — keep and continue if they
-match the plan, or `git restore`/stash if they're partial/unrelated. A resumed `implementing` row is NOT "stuck" (stuck
+match the plan, or `git restore`/stash if they're partial/unrelated. **One check first, because it
+inverts that instruction:** leftovers from an interrupted *mutation* pass are partial and
+unrelated-looking by construction — deliberately broken code matching no plan — and `git restore` is
+exactly what must not touch them (AC-verifier → Part 2: it restores from the index, which does not
+know about the surrounding work in progress). Before restoring anything, look for the marks of a
+pass that did not finish: a `- Restore:` line missing or reading `finding` on the interrupted
+iteration, pre-mutation snapshots on disk, or a leftover copy in `git worktree list`. If you find
+them, restore from the snapshots and do not use `git restore`; recovering a pass whose snapshots are
+gone is deferred with the apparatus (AC-verifier → Part 2), so escalate rather than improvise. A resumed `implementing` row is NOT "stuck" (stuck
 keys on a repeated error signature, not status re-entry — see Guardrails).
 
 ---
@@ -1017,7 +1179,7 @@ keys on a repeated error signature, not status re-entry — see Guardrails).
 
 | Route | Pipeline differences |
 |-------|----------------------|
-| `code` | full pipeline, all gates; the declared-offline tier (`HERMETIC_TEST_CMD`) runs at step 6 when the change adds or modifies a test; the acceptance gate's **mutation pass** (Class B) runs when the change alters behavior and adds or modifies a test — and when it alters behavior while adding **none**, that absence is itself a Class B finding, never a silent skip |
+| `code` | full pipeline, all gates; the declared-offline tier (`HERMETIC_TEST_CMD`) runs at step 6 when the change adds or modifies a test; the acceptance gate's **mutation pass** (Class B) is due when the change alters behavior and adds or modifies a test — though the pass itself is **deferred and runs on nothing today** (AC-verifier → Part 2) — and when it alters behavior while adding **none**, that absence is itself a Class B finding, never a silent skip |
 | `research` | lighter plan; **no test-coverage gate**; architect optional; security only if deps added; place outside the package source. No test-coverage gate means **nothing to mutate** — no mutation pass, and no hermetic-tier run (`n/a: research route`) |
 | `docs` | skip architect + security; light review; `docs:` scope; **no mutation pass**, and no hermetic-tier run (`n/a: docs route`) |
 | `stub-defer` | do NOT implement; journal why; leave in backlog (Status `deferred`) |
