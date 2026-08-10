@@ -103,10 +103,19 @@ that means for your repo:
 - **Either kind of finding blocks.** It is treated like an unmet acceptance criterion — fixed and
   re-verified — and a row still carrying one is never eligible for auto-merge.
 - **The loop does not yet break your code to check.** Deliberately mutating your source and
-  restoring it is a real power over your working tree, and it is specified separately, after the
-  work that isolates such edits from the tree you are working in. Until then the loop records that
-  the check was not run rather than improvising one. **Nothing in this release edits your source to
-  test it.**
+  restoring it is a real power over your working tree. The rules for *how* it must be done when it
+  lands are now written down — the mutating agent works in its own throwaway copy of your tree, never
+  yours; where that copy cannot run your tests, the fallback restores each file from a snapshot taken
+  before it was touched, never from git (which would discard your uncommitted work); and any pass
+  that mutates anything must journal that it gave the tree back. What is still missing is the check
+  that a mutation actually *broke* something, without which a clean result would mean nothing — so
+  the loop still records that this check was not run rather than improvising one. **Nothing in this
+  release edits your source to test it.**
+- **Isolated agent copies of your tree are cleaned up by the loop.** Where an agent needs to write to
+  your working tree, it gets its own git worktree rather than yours — so the loop may create and
+  remove worktrees under your repository. It must never stage one into a commit, and it owns removing
+  them, since the host only auto-cleans a copy the agent did not write to. This capability is dormant
+  until the check above lands.
 
 **If you bind a command for your offline test tier, the loop runs it and treats a failure as a bug.**
 Where `HERMETIC_TEST_CMD` names one, any `code`-route change that adds or modifies a test runs that
