@@ -273,18 +273,19 @@ and the running list of **dogfood findings this repo surfaces that the other two
   stopped it here was the orchestrator reading the issue body closely enough to notice — which is
   exactly the "instruction to be more careful" the engine rejects everywhere else. **Same shape as
   F14: a rule stated in prose that no mechanism enforces** (the *direction* is opposite — F7/F14 are
-  gates that fail open, this is a route that runs when it should not). Generic fix: an
-  actor-ownership signal the Router tests before assigning a route — a `human-only` marker, or a rule
-  that a change confined to `loop.config.md` is never loop-workable.
+  gates that fail open, this is a route that runs when it should not).
 
-  **⚠ What the human authorized here, stated so it cannot be misread as a licence.** The human
-  reviewed this at selection and **personally authorized and owns** the AC1/AC5 edit, on the reading
-  that the prohibition targets *unilateral rebinding* — an orchestrator changing a gate to match its
-  own reading — rather than transcription of values they specified verbatim. **That reasoning is a
-  candidate engine change, NOT a rule in force.** For the orchestrator, `never edit
-  `loop.config.md`` still holds **absolutely and without exception**: this row is not precedent, and
-  a future iteration must not read it as one. Carried to #1/#40 as a proposed carve-out to be
-  decided in the engine, which is the only place that could make it binding.
+  **Generic fix (for #40): one "workable-by-this-actor" predicate the Router tests before assigning
+  a route**, with two distinct detectors — (a) the change is confined to an artifact the orchestrator
+  is forbidden to write, sourced from **the set Tool surface already enumerates** rather than a new
+  list that will drift; and (b) the work lies outside the span of this run's repo, which is what
+  AC2–AC4 are and has nothing to do with `loop.config.md`. Do not collapse the two: a single
+  "`loop.config.md` is never loop-workable" rule both under-covers (a) — it omits the user-global
+  agent definitions the same prohibition names — and misses (b) entirely.
+
+  **The AC1/AC5 edit itself was authorized and is owned by the human, per PR #78; the reasoning is
+  recorded there and carried to #1/#40 as a proposed engine carve-out.** It is **not** precedent:
+  for the orchestrator, `never edit `loop.config.md`` holds absolutely.
 
 - **Deferred — protect `progress.md` with the append-only guard.** The ledger journal is append-only
   by design and the loop is its only writer, making it the natural `APPEND_ONLY_FILES` target. It
