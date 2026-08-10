@@ -50,5 +50,7 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   round-1 agent re-contacted. If the fresh re-check is still dirty, **escalate to the human** rather
   than iterating.
 - **Never edit the user-global `SCOPE_AGENT`/`DESIGN_AGENT` definitions**, and never `git add`
-  unrelated pre-existing working-tree changes.
+  unrelated pre-existing working-tree changes, and never blanket-stage
+  (`git add -A`/`git add .`) — stage explicit paths and read `git diff --cached` before committing,
+  since a subagent's isolated copy of the tree can be sitting in the repo untracked.
 - **The ledger is gitignored** — do NOT commit it.

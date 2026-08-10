@@ -103,19 +103,26 @@ that means for your repo:
 - **Either kind of finding blocks.** It is treated like an unmet acceptance criterion — fixed and
   re-verified — and a row still carrying one is never eligible for auto-merge.
 - **The loop does not yet break your code to check.** Deliberately mutating your source and
-  restoring it is a real power over your working tree. The rules for *how* it must be done when it
-  lands are now written down — the mutating agent works in its own throwaway copy of your tree, never
-  yours; where that copy cannot run your tests, the fallback restores each file from a snapshot taken
-  before it was touched, never from git (which would discard your uncommitted work); and any pass
-  that mutates anything must journal that it gave the tree back. What is still missing is the check
-  that a mutation actually *broke* something, without which a clean result would mean nothing — so
-  the loop still records that this check was not run rather than improvising one. **Nothing in this
-  release edits your source to test it.**
-- **Isolated agent copies of your tree are cleaned up by the loop.** Where an agent needs to write to
-  your working tree, it gets its own git worktree rather than yours — so the loop may create and
-  remove worktrees under your repository. It must never stage one into a commit, and it owns removing
-  them, since the host only auto-cleans a copy the agent did not write to. This capability is dormant
-  until the check above lands.
+  restoring it is a real power over your working tree, and the rules for *how* it must be done when
+  it lands are now written down. The mutating agent works in a throwaway copy of your tree. That copy
+  often cannot run your test suite — it has none of your installed dependencies — and in that case
+  the loop **must stop and ask you** before mutating your real working tree; if you allow it, each
+  file is restored from a snapshot taken before it was touched, never from git, which would discard
+  your uncommitted work. Any pass that mutates anything must journal whether it gave the tree back.
+  What is still missing is the check that a mutation actually *broke* something, without which a
+  clean result would mean nothing — so the loop still records that this check was not run rather than
+  improvising one. **Nothing in this release edits your source to test it.**
+
+**An agent that writes to your tree gets a copy of it, not yours — so the loop may create and remove
+git worktrees under your repository.** This is live now and is not limited to the mutation testing
+above: your working tree holds your uncommitted work, so any subagent that needs to write gets its
+own copy. Two things to expect. The copy is created **inside your repository** by default, so until
+it is removed it shows up as an untracked directory in `git status` — it is not gitignored for you,
+and if you gitignore it yourself, be aware the loop then has one fewer way to notice a stray one. And
+**the loop is responsible for removing it**: your host only auto-cleans a copy the agent never wrote
+to, which is never the case that matters, so removal is an instruction the loop follows rather than a
+guarantee something enforces. An iteration that dies partway can leave one behind; `git worktree
+list` will show it.
 
 **If you bind a command for your offline test tier, the loop runs it and treats a failure as a bug.**
 Where `HERMETIC_TEST_CMD` names one, any `code`-route change that adds or modifies a test runs that
@@ -144,7 +151,8 @@ iterating on itself.
 - **Never force-push.**
 - **Never bypass failing CI** — no admin-merge, never merge red.
 - **Only `--delete-branch` the PR's own branch.**
-- **Never `git add` unrelated pre-existing working-tree changes** in your working tree.
+- **Never blanket-stage** (`git add -A`/`git add .`) and never `git add` unrelated pre-existing
+  working-tree changes. It stages explicit paths and reads back what it staged before each commit.
 - **Never edit your user-global subagent definitions.**
 - **Never edit its own `loop.config.md`** — a binding that looks wrong gets journalled and handed to
   you, so the loop can't quietly rewrite its own gates to match its reading of them.
