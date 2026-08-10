@@ -55,6 +55,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `TEST_CMD` | `python3 -m unittest discover -s tests` | from `CLAUDE.md` → Commands and `.github/workflows/test.yml`. **Stdlib only — never add pytest or any dependency.** |
 | `LINT_CMD` | `—` (none configured) | no ruff/flake8/eslint config exists, deliberately: the repo is stdlib-only with no dependency manifest. Not a blank to fill. |
 | `TYPE_CMD` | `—` (none configured) | no mypy/pyright config; same rationale. |
+| `HERMETIC_TEST_CMD` | `—` — **stdlib `unittest` suite, no network use; no offline/hermetic tier declared** | **A deliberate not-applicable, not an unfilled blank** — #73 AC5, **for this config only**; AC5's scope is all three consumer configs and the other two remain human-owned. The engine reads `—` **plus a reason** as `n/a: <that reason>`, and a *bare* `—` as a blank that escalates **on a row the trigger fired on**. Discharged by running the check, not by asserting it (2026-08-10): (1) **no tier is declared** — searched `CLAUDE.md`, `README.md`, `.github/workflows/`, `tests/`, `hooks/`, `skills/`, `commands/`; no match declares a tier of *this repo's own suite*; (2) **no tier infrastructure exists** — no tox, pytest, `pyproject.toml`, `setup.cfg`, `Makefile`, or `conftest.py`; (3) **the suite reaches the network by neither import nor subprocess** — zero `socket`/`urllib`/`http`/`requests` and zero `subprocess`/`os.system`/`popen` in `tests/` or `hooks/`, and CI installs nothing (deliberately — stdlib-only). ⚠ **Never delete this row.** An absent row reads as *unknown, and unknown is due* → escalate on any `code`-route change that adds or modifies a test (the gate's four-state table). **That escalation goes live at the #36 re-install, not before** — the installed 0.0.1 engine contains no hermetic gate at all — which is precisely why #73 must merge before #36. |
 | `CI_STATUS_CMD` | `gh pr checks <PR>` | GitHub host. The required check is the aggregate **`test-suite`** job, not the per-version matrix jobs. |
 | `BRANCH_FMT` | `<type>/<kebab-slug>` — e.g. `fix/code-review-gate-binding`, `test/markdown-consistency-checks`, `docs/readme-status-and-trust-model`, `ci/test-suite-workflow` | inferred from 4/4 merged PR branches in `git log --merges`. `<type>` matches the Conventional Commit type. |
 | `COMMIT_CONV` | Conventional Commits — `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `ci:` | stated in `CLAUDE.md` → Repo conventions; confirmed against `git log`. |
@@ -255,6 +256,36 @@ and the running list of **dogfood findings this repo surfaces that the other two
 
   **Precedent set:** PR #59 (the #22 contract half) hit this limit case, journalled
   `mutation-survivors=1 (no guard added)`, and merged on disposition 2.
+
+- **F-candidate — the router cannot see a row that is implementation-ready but *forbidden to this
+  actor* (2026-08-10, surfaced routing #73).** #73's acceptance criteria are **entirely
+  `loop.config.md` edits across three repositories** — no plugin code, no test, no engine text. Two
+  things make it unworkable as an ordinary `code` row: the engine's Tool surface says **"never edit
+  `loop.config.md`"**, and AC2–AC4 live in *other repos* the loop's one-PR-at-a-time machinery does
+  not span. #73's own body cites that prohibition as the reason the work was excluded from #39,
+  concluding *"config changes are human work landed outside a loop iteration."*
+
+  **The gap:** nothing in the Router detects this. Rule 1 defers only what `SOURCE_LAYOUT`'s
+  stub-defer marker names (§3 above: epic trackers, and #1) or a body that declares itself not
+  implementation-ready — **none of which is about *who* may do the work**. #73 is ready; it is
+  merely ready **for a different actor**. Routed `code` as its signals dictate, it walks into
+  engine step 6 and the orchestrator edits three configs, breaking Tool surface. The only thing that
+  stopped it here was the orchestrator reading the issue body closely enough to notice — which is
+  exactly the "instruction to be more careful" the engine rejects everywhere else. **Same shape as
+  F14: a rule stated in prose that no mechanism enforces** (the *direction* is opposite — F7/F14 are
+  gates that fail open, this is a route that runs when it should not).
+
+  **Generic fix (for #40): one "workable-by-this-actor" predicate the Router tests before assigning
+  a route**, with two distinct detectors — (a) the change is confined to an artifact the orchestrator
+  is forbidden to write, sourced from **the set Tool surface already enumerates** rather than a new
+  list that will drift; and (b) the work lies outside the span of this run's repo, which is what
+  AC2–AC4 are and has nothing to do with `loop.config.md`. Do not collapse the two: a single
+  "`loop.config.md` is never loop-workable" rule both under-covers (a) — it omits the user-global
+  agent definitions the same prohibition names — and misses (b) entirely.
+
+  **The AC1/AC5 edit itself was authorized and is owned by the human, per PR #78; the reasoning is
+  recorded there and carried to #1/#40 as a proposed engine carve-out.** It is **not** precedent:
+  for the orchestrator, `never edit `loop.config.md`` holds absolutely.
 
 - **Deferred — protect `progress.md` with the append-only guard.** The ledger journal is append-only
   by design and the loop is its only writer, making it the natural `APPEND_ONLY_FILES` target. It
