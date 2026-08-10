@@ -32,9 +32,19 @@ stdlib-only constraint was broken — fix the code, not the workflow.
 
 ### What is and isn't covered
 
-Two modules, and the split between them matters:
+Three modules, and the split between them matters:
 
-- **`tests/test_guard_append_only.py`** — behavior of the one piece of executable code.
+- **`tests/test_guard_append_only.py`** — behavior of the guard hook.
+- **`tests/test_mutate_verify.py`** — behavior of `tools/mutate_verify.py`, the mutation harness.
+  Added by #60, and the reason it exists is worth keeping: the prose version of this apparatus could
+  not converge because **every review round re-derived its correctness by reading** — there was
+  nothing to execute. These tests are what make a green suite say something about it. They are
+  behavioral (what the harness does to a tree, and what it refuses to do), and they assert
+  *mechanism* rather than outcome where the two differ — see
+  `test_the_only_thing_the_harness_executes_is_the_callers_test_command`, which walks the AST rather
+  than grepping for `git`, because a substring search passes for any implementation that avoids the
+  word. **The harness is inert with respect to the engine**: shipping it did not lift the mutation
+  pass's deferral, which is a separate change (#60's second PR).
 - **`tests/test_repo_consistency.py`** — **mechanical** checks on the markdown/JSON deliverable:
   the shipped example sidecar still loads through the real `load_registry`; the composed
   `plugin@marketplace` identifier still matches every hand-written call site; engine `CAPS` ⊆
@@ -236,8 +246,13 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
 
 ## Repo conventions
 
-- `.claude-plugin/` holds **only** manifests (`plugin.json`, `marketplace.json`). Skills, hooks, and
-  commands live at the repo root in their own directories.
+- `.claude-plugin/` holds **only** manifests (`plugin.json`, `marketplace.json`). Skills, hooks,
+  commands, and tools live at the repo root in their own directories.
+- `tools/` holds **executables the engine invokes at runtime but that are not hooks** — currently
+  just `mutate_verify.py`. The distinction from `hooks/` is what wires them: a hook is registered in
+  `hooks/hooks.json` and fired by the harness on a tool event; a tool is run by the orchestrator by
+  path. Both are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both are **stdlib-only**, for
+  the same reason — they execute under bare `python3` in a consumer's environment.
 - `${CLAUDE_PLUGIN_ROOT}` (this installed plugin) and `${CLAUDE_PROJECT_DIR}` (the consuming repo)
   are not interchangeable — the engine and hook both depend on the distinction.
 - The loop ledger (`queue.md`, `progress.md`, `issue-<N>.plan.md`) lives under the *consuming*
