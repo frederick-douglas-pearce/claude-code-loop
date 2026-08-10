@@ -55,6 +55,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `TEST_CMD` | `python3 -m unittest discover -s tests` | from `CLAUDE.md` → Commands and `.github/workflows/test.yml`. **Stdlib only — never add pytest or any dependency.** |
 | `LINT_CMD` | `—` (none configured) | no ruff/flake8/eslint config exists, deliberately: the repo is stdlib-only with no dependency manifest. Not a blank to fill. |
 | `TYPE_CMD` | `—` (none configured) | no mypy/pyright config; same rationale. |
+| `HERMETIC_TEST_CMD` | `—` — **stdlib `unittest` suite, no network use; no offline/hermetic tier declared** | **A deliberate not-applicable, not an unfilled blank** (#73 AC5) — the engine reads `—` **plus a reason** as `n/a: <that reason>`, and a *bare* `—` as a blank that escalates. Discharged by running the check, not by asserting it (2026-08-11): (1) **no tier is declared** — searched `CLAUDE.md`, `README.md`, `.github/workflows/`, `tests/`, `hooks/`; every `offline`/`hermetic` match is *the shipped product describing this feature for its consumers* (as are the matches under `skills/` and `commands/`), never a tier of this repo's own suite; (2) **no tier infrastructure exists** — no tox, pytest, `pyproject.toml`, `setup.cfg`, `Makefile`, or `conftest.py`; (3) **the suite reaches the network by neither import nor subprocess** — zero `socket`/`urllib`/`http`/`requests` and zero `subprocess`/`os.system`/`popen` in `tests/` or `hooks/`, and CI installs nothing (deliberately — stdlib-only). ⚠ **Never delete this row.** An absent row reads as *unknown, and unknown is due* → escalate on any `code`-route change that adds or modifies a test (the gate's four-state table). That escalation is #73's whole subject: it was scheduled to fire on **#60** — the next selectable row by queue position — which ships `mutate_verify.py` plus its unit tests. |
 | `CI_STATUS_CMD` | `gh pr checks <PR>` | GitHub host. The required check is the aggregate **`test-suite`** job, not the per-version matrix jobs. |
 | `BRANCH_FMT` | `<type>/<kebab-slug>` — e.g. `fix/code-review-gate-binding`, `test/markdown-consistency-checks`, `docs/readme-status-and-trust-model`, `ci/test-suite-workflow` | inferred from 4/4 merged PR branches in `git log --merges`. `<type>` matches the Conventional Commit type. |
 | `COMMIT_CONV` | Conventional Commits — `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `ci:` | stated in `CLAUDE.md` → Repo conventions; confirmed against `git log`. |
@@ -255,6 +256,31 @@ and the running list of **dogfood findings this repo surfaces that the other two
 
   **Precedent set:** PR #59 (the #22 contract half) hit this limit case, journalled
   `mutation-survivors=1 (no guard added)`, and merged on disposition 2.
+
+- **F-candidate — the router cannot see a row that is implementation-ready but *forbidden to this
+  actor* (2026-08-11, surfaced routing #73).** #73's acceptance criteria are **entirely
+  `loop.config.md` edits across three repositories** — no plugin code, no test, no engine text. Two
+  things make it unworkable as an ordinary `code` row: the engine's Tool surface says **"never edit
+  `loop.config.md`"** (`loop-engine.md:514`), and AC2–AC4 live in *other repos* the loop's
+  one-PR-at-a-time machinery does not span. #73's own body cites that prohibition as the reason the
+  work was excluded from #39, concluding *"config changes are human work landed outside a loop
+  iteration."*
+
+  **The gap:** nothing in the Router detects this. Rule 1's `stub-defer` marker keys on the body
+  saying *"NOT implementation-ready"* — but #73 **is** ready; it is merely ready **for a different
+  actor**. Routed `code` as the signals dictate, it sails into step 6 and the orchestrator edits
+  three configs, breaking Tool surface. The only thing that stopped it here was the orchestrator
+  reading the issue body closely enough to notice, which is exactly the "instruction to be more
+  careful" the engine rejects everywhere else. **Same family as F7/F14: an invariant that exists but
+  that nothing routes on.** Generic fix: an actor-ownership signal the Router tests before assigning
+  a route — a `human-only` marker, or a rule that a change confined to `loop.config.md` is never
+  loop-workable.
+
+  **Disposition taken (human, at selection):** the prohibition bars *unilateral rebinding* — an
+  orchestrator changing a gate to match its own reading — not **transcribing values the human
+  specified verbatim in a tracked issue** under the plan, review, and merge gates. AC1+AC5 were
+  landed by the loop on that basis; AC2–AC4 stay human-owned. Recording the reasoning because the
+  *distinction* is the reusable part, not the verdict.
 
 - **Deferred — protect `progress.md` with the append-only guard.** The ledger journal is append-only
   by design and the loop is its only writer, making it the natural `APPEND_ONLY_FILES` target. It
