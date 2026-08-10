@@ -1077,8 +1077,7 @@ leftovers no mutation produced. Under isolation the whole question is moot — n
 was mutated, so there is nothing to restore.
 
 **Journal the restore, whichever path ran.** Whenever a pass applies **≥1 mutation**, it emits the
-`- Restore:` line in one of its enumerated forms (Ledger format → progress.md), under isolation as
-well as in-tree.
+`- Restore:` line (Ledger format → progress.md), under isolation as well as in-tree.
 This is the **only detection mechanism** in the envelope: everything above is prevention, and
 prevention that fails, fails silently — the line is what surfaces a leak instead of waiting for a
 reviewer to notice broken code in a diff. It is therefore **not** conditional on isolation having
