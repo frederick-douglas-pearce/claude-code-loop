@@ -119,8 +119,9 @@ an exit status and cannot see *how* you blocked, so the requirement that the blo
 (a proxy still resolves DNS) is one you check once when writing the binding, not one the loop
 enforces. `/init-loop` may draft the value for you and flag it for confirmation; confirming it is
 yours to do. **No such tier? Say so explicitly** — bind `—` plus a reason and the gate records
-itself as not applicable. Leaving the row off is not the same thing: the loop cannot tell "no tier"
-from "a tier I was not told about", so it asks you.
+itself as not applicable. Leaving the row off is not the same thing: on a change that would have run
+the gate, the loop cannot tell "no tier" from "a tier I was not told about", so it stops and asks
+you rather than assuming.
 
 **A fix is never checked by whoever wrote it.** When the loop fixes what a gate found — the
 acceptance gate above, or code review, on any route — a freshly spawned checker decides whether the

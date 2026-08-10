@@ -44,13 +44,13 @@ Two modules, and the split between them matters:
   `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
   `description`** (`plan→architect→implement→review→merge` — the string the model reads when
   deciding to invoke the skill, so a behavior surface, not prose), the engine's in-prose
-  `step N` cross-references — **82 sites, 86 numbers** — and `commands/init-loop.md`'s
+  `step N` cross-references — **84 sites, 88 numbers** — and `commands/init-loop.md`'s
   `engine step N` (below). *"Four files" is newly true, not newly written:* the previous five
   restatements live in **three** files (`loop-engine.md` ×2, `SKILL.md` ×2, `plugin.json`), so the
   standing "five restatements in four files" was off by one on the file count; `init-loop.md` is what
   makes four correct. That grep
   (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) reports
-  only 80: the other two are line-wrapped, which is exactly how they went unguarded until review
+  only 82: the other two are line-wrapped, which is exactly how they went unguarded until review
   caught it. It checks numbering and label correspondence **only** — never whether a
   step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
   `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
@@ -66,7 +66,7 @@ Two modules, and the split between them matters:
   that is semantics, which this module does not do. It fires when a reference goes **out of range** —
   whether edited to a number no heading defines, or left behind when the heading run shrank or was
   rebased off zero. Stated bluntly, because this is the case #31 will actually hit: **insert a step
-  mid-pipeline, renumber everything after it, and all 82 reference sites (86 numbers) point at the
+  mid-pipeline, renumber everything after it, and all 84 reference sites (88 numbers) point at the
   wrong step with the whole suite green.** Confirmed by mutation (#44), along with the milder shapes — appending a step
   and updating `SKILL.md` passes, as does rewriting a `(step 9)` to `(step 7)`. **A green run is not
   evidence the cross-references were correctly renumbered.** Reference *forms* the regex does not
@@ -96,7 +96,11 @@ Two modules, and the split between them matters:
   one reference existed, but at the second it would have stayed green while either one migrated out
   to prose. `all()` would have been the wrong correction — this file's own maintainer note invites
   prose references — so the inside *count* is what is pinned, which catches migration in either
-  direction and still allows a prose reference to be added deliberately.
+  direction and still allows a prose reference to be added deliberately. **The span itself is a
+  fragile instrument** — a trailing space or a non-breaking space on the closing fence widens it,
+  defeated four times on #39's PR before the attempt was abandoned. `CapsVocabularyTests`
+  deliberately does **not** use it (it reads the whole file, and is loose in the way #76 describes);
+  hardening the span is #76's job and the answer there is not a fifth regex.
 
   **Not yet copied anywhere — and that is the point.** The `engine step 9` row entered the skeleton
   in-tree with #10; the *installed* 0.0.1 that onboarded all three consumers still binds
@@ -150,12 +154,7 @@ table) and its inference map must be updated in the same change, or newly-onboar
 missing the binding the engine now reads.
 
 **`CapsVocabularyTests` enforces the half of that a test can reach**: it fails if the engine (or
-`SKILL.md`) names a `CAPS` parameter the skeleton does not offer. **"Skeleton" means the `~~~`-fenced
-blocks only, as of #39** — before that it searched the whole of `init-loop.md`, so a parameter
-documented solely in the inference map satisfied the check while every newly-onboarded repo still
-got no binding row. That is the same prose-versus-product distinction #45 drew for the step
-reference, and it surfaced the only way it could: a mutation deleting the skeleton row left the
-check green. It cannot check that the
+`SKILL.md`) names a `CAPS` parameter the skeleton does not offer. It cannot check that the
 *inference map* gained a row, or that the Notes column makes sense — so a red run means you forgot
 the binding table, and a green run does **not** mean the skeleton update is complete. The check is
 one-directional by design: skeleton-only names are fine, engine-only names are the bug.

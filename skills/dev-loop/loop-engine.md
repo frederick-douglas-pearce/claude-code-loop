@@ -244,19 +244,22 @@ reading of it. "Once per issue" bounds the *trigger*, never the re-runs a findin
 
 Whether the fix **preserved what the test asserts** is not an exit status, and you are the one
 reader who cannot judge it: you wrote the fix. Send that question to a **fresh instance** — a new
-spawn, not you and not whoever wrote the test — giving it the test as it now stands, the behavior
-the test covered before, and none of your conclusions. It decides by **reading**, never by running
-or altering anything, and **if it cannot tell, that is a dirty answer, not a clean one.**
+spawn, not you and not whoever wrote the test. **Its prompt carries four things**, and the last two
+matter most because they are rules it cannot see from where it sits: the test as it now stands; the
+behavior the test covered before; that it must decide by **reading**, never by running or altering
+anything; and that it must **say plainly when it cannot tell — which is a dirty answer, not a clean
+one.** Withhold your conclusions. An unprompted checker hedges, and a hedge read as agreement is how
+this gate goes quietly soft.
 
 This borrows the *shape* of the Fresh-re-check invariant without being governed by it: that
-invariant covers the two gates carrying a round cap (steps 7 and 9), and this gate carries none —
+invariant covers the two gates carrying a round cap (step 7 and step 9), and this gate carries none —
 it blocks until green, like any other step-6 command. So there is no round to count and no cap to
 consume. **If the fresh read comes back dirty, or cannot tell, escalate to the human and STOP** —
 do not absorb it, and do not fix-and-re-ask in a loop. A hermetic finding you stop on never reaches
 the merge gate; the always-escalate entry at step 11 is there for the other path, where a row somehow
 arrives carrying one.
 
-**A test added later re-arms the trigger.** Steps 7 and 9 routinely add tests — the Class B limit
+**A test added later re-arms the trigger.** Step 7 and step 9 routinely add tests — the Class B limit
 case is fixed by adding one, and review findings often are too. A gate journalled `n/a: no test
 change` at step 6 and then handed a new test at step 7 has left the tier unrun on an issue that
 *did* add a test, which is precisely what this gate is due on. Re-evaluate the trigger before you
@@ -1061,8 +1064,10 @@ one is a `- gate-error:`. This is what the `mutation-survivors` slot already ass
 the whole class on the rule instead of on that one aside. **Three of the four need no journal slot
 of their own:** `LINT_CMD`/`TYPE_CMD`/`TEST_CMD` run on every issue and the iteration cannot reach
 step 8 until each exits zero, so *the absence of a `- gate-error:` naming one is the record that it
-passed* — and one bound to `—` plus a reason is recorded the same way, by the same absence, since
-nothing ran and nothing failed. `HERMETIC_TEST_CMD` gets the `- Hermetic:` line because it is the only one of the four that
+passed*. **A `—`-plus-a-reason build command is the exception and is written out**, as
+`- Lint: n/a: <reason>` (likewise `- Type:`, `- Test:`): the invariant requires a deliberate
+not-applicable to be *visible*, and an absence cannot carry a reason. Absence means "it ran and the
+iteration got past it"; it never means "it was not due". `HERMETIC_TEST_CMD` gets the `- Hermetic:` line because it is the only one of the four that
 is **conditionally due**, so for it "no line" would be ambiguous between ran-clean and never-ran.
 
 **One carve-out, for the one gate whose due-ness is knowable only from its binding.** The paragraph
