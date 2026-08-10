@@ -64,8 +64,9 @@ column (e.g. "from pyproject `[tool.pytest]`"); leave anything you cannot infer 
 | Parameter | Look here |
 |-----------|-----------|
 | `TEST_CMD` | pyproject/`tox`, `package.json` scripts (`test`), `Makefile` (`test:`), `Cargo.toml`, CI workflow steps |
-| `LINT_CMD` | ruff/flake8/eslint/clippy/golangci config; `lint` script; CI |
-| `TYPE_CMD` | mypy/pyright config, `tsc`, `package.json` `typecheck`; omit (`—`) if the language has no separate type step |
+| `LINT_CMD` | ruff/flake8/eslint/clippy/golangci config; `lint` script; CI. Same rule as `TYPE_CMD` below: if there is none, `—` **plus a reason** |
+| `TYPE_CMD` | mypy/pyright config, `tsc`, `package.json` `typecheck`; where the language has no separate type step write `—` **plus the reason** (e.g. `— (no separate type step)`), never a bare dash — the engine reads a reasonless `—` as a blank and escalates on it |
+| `HERMETIC_TEST_CMD` | **First, whether an offline/hermetic tier is *declared* at all.** Signals are ecosystem-specific: prose in `CLAUDE.md`/`CONTRIBUTING`/README ("unit tests are offline — no network or DB"); Python — a marker or `addopts` exclusion (`-m 'not integration'`), split `tests/unit` vs `tests/integration`, a tox env; Go — `testing.Short()` with `-short`, or a `//go:build !integration` tag (the canonical Go form); Node — a `test:unit` script, `jest --testPathIgnorePatterns`, `nock.disableNetConnect()`; Rust — `cargo test --lib` vs `tests/`, `#[ignore]`; any ecosystem — a `test-unit`-style `Makefile` target or a CI job named for it. **If none is declared, emit `—` plus the reason "no offline/hermetic tier declared"** — the common case, and see the fail-open note below. If one *is* declared, the value is that tier's command wrapped in a socket-level block: prefer a blocker already in the project (`pytest --disable-socket`); otherwise on a **Linux** host propose `unshare -rn -- sh -c 'ip link set lo up && <the tier's command>'` — a fresh network namespace, which is language-agnostic and needs no test-framework support. **Do not drop the `ip link set lo up`:** a fresh netns has loopback DOWN, so `connect()` to `127.0.0.1` fails and every test using a local server, socket or TCP database breaks — which the engine would then report as a bug rather than an environment fault, the one false positive it is least able to dismiss. Note in the Notes that `ip` is iproute2 (absent from minimal images — `ifconfig lo up` is the fallback), that `-r` runs the tier as **uid 0**, and that the human must confirm the value. If a tier is declared and you can find no workable block, emit `TODO(init-loop)`, **never `—`** |
 | `CI_STATUS_CMD` | `gh pr checks <PR>` if GitHub host; else the host's equivalent or `TODO(init-loop)` |
 | `BRANCH_FMT` | CLAUDE.md / CONTRIBUTING branch rules; else infer from existing `git branch -a` names |
 | `COMMIT_CONV` | CONTRIBUTING / CLAUDE.md; detect Conventional Commits from recent `git log` if unstated |
@@ -75,6 +76,15 @@ column (e.g. "from pyproject `[tool.pytest]`"); leave anything you cannot infer 
 | `PRIORITY_LABELS` | `gh label list` for `priority:*` labels (GitHub host); else CONTRIBUTING/CLAUDE.md; else `TODO(init-loop)` |
 | `RELEASE_SCHEME` | release-please / semantic-release config, `pyproject`/`package.json` version + publish; else "no release cycle" |
 | `SCOPE_AGENT` / `DESIGN_AGENT` | user-global subagents — cannot be inferred from the repo; default `TODO(init-loop): name a scope/design subagent, or remove if none` |
+
+> ⚠ **`HERMETIC_TEST_CMD` is the one row where the generator fails *open*, and the human reviewing
+> this config is the only thing that catches it.** Emitting `—` says "this project declares no
+> hermetic tier", which the engine reads as a clean not-applicable and never asks about again. But
+> the generator cannot distinguish *no tier is declared* from *a tier is declared somewhere I did not
+> look* — the declaration is prose, and it may sit in a README section, a test docstring, or a
+> reviewer's habit rather than in any file listed above. Every other unfillable row escalates; this
+> one goes quiet. **So check this row specifically** rather than skimming it: if your project claims
+> anywhere that some tests run offline, the `—` is wrong and the gate you want is off.
 
 ## Step 3 — Detect an append-only file (for the guard)
 
@@ -105,7 +115,9 @@ GitHub-ism to be re-specified.
 > headings, which resolve to real engine step numbers too, so nothing would catch a stale one. Add
 > references freely in that form, bumping `_EXPECTED_INIT_LOOP_STEP_REFERENCES` in
 > `tests/test_repo_consistency.py` in the same change; write `N` rather than a digit in any
-> illustrative example, which the same count would otherwise pick up. **At least one reference must
+> illustrative example, which the same count would otherwise pick up. A reference you add **inside**
+> the skeleton bumps `_EXPECTED_SKELETON_STEP_REFERENCES` as well; one in surrounding prose bumps
+> only the total. **At least one reference must
 > stay inside the `~~~markdown` skeleton** — that block is the only part of this file copied into a
 > consuming repo, so a reference that drifts out into surrounding prose stops guarding anything that
 > ships, and a check enforces it.
@@ -153,8 +165,9 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `ARCHITECT_TRIGGERS` | see §2 | **project-specific — edit when porting** |
 | `SOURCE_LAYOUT` | see §3 | router uses this; **edit when porting** |
 | `TEST_CMD` | <inferred / TODO(init-loop)> | |
-| `LINT_CMD` | <inferred / TODO(init-loop)> | |
-| `TYPE_CMD` | <inferred / — if none> | |
+| `LINT_CMD` | <inferred / — + reason if none> | a bare `—` with no reason is a blank, not a "not applicable" |
+| `TYPE_CMD` | <inferred / — + reason if none, e.g. `— (no separate type step)`> | a bare `—` with no reason is a blank, not a "not applicable" |
+| `HERMETIC_TEST_CMD` | <the declared offline tier wrapped in a socket-level block / `—` + "no offline/hermetic tier declared"> | runs at engine step 6 on a `code`-route change that adds or modifies a test. **If this says `—`, confirm it** — the generator writes `—` whenever it found no declared offline tier, and it only read the files the onboarding run listed; if anything in this repo claims some tests run offline, the `—` is wrong and the gate is off. **Never delete this row:** an absent row reads as unknown and stops the run — write `—` plus a reason instead. **The block must be socket-level — a proxy still resolves DNS.** Verify once: for a wrapper-style block run `<the block> python3 -c "import socket; socket.create_connection(('1.1.1.1',443),3)"` and require it to fail (and to connect without the block); for an in-process blocker, add a throwaway test doing that connect and confirm it fails inside the tier and passes outside it. A bare `—` with no reason, or a `TODO`, escalates — neither is read as "no tier" |
 | `CI_STATUS_CMD` | <inferred / TODO(init-loop)> | |
 | `BRANCH_FMT` | <inferred / TODO(init-loop)> | |
 | `COMMIT_CONV` | <inferred / TODO(init-loop)> | |
