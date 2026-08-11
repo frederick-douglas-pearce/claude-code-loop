@@ -62,7 +62,7 @@ Spec format (JSON)::
       "mutations": [
         {
           "id": "fail-open-on-read-error",
-          "file": "hooks/guard_append_only.py",
+          "file": "src/yourpackage/module.py",
           "find": "return _deny(",
           "replace": "return _allow(",
           "kind": "fail-open",
@@ -70,7 +70,7 @@ Spec format (JSON)::
         },
         {
           "id": "control-comment",
-          "file": "hooks/guard_append_only.py",
+          "file": "src/yourpackage/module.py",
           "find": "# noqa-control",
           "replace": "# noqa-control-mutated",
           "kind": "control",
@@ -85,11 +85,24 @@ default false — replace the first occurrence only), ``kind`` (string, default 
 
 Usage::
 
-    python3 tools/mutate_verify.py run --spec mutations.json \\
-        --test-cmd "python3 -m unittest discover -s tests" --root .
+    python3 "${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py" run \\
+        --spec <spec.json> --test-cmd "<TEST_CMD>" --root "${CLAUDE_PROJECT_DIR}"
+
+**The two paths are two different trees, and conflating them is the standing hazard here.** The
+script lives in the installed plugin (``${CLAUDE_PLUGIN_ROOT}``); the tree it mutates is the
+consuming repository (``${CLAUDE_PROJECT_DIR}``). Running it as ``python3 tools/mutate_verify.py
+... --root .`` is correct only when developing this plugin itself, where the two coincide.
 
 ``--test-cmd`` is a **parameter**, never read from a config file: the engine that calls this stays
-project-agnostic, and ``TEST_CMD`` is bound per project in ``loop.config.md``.
+project-agnostic, and ``TEST_CMD`` is bound per project in ``loop.config.md``. ``--root`` likewise
+comes from the caller.
+
+``run_pass(..., snapshot_root=...)`` exists for tests. A caller must never point it inside the
+repository being mutated: snapshots there would be visible to the test command, stageable by a
+blanket ``git add``, and indistinguishable from the deliverables they exist to protect.
+
+Platform note: ``--test-cmd`` is run through the shell, so a POSIX shell is assumed; the
+``unshare`` example above is Linux-specific. These are the only platform assumptions in the file.
 """
 
 from __future__ import annotations
@@ -116,6 +129,8 @@ EXIT_RESTORE_FAILED = 4  # a mutation may still be live in the tree — the most
 
 _VALID_EXPECT = ("killed", "survived")
 _DEFAULT_TIMEOUT = 1800
+_OUTPUT_TAIL_CHARS = 4000  # enough to see a failure summary, not a whole verbose run
+_BACKREFERENCE = re.compile(r"\\(?:\d|g<)")  # `\1`, `\g<name>` — see load_spec
 
 
 class SpecError(Exception):
@@ -128,6 +143,23 @@ class MutationError(Exception):
 
 class RestoreError(Exception):
     """A file could not be given back byte-exact. The tree may still hold a mutation."""
+
+
+class ConcurrentModification(Exception):
+    """Someone else wrote to a target while it was mutated.
+
+    Its own class because it is the one failure whose correct handling is to do **less**: the
+    snapshot no longer describes the file, so restoring it would destroy work the harness never
+    touched. Every other failure path restores; this one must not.
+    """
+
+
+def _target_is_intact(target: Path, expected_sha: str) -> bool:
+    """True when the target still holds its pre-mutation bytes, so nothing is live."""
+    try:
+        return _sha256(target.read_bytes()) == expected_sha
+    except OSError:
+        return False
 
 
 @dataclass(frozen=True)
@@ -152,6 +184,7 @@ class Result:
     outcome: str  # "killed" | "survived"
     applied: bool
     test_exit: int
+    output_tail: str = ""  # evidence for the verdict; a survivor with no output is hard to act on
 
     @property
     def as_expected(self) -> bool:
@@ -214,6 +247,12 @@ def load_spec(spec_path: Path) -> List[Mutation]:
                     index, _VALID_EXPECT, expect
                 )
             )
+        if "kind" in entry and not isinstance(entry["kind"], str):
+            raise SpecError(
+                "mutations[{}] 'kind' must be a string (it becomes a de-duplication key)".format(
+                    index
+                )
+            )
         for flag in ("regex", "all"):
             if flag in entry and not isinstance(entry[flag], bool):
                 raise SpecError("mutations[{}] '{}' must be a boolean".format(index, flag))
@@ -224,6 +263,17 @@ def load_spec(spec_path: Path) -> List[Mutation]:
                 raise SpecError(
                     "mutations[{}] 'find' is not a valid regex: {}".format(index, exc)
                 ) from exc
+            # The replacement is inserted literally (see `mutate_text`), so a backreference would
+            # land as the characters `\1` rather than the captured text. That still changes bytes,
+            # so it clears the no-op check, and it almost always breaks the file — which the suite
+            # then reports as a KILL. A kill certified by a syntax error is a false negative
+            # wearing a pass, so refuse the shape rather than let it be discovered as a mystery.
+            if _BACKREFERENCE.search(entry["replace"]):
+                raise SpecError(
+                    "mutations[{}] 'replace' looks like a backreference ({!r}), but replacements "
+                    "are inserted literally — it would land as those characters, not as the "
+                    "captured text".format(index, entry["replace"])
+                )
 
         mutations.append(
             Mutation(
@@ -307,7 +357,9 @@ def apply_mutation(mutation: Mutation, target: Path) -> bytes:
     return original
 
 
-def restore_file(target: Path, snapshot: Path, expected_sha: str) -> None:
+def restore_file(
+    target: Path, snapshot: Path, expected_sha: str, mode: Optional[int] = None
+) -> None:
     """Restore from the pre-mutation snapshot and verify the result is byte-exact.
 
     Never ``git checkout``/``git restore``: the index does not know about the surrounding work in
@@ -318,6 +370,13 @@ def restore_file(target: Path, snapshot: Path, expected_sha: str) -> None:
         restored = target.read_bytes()
     except OSError as exc:
         raise RestoreError("could not restore {} from {}: {}".format(target, snapshot, exc)) from exc
+    if mode is not None:
+        # Only matters when the test command deleted the file: `copyfile` then creates a new inode
+        # with default permissions, silently dropping +x from an executable target.
+        try:
+            target.chmod(mode)
+        except OSError:
+            pass
     actual = _sha256(restored)
     if actual != expected_sha:
         raise RestoreError(
@@ -327,18 +386,26 @@ def restore_file(target: Path, snapshot: Path, expected_sha: str) -> None:
         )
 
 
-def run_tests(test_cmd: str, root: Path, timeout: int) -> int:
-    """Run the project's test command and return its exit status.
+def run_tests(test_cmd: str, root: Path, timeout: int) -> Tuple[int, str]:
+    """Run the project's test command; return its exit status and the tail of its output.
 
     A timeout is **not** silently counted as a kill. A mutation that hangs the suite is ambiguous,
     and claiming a kill we did not observe is the manufactured confidence this gate exists to
     prevent — so it is raised as a harness error for a human to read.
+
+    The output tail is kept rather than discarded: this tool's entire product is a verdict, and a
+    verdict with no evidence attached sends the reader off to re-run the suite by hand. Only the
+    tail, because a verbose suite's full output is megabytes of nothing.
+
+    `stdin` is closed. A test command that stops to prompt would otherwise inherit the harness's
+    stdin and hang until the timeout, with a mutation live in the tree the whole while.
     """
     try:
         completed = subprocess.run(  # noqa: S602 - repo-local committed config, see module docstring
             test_cmd,
             shell=True,
             cwd=str(root),
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             timeout=timeout,
@@ -351,7 +418,8 @@ def run_tests(test_cmd: str, root: Path, timeout: int) -> int:
         ) from exc
     except OSError as exc:
         raise MutationError("could not run test command {!r}: {}".format(test_cmd, exc)) from exc
-    return completed.returncode
+    output = (completed.stdout or b"").decode("utf-8", "replace")
+    return completed.returncode, output[-_OUTPUT_TAIL_CHARS:]
 
 
 def dedupe_survivors(results: Sequence[Result]) -> List[Dict[str, object]]:
@@ -394,6 +462,7 @@ class Report:
 
     baseline_exit: int
     applied: int = 0
+    restored: int = 0  # the engine's `- Restore:` ledger line names this number explicitly
     killed: int = 0
     survived: int = 0
     results: List[Result] = field(default_factory=list)
@@ -407,6 +476,7 @@ class Report:
             {
                 "baseline_exit": self.baseline_exit,
                 "applied": self.applied,
+                "restored": self.restored,
                 "killed": self.killed,
                 "survived": self.survived,
                 "control_proved": self.control_proved,
@@ -420,6 +490,7 @@ class Report:
                         "outcome": r.outcome,
                         "as_expected": r.as_expected,
                         "test_exit": r.test_exit,
+                        "output_tail": r.output_tail,
                     }
                     for r in self.results
                 ],
@@ -471,10 +542,20 @@ def run_pass(
         reaches any of these paths, which is exactly the interrupted case recovery must catch.
         """
         shutil.rmtree(str(snapshot_dir), ignore_errors=True)
+        if snapshot_dir.exists():
+            # `ignore_errors` swallowed a real failure (a full or read-only TMPDIR, an NFS
+            # silly-rename). Clearing the field anyway would invert the retention signal: the
+            # directory survives on disk while the report says it is gone, so recovery would read a
+            # clean tree as dirty. Keep the field and say so instead.
+            report.errors.append(
+                "could not remove the snapshot directory {} — it is stale, not evidence of a live "
+                "mutation".format(snapshot_dir)
+            )
+            return
         report.snapshot_dir = None
 
     try:
-        report.baseline_exit = run_tests(test_cmd, root, timeout)
+        report.baseline_exit, baseline_output = run_tests(test_cmd, root, timeout)
     except MutationError as exc:
         report.errors.append(str(exc))
         discard_snapshots()
@@ -482,7 +563,9 @@ def run_pass(
     if report.baseline_exit != 0:
         report.errors.append(
             "baseline is not green (exit {}) — every verdict below it would be meaningless, "
-            "so none was taken".format(report.baseline_exit)
+            "so none was taken. Tail of its output:\n{}".format(
+                report.baseline_exit, baseline_output.strip() or "(no output)"
+            )
         )
         discard_snapshots()
         return report, EXIT_HARNESS_ERROR
@@ -498,23 +581,61 @@ def run_pass(
             discard_snapshots()
             return report, EXIT_HARNESS_ERROR
         expected_sha = _sha256(original)
+        try:
+            original_mode = target.stat().st_mode
+        except OSError:
+            original_mode = None
 
         # One handler for the whole mutate-run-restore body, catching **any** exception rather than
         # only the ones this module raises. An unexpected OSError (a read-only target, a full disk)
         # escaping to the process would surface as exit 1 — which means "survivors found" — so a
         # crash would read as a result. Fail closed instead, mirroring `hooks/guard_append_only.py`.
         try:
-            apply_mutation(mutation, target)
+            original_seen = apply_mutation(mutation, target)
+            # The file must be what we snapshotted a moment ago. If it is not, someone wrote to it
+            # in between and the snapshot is already stale — restoring it would erase their work.
+            if _sha256(original_seen) != expected_sha:
+                raise ConcurrentModification(
+                    "{} changed between the snapshot and the mutation".format(mutation.file)
+                )
             report.applied += 1
-            test_exit = run_tests(test_cmd, root, timeout)
+            mutated_bytes = target.read_bytes()
+            test_exit, test_output = run_tests(test_cmd, root, timeout)
+            # The window that actually matters: a whole test run, minutes long, on a file in a live
+            # working tree. If the bytes are no longer the ones we wrote, a developer (or the suite)
+            # edited the file underneath us — so the snapshot no longer describes "before", and
+            # copying it back would silently destroy uncommitted work. That is the exact outcome
+            # this design refuses to reach via `git restore`; it must not reach it this way either.
+            if target.read_bytes() != mutated_bytes:
+                raise ConcurrentModification(
+                    "{} was modified while the test command was running".format(mutation.file)
+                )
             outcome = "killed" if test_exit != 0 else "survived"
             if outcome == "killed":
                 report.killed += 1
             else:
                 report.survived += 1
             report.results.append(
-                Result(mutation=mutation, outcome=outcome, applied=True, test_exit=test_exit)
+                Result(
+                    mutation=mutation,
+                    outcome=outcome,
+                    applied=True,
+                    test_exit=test_exit,
+                    output_tail=test_output,
+                )
             )
+        except ConcurrentModification as exc:
+            # Deliberately NOT restored: the tree holds both a live mutation and someone else's
+            # edit, and only a human can separate them. Retain the snapshot — it is the safe repair
+            # material — and say plainly what is where.
+            report.errors.append(
+                "{} — refusing to restore, because the snapshot no longer describes this file and "
+                "writing it back would destroy that change. The mutation ({!r}: {!r} -> {!r}) is "
+                "still live in the tree.".format(
+                    exc, mutation.id, mutation.find, mutation.replace
+                )
+            )
+            return report, EXIT_RESTORE_FAILED
         except Exception as exc:  # noqa: BLE001 - deliberate: see the comment above
             report.errors.append("{}: {}".format(type(exc).__name__, exc))
             # Restore before reporting, and never trust "nothing was written" as a reason to skip
@@ -527,12 +648,25 @@ def run_pass(
                         type(restore_exc).__name__, restore_exc
                     )
                 )
+                # A failed restore does not always mean a dirty tree. If the target still hashes to
+                # its pre-mutation content — an unwritable file, say, where the mutation never
+                # landed — then nothing is live and this is an ordinary harness error. Reserving
+                # code 4 for a genuinely dirty tree is what keeps it worth reacting to.
+                if _target_is_intact(target, expected_sha):
+                    report.errors.append(
+                        "the tree is intact: {} still matches its pre-mutation content".format(
+                            target
+                        )
+                    )
+                    discard_snapshots()
+                    return report, EXIT_HARNESS_ERROR
                 return report, EXIT_RESTORE_FAILED
             discard_snapshots()
             return report, EXIT_HARNESS_ERROR
 
         try:
-            restore_file(target, snapshot, expected_sha)
+            restore_file(target, snapshot, expected_sha, mode=original_mode)
+            report.restored += 1
         except Exception as exc:  # noqa: BLE001 - the tree may still hold this mutation
             report.errors.append("{}: {}".format(type(exc).__name__, exc))
             return report, EXIT_RESTORE_FAILED
@@ -579,7 +713,9 @@ def run_pass(
 def _render(report: Report, code: int) -> str:
     lines = [
         "baseline: exit {}".format(report.baseline_exit),
-        "applied: {} (mutations that actually altered a file)".format(report.applied),
+        "applied: {} (mutations that actually altered a file), restored: {}".format(
+            report.applied, report.restored
+        ),
         "killed: {}  survived: {}".format(report.killed, report.survived),
         "control proved the pipeline can report a survivor: {}".format(
             "yes" if report.control_proved else "NO"
@@ -636,7 +772,30 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print("mutate_verify: unexpected {}: {}".format(type(exc).__name__, exc), file=sys.stderr)
         return EXIT_HARNESS_ERROR
 
-    print(report.to_json() if args.json else _render(report, code))
+    # Reporting is guarded too, and separately, because it fails for ordinary reasons: stdout piped
+    # into `head` (BrokenPipeError), or an ASCII stdout encoding meeting a `find` string copied out
+    # of a file full of em dashes — which is the *normal* case when the targets are prose. An
+    # exception here would escape to the interpreter and exit 1, i.e. EXIT_SURVIVORS, turning a
+    # printing failure into a verdict. The verdict `run_pass` reached is what gets returned, so a
+    # dirty tree still reports 4 rather than being downgraded.
+    try:
+        print(report.to_json() if args.json else _render(report, code))
+    except Exception as exc:  # noqa: BLE001 - the verdict survives a failure to announce it
+        try:
+            sys.stderr.buffer.write(
+                "mutate_verify: could not write the report ({}: {}); the verdict below still "
+                "stands.\n".format(type(exc).__name__, exc).encode("utf-8", "backslashreplace")
+            )
+            if report.snapshot_dir:
+                # The one thing that must reach the operator even when reporting is broken.
+                sys.stderr.buffer.write(
+                    "mutate_verify: SNAPSHOTS RETAINED: {}\n".format(report.snapshot_dir).encode(
+                        "utf-8", "backslashreplace"
+                    )
+                )
+            sys.stderr.buffer.flush()
+        except Exception:  # noqa: BLE001 - stderr is gone too; the exit code is all that is left
+            pass
     return code
 
 

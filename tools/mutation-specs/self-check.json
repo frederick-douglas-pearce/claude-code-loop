@@ -1,0 +1,166 @@
+{
+  "_comment": [
+    "Self-check spec for tools/mutate_verify.py \u2014 the harness pointed at its own source.",
+    "Committed so the mutation numbers quoted in #60's PR are reproducible by a reviewer,",
+    "rather than a property of a spec only the author ever saw. Run from the repo root:",
+    "  python3 tools/mutate_verify.py run --spec tools/mutation-specs/self-check.json \\",
+    "      --test-cmd 'python3 -m unittest discover -s tests' --root . --timeout 600",
+    "Expected: every entry killed, the single control survived, exit 0, tree byte-identical.",
+    "A `find` that stops matching is a LOUD failure (exit 2), not a silent skip \u2014 so this file",
+    "going stale is visible rather than quietly reducing coverage."
+  ],
+  "mutations": [
+    {
+      "id": "ac5-no-match-guard",
+      "file": "tools/mutate_verify.py",
+      "find": "    if mutation.find not in text:",
+      "replace": "    if False:",
+      "kind": "fail-open",
+      "expect": "killed"
+    },
+    {
+      "id": "ac5-no-op-guard",
+      "file": "tools/mutate_verify.py",
+      "find": "    if mutated_bytes == original:",
+      "replace": "    if False:",
+      "kind": "fail-open",
+      "expect": "killed"
+    },
+    {
+      "id": "ac5-baseline-guard",
+      "file": "tools/mutate_verify.py",
+      "find": "    if report.baseline_exit != 0:",
+      "replace": "    if False:",
+      "kind": "fail-open",
+      "expect": "killed"
+    },
+    {
+      "id": "ac5-real-mutation-requirement",
+      "file": "tools/mutate_verify.py",
+      "find": "    if not any(m.expect == \"killed\" for m in mutations):",
+      "replace": "    if False:",
+      "kind": "fail-open",
+      "expect": "killed"
+    },
+    {
+      "id": "ac6-control-presence",
+      "file": "tools/mutate_verify.py",
+      "find": "    if not controls:",
+      "replace": "    if False:",
+      "kind": "fail-open",
+      "expect": "killed"
+    },
+    {
+      "id": "ac6-control-integrity",
+      "file": "tools/mutate_verify.py",
+      "find": "    if controls and not report.control_proved:",
+      "replace": "    if False:",
+      "kind": "fail-open",
+      "expect": "killed"
+    },
+    {
+      "id": "restore-byte-exact",
+      "file": "tools/mutate_verify.py",
+      "find": "    if actual != expected_sha:",
+      "replace": "    if False:",
+      "kind": "fail-open",
+      "expect": "killed"
+    },
+    {
+      "id": "resolve-missing-file",
+      "file": "tools/mutate_verify.py",
+      "find": "    if not target.is_file():",
+      "replace": "    if False:",
+      "kind": "fail-open",
+      "expect": "killed"
+    },
+    {
+      "id": "ac7-repeated-flag",
+      "file": "tools/mutate_verify.py",
+      "find": "\"repeated\": len(members) > 1,",
+      "replace": "\"repeated\": False,",
+      "kind": "weakened-signal",
+      "expect": "killed"
+    },
+    {
+      "id": "ac7-controls-as-findings",
+      "file": "tools/mutate_verify.py",
+      "find": " or result.mutation.expect == \"survived\"",
+      "replace": "",
+      "kind": "false-positive",
+      "expect": "killed"
+    },
+    {
+      "id": "cli-always-zero",
+      "file": "tools/mutate_verify.py",
+      "find": "    return code",
+      "replace": "    return 0",
+      "kind": "fail-open",
+      "expect": "killed"
+    },
+    {
+      "id": "H2-concurrent-during-run",
+      "file": "tools/mutate_verify.py",
+      "find": "            if target.read_bytes() != mutated_bytes:",
+      "replace": "            if False:",
+      "kind": "data-loss",
+      "expect": "killed"
+    },
+    {
+      "id": "H2-stale-snapshot",
+      "file": "tools/mutate_verify.py",
+      "find": "            if _sha256(original_seen) != expected_sha:",
+      "replace": "            if False:",
+      "kind": "data-loss",
+      "expect": "killed"
+    },
+    {
+      "id": "M1-cleanup-signal",
+      "file": "tools/mutate_verify.py",
+      "find": "        if snapshot_dir.exists():",
+      "replace": "        if False:",
+      "kind": "inverted-signal",
+      "expect": "killed"
+    },
+    {
+      "id": "M2-severity-inflation",
+      "file": "tools/mutate_verify.py",
+      "find": "                if _target_is_intact(target, expected_sha):",
+      "replace": "                if False:",
+      "kind": "cry-wolf",
+      "expect": "killed"
+    },
+    {
+      "id": "M3-baseline-evidence",
+      "file": "tools/mutate_verify.py",
+      "find": "report.baseline_exit, baseline_output.strip() or \"(no output)\"",
+      "replace": "report.baseline_exit, \"(no output)\"",
+      "kind": "lost-evidence",
+      "expect": "killed"
+    },
+    {
+      "id": "restored-counter",
+      "file": "tools/mutate_verify.py",
+      "find": "            report.restored += 1",
+      "replace": "            report.restored += 0",
+      "kind": "miscount",
+      "expect": "killed"
+    },
+    {
+      "id": "L1-backref-guard",
+      "file": "tools/mutate_verify.py",
+      "find": "            if _BACKREFERENCE.search(entry[\"replace\"]):",
+      "replace": "            if False:",
+      "kind": "fail-open",
+      "expect": "killed"
+    },
+    {
+      "id": "control-comment-only",
+      "file": "tools/mutate_verify.py",
+      "find": "# Exit codes. Distinct on purpose:",
+      "replace": "# Exit codes. Distinct deliberately:",
+      "kind": "control",
+      "expect": "survived"
+    }
+  ]
+}

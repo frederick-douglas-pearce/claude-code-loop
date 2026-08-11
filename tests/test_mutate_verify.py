@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Behavior of the mutation harness (`tools/mutate_verify.py`).
 
 This module is the point of #60. The prose version of this apparatus could not converge because
@@ -11,20 +12,33 @@ environment, so its tests must too.
 The scratch project each test builds is deliberately tiny: one source file holding a marker, plus a
 "test suite" that is a one-line `python3 -c` command. That gives exact control over which mutations
 the suite observes, which is the only thing these tests need to vary.
+
+Run with: python3 -m unittest discover -s tests
 """
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+# Load the harness by path, as `test_guard_append_only.py` and `test_repo_consistency.py` both do.
+# Deliberately NOT `sys.path.insert`: `discover` runs all three modules in one process, so a
+# permanent entry would leave `tools/` on the path for the whole session and shadow any stdlib
+# module sharing a filename with something added there later.
+_MUTATE_VERIFY_PATH = Path(__file__).resolve().parents[1] / "tools" / "mutate_verify.py"
+_spec = importlib.util.spec_from_file_location("mutate_verify", _MUTATE_VERIFY_PATH)
+assert _spec and _spec.loader
+mutate_verify = importlib.util.module_from_spec(_spec)
+# Registered BEFORE exec: `dataclasses` resolves a field's type by looking its module up in
+# `sys.modules`, so a module executed while absent from it raises during class creation.
+sys.modules["mutate_verify"] = mutate_verify
+_spec.loader.exec_module(mutate_verify)
 
-import mutate_verify  # noqa: E402  (path juggling above is deliberate)
-from mutate_verify import (  # noqa: E402
+from mutate_verify import (  # noqa: E402  # type: ignore[import-not-found]
     EXIT_CLEAN,
     EXIT_HARNESS_ERROR,
     EXIT_RESTORE_FAILED,
@@ -51,6 +65,8 @@ _OBSERVING_SUITE = (
 _BLIND_SUITE = '{exe} -c "import sys; sys.exit(0)"'
 # A suite that is red before anything is mutated.
 _RED_SUITE = '{exe} -c "import sys; sys.exit(1)"'
+# A red baseline that prints something a human would need in order to understand why.
+_NOISY_RED_SUITE = '{exe} -c "print(\'DIAGNOSTIC-MARKER: assertion failed\'); raise SystemExit(1)"'
 # A suite that observes ONLY the control's marker — so the control dies and the real mutation lives.
 _CONTROL_OBSERVING_SUITE = (
     "{exe} -c \"import sys; sys.exit(0 if 'SPARE_A' in open('src.py').read() else 1)\""
@@ -191,6 +207,27 @@ class RestoreTests(unittest.TestCase):
         import ast
 
         tree = ast.parse(Path(mutate_verify.__file__).read_text(encoding="utf-8"))
+
+        # First close the alias hole: `from subprocess import call as _c` would make every
+        # attribute-based check below blind, so no process-spawning name may be imported directly.
+        spawning = {"subprocess", "os", "runpy", "multiprocessing", "pty", "commands"}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    self.assertIn(
+                        alias.name.split(".")[0],
+                        spawning | {"argparse", "hashlib", "json", "re", "shutil", "sys",
+                                    "tempfile", "dataclasses", "pathlib", "typing", "__future__"},
+                        "unexpected import {!r}".format(alias.name),
+                    )
+                    self.assertIsNone(alias.asname, "aliased import hides the call site")
+            elif isinstance(node, ast.ImportFrom):
+                self.assertNotIn(
+                    node.module,
+                    spawning,
+                    "importing names out of {!r} bypasses the call-site check".format(node.module),
+                )
+
         call_sites = []
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
@@ -314,6 +351,56 @@ class LoadSpecTests(unittest.TestCase):
             )
         self.assertIn("expect", str(ctx.exception))
 
+    def test_a_backreference_shaped_replacement_is_refused(self) -> None:
+        # Replacements are inserted literally, so `\\1` would land as those two characters. That
+        # changes bytes (clearing the no-op check) and usually breaks the file, which the suite
+        # reports as a KILL — a false negative wearing a pass. Refuse the shape instead.
+        for bad in ("return \\1", "x = \\g<0>"):
+            with self.assertRaises(SpecError) as ctx:
+                load_spec(
+                    self._write(
+                        {
+                            "mutations": [
+                                {
+                                    "id": "a",
+                                    "file": "src.py",
+                                    "find": "value = (.)",
+                                    "replace": bad,
+                                    "regex": True,
+                                }
+                            ]
+                        }
+                    )
+                )
+            self.assertIn("backreference", str(ctx.exception))
+
+    def test_a_literal_replacement_may_contain_a_backslash_digit(self) -> None:
+        # The refusal is scoped to `regex: true`; a literal replacement is inserted verbatim and
+        # has no backreference semantics to be confused about.
+        path = self._write(
+            {"mutations": [{"id": "a", "file": "src.py", "find": "GOOD", "replace": "x\\1"}]}
+        )
+        self.assertEqual(load_spec(path)[0].replace, "x\\1")
+
+    def test_kind_must_be_a_string_because_it_becomes_a_grouping_key(self) -> None:
+        with self.assertRaises(SpecError) as ctx:
+            load_spec(
+                self._write(
+                    {
+                        "mutations": [
+                            {
+                                "id": "a",
+                                "file": "src.py",
+                                "find": "G",
+                                "replace": "B",
+                                "kind": 123,
+                            }
+                        ]
+                    }
+                )
+            )
+        self.assertIn("kind", str(ctx.exception))
+
     def test_invalid_regex_is_refused_at_load_time(self) -> None:
         with self.assertRaises(SpecError) as ctx:
             load_spec(
@@ -408,31 +495,142 @@ class RunPassTests(unittest.TestCase):
         _, code = run_pass([_mutation()], scratch.test_cmd, scratch.root)
         self.assertEqual(code, EXIT_SURVIVORS)
 
-    def test_a_doubled_failure_reports_the_dirty_tree_not_a_plain_error(self) -> None:
-        # The worst state the design defines: the harness errored AND the restore then failed too.
-        # It must exit EXIT_RESTORE_FAILED (a mutation may be live), never EXIT_HARNESS_ERROR.
+    def _explode(self, name: str, exc: Exception) -> None:
+        original = getattr(mutate_verify, name)
+
+        def boom(*args: object, **kwargs: object) -> object:
+            raise exc
+
+        setattr(mutate_verify, name, boom)
+        self.addCleanup(lambda: setattr(mutate_verify, name, original))
+
+    def test_a_doubled_failure_with_a_dirty_tree_reports_restore_failed(self) -> None:
+        # The worst state the design defines: the mutation landed, then the harness errored, then
+        # the restore failed too. A mutation is live, so it must exit EXIT_RESTORE_FAILED.
         scratch = _Scratch(self)
-        original_apply = mutate_verify.apply_mutation
-        original_restore = mutate_verify.restore_file
+        original_run = mutate_verify.run_tests
+        calls = {"n": 0}
 
-        def exploding_apply(*args: object, **kwargs: object) -> bytes:
-            raise OSError("simulated failure while mutating")
+        def green_baseline_then_explode(*args: object, **kwargs: object) -> object:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return original_run(*args, **kwargs)  # the baseline must pass, or nothing is tried
+            raise OSError("simulated failure while running the suite")
 
-        def exploding_restore(*args: object, **kwargs: object) -> None:
-            raise RestoreError("simulated failure while restoring")
-
-        mutate_verify.apply_mutation = exploding_apply  # type: ignore[assignment]
-        mutate_verify.restore_file = exploding_restore  # type: ignore[assignment]
-        self.addCleanup(lambda: setattr(mutate_verify, "apply_mutation", original_apply))
-        self.addCleanup(lambda: setattr(mutate_verify, "restore_file", original_restore))
+        mutate_verify.run_tests = green_baseline_then_explode  # type: ignore[assignment]
+        self.addCleanup(lambda: setattr(mutate_verify, "run_tests", original_run))
+        self._explode("restore_file", RestoreError("simulated failure while restoring"))
 
         report, code = run_pass([_mutation()], scratch.test_cmd, scratch.root)
         self.assertEqual(code, EXIT_RESTORE_FAILED)
         self.assertTrue(any("restore also failed" in e for e in report.errors))
+        self.assertIn("BAD", scratch.source.read_text(encoding="utf-8"))  # the mutation IS live
+        # The DISK, not `report.snapshot_dir` — the field is the report's own claim, and asserting
+        # it passes for an implementation that keeps the field and deletes the files, which would
+        # destroy the only safe repair for the most severe outcome this tool has.
         self.assertIsNotNone(report.snapshot_dir)
+        self.assertTrue(Path(report.snapshot_dir).is_dir(), "the safe repair was deleted")
         import shutil
 
         shutil.rmtree(report.snapshot_dir, ignore_errors=True)
+
+    def test_a_doubled_failure_with_an_intact_tree_is_only_a_harness_error(self) -> None:
+        # Same doubled failure, but the mutation never landed — an unwritable target, say. Nothing
+        # is live, so code 4 would be crying wolf, and a severity that fires on the most benign
+        # cause there is stops being read.
+        scratch = _Scratch(self)
+        self._explode("apply_mutation", OSError("simulated read-only target"))
+        self._explode("restore_file", RestoreError("simulated failure while restoring"))
+
+        report, code = run_pass([_mutation()], scratch.test_cmd, scratch.root)
+        self.assertEqual(code, EXIT_HARNESS_ERROR)
+        self.assertTrue(any("tree is intact" in e for e in report.errors))
+        self.assertEqual(scratch.source.read_text(encoding="utf-8"), _SOURCE)
+
+    def test_a_write_during_the_test_run_is_never_overwritten(self) -> None:
+        # THE defect this design exists to prevent, reached by a door that is not `git restore`.
+        # A developer saves an edit while the suite runs under a live mutant. The snapshot no longer
+        # describes "before", so copying it back would destroy their work — and the pass would
+        # report exit 0, clean and trustworthy, having done it.
+        scratch = _Scratch(self)
+        writer = scratch.root / "writer.py"
+        writer.write_text(
+            "import sys\n"
+            "c = open('src.py').read()\n"
+            "if 'BAD' in c and 'DEVWORK' not in c:\n"
+            "    open('src.py', 'a').write('DEVWORK = 1\\n')\n"
+            "sys.exit(0 if 'GOOD' in open('src.py').read() else 1)\n",
+            encoding="utf-8",
+        )
+        cmd = "{} {}".format(sys.executable, writer)
+
+        report, code = run_pass([_mutation(), _control()], cmd, scratch.root)
+        self.assertEqual(code, EXIT_RESTORE_FAILED)
+        self.assertNotEqual(code, EXIT_CLEAN)
+        self.assertIn("DEVWORK", scratch.source.read_text(encoding="utf-8"))
+        self.assertTrue(any("refusing to restore" in e for e in report.errors))
+        self.assertIsNotNone(report.snapshot_dir)
+        self.assertTrue(Path(report.snapshot_dir).is_dir(), "the safe repair was deleted")
+        import shutil
+
+        shutil.rmtree(report.snapshot_dir, ignore_errors=True)
+
+    def test_a_change_between_snapshot_and_mutation_is_also_refused(self) -> None:
+        # The narrower window, same rule: if the file is not what we snapshotted, the snapshot is
+        # already stale and writing it back would erase whatever changed it.
+        scratch = _Scratch(self)
+        original_apply = mutate_verify.apply_mutation
+
+        def apply_then_report_different_original(mutation: object, target: Path) -> bytes:
+            original_apply(mutation, target)
+            return b"not what was snapshotted"
+
+        mutate_verify.apply_mutation = apply_then_report_different_original  # type: ignore
+        self.addCleanup(lambda: setattr(mutate_verify, "apply_mutation", original_apply))
+
+        report, code = run_pass([_mutation()], scratch.test_cmd, scratch.root)
+        self.assertEqual(code, EXIT_RESTORE_FAILED)
+        self.assertTrue(any("between the snapshot and the mutation" in e for e in report.errors))
+        self.assertTrue(Path(report.snapshot_dir).is_dir(), "the safe repair was deleted")
+        import shutil
+
+        shutil.rmtree(report.snapshot_dir, ignore_errors=True)
+
+    def test_a_failed_cleanup_does_not_claim_the_snapshots_are_gone(self) -> None:
+        # `ignore_errors=True` swallows a real removal failure. Clearing the field anyway would
+        # invert the signal: the directory survives while the report says it is gone, so recovery
+        # reads a clean tree as dirty.
+        import shutil as _shutil
+
+        scratch = _Scratch(self)
+        original_rmtree = _shutil.rmtree
+
+        def silently_failing_rmtree(*args: object, **kwargs: object) -> None:
+            # Exactly what `ignore_errors=True` does when removal genuinely fails: nothing, quietly.
+            return None
+
+        _shutil.rmtree = silently_failing_rmtree  # type: ignore[assignment]
+        self.addCleanup(lambda: setattr(_shutil, "rmtree", original_rmtree))
+
+        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root)
+        self.assertEqual(code, EXIT_CLEAN)
+        self.assertIsNotNone(report.snapshot_dir, "cleared the field while the directory survived")
+        self.assertTrue(any("stale, not evidence" in e for e in report.errors))
+
+        _shutil.rmtree = original_rmtree  # type: ignore[assignment]
+        original_rmtree(report.snapshot_dir, ignore_errors=True)
+
+    def test_restored_is_counted_because_the_ledger_line_names_it(self) -> None:
+        scratch = _Scratch(self)
+        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root)
+        self.assertEqual(code, EXIT_CLEAN)
+        self.assertEqual(report.restored, report.applied)
+        self.assertEqual(report.restored, 2)
+
+    def test_a_red_baseline_carries_the_output_that_explains_it(self) -> None:
+        scratch = _Scratch(self, suite=_NOISY_RED_SUITE)
+        report, _ = run_pass([_mutation()], scratch.test_cmd, scratch.root)
+        self.assertTrue(any("DIAGNOSTIC-MARKER" in e for e in report.errors))
 
     def test_a_red_baseline_takes_no_verdicts_at_all(self) -> None:
         scratch = _Scratch(self, suite=_RED_SUITE)
@@ -511,12 +709,24 @@ class RunPassTests(unittest.TestCase):
         self.assertEqual(scratch.source.read_text(encoding="utf-8"), _SOURCE)
 
     def test_a_timeout_is_not_recorded_as_a_kill(self) -> None:
+        # The suite must be fast at BASELINE and hang only once the mutant is live. An earlier
+        # version timed out on the baseline, so `applied` was 0 and `killed == 0` was trivially
+        # true — the assertion held without the code path it names ever running, and the case that
+        # matters (a timeout with a mutation live in the tree, needing a restore) was uncovered.
         scratch = _Scratch(self)
-        slow = '{exe} -c "import time; time.sleep(30)"'.format(exe=sys.executable)
-        report, code = run_pass([_mutation()], slow, scratch.root, timeout=1)
+        hangs_only_when_mutated = (
+            "{exe} -c \"import sys,time; c=open('src.py').read(); "
+            "sys.exit(0) if 'GOOD' in c else time.sleep(30)\""
+        ).format(exe=sys.executable)
+
+        report, code = run_pass([_mutation()], hangs_only_when_mutated, scratch.root, timeout=2)
         self.assertEqual(code, EXIT_HARNESS_ERROR)
+        self.assertEqual(report.baseline_exit, 0, "the baseline must have completed, not timed out")
+        self.assertEqual(report.applied, 1, "the timeout must happen with a mutation live")
         self.assertEqual(report.killed, 0)
         self.assertTrue(any("timed out" in e for e in report.errors))
+        # And the tree still comes back.
+        self.assertEqual(scratch.source.read_text(encoding="utf-8"), _SOURCE)
 
     def test_a_bad_target_is_caught_before_anything_is_mutated(self) -> None:
         scratch = _Scratch(self)
@@ -609,13 +819,52 @@ class CliTests(unittest.TestCase):
         return path
 
     @staticmethod
-    def _quiet(argv: list) -> int:
-        """Invoke the CLI with its own reporting silenced — it prints by design."""
+    def _invoke(argv: list) -> tuple:
+        """Run the CLI and RETURN what it printed, rather than discarding it.
+
+        An earlier version redirected stdout and stderr into throwaway buffers, which meant no test
+        observed anything `main()` printed — deleting the `print` outright, or ignoring `--json`,
+        left the suite green. A class whose docstring says it covers "what is printed" must
+        actually look at it.
+        """
         import contextlib
         import io
 
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            return mutate_verify.main(argv)
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = mutate_verify.main(argv)
+        return code, out.getvalue(), err.getvalue()
+
+    def _quiet(self, argv: list) -> int:
+        return self._invoke(argv)[0]
+
+    def _clean_spec(self, scratch: _Scratch) -> Path:
+        """A real mutation plus a control — the shape that can reach EXIT_CLEAN."""
+        return self._spec(
+            scratch,
+            [
+                {"id": "m", "file": "src.py", "find": "GOOD", "replace": "BAD"},
+                {
+                    "id": "c",
+                    "file": "src.py",
+                    "find": "SPARE_A",
+                    "replace": "SPARE_Z",
+                    "expect": "survived",
+                },
+            ],
+        )
+
+    @staticmethod
+    def _argv(scratch: _Scratch, spec: Path) -> list:
+        return [
+            "run",
+            "--spec",
+            str(spec),
+            "--test-cmd",
+            scratch.test_cmd,
+            "--root",
+            str(scratch.root),
+        ]
 
     def _run(self, scratch: _Scratch, mutations: list, extra: list = None) -> int:
         spec = self._spec(scratch, mutations)
@@ -688,6 +937,51 @@ class CliTests(unittest.TestCase):
         code = self._run(scratch, [{"id": "m", "file": "src.py", "find": "GOOD", "replace": "BAD"}])
         self.assertEqual(code, EXIT_HARNESS_ERROR)
         self.assertNotEqual(code, EXIT_SURVIVORS)
+
+    def test_the_cli_actually_prints_the_report(self) -> None:
+        # Deleting the `print` in `main()` must not leave the suite green: a tool whose entire
+        # product is a verdict that nobody prints has produced nothing.
+        scratch = _Scratch(self)
+        code, out, _ = self._invoke(self._argv(scratch, self._clean_spec(scratch)))
+        self.assertEqual(code, EXIT_CLEAN)
+        self.assertIn("applied:", out)
+        self.assertIn("killed:", out)
+        self.assertIn("baseline:", out)
+        self.assertIn("control proved", out)
+        self.assertIn("exit 0", out)
+
+    def test_json_flag_produces_parseable_json_not_the_rendered_report(self) -> None:
+        scratch = _Scratch(self)
+        code, out, _ = self._invoke(self._argv(scratch, self._clean_spec(scratch)) + ["--json"])
+        self.assertEqual(code, EXIT_CLEAN)
+        payload = json.loads(out)  # would raise if `--json` were ignored
+        self.assertEqual(payload["applied"], 2)
+        self.assertEqual(payload["restored"], 2)
+        self.assertNotIn("baseline: exit", out)
+
+    def test_a_survivor_is_named_in_what_the_cli_prints(self) -> None:
+        scratch = _Scratch(self, suite=_BLIND_SUITE)
+        code, out, _ = self._invoke(self._argv(scratch, self._clean_spec(scratch)))
+        self.assertEqual(code, EXIT_SURVIVORS)
+        self.assertIn("SURVIVOR", out)
+
+    def test_the_timeout_flag_reaches_the_pass(self) -> None:
+        # `--timeout` is plumbing, and unplumbed plumbing is invisible: without this, dropping the
+        # argument would silently restore the 1800s default on every run.
+        scratch = _Scratch(self)
+        spec = self._spec(scratch, [{"id": "m", "file": "src.py", "find": "GOOD", "replace": "BAD"}])
+        argv = [
+            "run", "--spec", str(spec),
+            "--test-cmd", '{} -c "import time; time.sleep(30)"'.format(sys.executable),
+            "--root", str(scratch.root), "--timeout", "1",
+        ]
+        code, out, _ = self._invoke(argv)
+        self.assertEqual(code, EXIT_HARNESS_ERROR)
+        self.assertIn("timed out after 1s", out)
+
+    def test_spec_is_required(self) -> None:
+        with self.assertRaises(SystemExit):
+            self._invoke(["run", "--test-cmd", "true"])
 
     def test_render_announces_a_survivor_and_marks_a_repeat(self) -> None:
         report = mutate_verify.Report(baseline_exit=0)

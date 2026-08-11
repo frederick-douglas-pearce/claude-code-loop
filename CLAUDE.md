@@ -39,12 +39,19 @@ Three modules, and the split between them matters:
   Added by #60, and the reason it exists is worth keeping: the prose version of this apparatus could
   not converge because **every review round re-derived its correctness by reading** — there was
   nothing to execute. These tests are what make a green suite say something about it. They are
-  behavioral (what the harness does to a tree, and what it refuses to do), and they assert
-  *mechanism* rather than outcome where the two differ — see
-  `test_the_only_thing_the_harness_executes_is_the_callers_test_command`, which walks the AST rather
-  than grepping for `git`, because a substring search passes for any implementation that avoids the
-  word. **The harness is inert with respect to the engine**: shipping it did not lift the mutation
-  pass's deferral, which is a separate change (#60's second PR).
+  behavioral: what the harness does to a tree, and what it refuses to do. **The harness is inert
+  with respect to the engine** — shipping it did not lift the mutation pass's deferral, which is a
+  separate change (#60's second PR).
+
+  **No claim is made here about these tests being mechanism-shaped rather than outcome-shaped, and
+  that absence is deliberate.** Two earlier drafts of this bullet asserted it; both were false when
+  written, and the second was a *reword* of the first with a hedge added. Three separate reviews of
+  #60 each found an outcome-shaped or vacuous test in this very module — one of them created by the
+  commit that fixed the previous one. The discipline is real and is applied per-test where it bites
+  (`test_the_only_thing_the_harness_executes_is_the_callers_test_command` walks the AST instead of
+  grepping for `git`, because a substring search passes for any implementation that avoids the
+  word). But a **file-level** guarantee of it is exactly the enumerable assertion this project keeps
+  having to retract, so it is not made. Check the test, not this sentence.
 - **`tests/test_repo_consistency.py`** — **mechanical** checks on the markdown/JSON deliverable:
   the shipped example sidecar still loads through the real `load_registry`; the composed
   `plugin@marketplace` identifier still matches every hand-written call site; engine `CAPS` ⊆
