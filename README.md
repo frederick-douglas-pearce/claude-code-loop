@@ -56,6 +56,8 @@ claude-code-loop/
 │   └── loop.append-guard.example.json  # sample per-project protection registry
 ├── commands/
 │   └── init-loop.md         # /init-loop onboarding scaffolder
+├── tools/
+│   └── mutate_verify.py     # mutation harness; run by path (stdlib only, not yet wired in)
 ├── tests/                   # stdlib unittest suite (no pytest, no dependencies)
 ├── .github/workflows/       # CI: the suite on Python 3.9-3.13
 ├── LICENSE

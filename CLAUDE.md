@@ -32,9 +32,26 @@ stdlib-only constraint was broken — fix the code, not the workflow.
 
 ### What is and isn't covered
 
-Two modules, and the split between them matters:
+Three modules, and the split between them matters:
 
-- **`tests/test_guard_append_only.py`** — behavior of the one piece of executable code.
+- **`tests/test_guard_append_only.py`** — behavior of the guard hook.
+- **`tests/test_mutate_verify.py`** — behavior of `tools/mutate_verify.py`, the mutation harness.
+  Added by #60, and the reason it exists is worth keeping: the prose version of this apparatus could
+  not converge because **every review round re-derived its correctness by reading** — there was
+  nothing to execute. These tests are what make a green suite say something about it. They are
+  behavioral: what the harness does to a tree, and what it refuses to do. **The harness is inert
+  with respect to the engine** — shipping it did not lift the mutation pass's deferral, which is a
+  separate change (#60's second PR).
+
+  **No claim is made here about these tests being mechanism-shaped rather than outcome-shaped, and
+  that absence is deliberate.** Two earlier drafts of this bullet asserted it; both were false when
+  written, and the second was a *reword* of the first with a hedge added. Three separate reviews of
+  #60 each found an outcome-shaped or vacuous test in this very module — one of them created by the
+  commit that fixed the previous one. The discipline is real and is applied per-test where it bites
+  (`test_the_only_thing_the_harness_executes_is_the_callers_test_command` walks the AST instead of
+  grepping for `git`, because a substring search passes for any implementation that avoids the
+  word). But a **file-level** guarantee of it is exactly the enumerable assertion this project keeps
+  having to retract, so it is not made. Check the test, not this sentence.
 - **`tests/test_repo_consistency.py`** — **mechanical** checks on the markdown/JSON deliverable:
   the shipped example sidecar still loads through the real `load_registry`; the composed
   `plugin@marketplace` identifier still matches every hand-written call site; engine `CAPS` ⊆
@@ -236,8 +253,16 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
 
 ## Repo conventions
 
-- `.claude-plugin/` holds **only** manifests (`plugin.json`, `marketplace.json`). Skills, hooks, and
-  commands live at the repo root in their own directories.
+- `.claude-plugin/` holds **only** manifests (`plugin.json`, `marketplace.json`). Skills, hooks,
+  commands, and tools live at the repo root in their own directories.
+- `tools/` holds **executables meant to be run by path rather than wired to a tool event** —
+  currently just `mutate_verify.py`. The distinction from `hooks/` is what invokes them: a hook is
+  registered in `hooks/hooks.json` and fired by the harness; a tool is run by whoever needs it.
+  **Nothing in `skills/` or `commands/` references `mutate_verify.py` yet** — the engine will call it
+  when #60's second PR lifts the mutation pass's deferral, and until then it is reachable but
+  uncalled. Both directories are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both are
+  **stdlib-only**, for the same reason — they execute under bare `python3` in a consumer's
+  environment.
 - `${CLAUDE_PLUGIN_ROOT}` (this installed plugin) and `${CLAUDE_PROJECT_DIR}` (the consuming repo)
   are not interchangeable — the engine and hook both depend on the distinction.
 - The loop ledger (`queue.md`, `progress.md`, `issue-<N>.plan.md`) lives under the *consuming*
