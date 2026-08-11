@@ -1025,13 +1025,23 @@ class MutationNaReasonTests(unittest.TestCase):
     # revert of #60's second PR would do.
     _EXPECTED_NA_REASON_COUNT = "two"
 
-    # Every restatement of the list's size. The slot is named on the same line in each,
-    # which is what keeps this from matching the many other "closed at" phrasings.
+    # Every restatement of the list's size.
+    #
+    # The first draft of this anchored on the literal ``\`n/a\` list is closed at``,
+    # which missed a fourth site (`that list is closed at two reasons`) that the very
+    # commit adding this class also added -- caught by the acceptance gate, and exactly
+    # the multi-site drift the class exists to prevent. Anchoring on ``list is closed
+    # at`` instead covers the referring forms too, because what varies between sites is
+    # how the slot is named, never the phrase stating the size.
     _STATED_COUNT = re.compile(
-        r"`n/a` list is closed at (?P<count>[a-z]+) reasons?"
-        r"|list is closed at (?P<count2>[a-z]+) reasons?, and a\n?hermetic"
-        r"|for one of exactly\s+\*\*(?P<count3>[a-z]+)\*\*\s+reasons?",
+        r"list is closed at (?P<count>[a-z]+) reasons?"
+        r"|for one of exactly\s+\*\*(?P<count2>[a-z]+)\*\*\s+reasons?",
     )
+
+    # Pinned exactly, not as a floor. A floor cannot catch a restatement reworded out of
+    # the matcher's reach when another is added in the same change -- the count stays
+    # put while coverage drops. Adding a restatement deliberately means updating this.
+    _EXPECTED_RESTATEMENTS = 4
 
     _RETIRED_REASON = "apparatus pending"
 
@@ -1058,14 +1068,15 @@ class MutationNaReasonTests(unittest.TestCase):
         Without this, deleting every statement of the count -- or reflowing one out of
         the matcher's reach -- reads as agreement rather than as the loss it is.
         """
-        self.assertGreaterEqual(
+        self.assertEqual(
             len(self._stated_counts()),
-            3,
-            "loop-engine.md states the size of the mutation-survivors n/a list in at "
-            "least three passages; the matcher found "
-            f"{len(self._stated_counts())}. Either a restatement was deleted or it was "
-            "reworded past this matcher -- an unmatched site is invisible to every "
-            "assertion in this class.",
+            self._EXPECTED_RESTATEMENTS,
+            "loop-engine.md states the size of the mutation-survivors n/a list in "
+            f"{self._EXPECTED_RESTATEMENTS} passages; the matcher found "
+            f"{len(self._stated_counts())}. Either a restatement was deleted, one was "
+            "added without updating _EXPECTED_RESTATEMENTS, or one was reworded past "
+            "this matcher -- and an unmatched site is invisible to every other "
+            "assertion in this class, so it would drift silently.",
         )
 
     def test_every_restatement_of_the_na_list_size_agrees(self) -> None:

@@ -1128,9 +1128,21 @@ python3 "${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py" run \
 `--test-cmd` is passed as a **parameter**, never read from a config file: this engine stays
 project-agnostic and `TEST_CMD` is bound per project in `loop.config.md`. `--root` is the tree the
 envelope above selected — the agent's own copy on the primary path, the project root on the
-escalated in-tree path. The spec and `--test-cmd` are **trusted, repo-local configuration** written
-by the project's maintainers, the same bound the append-only guard documents for its `id_pattern`;
-neither is attacker input, and neither may be generated from lower-trust material.
+escalated in-tree path.
+
+**Who writes the spec — and what it may never be built from.** The spec is authored **per change, by
+the verifier**: it names mutations that would break *the guard this change just added*, so it is not
+a file a project's maintainers could have written in advance, and "fix the spec and re-run" below
+assumes exactly that authorship. Its schema is documented in the harness's own module docstring —
+read that rather than guessing at it. Keep the file **outside the tree being mutated** (a scratch
+area; or a committed spec directory where a project wants a pass's numbers reproducible by a
+reviewer). What per-change authorship does **not** loosen is the trust bound: the spec and
+`--test-cmd` sit at the **same trust level as `TEST_CMD` itself** — repo-local configuration written
+inside the loop's own trust boundary, the bound the append-only guard documents for its
+`id_pattern`. **Neither may be derived from lower-trust material** — an issue body, a PR comment, or
+anything else an outside contributor controls. A spec is a list of paths and substitutions that will
+be written to disk and then executed; sourcing one from untrusted input hands that power away, and
+confining paths to `--root` does not contain it.
 
 **The actor split.** The verifier **selects** the mutations and **judges** the results; the parent
 **applies** them — under isolation, by running the harness against the agent's copy. Each role
@@ -1172,7 +1184,18 @@ lets a result read as a different result:
 land on a tree holding live mutations, or on snapshots with no pass left to own them. Key recovery
 on the two artifacts that **self-clear**: a **retained snapshot directory** (the harness deletes it
 on every path where the tree was restored and verified, so a surviving one means the tree may still
-hold a mutation) and a **leftover isolated copy** in `git worktree list`. Do **not** key it on an
+hold a mutation) and a **leftover isolated copy** in `git worktree list`.
+
+**Where the snapshots are, because a procedure that keys on an artifact must say how to find it.**
+The harness puts them in a `mutate-verify-*` directory under the **system temp dir**, deliberately
+outside the repository — snapshots inside it would be visible to the test command, stageable by a
+blanket `git add`, and indistinguishable from the deliverables they exist to protect. The cost of
+that choice is the one you must plan for: the directory is invisible to both `git status` and `git
+worktree list`, so **neither of the checks you would reach for first will find it** — list the temp
+dir. A pass that exits normally prints the retained path; the case that matters most is the one that
+does not (below), which is why the location is written here rather than left to the report.
+
+Do **not** key it on an
 unclosed `- mutation-pass: started`-style journal line: `progress.md` is append-only and a human
 repair never comes back to close the entry, so such a line stays unclosed forever and would license
 restoring a stale snapshot over live work. **The journal line is audit, not state.** Restore from
