@@ -1179,6 +1179,16 @@ restoring a stale snapshot over live work. **The journal line is audit, not stat
 the snapshots, never with `git checkout`/`git restore` (above); if the snapshots are what went
 missing, the safe repair is gone — escalate to the human.
 
+**A retained snapshot is a *candidate*, not a verdict — confirm it against the tree before
+restoring anything.** The directory self-clears per run, but nothing scopes it to *this* iteration:
+a pass that failed or was interrupted weeks ago leaves one behind exactly as a pass that died a
+minute ago does, and development of the harness itself leaves a drift of them. So **compare each
+snapshot with the file it shadows**. Identical means the tree is already intact and the snapshot is
+stale residue — delete it and move on, do **not** "restore". Different means a mutation may still be
+live: that is the case recovery exists for. Skipping the comparison inverts this mechanism into the
+hazard it was designed against, since restoring a *stale* snapshot over a file the human has since
+edited destroys exactly the uncommitted work the never-`git restore` rule protects.
+
 **One case the artifacts do not cover, stated plainly because a silent gap here is the whole
 hazard:** a pass killed by a signal runs no cleanup and prints nothing, so the mutation stays in the
 tree with its snapshots intact and unannounced. That is precisely why recovery keys on the presence
