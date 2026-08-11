@@ -101,14 +101,14 @@ that means for your repo:
 - **It only applies to `code`-route changes that alter behavior.** A `docs` or `research` route is
   out of scope entirely.
 - **If such a change adds no test at all, the loop tells you.** That is read straight off the diff
-  and is the one case live today — it needs nothing run against your code.
+  and is the one case that needs nothing run against your code at all.
 - **Either kind of finding blocks.** It is treated like an unmet acceptance criterion — fixed and
   re-verified — and a row still carrying one is never eligible for auto-merge.
 - **To check the rest, the loop breaks your code on purpose — in a copy.** This is the most
   invasive thing the plugin does, so it is worth being exact about. Where the change adds or
   modifies a test, a mutating agent takes a **throwaway copy of your tree**, makes a small edit that
   ought to break something, runs your test suite against it, and reports any test that stayed green.
-  Your working tree is not the tree that gets broken. **This arrives with v0.2.0** — the released
+  Your working tree is not the tree that gets broken — unless you explicitly allow it, which is the next point. **This arrives with v0.2.0** — the released
   v0.0.1 has no mutation pass at all, and the paragraph you are reading is the posture the next
   release ships with, stated before it lands rather than after.
 - **If the copy cannot run your suite, the loop stops and asks you.** A bare copy has none of your

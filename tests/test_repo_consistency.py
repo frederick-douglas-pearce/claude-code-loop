@@ -1009,7 +1009,7 @@ class MutationNaReasonTests(unittest.TestCase):
 
     #60's second PR retired one of three reasons (``n/a: apparatus pending``) when the
     mutation apparatus landed. Retiring a member of a closed list is a multi-site edit:
-    the engine states the list's size in three separate passages, and a partial
+    the engine states the list's size in four separate passages, and a partial
     retraction leaves the engine contradicting itself about how many ways there are to
     skip the gate -- which is the fail-open direction, since a reader who finds "three"
     goes looking for a third reason.
@@ -1051,6 +1051,16 @@ class MutationNaReasonTests(unittest.TestCase):
     # earlier `assertIn` of the correct string, because the correct string still
     # appeared in the prose beside it.
     _HARNESS_REFERENCE = re.compile(r"\$\{([A-Z_]+)\}/tools/mutate_verify\.py")
+
+    # Pinned, for the reason the class pins everything else: a floor of one let the
+    # runnable command block be deleted while a prose mention held the test green.
+    _EXPECTED_HARNESS_REFERENCES = 2
+
+    # The runnable invocation, as distinct from a mention of the path. Naming the tool
+    # is not wiring it in, and only one of the two references is the wiring.
+    _RUNNABLE_INVOCATION = re.compile(
+        r"mutate_verify\.py\"?\s+run\b[^\n]*(?:\n[^\n]*)*?--spec\b(?:.|\n)*?--test-cmd\b"
+    )
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -1127,10 +1137,14 @@ class MutationNaReasonTests(unittest.TestCase):
         )
 
     def test_the_retired_reason_reaches_no_other_shipped_artifact(self) -> None:
-        """SKILL.md and the /init-loop skeleton have no legitimate use for it.
+        """A cheap regression guard, and deliberately no more than that.
 
-        init-loop.md matters most: what it carries is copied into each onboarded repo's
-        config, where no later release of this plugin can correct it.
+        Honest about its own strength: the retired spelling has never appeared in any of
+        these three files, so this passes identically on `main` and on a full revert. It
+        does not guard the retraction -- the tests above do. It guards a *future* edit
+        that would carry the dead reason into an artifact with no legitimate use for it,
+        init-loop.md most of all, since what that file carries is copied into every
+        onboarded repo's config where no later release can correct it.
         """
         for path in (_SKILL, _INIT_LOOP, _README):
             with self.subTest(path=path.name):
@@ -1155,11 +1169,22 @@ class MutationNaReasonTests(unittest.TestCase):
             "orchestrator to run it.",
         )
         roots = self._HARNESS_REFERENCE.findall(self.engine_text)
+        self.assertEqual(
+            len(roots),
+            self._EXPECTED_HARNESS_REFERENCES,
+            "loop-engine.md names the harness "
+            f"{self._EXPECTED_HARNESS_REFERENCES} times and the matcher found "
+            f"{len(roots)}. Pinned exactly, not as a floor: with a floor of one, "
+            "deleting the runnable command block -- reverting the wiring this whole "
+            "change is FOR -- stays green off the prose mention beside it.",
+        )
         self.assertTrue(
-            roots,
-            "loop-engine.md no longer names the harness at all. The mutation pass is "
-            "live, so the engine must say what runs it -- otherwise it authorizes a "
-            "pass while still leaving the procedure to be improvised.",
+            self._RUNNABLE_INVOCATION.search(self.engine_text),
+            "loop-engine.md still mentions the harness in prose but no longer carries "
+            "a runnable invocation of it (a block containing `run`, `--spec` and "
+            "`--test-cmd`). Naming a tool is not wiring it in: without the command, "
+            "the engine authorizes a mutation pass and leaves the procedure to be "
+            "improvised, which every version of this text has forbidden.",
         )
         self.assertEqual(
             sorted(set(roots)),

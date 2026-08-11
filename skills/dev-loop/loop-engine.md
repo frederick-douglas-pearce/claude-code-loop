@@ -715,7 +715,7 @@ only legal rendering asserts success is a template that pressures you to assert 
   the safe repair — escalate to the human rather than reaching for `git checkout`/`git restore`,
   which is the move that destroys uncommitted work (AC-verifier → Part 2).
 - **`- Restore: n/a: no mutation applied`** — no mutation was applied, so there was nothing to give
-  back. This is the **not-due** case (AC-verifier → Part 2, questions 1–3) and the **limit case**,
+  back. This is the **not-due** case (AC-verifier → Part 2, questions 1 and 2) and the **limit case**,
   where no pass runs at all. It is **not** available to a pass that ran: a due pass that applied
   zero mutations is a harness error — its spec matched nothing, which the harness reports as such
   rather than as a clean run — and that takes a `- gate-error:`, never this line. The distinction
@@ -738,9 +738,10 @@ Two ordering rules, because both are easy to get backwards:
   clean with a copy still present, so pair it with `git worktree list` (Tool surface).
 
 **A producer now exists** (AC-verifier → Part 2), so on an isolated or in-tree pass the two counts
-are read off the harness's report rather than tallied by hand: `applied` counts files whose bytes
-**actually changed**, and `restored` counts files verified byte-exact on the way back. Neither
-counts invocations of a helper — that substitution is the specific dishonesty AC5 names, and it is
+are read off the harness's report rather than tallied by hand: `applied` counts **mutations whose
+substitution actually changed the file's bytes**, and `restored` counts mutations whose file was
+verified byte-exact on the way back. They count mutations, not files — three mutations in one file
+report `applied: 3` — and neither counts invocations of a helper — that substitution is the specific dishonesty AC5 names, and it is
 now settled in code instead of by instruction. Pinning this line's presence or shape with a
 consistency check became possible with that producer; whether to do it is **#62's** call, not a
 claim this section makes on its behalf.
@@ -815,7 +816,8 @@ Fields:
     - a change that alters behavior *while adding no test* is the **limit case** — a Class B
       **finding**, written as a count;
     - an unrunnable `TEST_CMD` is a `- gate-error:`;
-    - a suite that cannot be made green **in the isolated copy**, where the human then declines the
+    - an isolated copy that cannot be made **usable** — the suite will not go green there, or the
+      change under verification cannot be materialized in it — where the human then declines the
       in-tree fallback, is **also** a `- gate-error:` (Part 2's fallback ladder) — the pass was due
       and produced no verdict, which is not the same as never being due.
 
@@ -1079,18 +1081,46 @@ none of the environment a suite needs — installed dependencies, build artifact
 environment — so a suite that passes in the parent can be unrunnable beside it. Confirm it green in
 the copy **before** the mutating run begins.
 
+**Its second precondition, and the one whose failure is silent: the copy must contain the change
+under verification — check it, never assume it.** How a host materializes an isolated tree is a
+**host** fact this engine deliberately does not know (Tool surface), and step 7 certifies work in
+every commit state including **wholly uncommitted** (Part 1). A copy taken from a commit therefore
+carries none of the uncommitted remainder — which is most of the change, on most iterations, at this
+point in the pipeline. Confirm with `git -C <copy> diff "$BASE" --stat`, using the **same `$BASE`**
+Part 1 resolved: every file the change adds or modifies must appear, and **the added or modified
+test above all**, since that guard is the whole object of the pass.
+
+**Both failure shapes are real, and only one of them is loud.** If the spec's `find` strings are
+absent from the copy the harness errors — safe, but if that happens on every uncommitted iteration
+the fallback below stops being an escalation and becomes a per-iteration click-through, which is how
+an escalation quietly turns into a default. The silent shape is the dangerous one: where the change
+edits an **existing** file, the old text still matches, the copy's **old** suite — the one without
+the new test — kills the mutant, and the pass exits clean. **The gate then certifies that the new
+guard guards, having never seen the new guard.** That is the manufactured confidence this whole part
+exists to refuse, and nothing downstream can detect it: the harness has no notion of "the change",
+so no exit code distinguishes this from a real clean pass. The check above is the only thing that
+does.
+
+**Materialize the change in the copy before mutating** — applying the step-7 working-tree diff into
+it is the obvious mechanism. **Do not commit the parent's work to create it**: step 8 owns the
+commit, and a gate written to certify uncommitted work must not require a commit to run. If the
+change cannot be materialized in the copy, the copy is unusable for this pass and takes exactly the
+rung below.
+
 **If it cannot be made green, the fallback is in-tree mutation with BOTH compensating controls —
 explicit-path staging (step 6) **and** the restore journal (below) — and never in-tree mutation
 alone.** But **do not take that rung on your own judgement.** It moves a deliberately-destructive
 operation onto the tree holding the human's uncommitted work, which is a destructive and
 irreversible action, so the Escalation rubric applies: **escalate to the human and let them choose
 it.** If they decline, the pass was due and produced no verdict, so emit
-`- gate-error: acceptance (Class B) — TEST_CMD unrunnable in the isolated copy — <first line of the
-error>` and STOP. **Do not record `mutation-survivors=n/a`**: that list is closed at two reasons and
-neither of them is this one (progress.md → the Budget line). This is the `:1067`-vs-`:801` alignment
-made explicit — an unrunnable `TEST_CMD` was *already* ruled a `- gate-error:` everywhere else, and
-"the copy could not run the tests" as an `n/a` is an off switch that silently upgrades its own blast
-radius, the shape Part 2's three questions are deliberately written to exclude.
+`- gate-error: acceptance (Class B) — isolated copy unusable: <TEST_CMD unrunnable | change under
+verification not present> — <first line of the error>` and STOP. **One gate-error shape covers both
+preconditions**, so widening the ladder never needs a second spelling. **Do not record
+`mutation-survivors=n/a`**: that list is closed at two reasons and neither of them is this one
+(progress.md → the Budget line). An unrunnable `TEST_CMD` was *already* ruled a `- gate-error:`
+everywhere else, and "the copy could not run the tests" as an `n/a` is an off switch that silently
+upgrades its own blast radius, the shape Part 2's three questions are deliberately written to
+exclude.
 
 **Restore from a pre-mutation copy of the file, never from the index.** On the in-tree path, copy
 each file before mutating it and restore from that copy. **Never `git checkout`/`git restore` a file
@@ -1109,8 +1139,9 @@ worked.
 
 **The apparatus — what actually runs the pass.** Three things were deferred here until there was
 something to execute: the **actor split**, the **applied-check**, and **interrupted-pass recovery**.
-All three are specified below, and their mechanical half ships with the plugin as
-`${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py`.
+All three are specified below. The applied-check is enforced mechanically by the harness that ships
+with the plugin as `${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py`; the actor split and recovery are
+procedure, and nothing in that script knows about either.
 
 **Use the harness. Do NOT improvise a mutation procedure.** That prohibition has not been lifted —
 it has been given something to point at. An improvised pass reporting a clean result is the
@@ -1134,9 +1165,12 @@ escalated in-tree path.
 the verifier**: it names mutations that would break *the guard this change just added*, so it is not
 a file a project's maintainers could have written in advance, and "fix the spec and re-run" below
 assumes exactly that authorship. Its schema is documented in the harness's own module docstring —
-read that rather than guessing at it. Keep the file **outside the tree being mutated** (a scratch
-area; or a committed spec directory where a project wants a pass's numbers reproducible by a
-reviewer). What per-change authorship does **not** loosen is the trust bound: the spec and
+read that rather than guessing at it. Keep the file in the **ledger directory beside
+`issue-<N>.plan.md`**: it is outside the tree being mutated on the in-tree path, it survives
+`/clear`, and recovery needs it to attribute a snapshot (below). A project that wants a pass's
+numbers reproducible by a reviewer may commit a spec directory instead — but then it lives *inside*
+`--root` on the in-tree path, so pass the parent's path to it and never let a mutation target it.
+What per-change authorship does **not** loosen is the trust bound: the spec and
 `--test-cmd` sit at the **same trust level as `TEST_CMD` itself** — repo-local configuration written
 inside the loop's own trust boundary, the bound the append-only guard documents for its
 `id_pattern`. **Neither may be derived from lower-trust material** — an issue body, a PR comment, or
@@ -1176,13 +1210,22 @@ lets a result read as a different result:
 |---|---|---|
 | `0` | clean — every real mutation killed, and a control proved the pipeline can report a survivor | `mutation-survivors=0` |
 | `1` | the pass worked and found survivors — **a result, not an error** | Class B findings; each blocks |
-| `2` | harness error — no match, a no-op mutation, a bad spec, a red baseline, or the test command could not run | `- gate-error:`, STOP |
-| `3` | unproven — no control, so the clean verdict is not trustworthy | not a pass; fix the spec and re-run |
-| `4` | restore failed — **a mutation may still be live in the tree** | `- Restore: finding`; repair from the snapshot before doing anything else |
+| `2` | harness error — no match, a no-op mutation, a bad spec, a red baseline, a control that was **killed**, a spec made only of controls, or any other harness failure | `- gate-error:`, STOP |
+| `3` | unproven — no control, so the clean verdict is not trustworthy | not a pass; add a control and re-run. If a control cannot be produced, the pass was due and produced no verdict: `- gate-error:` and STOP — **never `=0`**, which would report an unproven pipeline as a clean one, and never `n/a` |
+| `4` | restore failed — **a mutation may still be live in the tree** | `- Restore: finding`, and **read the harness's error lines before touching anything** — see below |
+
+**Exit 4 has two shapes and they take opposite actions, which is why the row above sends you to the
+error text first.** Where the harness reports that it **refused** to restore because the file changed
+underneath it, the snapshot no longer describes that file: writing it back destroys whatever changed
+it, which is the one harm this entire envelope exists to prevent. **Escalate; do not restore.** Where
+the restore merely failed, the snapshot still describes "before" and repairing from it is correct.
+The general rule, of which the missing-snapshot case (the `- Restore:` line) is the other instance:
+**a snapshot is safe repair material only while it still describes the file's pre-mutation state — a
+snapshot that has been overtaken is as gone as one that was never taken.**
 
 **Interrupted-pass recovery — keyed on the artifacts, never on the journal.** A later invocation can
 land on a tree holding live mutations, or on snapshots with no pass left to own them. Key recovery
-on the two artifacts that **self-clear**: a **retained snapshot directory** (the harness deletes it
+on two artifacts that outlive the pass: a **retained snapshot directory**, which self-clears (the harness deletes it
 on every path where the tree was restored and verified, so a surviving one means the tree may still
 hold a mutation) and a **leftover isolated copy** in `git worktree list`.
 
@@ -1202,15 +1245,32 @@ restoring a stale snapshot over live work. **The journal line is audit, not stat
 the snapshots, never with `git checkout`/`git restore` (above); if the snapshots are what went
 missing, the safe repair is gone — escalate to the human.
 
-**A retained snapshot is a *candidate*, not a verdict — confirm it against the tree before
-restoring anything.** The directory self-clears per run, but nothing scopes it to *this* iteration:
-a pass that failed or was interrupted weeks ago leaves one behind exactly as a pass that died a
-minute ago does, and development of the harness itself leaves a drift of them. So **compare each
-snapshot with the file it shadows**. Identical means the tree is already intact and the snapshot is
-stale residue — delete it and move on, do **not** "restore". Different means a mutation may still be
-live: that is the case recovery exists for. Skipping the comparison inverts this mechanism into the
-hazard it was designed against, since restoring a *stale* snapshot over a file the human has since
-edited destroys exactly the uncommitted work the never-`git restore` rule protects.
+**A retained snapshot is a *candidate*, not a verdict — and it is not self-describing.** The
+directory self-clears per run, but nothing scopes it to *this* iteration: a pass that died weeks ago
+leaves one behind exactly as a pass that died a minute ago does, and developing the harness itself
+leaves a drift of them. Worse, snapshots are named by **basename only**, so the directory tells you
+*that* a pass may have died and by itself tells you neither which file, nor which run, nor which
+**repository** — and every run of every project lands in the same temp dir. A same-named file from
+another clone restored over this one by basename inference is a cross-repository data loss, invented
+entirely by the recovery step.
+
+So attribute **positively** before any write, and prefer the check that needs no attribution at all:
+an in-tree mutation is a deliberate break in a source file, so it is usually visible in the parent's
+`git diff` and would fail `TEST_CMD` (usually — not a guarantee, since the mutated file need not be
+tracked; the retained directory stays the fail-safe signal that does not depend on it). To attribute,
+use the run's report if you still have it, and otherwise **the iteration's spec**, which carries
+every target's relative path and its `find`/`replace`. That is what makes the spec's location
+matter: **keep it in the ledger directory beside `issue-<N>.plan.md`**, where it survives `/clear`
+for the same reason the rest of the ledger does. Attribute by **content** — does the live file differ
+from its snapshot by exactly some spec entry's `find`→`replace`? — never by the snapshot's filename
+or its ordering, which nothing pins.
+
+**Then treat "different" as a trigger, not an authorization.** Identical is a sound conclusion: the
+file is intact and restoring would be a no-op anyway — delete the snapshot and move on. Different has
+three causes — a live mutation, a human edit since the snapshot, or both — and the comparison cannot
+separate them. Inspect the difference: restore only where it is the mutation and nothing else, and
+**escalate wherever anything else is in there**, because that is the overtaken-snapshot case above.
+A snapshot you cannot attribute to a specific file **in this repository** is never written anywhere.
 
 **One case the artifacts do not cover, stated plainly because a silent gap here is the whole
 hazard:** a pass killed by a signal runs no cleanup and prints nothing, so the mutation stays in the
@@ -1427,7 +1487,7 @@ your *conclusions*, not the instructions the checker needs).
   criteria are the yardstick, so a round-2 checker that re-derives met/not-met from scratch is *more*
   independent than one handed a list of claimed repairs. **Do not relax Part 1's `ONLY` here** — a
   claimed-repairs list is a claim, which that list exists to exclude.
-- **Acceptance gate, Class B — the limit case is live today and needs its own recipe.** Where the
+- **Acceptance gate, Class B — the limit case needs its own recipe.** Where the
   finding was the *absence* of a guard (behavior altered, no test added — read straight off the
   diff, so it needs no apparatus), the re-checker receives the change as it now stands plus the
   behavior the missing guard was meant to cover, and none of your claims about the test you added.
@@ -1455,8 +1515,10 @@ your *conclusions*, not the instructions the checker needs).
   keeps it fail-safe where an instruction to be careful never is. None of this substitutes for the
   apparatus — a *surviving mutant* still requires it, and no argument here is offered against
   "only mutation detects it."
-  (**A re-check of a *surviving mutant* re-runs the harness on the same spec entry** after the guard
-  is strengthened, and the mutation must come back **killed**; a re-read is not sufficient there,
+  (**A re-check of a *surviving mutant* re-runs the harness on the same spec entry, with its control
+  retained** — a lone entry declares no control, so the harness would return *unproven* however the
+  mutation lands — and after the guard is strengthened the mutation must come back **killed**; a
+  re-read is not sufficient there,
   precisely because the survivor was established by running rather than by reading. That re-run is a
   fresh instance too, per the invariant above.)
 - **Code review (step 9) — the change as it now stands, plus the list of what you claimed to fix.**
