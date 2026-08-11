@@ -43,10 +43,13 @@ Two things this script must never do:
   trusted-spec bound stated below rather than on this check.
 
 Snapshots live **outside the repository** (system temp) and are deleted on every path where the
-tree was restored and verified. A surviving snapshot directory therefore means one of exactly two
-things: a restore failed, or the pass was killed mid-run — which is what interrupted-pass recovery
-keys on. **Whenever snapshots are retained, their path is printed**; when the tree is known good
-they are gone, and there is nothing to announce.
+tree was restored and verified, so a surviving snapshot directory means the tree may still hold a
+live mutation. That directory is the durable input to interrupted-pass recovery.
+
+Note what this deliberately does **not** promise: that the path is always announced. A pass killed
+by a signal — Ctrl-C is the likeliest way a long pass ends early — runs no handler here, so the
+mutation stays in the tree and nothing is printed. That case is real, and recovering from it is a
+separate mechanism this script does not carry. Finding the snapshots is what recovery is *for*.
 
 Trust level of the spec and of ``--test-cmd``: repo-local, committed configuration written by the
 project's maintainers — the same bound ``hooks/guard_append_only.py`` documents for ``id_pattern``,
@@ -512,9 +515,6 @@ def run_pass(
             report.results.append(
                 Result(mutation=mutation, outcome=outcome, applied=True, test_exit=test_exit)
             )
-        except RestoreError as exc:  # only reachable if a helper is changed to raise it here
-            report.errors.append(str(exc))
-            return report, EXIT_RESTORE_FAILED
         except Exception as exc:  # noqa: BLE001 - deliberate: see the comment above
             report.errors.append("{}: {}".format(type(exc).__name__, exc))
             # Restore before reporting, and never trust "nothing was written" as a reason to skip
@@ -537,16 +537,31 @@ def run_pass(
             report.errors.append("{}: {}".format(type(exc).__name__, exc))
             return report, EXIT_RESTORE_FAILED
 
-    report.survivor_groups = dedupe_survivors(report.results)
-
-    controls = [r for r in report.results if r.mutation.expect == "survived"]
-    report.control_proved = bool(controls) and all(r.as_expected for r in controls)
-
-    real_survivors = sum(int(g["count"]) for g in report.survivor_groups)
-
-    # The whole tree was given back and every restore verified, so the snapshots have done their job.
+    # The whole tree was given back and every restore verified, so the snapshots have done their
+    # job. Discarded HERE, immediately after the loop, rather than after the bookkeeping below: an
+    # unexpected defect in that bookkeeping would otherwise leave a snapshot directory on disk with
+    # a clean tree, which recovery would read as a restore failure that never happened.
     discard_snapshots()
 
+    report.survivor_groups = dedupe_survivors(report.results)
+    controls = [r for r in report.results if r.mutation.expect == "survived"]
+    report.control_proved = bool(controls) and all(r.as_expected for r in controls)
+    real_survivors = sum(int(g["count"]) for g in report.survivor_groups)
+
+    # Order matters here, and two different questions about the controls are deliberately split.
+    #
+    # INTEGRITY first, because it gates every verdict including EXIT_SURVIVORS. A control that was
+    # killed means the pipeline mis-classifies, and "survivors found" from a pipeline already shown
+    # to mis-classify is an authoritative-sounding verdict with nothing behind it.
+    if controls and not report.control_proved:
+        report.errors.append(
+            "a control mutation (expect=survived) was killed — the pipeline's classification cannot "
+            "be trusted, so no verdict was taken from this pass"
+        )
+        return report, EXIT_HARNESS_ERROR
+    # Then survivors. A survivor is self-proving: the pipeline just demonstrated it can report one,
+    # which is the very capability a control exists to establish. So PRESENCE of a control gates
+    # only the clean verdict below, never this one.
     if real_survivors:
         return report, EXIT_SURVIVORS
     if not controls:
@@ -555,17 +570,9 @@ def run_pass(
             "report a survivor at all — a green verdict must prove it can go red"
         )
         return report, EXIT_UNPROVEN
-    if not report.control_proved:
-        report.errors.append(
-            "a control mutation (expect=survived) was killed — the pipeline's classification cannot "
-            "be trusted, so no verdict was taken from this pass"
-        )
-        return report, EXIT_HARNESS_ERROR
-    # Every outcome now matches its expectation, and that is a consequence of the two branches
-    # above rather than a further check: a real mutation that survived left the pass at
-    # EXIT_SURVIVORS, and a control that was killed left it at the branch immediately above. An
-    # explicit `if unexpected:` here would be unreachable, and an unreachable guard reads as
-    # protection that is not there.
+    # Every outcome now matches its expectation, as a consequence of the branches above rather than
+    # of a further check. An explicit `if unexpected:` here would be unreachable, and an unreachable
+    # guard reads as protection that is not there.
     return report, EXIT_CLEAN
 
 

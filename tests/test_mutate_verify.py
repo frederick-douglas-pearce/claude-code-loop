@@ -51,6 +51,10 @@ _OBSERVING_SUITE = (
 _BLIND_SUITE = '{exe} -c "import sys; sys.exit(0)"'
 # A suite that is red before anything is mutated.
 _RED_SUITE = '{exe} -c "import sys; sys.exit(1)"'
+# A suite that observes ONLY the control's marker — so the control dies and the real mutation lives.
+_CONTROL_OBSERVING_SUITE = (
+    "{exe} -c \"import sys; sys.exit(0 if 'SPARE_A' in open('src.py').read() else 1)\""
+)
 
 _SOURCE = "# marker: GOOD\nvalue = 1\n# spare: SPARE_A\n# spare: SPARE_B\n"
 
@@ -367,11 +371,68 @@ class RunPassTests(unittest.TestCase):
 
     def test_a_killed_control_invalidates_the_pass(self) -> None:
         # The control was expected to survive and did not, so the classification cannot be trusted.
+        #
+        # The spec MUST pair a real mutation with the killed control. An earlier version passed only
+        # the control, which made the spec control-only — so `run_pass` refused it up front and this
+        # test went green without ever reaching the branch it names. Four paths return
+        # EXIT_HARNESS_ERROR, so the error text is asserted to tell this one from those.
         scratch = _Scratch(self)
         killed_control = _control(find="GOOD", replace="BAD", id="bad-control")
-        report, code = run_pass([killed_control], scratch.test_cmd, scratch.root)
+        report, code = run_pass([_mutation(), killed_control], scratch.test_cmd, scratch.root)
         self.assertEqual(code, EXIT_HARNESS_ERROR)
         self.assertFalse(report.control_proved)
+        self.assertTrue(
+            any("classification cannot be trusted" in e for e in report.errors),
+            "reached a different EXIT_HARNESS_ERROR path than the one this test names",
+        )
+
+    def test_a_killed_control_outranks_a_survivor_finding(self) -> None:
+        # The pipeline mis-classified (the control died), so "survivors found" from it would be an
+        # authoritative-sounding verdict with nothing behind it. Integrity gates every verdict.
+        scratch = _Scratch(self, suite=_CONTROL_OBSERVING_SUITE)
+        report, code = run_pass(
+            [_mutation(), _control(replace="SPARE_Z")], scratch.test_cmd, scratch.root
+        )
+        # The real mutation survived (this suite ignores GOOD) AND the control was killed.
+        self.assertEqual(report.survived, 1)
+        self.assertEqual(report.killed, 1)
+        self.assertNotEqual(code, EXIT_SURVIVORS)
+        self.assertEqual(code, EXIT_HARNESS_ERROR)
+        self.assertTrue(any("classification cannot be trusted" in e for e in report.errors))
+
+    def test_a_survivor_is_reported_even_without_a_control(self) -> None:
+        # The mirror of the rule above: a survivor is self-proving. The pipeline just demonstrated
+        # the capability a control exists to establish, so a missing control must not downgrade a
+        # real finding to "unproven".
+        scratch = _Scratch(self, suite=_BLIND_SUITE)
+        _, code = run_pass([_mutation()], scratch.test_cmd, scratch.root)
+        self.assertEqual(code, EXIT_SURVIVORS)
+
+    def test_a_doubled_failure_reports_the_dirty_tree_not_a_plain_error(self) -> None:
+        # The worst state the design defines: the harness errored AND the restore then failed too.
+        # It must exit EXIT_RESTORE_FAILED (a mutation may be live), never EXIT_HARNESS_ERROR.
+        scratch = _Scratch(self)
+        original_apply = mutate_verify.apply_mutation
+        original_restore = mutate_verify.restore_file
+
+        def exploding_apply(*args: object, **kwargs: object) -> bytes:
+            raise OSError("simulated failure while mutating")
+
+        def exploding_restore(*args: object, **kwargs: object) -> None:
+            raise RestoreError("simulated failure while restoring")
+
+        mutate_verify.apply_mutation = exploding_apply  # type: ignore[assignment]
+        mutate_verify.restore_file = exploding_restore  # type: ignore[assignment]
+        self.addCleanup(lambda: setattr(mutate_verify, "apply_mutation", original_apply))
+        self.addCleanup(lambda: setattr(mutate_verify, "restore_file", original_restore))
+
+        report, code = run_pass([_mutation()], scratch.test_cmd, scratch.root)
+        self.assertEqual(code, EXIT_RESTORE_FAILED)
+        self.assertTrue(any("restore also failed" in e for e in report.errors))
+        self.assertIsNotNone(report.snapshot_dir)
+        import shutil
+
+        shutil.rmtree(report.snapshot_dir, ignore_errors=True)
 
     def test_a_red_baseline_takes_no_verdicts_at_all(self) -> None:
         scratch = _Scratch(self, suite=_RED_SUITE)
