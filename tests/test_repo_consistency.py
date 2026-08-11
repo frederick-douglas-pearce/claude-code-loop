@@ -1035,6 +1035,13 @@ class MutationNaReasonTests(unittest.TestCase):
 
     _RETIRED_REASON = "apparatus pending"
 
+    # Every path reference to the harness, capturing the variable it is rooted at.
+    # Capturing the root rather than matching one blessed literal is deliberate: a
+    # mutation that repointed the runnable command at ${CLAUDE_PROJECT_DIR} survived an
+    # earlier `assertIn` of the correct string, because the correct string still
+    # appeared in the prose beside it.
+    _HARNESS_REFERENCE = re.compile(r"\$\{([A-Z_]+)\}/tools/mutate_verify\.py")
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.engine_text = _ENGINE.read_text(encoding="utf-8")
@@ -1136,13 +1143,24 @@ class MutationNaReasonTests(unittest.TestCase):
             "tools/mutate_verify.py is missing, but loop-engine.md tells the "
             "orchestrator to run it.",
         )
-        self.assertIn(
-            "${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py",
-            self.engine_text,
-            "loop-engine.md no longer names the harness by its installed path. The "
-            "mutation pass is live, so the engine must say what runs it -- and it must "
-            "be reached through ${CLAUDE_PLUGIN_ROOT}, never ${CLAUDE_PROJECT_DIR}: "
-            "the script ships with the plugin, the tree it mutates is the consumer's.",
+        roots = self._HARNESS_REFERENCE.findall(self.engine_text)
+        self.assertTrue(
+            roots,
+            "loop-engine.md no longer names the harness at all. The mutation pass is "
+            "live, so the engine must say what runs it -- otherwise it authorizes a "
+            "pass while still leaving the procedure to be improvised.",
+        )
+        self.assertEqual(
+            sorted(set(roots)),
+            ["CLAUDE_PLUGIN_ROOT"],
+            "loop-engine.md reaches the mutation harness through "
+            f"{sorted(set(roots))}. **Every** reference must be rooted at "
+            "${CLAUDE_PLUGIN_ROOT}: the script ships with the installed plugin, while "
+            "${CLAUDE_PROJECT_DIR} is the consumer's repository -- the very tree the "
+            "pass is supposed to mutate only through an isolated copy. Asserting one "
+            "correct spelling is *present* does not catch this, because the prose "
+            "mentions the path beside the runnable command; the property is that no "
+            "reference uses any other root.",
         )
 
 
