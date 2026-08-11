@@ -248,11 +248,14 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
 
 - `.claude-plugin/` holds **only** manifests (`plugin.json`, `marketplace.json`). Skills, hooks,
   commands, and tools live at the repo root in their own directories.
-- `tools/` holds **executables the engine invokes at runtime but that are not hooks** — currently
-  just `mutate_verify.py`. The distinction from `hooks/` is what wires them: a hook is registered in
-  `hooks/hooks.json` and fired by the harness on a tool event; a tool is run by the orchestrator by
-  path. Both are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both are **stdlib-only**, for
-  the same reason — they execute under bare `python3` in a consumer's environment.
+- `tools/` holds **executables meant to be run by path rather than wired to a tool event** —
+  currently just `mutate_verify.py`. The distinction from `hooks/` is what invokes them: a hook is
+  registered in `hooks/hooks.json` and fired by the harness; a tool is run by whoever needs it.
+  **Nothing in `skills/` or `commands/` references `mutate_verify.py` yet** — the engine will call it
+  when #60's second PR lifts the mutation pass's deferral, and until then it is reachable but
+  uncalled. Both directories are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both are
+  **stdlib-only**, for the same reason — they execute under bare `python3` in a consumer's
+  environment.
 - `${CLAUDE_PLUGIN_ROOT}` (this installed plugin) and `${CLAUDE_PROJECT_DIR}` (the consuming repo)
   are not interchangeable — the engine and hook both depend on the distinction.
 - The loop ledger (`queue.md`, `progress.md`, `issue-<N>.plan.md`) lives under the *consuming*

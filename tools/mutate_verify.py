@@ -16,25 +16,37 @@ The fail posture is a deliberate asymmetry — preserve it in any change
 --------------------------------------------------------------------
 ``exit 0`` means *clean and trustworthy*, and it is reachable only when ALL of these hold:
 
+* the spec declared **at least one real mutation** (``"expect": "killed"``) — a pass made only of
+  controls exercises no guard, so a clean verdict from it would certify nothing;
 * the baseline suite was **green before any mutation** (a red baseline invalidates every verdict);
 * every mutation **actually altered the file's bytes** (a pattern that does not match, or matches
   but changes nothing, is a loud error — never a silent pass);
 * every file was **restored byte-exact** from its pre-mutation snapshot;
-* every mutation's outcome **matched its declared expectation**;
-* at least one **control** mutation (``"expect": "survived"``) proved the pipeline can report a
-  survivor at all — a green verdict must prove it can go red.
+* every real mutation was **killed**, and every **control** mutation (``"expect": "survived"``)
+  survived — the control is what proves the pipeline can report a survivor at all, so a green
+  verdict proves it can go red;
+* nothing raised unexpectedly along the way.
 
 Anything else exits non-zero. There is no flag that produces ``exit 0`` without that proof.
+
+**An unexpected exception fails closed**, mirroring ``hooks/guard_append_only.py``: it is reported
+as a harness error (exit 2), never allowed to surface as the process exit 1 that means "survivors
+found". A crash is not a result.
 
 Two things this script must never do:
 
 * **Never run ``git``.** Restoring a mutation from the index destroys uncommitted work the mutation
   never touched. Restores come from the snapshot copy, never from ``git checkout``/``git restore``.
-* **Never mutate outside ``--root``.** A resolved target path outside the root is a spec error.
+* **Never mutate outside ``--root``.** A target whose *resolved path* leaves the root is a spec
+  error, which covers ``..`` traversal, absolute paths and symlinks. It does **not** cover a hard
+  link, which is indistinguishable from an ordinary file by path — that residual case rests on the
+  trusted-spec bound stated below rather than on this check.
 
-Snapshots live **outside the repository** (system temp) and are **deleted only on a clean run**. A
-surviving snapshot directory is therefore the durable marker that a pass did not finish — which is
-what interrupted-pass recovery keys on. The path is printed on every non-clean exit.
+Snapshots live **outside the repository** (system temp) and are deleted on every path where the
+tree was restored and verified. A surviving snapshot directory therefore means one of exactly two
+things: a restore failed, or the pass was killed mid-run — which is what interrupted-pass recovery
+keys on. **Whenever snapshots are retained, their path is printed**; when the tree is known good
+they are gone, and there is nothing to announce.
 
 Trust level of the spec and of ``--test-cmd``: repo-local, committed configuration written by the
 project's maintainers — the same bound ``hooks/guard_append_only.py`` documents for ``id_pattern``,
@@ -431,6 +443,17 @@ def run_pass(
     # Resolve every target before touching anything, so a bad spec cannot leave a half-mutated tree.
     targets = {m.id: resolve_target(root, m.file) for m in mutations}
 
+    # A pass built only of controls exercises no guard at all. It would satisfy every other
+    # condition below and report `killed: 0` as clean, which is the vacuous-pass shape AC5 exists to
+    # rule out — so it is refused before the baseline is even run.
+    if not any(m.expect == "killed" for m in mutations):
+        report = Report(baseline_exit=-1)
+        report.errors.append(
+            "spec declares no real mutation (every entry is a control) — such a pass exercises no "
+            "guard, so a clean verdict from it would certify nothing"
+        )
+        return report, EXIT_HARNESS_ERROR
+
     snapshot_dir = Path(
         tempfile.mkdtemp(prefix="mutate-verify-", dir=str(snapshot_root) if snapshot_root else None)
     )
@@ -461,7 +484,6 @@ def run_pass(
         discard_snapshots()
         return report, EXIT_HARNESS_ERROR
 
-    restore_failed = False
     for index, mutation in enumerate(mutations):
         target = targets[mutation.id]
         snapshot = snapshot_dir / "{:03d}-{}".format(index, target.name)
@@ -474,59 +496,52 @@ def run_pass(
             return report, EXIT_HARNESS_ERROR
         expected_sha = _sha256(original)
 
+        # One handler for the whole mutate-run-restore body, catching **any** exception rather than
+        # only the ones this module raises. An unexpected OSError (a read-only target, a full disk)
+        # escaping to the process would surface as exit 1 — which means "survivors found" — so a
+        # crash would read as a result. Fail closed instead, mirroring `hooks/guard_append_only.py`.
         try:
             apply_mutation(mutation, target)
-        except MutationError as exc:
-            report.errors.append(str(exc))
-            # Nothing was written, so the snapshot is untouched — but restore anyway rather than
-            # trust that claim, since being wrong here means leaving a mutation live.
-            try:
-                restore_file(target, snapshot, expected_sha)
-            except RestoreError as restore_exc:
-                report.errors.append(str(restore_exc))
-                return report, EXIT_RESTORE_FAILED
-            discard_snapshots()
-            return report, EXIT_HARNESS_ERROR
-
-        report.applied += 1
-
-        try:
+            report.applied += 1
             test_exit = run_tests(test_cmd, root, timeout)
-        except MutationError as exc:
+            outcome = "killed" if test_exit != 0 else "survived"
+            if outcome == "killed":
+                report.killed += 1
+            else:
+                report.survived += 1
+            report.results.append(
+                Result(mutation=mutation, outcome=outcome, applied=True, test_exit=test_exit)
+            )
+        except RestoreError as exc:  # only reachable if a helper is changed to raise it here
             report.errors.append(str(exc))
+            return report, EXIT_RESTORE_FAILED
+        except Exception as exc:  # noqa: BLE001 - deliberate: see the comment above
+            report.errors.append("{}: {}".format(type(exc).__name__, exc))
+            # Restore before reporting, and never trust "nothing was written" as a reason to skip
+            # it — being wrong about that means leaving a mutation live in the tree.
             try:
                 restore_file(target, snapshot, expected_sha)
-            except RestoreError as restore_exc:
-                report.errors.append(str(restore_exc))
+            except Exception as restore_exc:  # noqa: BLE001 - the tree may now be dirty
+                report.errors.append(
+                    "restore also failed: {}: {}".format(
+                        type(restore_exc).__name__, restore_exc
+                    )
+                )
                 return report, EXIT_RESTORE_FAILED
             discard_snapshots()
             return report, EXIT_HARNESS_ERROR
-
-        outcome = "killed" if test_exit != 0 else "survived"
-        if outcome == "killed":
-            report.killed += 1
-        else:
-            report.survived += 1
-        report.results.append(
-            Result(mutation=mutation, outcome=outcome, applied=True, test_exit=test_exit)
-        )
 
         try:
             restore_file(target, snapshot, expected_sha)
-        except RestoreError as exc:
-            report.errors.append(str(exc))
-            restore_failed = True
-            break
-
-    if restore_failed:
-        return report, EXIT_RESTORE_FAILED
+        except Exception as exc:  # noqa: BLE001 - the tree may still hold this mutation
+            report.errors.append("{}: {}".format(type(exc).__name__, exc))
+            return report, EXIT_RESTORE_FAILED
 
     report.survivor_groups = dedupe_survivors(report.results)
 
     controls = [r for r in report.results if r.mutation.expect == "survived"]
     report.control_proved = bool(controls) and all(r.as_expected for r in controls)
 
-    unexpected = [r for r in report.results if not r.as_expected]
     real_survivors = sum(int(g["count"]) for g in report.survivor_groups)
 
     # The whole tree was given back and every restore verified, so the snapshots have done their job.
@@ -546,16 +561,11 @@ def run_pass(
             "be trusted, so no verdict was taken from this pass"
         )
         return report, EXIT_HARNESS_ERROR
-    if unexpected:
-        report.errors.append(
-            "outcomes did not match expectations: {}".format(
-                ", ".join(
-                    "{} expected {} got {}".format(r.mutation.id, r.mutation.expect, r.outcome)
-                    for r in unexpected
-                )
-            )
-        )
-        return report, EXIT_HARNESS_ERROR
+    # Every outcome now matches its expectation, and that is a consequence of the two branches
+    # above rather than a further check: a real mutation that survived left the pass at
+    # EXIT_SURVIVORS, and a control that was killed left it at the branch immediately above. An
+    # explicit `if unexpected:` here would be unreachable, and an unreachable guard reads as
+    # protection that is not there.
     return report, EXIT_CLEAN
 
 
@@ -609,16 +619,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     try:
         mutations = load_spec(args.spec)
-        report, code = run_pass(
-            mutations, args.test_cmd, args.root, timeout=args.timeout
-        )
+        report, code = run_pass(mutations, args.test_cmd, args.root, timeout=args.timeout)
     except (SpecError, MutationError) as exc:
         print("mutate_verify: {}".format(exc), file=sys.stderr)
+        return EXIT_HARNESS_ERROR
+    except Exception as exc:  # noqa: BLE001 - fail closed; a crash must never read as a result
+        # Without this the exception would reach the interpreter, which exits 1 — and 1 is
+        # EXIT_SURVIVORS. A traceback would silently become "the pass found survivors".
+        print("mutate_verify: unexpected {}: {}".format(type(exc).__name__, exc), file=sys.stderr)
         return EXIT_HARNESS_ERROR
 
     print(report.to_json() if args.json else _render(report, code))
     return code
 
 
-if __name__ == "__main__":  # pragma: no cover - exercised via subprocess in the tests
+if __name__ == "__main__":
     sys.exit(main())

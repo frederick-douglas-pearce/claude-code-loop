@@ -399,11 +399,55 @@ class RunPassTests(unittest.TestCase):
         )
         self.assertEqual(report.applied, 0)
 
-    def test_snapshots_are_discarded_when_the_tree_is_known_good(self) -> None:
+    def test_snapshots_really_leave_the_disk_when_the_tree_is_known_good(self) -> None:
+        # Assert the directory is GONE, not merely that the report says so. Asserting
+        # `report.snapshot_dir is None` is an outcome assertion: it passes for an implementation
+        # that nulls the field and leaves the files, which is exactly the leak this cleanup exists
+        # to prevent. Capture the path first, then look at the filesystem.
         scratch = _Scratch(self)
+        seen: list = []
+        original_mkdtemp = mutate_verify.tempfile.mkdtemp
+
+        def spy(*args: object, **kwargs: object) -> str:
+            path = original_mkdtemp(*args, **kwargs)
+            seen.append(path)
+            return path
+
+        mutate_verify.tempfile.mkdtemp = spy  # type: ignore[assignment]
+        self.addCleanup(lambda: setattr(mutate_verify.tempfile, "mkdtemp", original_mkdtemp))
+
         report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root)
         self.assertEqual(code, EXIT_CLEAN)
+        self.assertEqual(len(seen), 1)
+        self.assertFalse(Path(seen[0]).exists(), "snapshot directory was left on disk")
         self.assertIsNone(report.snapshot_dir)
+
+    def test_a_spec_of_only_controls_is_refused(self) -> None:
+        # Every other condition for a clean verdict would hold, and the pass would report
+        # `killed: 0` as clean — certifying that nothing was tested.
+        scratch = _Scratch(self)
+        report, code = run_pass([_control()], scratch.test_cmd, scratch.root)
+        self.assertEqual(code, EXIT_HARNESS_ERROR)
+        self.assertEqual(report.applied, 0)
+        self.assertTrue(any("no real mutation" in e for e in report.errors))
+
+    def test_an_unexpected_exception_fails_closed_rather_than_reading_as_survivors(self) -> None:
+        # An OSError escaping to the interpreter exits 1 — which is EXIT_SURVIVORS. A crash must
+        # never be readable as "the pass found survivors".
+        scratch = _Scratch(self)
+        original_apply = mutate_verify.apply_mutation
+
+        def exploding_apply(*args: object, **kwargs: object) -> bytes:
+            raise OSError("simulated read-only filesystem")
+
+        mutate_verify.apply_mutation = exploding_apply  # type: ignore[assignment]
+        self.addCleanup(lambda: setattr(mutate_verify, "apply_mutation", original_apply))
+
+        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root)
+        self.assertNotEqual(code, EXIT_SURVIVORS)
+        self.assertEqual(code, EXIT_HARNESS_ERROR)
+        self.assertTrue(any("OSError" in e for e in report.errors))
+        self.assertEqual(scratch.source.read_text(encoding="utf-8"), _SOURCE)
 
     def test_a_timeout_is_not_recorded_as_a_kill(self) -> None:
         scratch = _Scratch(self)
@@ -488,6 +532,148 @@ class DedupeTests(unittest.TestCase):
             mutation=_mutation(), outcome="killed", applied=True, test_exit=1
         )
         self.assertEqual(dedupe_survivors([killed]), [])
+
+
+class CliTests(unittest.TestCase):
+    """The surface the orchestrator actually reads: the process exit code and what is printed.
+
+    Everything below `run_pass` was unguarded in the first draft of this module — a mutation pass
+    over it produced six survivors, including deletion of the `SNAPSHOTS RETAINED` warning, which is
+    the interrupted-pass signal. The verdict is only as trustworthy as its delivery.
+    """
+
+    def _spec(self, scratch: _Scratch, mutations: list) -> Path:
+        path = scratch.root / "spec.json"
+        path.write_text(json.dumps({"mutations": mutations}), encoding="utf-8")
+        return path
+
+    @staticmethod
+    def _quiet(argv: list) -> int:
+        """Invoke the CLI with its own reporting silenced — it prints by design."""
+        import contextlib
+        import io
+
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            return mutate_verify.main(argv)
+
+    def _run(self, scratch: _Scratch, mutations: list, extra: list = None) -> int:
+        spec = self._spec(scratch, mutations)
+        argv = [
+            "run",
+            "--spec",
+            str(spec),
+            "--test-cmd",
+            scratch.test_cmd,
+            "--root",
+            str(scratch.root),
+        ]
+        return self._quiet(argv + (extra or []))
+
+    def test_main_propagates_clean(self) -> None:
+        scratch = _Scratch(self)
+        code = self._run(
+            scratch,
+            [
+                {"id": "m", "file": "src.py", "find": "GOOD", "replace": "BAD"},
+                {
+                    "id": "c",
+                    "file": "src.py",
+                    "find": "SPARE_A",
+                    "replace": "SPARE_A2",
+                    "expect": "survived",
+                },
+            ],
+        )
+        self.assertEqual(code, EXIT_CLEAN)
+
+    def test_main_propagates_a_nonzero_verdict_rather_than_always_returning_zero(self) -> None:
+        # The property AC6 is about, at the boundary the engine reads. `return 0` here would make
+        # every pass look clean no matter what `run_pass` decided.
+        scratch = _Scratch(self, suite=_BLIND_SUITE)
+        code = self._run(
+            scratch,
+            [
+                {"id": "m", "file": "src.py", "find": "GOOD", "replace": "BAD"},
+                {
+                    "id": "c",
+                    "file": "src.py",
+                    "find": "SPARE_A",
+                    "replace": "SPARE_A2",
+                    "expect": "survived",
+                },
+            ],
+        )
+        self.assertEqual(code, EXIT_SURVIVORS)
+
+    def test_main_returns_harness_error_on_a_bad_spec(self) -> None:
+        scratch = _Scratch(self)
+        spec = scratch.root / "spec.json"
+        spec.write_text("{not json", encoding="utf-8")
+        code = self._quiet(
+            ["run", "--spec", str(spec), "--test-cmd", scratch.test_cmd, "--root", str(scratch.root)]
+        )
+        self.assertEqual(code, EXIT_HARNESS_ERROR)
+
+    def test_an_unexpected_exception_in_main_never_exits_as_survivors(self) -> None:
+        scratch = _Scratch(self)
+        original = mutate_verify.run_pass
+
+        def exploding(*args: object, **kwargs: object) -> None:
+            raise RuntimeError("simulated internal defect")
+
+        mutate_verify.run_pass = exploding  # type: ignore[assignment]
+        self.addCleanup(lambda: setattr(mutate_verify, "run_pass", original))
+
+        code = self._run(scratch, [{"id": "m", "file": "src.py", "find": "GOOD", "replace": "BAD"}])
+        self.assertEqual(code, EXIT_HARNESS_ERROR)
+        self.assertNotEqual(code, EXIT_SURVIVORS)
+
+    def test_render_announces_a_survivor_and_marks_a_repeat(self) -> None:
+        report = mutate_verify.Report(baseline_exit=0)
+        report.survivor_groups = [
+            {"kind": "fail-open", "pattern": "x", "count": 2, "repeated": True, "locations": []}
+        ]
+        rendered = mutate_verify._render(report, EXIT_SURVIVORS)
+        self.assertIn("SURVIVOR", rendered)
+        self.assertIn("fail-open", rendered)
+        self.assertIn("de-duplication signal", rendered)
+
+    def test_render_announces_retained_snapshots(self) -> None:
+        # The only durable pointer to a tree that may still hold a live mutation.
+        report = mutate_verify.Report(baseline_exit=0, snapshot_dir="/tmp/example-snapshots")
+        rendered = mutate_verify._render(report, EXIT_RESTORE_FAILED)
+        self.assertIn("SNAPSHOTS RETAINED", rendered)
+        self.assertIn("/tmp/example-snapshots", rendered)
+
+    def test_render_does_not_announce_snapshots_when_the_tree_is_good(self) -> None:
+        report = mutate_verify.Report(baseline_exit=0)
+        self.assertNotIn("SNAPSHOTS RETAINED", mutate_verify._render(report, EXIT_CLEAN))
+
+    def test_render_reports_errors(self) -> None:
+        report = mutate_verify.Report(baseline_exit=1)
+        report.errors.append("baseline is not green")
+        self.assertIn("ERROR: baseline is not green", mutate_verify._render(report, 2))
+
+    def test_json_report_carries_the_fields_a_caller_journals(self) -> None:
+        scratch = _Scratch(self)
+        report, _ = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root)
+        payload = json.loads(report.to_json())
+        for key in (
+            "applied",
+            "killed",
+            "survived",
+            "control_proved",
+            "survivor_groups",
+            "results",
+            "errors",
+            "baseline_exit",
+            "snapshot_dir",
+        ):
+            self.assertIn(key, payload)
+        self.assertEqual(payload["applied"], 2)
+        self.assertEqual(payload["killed"], 1)
+        self.assertTrue(payload["control_proved"])
+        self.assertEqual(len(payload["results"]), 2)
 
 
 class ExitCodeTests(unittest.TestCase):
