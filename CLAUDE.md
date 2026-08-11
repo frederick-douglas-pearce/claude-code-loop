@@ -39,9 +39,10 @@ Three modules, and the split between them matters:
   Added by #60, and the reason it exists is worth keeping: the prose version of this apparatus could
   not converge because **every review round re-derived its correctness by reading** — there was
   nothing to execute. These tests are what make a green suite say something about it. They are
-  behavioral: what the harness does to a tree, and what it refuses to do. **The harness is inert
-  with respect to the engine** — shipping it did not lift the mutation pass's deferral, which is a
-  separate change (#60's second PR).
+  behavioral: what the harness does to a tree, and what it refuses to do. The harness was inert with
+  respect to the engine when it shipped; **#60's second PR wired it in** — `loop-engine.md`'s Part 2
+  now names it as the thing a due mutation pass runs, so these tests are the only executable
+  evidence behind a gate that edits source code.
 
   **No claim is made here about these tests being mechanism-shaped rather than outcome-shaped, and
   that absence is deliberate.** Two earlier drafts of this bullet asserted it; both were false when
@@ -215,10 +216,10 @@ even though nothing will fail loudly:
   backstops it, are now restated across `loop-engine.md` (step 6, step 8, Tool surface, the
   `- Restore:` line, the AC-verifier untracked scan, Part 2's envelope, Resume), plus `SKILL.md`'s
   fail-safe list and the README trust model. Nothing checks their agreement, so an edit to one
-  desyncs the rest silently — the same shape as the `mode:`-gating restatements above. Note the
-  **scope split** that is easy to collapse by accident: the *mutation pass* is dormant until #60,
-  but the isolation invariant and the staging rule are **live now** and govern every writing
-  subagent. A "tidy-up" that fences them all as dormant is a regression.
+  desyncs the rest silently — the same shape as the `mode:`-gating restatements above. The scope
+  split this bullet used to carry — isolation live, mutation pass dormant — **closed with #60's
+  second PR**: the pass now runs the harness, so every one of those sites describes live behavior
+  and none of them may be re-fenced as dormant.
 
 ## The append-only guard hook
 
@@ -258,9 +259,9 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
 - `tools/` holds **executables meant to be run by path rather than wired to a tool event** —
   currently just `mutate_verify.py`. The distinction from `hooks/` is what invokes them: a hook is
   registered in `hooks/hooks.json` and fired by the harness; a tool is run by whoever needs it.
-  **Nothing in `skills/` or `commands/` references `mutate_verify.py` yet** — the engine will call it
-  when #60's second PR lifts the mutation pass's deferral, and until then it is reachable but
-  uncalled. Both directories are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both are
+  `loop-engine.md` (AC-verifier → Part 2) invokes it by path as
+  `${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py`, which is the whole reason the directory ships in
+  the plugin payload. Both directories are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both are
   **stdlib-only**, for the same reason — they execute under bare `python3` in a consumer's
   environment.
 - `${CLAUDE_PLUGIN_ROOT}` (this installed plugin) and `${CLAUDE_PROJECT_DIR}` (the consuming repo)
