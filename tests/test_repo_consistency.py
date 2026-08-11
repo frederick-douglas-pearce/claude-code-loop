@@ -1058,9 +1058,20 @@ class MutationNaReasonTests(unittest.TestCase):
 
     # The runnable invocation, as distinct from a mention of the path. Naming the tool
     # is not wiring it in, and only one of the two references is the wiring.
-    _RUNNABLE_INVOCATION = re.compile(
-        r"mutate_verify\.py\"?\s+run\b[^\n]*(?:\n[^\n]*)*?--spec\b(?:.|\n)*?--test-cmd\b"
-    )
+    #
+    # Scoped to a single fenced code block, and that scoping is the point: the first
+    # draft used `(?:.|\n)*?`, which ran past the closing fence and satisfied
+    # `--test-cmd` from the prose below it -- so deleting `--test-cmd` from the command
+    # still passed, while the failure message claimed the block had been checked.
+    _FENCED_BLOCK = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
+    _INVOCATION_PARTS = ("mutate_verify.py", "run", "--spec", "--test-cmd")
+
+    @classmethod
+    def _has_runnable_invocation(cls, text: str) -> bool:
+        return any(
+            all(part in block for part in cls._INVOCATION_PARTS)
+            for block in cls._FENCED_BLOCK.findall(text)
+        )
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -1179,12 +1190,12 @@ class MutationNaReasonTests(unittest.TestCase):
             "change is FOR -- stays green off the prose mention beside it.",
         )
         self.assertTrue(
-            self._RUNNABLE_INVOCATION.search(self.engine_text),
-            "loop-engine.md still mentions the harness in prose but no longer carries "
-            "a runnable invocation of it (a block containing `run`, `--spec` and "
-            "`--test-cmd`). Naming a tool is not wiring it in: without the command, "
-            "the engine authorizes a mutation pass and leaves the procedure to be "
-            "improvised, which every version of this text has forbidden.",
+            self._has_runnable_invocation(self.engine_text),
+            "loop-engine.md still mentions the harness in prose but no single fenced "
+            "code block carries a runnable invocation of it -- one block containing "
+            f"all of {self._INVOCATION_PARTS}. Naming a tool is not wiring it in: "
+            "without the command, the engine authorizes a mutation pass and leaves the "
+            "procedure to be improvised, which every version of this text forbids.",
         )
         self.assertEqual(
             sorted(set(roots)),

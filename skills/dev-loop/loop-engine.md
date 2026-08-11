@@ -1088,7 +1088,12 @@ every commit state including **wholly uncommitted** (Part 1). A copy taken from 
 carries none of the uncommitted remainder — which is most of the change, on most iterations, at this
 point in the pipeline. Confirm with `git -C <copy> diff "$BASE" --stat`, using the **same `$BASE`**
 Part 1 resolved: every file the change adds or modifies must appear, and **the added or modified
-test above all**, since that guard is the whole object of the pass.
+test above all**, since that guard is the whole object of the pass. **Pair it with `git -C <copy>
+ls-files --others --exclude-standard`, for the reason Part 1 pairs them:** a diff never shows an
+untracked file, and a brand-new test is both among the commonest forms of AC evidence and the most
+likely thing this pass is here to mutate. Checking with the diff alone would miss exactly the case
+the gate is most due on — and would miss it *silently*, since a copy lacking the new file simply
+mutates the old code instead.
 
 **Both failure shapes are real, and only one of them is loud.** If the spec's `find` strings are
 absent from the copy the harness errors — safe, but if that happens on every uncommitted iteration
@@ -1166,11 +1171,14 @@ the verifier**: it names mutations that would break *the guard this change just 
 a file a project's maintainers could have written in advance, and "fix the spec and re-run" below
 assumes exactly that authorship. Its schema is documented in the harness's own module docstring —
 read that rather than guessing at it. Keep the file in the **ledger directory beside
-`issue-<N>.plan.md`**: it is outside the tree being mutated on the in-tree path, it survives
-`/clear`, and recovery needs it to attribute a snapshot (below). A project that wants a pass's
-numbers reproducible by a reviewer may commit a spec directory instead — but then it lives *inside*
-`--root` on the in-tree path, so pass the parent's path to it and never let a mutation target it.
-What per-change authorship does **not** loosen is the trust bound: the spec and
+`issue-<N>.plan.md`**: it survives `/clear`, and recovery needs it to attribute a snapshot (below).
+A project that wants a pass's numbers reproducible by a reviewer may commit a spec directory
+instead. **Both sit *inside* `--root` on the in-tree path** — `LEDGER_ROOT` is a directory of the
+consuming repo — so the containment rule that matters is not *where the file lives* but this:
+**never let a mutation target the spec, the ledger, or anything else the pass needs to survive
+itself.** The harness writes only the paths the spec names, which is what makes that rule
+sufficient; do not weaken it into "the spec is outside the tree", which is false on the path where
+it would matter. What per-change authorship does **not** loosen is the trust bound: the spec and
 `--test-cmd` sit at the **same trust level as `TEST_CMD` itself** — repo-local configuration written
 inside the loop's own trust boundary, the bound the append-only guard documents for its
 `id_pattern`. **Neither may be derived from lower-trust material** — an issue body, a PR comment, or
@@ -1516,9 +1524,10 @@ your *conclusions*, not the instructions the checker needs).
   apparatus — a *surviving mutant* still requires it, and no argument here is offered against
   "only mutation detects it."
   (**A re-check of a *surviving mutant* re-runs the harness on the same spec entry, with its control
-  retained** — a lone entry declares no control, so the harness would return *unproven* however the
-  mutation lands — and after the guard is strengthened the mutation must come back **killed**; a
-  re-read is not sufficient there,
+  retained** — a lone entry declares no control, so the harness returns *unproven* on exactly the
+  outcome the re-check is looking for, a kill (a survivor is self-proving and still reports as one)
+  — and after the guard is strengthened the mutation must come back **killed**; a re-read is not
+  sufficient there,
   precisely because the survivor was established by running rather than by reading. That re-run is a
   fresh instance too, per the invariant above.)
 - **Code review (step 9) — the change as it now stands, plus the list of what you claimed to fix.**
