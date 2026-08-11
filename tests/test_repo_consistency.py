@@ -1004,5 +1004,212 @@ class PipelineStepOrderTests(unittest.TestCase):
         )
 
 
+class MutationNaReasonTests(unittest.TestCase):
+    """The ``mutation-survivors`` ``n/a`` list is closed, and says so in several places.
+
+    #60's second PR retired one of three reasons (``n/a: apparatus pending``) when the
+    mutation apparatus landed. Retiring a member of a closed list is a multi-site edit:
+    the engine states the list's size in four separate passages, and a partial
+    retraction leaves the engine contradicting itself about how many ways there are to
+    skip the gate -- which is the fail-open direction, since a reader who finds "three"
+    goes looking for a third reason.
+
+    **Scope, stated narrowly on purpose.** This checks the *stated count* and that the
+    retired reason never appears without its retirement. It does NOT check that the
+    reasons enumerated are the *right* ones, that the list should be closed at all, or
+    anything else semantic -- that stays on review + dogfooding (CLAUDE.md).
+    """
+
+    # The number of legal ``n/a`` reasons, pinned rather than derived. Agreement alone
+    # cannot catch every site being reverted together, which is exactly what a careless
+    # revert of #60's second PR would do.
+    _EXPECTED_NA_REASON_COUNT = "two"
+
+    # Every restatement of the list's size.
+    #
+    # The first draft of this anchored on the literal ``\`n/a\` list is closed at``,
+    # which missed a fourth site (`that list is closed at two reasons`) that the very
+    # commit adding this class also added -- caught by the acceptance gate, and exactly
+    # the multi-site drift the class exists to prevent. Anchoring on ``list is closed
+    # at`` instead covers the referring forms too, because what varies between sites is
+    # how the slot is named, never the phrase stating the size.
+    _STATED_COUNT = re.compile(
+        r"list is closed at (?P<count>[a-z]+) reasons?"
+        r"|for one of exactly\s+\*\*(?P<count2>[a-z]+)\*\*\s+reasons?",
+    )
+
+    # Pinned exactly, not as a floor. A floor cannot catch a restatement reworded out of
+    # the matcher's reach when another is added in the same change -- the count stays
+    # put while coverage drops. Adding a restatement deliberately means updating this.
+    _EXPECTED_RESTATEMENTS = 4
+
+    _RETIRED_REASON = "apparatus pending"
+
+    # Every path reference to the harness, capturing the variable it is rooted at.
+    # Capturing the root rather than matching one blessed literal is deliberate: a
+    # mutation that repointed the runnable command at ${CLAUDE_PROJECT_DIR} survived an
+    # earlier `assertIn` of the correct string, because the correct string still
+    # appeared in the prose beside it.
+    _HARNESS_REFERENCE = re.compile(r"\$\{([A-Z_]+)\}/tools/mutate_verify\.py")
+
+    # Pinned, for the reason the class pins everything else: a floor of one let the
+    # runnable command block be deleted while a prose mention held the test green.
+    _EXPECTED_HARNESS_REFERENCES = 2
+
+    # The runnable invocation, as distinct from a mention of the path. Naming the tool
+    # is not wiring it in, and only one of the two references is the wiring.
+    #
+    # Scoped to a single fenced code block, and that scoping is the point: the first
+    # draft used `(?:.|\n)*?`, which ran past the closing fence and satisfied
+    # `--test-cmd` from the prose below it -- so deleting `--test-cmd` from the command
+    # still passed, while the failure message claimed the block had been checked.
+    _FENCED_BLOCK = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
+    _INVOCATION_PARTS = ("mutate_verify.py", "run", "--spec", "--test-cmd")
+
+    @classmethod
+    def _has_runnable_invocation(cls, text: str) -> bool:
+        return any(
+            all(part in block for part in cls._INVOCATION_PARTS)
+            for block in cls._FENCED_BLOCK.findall(text)
+        )
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.engine_text = _ENGINE.read_text(encoding="utf-8")
+
+    def _stated_counts(self) -> list[str]:
+        found = []
+        for match in self._STATED_COUNT.finditer(self.engine_text):
+            found.append(next(g for g in match.groups() if g))
+        return found
+
+    def test_the_extractor_actually_finds_the_restatements(self) -> None:
+        """Guard the guard: a regex that matches nothing would pass every test below.
+
+        Without this, deleting every statement of the count -- or reflowing one out of
+        the matcher's reach -- reads as agreement rather than as the loss it is.
+        """
+        self.assertEqual(
+            len(self._stated_counts()),
+            self._EXPECTED_RESTATEMENTS,
+            "loop-engine.md states the size of the mutation-survivors n/a list in "
+            f"{self._EXPECTED_RESTATEMENTS} passages; the matcher found "
+            f"{len(self._stated_counts())}. Either a restatement was deleted, one was "
+            "added without updating _EXPECTED_RESTATEMENTS, or one was reworded past "
+            "this matcher -- and an unmatched site is invisible to every other "
+            "assertion in this class, so it would drift silently.",
+        )
+
+    def test_every_restatement_of_the_na_list_size_agrees(self) -> None:
+        counts = set(self._stated_counts())
+        self.assertEqual(
+            len(counts),
+            1,
+            "loop-engine.md disagrees with itself about how many legal `n/a` reasons "
+            f"the mutation-survivors slot has: found {sorted(counts)}. Retiring or "
+            "adding a reason is a multi-site edit -- every passage stating the size "
+            "must change in the same commit, or a partially-loaded engine reads a "
+            "size that licenses a reason the list does not actually contain.",
+        )
+
+    def test_the_stated_size_is_the_pinned_one(self) -> None:
+        counts = set(self._stated_counts())
+        self.assertEqual(
+            counts,
+            {self._EXPECTED_NA_REASON_COUNT},
+            f"the mutation-survivors `n/a` list is pinned at "
+            f"'{self._EXPECTED_NA_REASON_COUNT}' reasons and the engine now says "
+            f"{sorted(counts)}. If this is a deliberate change, update "
+            "_EXPECTED_NA_REASON_COUNT -- but read the engine's own warning first: a "
+            "reachable extra reason is an off switch an agent can always reach for, "
+            "which is what this slot was designed against.",
+        )
+
+    def test_the_retired_reason_never_appears_without_its_retirement(self) -> None:
+        """The retired spelling may be *named* -- only in the passage forbidding it.
+
+        Paragraph-scoped rather than line-scoped so that reflowing the passage does not
+        fail this spuriously; blank-line delimiting needs no fenced span, which is the
+        instrument #76 records as defeated four times.
+        """
+        offenders = [
+            paragraph.strip().splitlines()[0][:90]
+            for paragraph in self.engine_text.split("\n\n")
+            if self._RETIRED_REASON in paragraph and "RETIRED" not in paragraph
+        ]
+        self.assertEqual(
+            offenders,
+            [],
+            "loop-engine.md uses the retired `n/a: apparatus pending` reason in a "
+            f"passage that does not mark it retired: {offenders}. The apparatus "
+            "shipped, so that reason names a gap that no longer exists -- writing it "
+            "would report a missing capability as the reason for not using the "
+            "capability.",
+        )
+
+    def test_the_retired_reason_reaches_no_other_shipped_artifact(self) -> None:
+        """A cheap regression guard, and deliberately no more than that.
+
+        Honest about its own strength: the retired spelling has never appeared in any of
+        these three files, so this passes identically on `main` and on a full revert. It
+        does not guard the retraction -- the tests above do. It guards a *future* edit
+        that would carry the dead reason into an artifact with no legitimate use for it,
+        init-loop.md most of all, since what that file carries is copied into every
+        onboarded repo's config where no later release can correct it.
+        """
+        for path in (_SKILL, _INIT_LOOP, _README):
+            with self.subTest(path=path.name):
+                self.assertNotIn(
+                    self._RETIRED_REASON,
+                    path.read_text(encoding="utf-8"),
+                    f"{path.name} names the retired `n/a: apparatus pending` reason. "
+                    "It was retired with #60's second PR and has no live use.",
+                )
+
+    def test_the_engine_names_the_harness_the_pass_actually_runs(self) -> None:
+        """The deferral was lifted *onto* something; this pins that it points at it.
+
+        Lifting the fence without naming the tool would leave the engine authorizing a
+        mutation pass while still leaving the procedure to be improvised -- which is
+        the one thing every version of this text has forbidden.
+        """
+        harness = _REPO_ROOT / "tools" / "mutate_verify.py"
+        self.assertTrue(
+            harness.is_file(),
+            "tools/mutate_verify.py is missing, but loop-engine.md tells the "
+            "orchestrator to run it.",
+        )
+        roots = self._HARNESS_REFERENCE.findall(self.engine_text)
+        self.assertEqual(
+            len(roots),
+            self._EXPECTED_HARNESS_REFERENCES,
+            "loop-engine.md names the harness "
+            f"{self._EXPECTED_HARNESS_REFERENCES} times and the matcher found "
+            f"{len(roots)}. Pinned exactly, not as a floor: with a floor of one, "
+            "deleting the runnable command block -- reverting the wiring this whole "
+            "change is FOR -- stays green off the prose mention beside it.",
+        )
+        self.assertTrue(
+            self._has_runnable_invocation(self.engine_text),
+            "loop-engine.md still mentions the harness in prose but no single fenced "
+            "code block carries a runnable invocation of it -- one block containing "
+            f"all of {self._INVOCATION_PARTS}. Naming a tool is not wiring it in: "
+            "without the command, the engine authorizes a mutation pass and leaves the "
+            "procedure to be improvised, which every version of this text forbids.",
+        )
+        self.assertEqual(
+            sorted(set(roots)),
+            ["CLAUDE_PLUGIN_ROOT"],
+            "loop-engine.md reaches the mutation harness through "
+            f"{sorted(set(roots))}. **Every** reference must be rooted at "
+            "${CLAUDE_PLUGIN_ROOT}: the script ships with the installed plugin, while "
+            "${CLAUDE_PROJECT_DIR} is the consumer's repository -- the very tree the "
+            "pass is supposed to mutate only through an isolated copy. Asserting one "
+            "correct spelling is *present* does not catch this, because the prose "
+            "mentions the path beside the runnable command; the property is that no "
+            "reference uses any other root.",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

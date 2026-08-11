@@ -51,10 +51,14 @@ by a signal — Ctrl-C is the likeliest way a long pass ends early — runs no h
 mutation stays in the tree and nothing is printed. That case is real, and recovering from it is a
 separate mechanism this script does not carry. Finding the snapshots is what recovery is *for*.
 
-Trust level of the spec and of ``--test-cmd``: repo-local, committed configuration written by the
-project's maintainers — the same bound ``hooks/guard_append_only.py`` documents for ``id_pattern``,
-and the same one ``README.md`` states. Neither is attacker input, and ``--test-cmd`` is run through
-the shell so that real bindings (``unshare -rn -- sh -c '...'``) work unchanged.
+Trust level of the spec and of ``--test-cmd``: repo-local configuration written inside the calling
+loop's own trust boundary — by the project's maintainers, or per change by the acceptance gate's
+verifier, which is the normal case, since a spec targets the guard a change has just added and so
+cannot be written in advance. The *level* is the same either way, and it is the bound
+``hooks/guard_append_only.py`` documents for ``id_pattern`` and ``README.md`` states. Neither is
+attacker input, neither may be derived from lower-trust material (an issue body, a PR comment), and
+``--test-cmd`` is run through the shell so that real bindings (``unshare -rn -- sh -c '...'``) work
+unchanged.
 
 Spec format (JSON)::
 
