@@ -176,7 +176,8 @@ proceed on a plan whose value story doesn't hold.
 
 ### 4. Architect gate (conditional)
 If any `ARCHITECT_TRIGGERS` condition fires OR you are unsure about the design, invoke the
-`DESIGN_AGENT` with the plan; address `blocking`/`important` concerns before coding. Skip for docs
+`DESIGN_AGENT` with the plan **in the order below** — the freeze comes first; address
+`blocking`/`important` concerns before coding. Skip for docs
 and trivial research.
 
 **Do these three things in this order.** The order is the mechanism, not presentation: freeze, then
@@ -274,10 +275,18 @@ merge gate only, so a graduated route still stops here:
   **A design consultation *after* this gate does not re-enter it — so it escalates directly.** The
   pipeline offers no path back to step 5 from `plan-approved` or later, and this step cannot reach
   forward to bind one. If a `DESIGN_AGENT` consultation at step 6, 7 or 9 materially redirects the
-  plan by the test above, **STOP and escalate to the human then** (Escalation rubric), journalling
+  plan, **STOP and escalate to the human then** (Escalation rubric), journalling
   `- Plan-gate: material (post-approval redirect at step <N>) → STOPPED`. Without this the condition
   is satisfiable by consulting one step later, and the step-5 line stays literally true while the
   plan that ships is one nobody approved.
+
+  **This case has no pre-image, so it is the axes applied directly — not a diff. Say so rather than
+  implying otherwise.** The frozen block is the *pre-step-4* approach; against it, an approved
+  architect redirect still reads material, so re-running that diff here would re-fire on every
+  consultation regardless of what it changed. What is being asked instead is whether **this
+  consultation's outcome** moves any of the materiality axes relative to `## Approach` **as the human
+  approved it**. That is a judgment, not a mechanism, and it is the one place in this condition where
+  that is true — so the default-deny catch-all governs: **if unsure, material.**
 
   **Present the frozen-vs-final diff at the stop**, not a re-read of the whole plan. The cost of this
   condition is the human's attention, and a diff is what keeps it cheap.
@@ -884,10 +893,15 @@ otherwise invisible for the same reason: it resolves before implementation, so a
 the diff and a run that took it and found nothing leave an identical ledger. It is also the only
 evidence this condition's falsifier can ever be evaluated against. **This is the one enumeration of
 the spellings; step 5 points here rather than restating them.** Write it **at step 5, when the gate
-resolves** — not at step 12. Every iteration **that reaches step 5** writes exactly one; a resumed
-row that re-enters *past* step 5 (Resume — a `plan-approved` row goes straight to implement) carries
-the line from the iteration that took the decision and writes none, exactly as `- Hermetic:`
-enumerates a writes-none path:
+resolves** — not at step 12. **Cardinality, stated once because two of the spellings are written at
+different points in the pipeline:** an iteration that reaches step 5 writes exactly one line
+**there**, from the first three spellings. An iteration that re-enters *past* step 5 (Resume — a
+`plan-approved` row goes straight to implement) writes none at step 5 and carries the decision from
+the iteration that took it — exactly as `- Hermetic:` enumerates a writes-none path. **The
+post-approval spelling is the exception in both directions:** it is written where the redirect
+happened (step 6, 7 or 9), so a resumed row that hits one *does* write a line despite never reaching
+step 5, and an iteration that wrote at step 5 and then hits one writes a **second**. That is not a
+violation of "exactly one" — it is a different event, journalled where it occurred.
 - **`- Plan-gate: material (<what changed>) → STOPPED`** — the diff showed a material change and the
   human was asked. Name the axis (a step added/removed/reordered, the files-to-touch set changed, a
   fork re-chosen, an AC reinterpreted), not just the verdict.
