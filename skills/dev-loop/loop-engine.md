@@ -272,27 +272,17 @@ merge gate only, so a graduated route still stops here:
   becomes the path the whole condition is bypassed through, journalled `n/a: architect skipped`
   while a pass was in fact run and did in fact redirect.
 
-  **A design consultation *after* this gate does not re-enter it — so it escalates directly.** The
-  pipeline offers no path back to step 5 from `plan-approved` or later, and this step cannot reach
-  forward to bind one. If a `DESIGN_AGENT` consultation at step 6, 7 or 9 materially redirects the
-  plan, **STOP and escalate to the human then** (Escalation rubric), journalling
-  `- Plan-gate: material (post-approval redirect at step <N>) → STOPPED`. Without this the condition
-  is satisfiable by consulting one step later, and the step-5 line stays literally true while the
-  plan that ships is one nobody approved.
-
-  **This case has no pre-image, so it is the axes applied directly — not a diff. Say so rather than
-  implying otherwise.** The frozen block is the *pre-step-4* approach; against it, an approved
-  architect redirect still reads material, so re-running that diff here would re-fire on every
-  consultation regardless of what it changed. What is being asked instead is whether **this
-  consultation's outcome** moves any of the materiality axes relative to `## Approach` **as the human
-  approved it**. That is a judgment, not a mechanism, and it is the one place in this condition where
-  that is true — so the default-deny catch-all governs: **if unsure, material.**
+  **A consultation *after* this gate is out of scope here, deliberately.** The pipeline offers no
+  path back to step 5 from `plan-approved`, and an approved plan later invalidated by a fresh
+  consultation is the plan-currency problem (#33), not this condition. Do not improvise a stop for it
+  here: with no pre-image to diff, any rule stated at this step would be self-assessment — the very
+  thing this condition exists to replace.
 
   **Present the frozen-vs-final diff at the stop**, not a re-read of the whole plan. The cost of this
   condition is the human's attention, and a diff is what keeps it cheap.
 
   **Journal what the diff returned, and journal it HERE — when the gate resolves, not at step 12.**
-  Write one of the **five** `- Plan-gate:` spellings (enumerated once, in Ledger format →
+  Write one of the **four** `- Plan-gate:` spellings (enumerated once, in Ledger format →
   `progress.md`; do not re-derive them from this paragraph). The ledger format licenses a block "per
   gate decision", and writing it now is what makes the record survive: a `/clear` between this step
   and step 12 otherwise leaves the resuming orchestrator owing a line with no evidence of what the
@@ -893,15 +883,10 @@ otherwise invisible for the same reason: it resolves before implementation, so a
 the diff and a run that took it and found nothing leave an identical ledger. It is also the only
 evidence this condition's falsifier can ever be evaluated against. **This is the one enumeration of
 the spellings; step 5 points here rather than restating them.** Write it **at step 5, when the gate
-resolves** — not at step 12. **Cardinality, stated once because two of the spellings are written at
-different points in the pipeline:** an iteration that reaches step 5 writes exactly one line
-**there**, from the first three spellings. An iteration that re-enters *past* step 5 (Resume — a
-`plan-approved` row goes straight to implement) writes none at step 5 and carries the decision from
-the iteration that took it — exactly as `- Hermetic:` enumerates a writes-none path. **The
-post-approval spelling is the exception in both directions:** it is written where the redirect
-happened (step 6, 7 or 9), so a resumed row that hits one *does* write a line despite never reaching
-step 5, and an iteration that wrote at step 5 and then hits one writes a **second**. That is not a
-violation of "exactly one" — it is a different event, journalled where it occurred.
+resolves** — not at step 12. Every iteration **that reaches step 5** writes exactly one; an
+iteration that re-enters *past* step 5 (Resume — a `plan-approved` row goes straight to implement)
+writes none and carries the decision from the iteration that took it, exactly as `- Hermetic:`
+enumerates a writes-none path.
 - **`- Plan-gate: material (<what changed>) → STOPPED`** — the diff showed a material change and the
   human was asked. Name the axis (a step added/removed/reordered, the files-to-touch set changed, a
   fork re-chosen, an AC reinterpreted), not just the verdict.
@@ -911,9 +896,6 @@ violation of "exactly one" — it is a different event, journalled where it occu
 - **`- Plan-gate: material (pre-image absent, architect ran) → STOPPED`** — the block was missing on
   a row where `DESIGN_AGENT` was consulted. There is nothing to name as "what changed" because the
   evidence is what is missing; that is a stop, never a pass.
-- **`- Plan-gate: material (post-approval redirect at step <N>) → STOPPED`** — a design consultation
-  *after* the gate materially redirected the plan (step 5). The gate cannot be re-entered, so the
-  escalation happens where the redirect did.
 - **`- Plan-gate: n/a: architect skipped (<route/reason>)`** — **no architect pass ran at all**: not
   at step 4, not at step 5, and not as the inline composition that substitutes for an unrunnable
   binding. If any pass ran, by any actor, this spelling is unavailable.
