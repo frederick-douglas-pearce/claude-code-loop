@@ -176,10 +176,53 @@ proceed on a plan whose value story doesn't hold.
 
 ### 4. Architect gate (conditional)
 If any `ARCHITECT_TRIGGERS` condition fires OR you are unsure about the design, invoke the
-`DESIGN_AGENT` with the plan; address `blocking`/`important` concerns before coding. Skip for docs
+`DESIGN_AGENT` with the plan **in the order below** — the freeze comes first; address
+`blocking`/`important` concerns before coding. Skip for docs
 and trivial research.
 
-### 5. Human gate (conditional — every mode)
+**Do these three things in this order.** The order is the mechanism, not presentation: freeze, then
+invoke, then apply. Executed in any other order the step-5 diff compares a text with itself and the
+always-on stop passes silently.
+
+**(a) FIRST, before you invoke `DESIGN_AGENT`, freeze the plan's approach.** Copy `## Approach`
+verbatim into a
+`## Approach as reviewed (frozen before the design gate) — write-once, do not edit` block in
+`issue-<N>.plan.md` (the heading is fixed and must match the template in Ledger format exactly —
+step 5 looks for it by name). That block
+is the **pre-image** step 5's materiality test diffs against — without it the test has nothing to
+compare and degrades to self-assessment, which is what it exists to replace. (The ledger is
+gitignored, so there is no git pre-image to recover instead.) The freeze is owed whenever you are
+about to consult `DESIGN_AGENT` — here, or at step 5 where that step first consults it; an architect
+pass that never happens can rewrite nothing.
+
+**A freeze taken after the agent has returned is not a pre-image.** It copies the already-redirected
+text, so treat the block as **absent** — which step 5 reads as material. Never back-date one.
+
+**(b) THEN invoke, and (c) write the outcome into `## Approach` before step 5 — not at implement
+time.** "Address the
+concerns before coding" is satisfied too late if you carry the architect's rulings in your head to
+step 6: `## Approach` would still read exactly as frozen, step 5's diff would come back **empty on
+precisely the run the gate exists to catch**, and the row would auto-approve by *literal
+compliance*. **You** perform this edit, not the agent — `DESIGN_AGENT` returns an issue comment and
+never writes to the tree (Tool surface), so an unedited `## Approach` is the orchestrator's omission
+and never evidence that nothing changed. Adopt, adapt, or decline each `blocking`/`important`
+finding **in the plan text** first; a declined finding is recorded with its one-line rationale, and
+a decline that alters no text is itself the record that the approach stands.
+
+**A ruling that belongs in another section still gets a line in `## Approach`.** Step 5 diffs
+`## Approach` and nothing else, so an AC reinterpretation written only under `## Acceptance criteria`
+or `## Risks / open questions for human` — and an approach-level redirect on a `research`/`docs` plan
+whose `## Approach` is thin — is invisible to the test. Record it where it belongs *and* note it
+there, or the one materiality axis this step also flags as an issue-amendment hazard never reaches
+the gate.
+
+**The block is write-once: if it already exists, never rewrite it.** Re-running the copy after the
+architect has edited `## Approach` would overwrite the pre-image with the post-architect text — the
+step-5 diff would then come back empty and the gate would **silently pass**, which is precisely the
+failure the test exists to catch. This is the same write-once discipline Resume already applies to
+this step's other side effect (the issue comment); both are stated there.
+
+### 5. Human gate (conditional — every mode — plus one always-on condition)
 The plan gate is **conditional in every mode** — `mode:` gates the merge gate only (step 11), never
 this one. It is **value-first**: present the step-3 value framing (user-story map / value statement)
 alongside the approach, and treat a **non-credible value story — no plausible user, or no
@@ -189,6 +232,71 @@ change is risky/irreversible; SCOPE/DESIGN agents disagree or punt; or you are o
 Otherwise proceed (note "auto-approved" + why in the journal). Route scope/value questions to
 `SCOPE_AGENT` and design questions to `DESIGN_AGENT` BEFORE escalating to the human. On approval
 (human or auto), advance the row to `plan-approved`.
+
+**One stop condition is ALWAYS-ON.** The conditions above are judgment calls; this one is not, and
+it fires under **every** mode. Route graduation cannot reach it — `escalation-only` loosens the
+merge gate only, so a graduated route still stops here:
+
+- **The architect materially changed the plan.** A *decisive* architect that **redirects** the plan
+  is a **stronger** reason for a human look than one that punts or disagrees, not a weaker one: the
+  plan you would have approved is now a different plan, and nobody has seen it. Read that inversion
+  literally — **"the agents agreed and ruled cleanly, so I proceeded" is not a reason to auto-approve,
+  it is the trigger.** (The condition above it keys on disagreement; this one keys on the opposite,
+  and both stop.)
+
+  **The test is a diff, not a self-assessment.** Compare the frozen `## Approach as reviewed (frozen
+  before the design gate) — write-once, do not edit` block (step 4) against the live `## Approach`.
+  The change is **material**
+  if any of: a step was added, removed, or reordered; the files-to-touch set changed; a different
+  fork was chosen; an acceptance criterion was reinterpreted. Pure wording is not material.
+  **The list is sufficient, not exhaustive — extend it, never prune it**, and **if you are unsure
+  whether an edit is material, it is material** (default-deny, as at every other gate). The
+  catch-all is what makes extension safe and pruning a regression.
+
+  **An empty diff is only evidence when both halves are present. Architect ran + block absent ⇒
+  material ⇒ STOP.** A missing pre-image is not "nothing changed" — it is a gate with nothing to
+  read, and reading it as a pass restores the self-assessment this test removes. It happens for
+  ordinary reasons (a crash between invoking the agent and the freeze, a hand-edited plan file, an
+  earlier iteration that predates this rule), none of which is evidence about the approach. Where
+  the architect was **skipped**, the block is legitimately absent and the condition is not due at
+  all — the distinction is whether the gate ran, never whether the artifact is there.
+
+  **"Skipped" means no architect pass ran at all — not merely that step 4 skipped it, and not
+  merely that `DESIGN_AGENT` by that name was never invoked.** Two cases the narrow reading loses:
+  this step routes design questions to `DESIGN_AGENT` before escalating, so the agent can first run
+  *here*, after step 4 declined it; and where the binding is unrunnable, the inline composition you
+  run in its place (Gate-outcome invariant) **is** an architect pass in substance. **The freeze is
+  owed by either, at step 4 or at step 5**: freeze `## Approach` before consulting, and apply the
+  outcome to the plan text before deciding. A consultation at this step that redirects the plan is
+  material on the same terms — otherwise the one architect call the freeze rule forgot to name
+  becomes the path the whole condition is bypassed through, journalled `n/a: architect skipped`
+  while a pass was in fact run and did in fact redirect.
+
+  **A consultation *after* this gate is out of scope here, deliberately.** The pipeline offers no
+  path back to step 5 from `plan-approved`, and an approved plan later invalidated by a fresh
+  consultation is the plan-currency problem (#89, in the same family as #33), not this
+  condition. Do not improvise a stop for it here: with no pre-image to diff, any rule stated at this step would be self-assessment — the very
+  thing this condition exists to replace.
+
+  **Present the frozen-vs-final diff at the stop**, not a re-read of the whole plan. The cost of this
+  condition is the human's attention, and a diff is what keeps it cheap.
+
+  **Journal what the diff returned, and journal it HERE — when the gate resolves, not at step 12.**
+  Write one of the **four** `- Plan-gate:` spellings (enumerated once, in Ledger format →
+  `progress.md`; do not re-derive them from this paragraph). The ledger format licenses a block "per
+  gate decision", and writing it now is what makes the record survive: a `/clear` between this step
+  and step 12 otherwise leaves the resuming orchestrator owing a line with no evidence of what the
+  diff returned, and the cheapest compliant line asserts a diff it never took. Absence of the line
+  is **not** a record that the diff was clean: a run
+  that never took it and a run that took it and found nothing are otherwise identical in the ledger,
+  which is the silent-inertness shape the `- Hermetic:` and `- Restore:` lines exist to prevent. It
+  is also the only evidence this condition's own falsifier can ever be evaluated against.
+
+  **A narrowing or reduction of an acceptance criterion is never absorbed here.** The gate may adopt
+  a rewrite; it may not quietly deliver less than the ACs ask. Reading down an AC's *wording* while
+  delivering its intent is interpretive and belongs to the gate; **reducing its intent is an issue
+  amendment** — record it on the issue and file the removed scope, or the acceptance gate (step 7)
+  will certify an AC that was never met.
 
 ### 6. Implement (you, the parent thread)
 Advance the row to `implementing`. Create the branch (`BRANCH_FMT`). Implement code + tests +
@@ -420,7 +528,8 @@ that findings ≥ the project's confidence bar are addressed):
 
 ### 11. Merge
 Read the run `mode` and `graduated-routes` from the `queue.md` header. The merge gate is the
-**only** gate `mode` changes (step 5 is conditional in every mode). A row is **auto-merge-eligible**
+**only** gate `mode` changes (step 5 is conditional in every mode — plus one always-on condition
+no mode reaches). A row is **auto-merge-eligible**
 only when ALL of these hold:
 - `mode: escalation-only`, AND
 - the row's Route is listed in the header's `graduated-routes` field, AND
@@ -495,8 +604,11 @@ re-invokes with fresh context for the next issue.)
 ### Escalation rubric (when unsure)
 Scope/priority/requirements — including any plan whose value story lacks a credible user or a
 checkable falsifier (step 3) — → `SCOPE_AGENT`, before implementing. Design/implementation →
-`DESIGN_AGENT`. Escalate to the HUMAN only when those disagree/punt, ACs are unresolvable, an
-action is destructive/irreversible, a review finding is contested, or the same step failed twice.
+`DESIGN_AGENT`. Escalate to the HUMAN when those disagree/punt, ACs are unresolvable, an
+action is destructive/irreversible, a review finding is contested, or the same step failed twice —
+**and, always-on, when the architect *decides*: a material redirect of the plan escalates exactly as
+a punt does** (step 5). "Only when those disagree/punt" would read a decisive rewrite as a reason to
+proceed, which inverts the point of the gate.
 
 **A gate that produced no verdict does not get reasoned about here.** Do not weigh whether its
 absence "matters" — apply the **Gate-outcome invariant (evidence-bound pass)** under Gates,
@@ -657,10 +769,11 @@ resume.
 
 The header carries a `mode:` field that gates **the merge gate only** — it does
 **not** change the plan gate, which is conditional in *every* mode (step 5: the
-plan gate stops only on ambiguous ACs, risk/irreversibility, agent disagreement, or genuine
-uncertainty — never merely because of `mode:`). The two modes:
+plan gate stops on ambiguous ACs, risk/irreversibility, agent disagreement, or genuine
+uncertainty — never merely because of `mode:` — **plus one always-on condition `mode:` cannot reach,
+a material architect rewrite of the plan**). The two modes:
 - **`calibration`** (default) — the human approves **every** merge; the loop never auto-merges
-  (step 11). Plan gate conditional.
+  (step 11). Plan gate conditional — plus its one always-on condition (step 5).
 - **`escalation-only`** — the human loosens the **merge gate per route**: a route the human has
   *graduated* auto-merges when CI + AC-verifier + review are green and the change produces no
   release-artifact bump (or ≤ patch where `RELEASE_SCHEME` defines one — a `docs`/`chore` change,
@@ -672,7 +785,10 @@ uncertainty — never merely because of `mode:`). The two modes:
   security surface, a contested review finding, an unresolved Class B mutation survivor (step 7),
   an unresolved hermetic-tier finding (step 6), or a `hold` row — **and, by default-deny, whenever
   route graduation or any always-escalate condition is uncertain, fall back to the human merge
-  gate.** Plan gate conditional (unchanged). Loosening to `escalation-only` presupposes the
+  gate.** Plan gate conditional (unchanged) — **and its one always-on condition is not loosened by
+  graduating a route**: a material architect rewrite of the plan stops for the human on every route,
+  in this mode as in `calibration` (step 5). Graduation buys an unattended *merge*, never an
+  unattended change of plan. Loosening to `escalation-only` presupposes the
   calibration prerequisites are met (these pinned mode semantics, plus per-iteration budget
   journaling — the `- Budget:` record and `iteration-cap:`/`subagent-cap:` fields below); it cannot
   run headless.
@@ -723,6 +839,7 @@ This is the audit trail and the resume anchor.
 - Route: research (probe; no test-coverage gate).
 - Plan: issue-<N>.plan.md written.
 - Architect: skipped (research scaffolding, no shared-interface impact).
+- Plan-gate: n/a: architect skipped (research scaffolding).
 - Human gate: plan auto-approved (route=research, low ambiguity).
 - Implemented: <path>; recorded findings in <path>.
 - Hermetic: n/a: research route.
@@ -760,6 +877,28 @@ of the first three spellings, or takes the fourth path, which writes none:
 - **no `- Hermetic:` line at all** — the gate produced no verdict, so a `- gate-error:` carries it
   instead and the iteration stops. Three states reach here, all of them on a row the trigger DID
   fire on: bound but unable to execute; `—` with no reason; and absent or `TODO`-valued.
+
+The **`- Plan-gate:`** line records the always-on stop's frozen-vs-live diff (step 5), which is
+otherwise invisible for the same reason: it resolves before implementation, so a run that never took
+the diff and a run that took it and found nothing leave an identical ledger. It is also the only
+evidence this condition's falsifier can ever be evaluated against. **This is the one enumeration of
+the spellings; step 5 points here rather than restating them.** Write it **at step 5, when the gate
+resolves** — not at step 12. Every iteration **that reaches step 5** writes exactly one; an
+iteration that re-enters *past* step 5 (Resume — a `plan-approved` row goes straight to implement)
+writes none and carries the decision from the iteration that took it, exactly as `- Hermetic:`
+enumerates a writes-none path.
+- **`- Plan-gate: material (<what changed>) → STOPPED`** — the diff showed a material change and the
+  human was asked. Name the axis (a step added/removed/reordered, the files-to-touch set changed, a
+  fork re-chosen, an AC reinterpreted), not just the verdict.
+- **`- Plan-gate: no material change (frozen-vs-live diff taken)`** — the diff was taken and came
+  back immaterial. The parenthetical is the point: it is what distinguishes this from the line never
+  being written.
+- **`- Plan-gate: material (pre-image absent, architect ran) → STOPPED`** — the block was missing on
+  a row where `DESIGN_AGENT` was consulted. There is nothing to name as "what changed" because the
+  evidence is what is missing; that is a stop, never a pass.
+- **`- Plan-gate: n/a: architect skipped (<route/reason>)`** — **no architect pass ran at all**: not
+  at step 4, not at step 5, and not as the inline composition that substitutes for an unrunnable
+  binding. If any pass ran, by any actor, this spelling is unavailable.
 
 **An absent or `TODO`-valued binding is never an `n/a: no offline/hermetic tier declared`** — that
 reason quotes a config that did not give one. On a row the trigger fires on it is unknown, unknown
@@ -971,6 +1110,13 @@ Add a source-fidelity note if the rationale leans on any externally-cited source
 
 ## Approach
 <steps, files to touch, tests to add>
+
+## Approach as reviewed (frozen before the design gate) — write-once, do not edit
+<Verbatim copy of `## Approach` taken BEFORE the architect pass was consulted — at step 4, or at
+step 5 where that step first consults it. Omit this section ONLY if no architect pass ran at all
+(step 4 skipping it is not enough). It is the pre-image step 5 diffs the live
+`## Approach` against to decide whether the architect materially changed the plan. Never
+regenerated and never back-dated — see Resume.>
 
 ## Architect triggers hit
 <which ARCHITECT_TRIGGERS fired, or "none">
@@ -1416,10 +1562,33 @@ row, check whether its branch exists, whether a PR is open (or already merged), 
 status, and resume at the matching pipeline stage — git wins on any conflict with a stale status.
 Stages 4/7/10 need no distinct status because the surrounding statuses bracket them: a
 `plan-approved` row re-enters at implement (step 6), so the architect/human gates are NOT re-run.
-The one external-side-effect stage is the architect (step 4) — it posts a comment to the issue —
-so on the rare resume of a `planning` row, check for an existing architect comment and skip
-re-invoking if present (do not double-post). AC-verify (step 7) is side-effect-free; security (step
-10) re-labeling is a no-op. Security (step 10) re-labeling is a no-op. **Working-tree reconciliation:** if a crashed prior
+The architect pass (step 4, or step 5 where that step first consults `DESIGN_AGENT`) carries **two**
+side effects, and on the rare resume of a `planning` row both
+are **write-once** — check for the artifact and skip the action if it is present:
+1. it posts a comment to the issue — check for an existing architect comment, do not double-post.
+   **But do not treat the comment as the whole of the step:** if a comment exists and `## Approach`
+   does not yet reflect its `blocking`/`important` outcome, the crash landed between the two, so
+   **apply the outcome now** (step 4) before reaching step 5. Skipping the re-invoke while leaving
+   the outcome unapplied strands it — the diff comes back empty and the always-on stop passes
+   silently, on the one path this guard was added to harden;
+2. it freezes `## Approach as reviewed (frozen before the design gate) — write-once, do not edit`
+   into `issue-<N>.plan.md`
+   **before** invoking the agent — **if that block exists, leave it exactly as it is; and if the
+   step-4 pass already ran without one, do not manufacture it now.** (This bars only a *back-dated*
+   freeze. Where step 5 is about to consult `DESIGN_AGENT` for the first time, the freeze is owed
+   and taken then, as normal.) Both halves matter and they fail in opposite directions: a
+   rewrite overwrites the pre-image, while a *late* freeze manufactures one out of the already-
+   redirected `## Approach` — either way step 5 diffs a text against itself, gets nothing, and the
+   always-on stop passes silently. A block that was never written is the **absent pre-image** case
+   (step 5): if the architect ran, that is **material**, and no freeze performed now can turn it back
+   into evidence. Re-running
+   the copy on resume would capture the *post*-architect approach as the pre-image, so step 5's
+   materiality diff would come back empty and the always-on stop would **silently pass**. A resumed
+   iteration is the one case where the pre-image and the live text have already diverged, which is
+   precisely when the guard matters.
+
+AC-verify (step 7) is side-effect-free; security (step
+10) re-labeling is a no-op. **Working-tree reconciliation:** if a crashed prior
 attempt left uncommitted changes, inspect them before proceeding — keep and continue if they
 match the plan, or `git restore`/stash if they're partial/unrelated. **One check first, because it
 inverts that instruction:** leftovers from an interrupted *mutation* pass are partial and
@@ -1464,7 +1633,7 @@ Gate table:
 |------|-----|------|--------|
 | Plan | orchestrator | every issue | `issue-<N>.plan.md` |
 | Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure | issue comment |
-| Human (plan) | user | only if uncertain/irreversible | approve/redirect |
+| Human (plan) | user | if uncertain/irreversible; **always** when the architect materially changed the plan (step 5's frozen-vs-live diff — decisiveness escalates exactly as a punt does, and no mode or route graduation reaches this one) | approve/redirect |
 | Build commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`) | orchestrator | step 6, each per its own binding; `HERMETIC_TEST_CMD` additionally requires Route `code` **and** a change that adds or modifies a test, **whatever the binding says** — on such a row an absent or `TODO` binding is unknown, and unknown is due (the gate's four-state table) | **exit status per command**; non-zero blocks |
 | AC-verify | fresh subagent (+`VERIFY`); **any re-check a fresh instance too** (Fresh-re-check invariant) | every issue with acceptance criteria (step 7 is unconditional; the **mutation pass within it** is scoped — Routing table) | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors); **either class blocks** |
 | Code review | `CODE_REVIEW` (parallel finders you run — step 9); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes |

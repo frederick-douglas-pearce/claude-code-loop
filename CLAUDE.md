@@ -57,18 +57,22 @@ Three modules, and the split between them matters:
   the shipped example sidecar still loads through the real `load_registry`; the composed
   `plugin@marketplace` identifier still matches every hand-written call site; engine `CAPS` ⊆
   the `/init-loop` skeleton (see the three-layer split below — this is that contract, enforced);
+  `PlanGateFrozenBlockTests` — the frozen-approach heading #28's always-on plan-gate stop is looked
+  up by appears, normalized, in each of four *located regions* of the engine (see the invariants
+  section below for why that string, and only that string, is checkable — and why per-region rather
+  than a global count);
   and `PipelineStepOrderTests` — the pipeline's **step *ordering*** agrees across the **six**
   restatements of it (in four files): `loop-engine.md`'s `### N.` headings, `SKILL.md`'s numbered chain,
   `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
   `description`** (`plan→architect→implement→review→merge` — the string the model reads when
   deciding to invoke the skill, so a behavior surface, not prose), the engine's in-prose
-  `step N` cross-references — **106 sites, 110 numbers** — and `commands/init-loop.md`'s
+  `step N` cross-references — **148 sites, 152 numbers** — and `commands/init-loop.md`'s
   `engine step N` (below). *"Four files" is newly true, not newly written:* the previous five
   restatements live in **three** files (`loop-engine.md` ×2, `SKILL.md` ×2, `plugin.json`), so the
   standing "five restatements in four files" was off by one on the file count; `init-loop.md` is what
   makes four correct. That grep
   (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) reports
-  only 104: the other two are line-wrapped, which is exactly how they went unguarded until review
+  only 146: the other two are line-wrapped, which is exactly how they went unguarded until review
   caught it. It checks numbering and label correspondence **only** — never whether a
   step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
   `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
@@ -84,7 +88,7 @@ Three modules, and the split between them matters:
   that is semantics, which this module does not do. It fires when a reference goes **out of range** —
   whether edited to a number no heading defines, or left behind when the heading run shrank or was
   rebased off zero. Stated bluntly, because this is the case #31 will actually hit: **insert a step
-  mid-pipeline, renumber everything after it, and all 106 reference sites (110 numbers) point at the
+  mid-pipeline, renumber everything after it, and all 148 reference sites (152 numbers) point at the
   wrong step with the whole suite green.** Confirmed by mutation (#44), along with the milder shapes — appending a step
   and updating `SKILL.md` passes, as does rewriting a `(step 9)` to `(step 7)`. **A green run is not
   evidence the cross-references were correctly renumbered.** Reference *forms* the regex does not
@@ -209,6 +213,11 @@ even though nothing will fail loudly:
   mode, and the engine restates this in ~5 places (step 5, step 11, both `queue.md` header mode
   descriptions, the gate table) plus `SKILL.md`. **Issue #1 / F2 reverses this** (calibration will
   make the plan gate unconditional); when implementing it, every restatement must change together.
+  **Half of it has landed: #28 shipped F2's always-on condition**, so the gate is now conditional
+  *plus* one condition no mode or route graduation reaches — and this bullet's five-site list is no
+  longer the whole set. The always-on plan-gate bullet below enumerates the current sites (step 11's
+  aside appears in both). **#29 is the remaining half**, and it is the one that would make the gate
+  unconditional; do not read this bullet as still describing untouched ground.
 - **Notes on `parked`/`blocked` rows record the durable curation DECISION, never mutable live
   evidence** — the latter is contradicted by the next re-check and destabilizes resume.
 - **The tree-isolation / staging rule is a new multi-site invariant with no test guarding it** (#25).
@@ -220,6 +229,54 @@ even though nothing will fail loudly:
   split this bullet used to carry — isolation live, mutation pass dormant — **closed with #60's
   second PR**: the pass now runs the harness, so every one of those sites describes live behavior
   and none of them may be re-fenced as dormant.
+- **The always-on plan-gate stop is a second multi-site invariant, only partly guarded** (#28).
+  "A material architect rewrite stops for the human, under every mode" is restated at every site in
+  the list below. **The list is the claim — there is deliberately no headline number.** Two drafts
+  of this bullet carried one and both were wrong (it said "eight" while listing nine; the correction
+  to "nine" was then re-derived by two independent reviewers as eleven and as twelve, depending on
+  whether adjacent sub-paragraphs count once or separately). That is the same enumerable assertion
+  this file documents itself retracting two sections above for "five restatements in four files",
+  and a number nobody can re-derive the same way twice is worse than no number. **Maintain the list;
+  do not summarize it.**
+  - `loop-engine.md` step 4 — the freeze-invoke-apply ordering, the pre-image, write-once,
+    no-back-dating, and the record-it-in-`## Approach` rule
+  - step 5 — the condition, the materiality test, the absent-pre-image rule,
+    and the architect-pass-by-any-actor definition
+  - the Escalation rubric · the `mode:` shared paragraph · the `calibration` bullet · the
+    `escalation-only` bullet · step 11's "only gate `mode` changes" aside · the gate table row
+  - Ledger format — the `- Plan-gate:` spelling enumeration (the **canonical** one; step 5 points
+    at it rather than restating, after a draft where the two lists disagreed) and the `progress.md`
+    worked example
+  - the `issue-<N>.plan.md` template · Resume's two write-once side effects
+  - `SKILL.md`'s fail-safe list · the README trust model
+
+  **`PlanGateFrozenBlockTests` guards one mechanically-checkable part** — that the frozen
+  block's heading appears, **normalized**, in each of four *located regions* of the engine: step 4's
+  span (which writes it), step 5's span (which diffs against it), the `issue-<N>.plan.md` template
+  fence, and the Resume paragraph. That coupling is a *string*, not a meaning, so the check is
+  neither fragile nor vacuous: if step 4 writes a heading step 5 no longer looks for, the mechanism
+  is dead while every word of the prose still reads correctly. **It asserts that the heading *appears*, normalized, in each region — not byte-identity, and not
+  equality** — whitespace is collapsed (one occurrence is line-wrapped, the hazard that hid two
+  step references from the naive grep above) and the em dash is folded; say no more than that about
+  it. **Per-region, not a global count, and that is the whole value:** the first draft asserted
+  `count(...) == 4` over the file and a fresh reviewer walked two mutations straight through it —
+  paraphrase Resume's occurrence while adding a spare mention elsewhere, or delete the block from
+  the plan template and mention it in the *progress.md* fence instead. Both leave the mechanism dead
+  with the suite green. Never replace the region anchors with a total, and never drop a region to
+  make it pass.
+  **The prose agreement across the sites listed above stays unguarded**, and that half is deliberate: a
+  check over it would be the fragile-or-vacuous shape #76 documents for the `~~~markdown` span.
+  Three failure modes to watch, each a silent reversal: (1) any site restored to "escalate **only**
+  when the agents disagree/punt" re-inverts the logic the change exists to fix, and the Escalation
+  rubric is where that wording actually lived; (2) the step-4 freeze losing its **write-once** guard
+  makes the step-5 diff come back empty on a resumed row, so the gate passes silently — the
+  mechanism failing in the one direction that looks like success; (3) **the subtlest, and the one
+  the acceptance gate caught in this very change** — dropping step 4's instruction to write the
+  architect's outcome into `## Approach` *before step 5*. Carry the rulings to implement time
+  instead and the diff is empty by **literal compliance**, no bad faith required. The materiality
+  list is **sufficient, not exhaustive**: extend it, never prune it. Its "if unsure, material"
+  catch-all is what makes it the opposite polarity to `ALLOWED_NON_BINDINGS`/`_STOPWORDS` —
+  additions can only strengthen it, so it is not the stale-allow-list failure those two flag.
 
 ## The append-only guard hook
 

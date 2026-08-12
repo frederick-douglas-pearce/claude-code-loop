@@ -248,8 +248,8 @@ class PipelineStepOrderTests(unittest.TestCase):
     breaks: ``SKILL.md``'s **frontmatter** ``description`` chain -- the string
     the model reads when deciding whether to invoke the skill, so a behavior
     surface rather than internal prose -- and the engine's in-prose ``step N``
-    / ``Stages N/M`` cross-references: **106 reference sites, 110 numbers** once
-    ``/``- and dash-separated runs are expanded. This grep finds 104 of the 106::
+    / ``Stages N/M`` cross-references: **148 reference sites, 152 numbers** once
+    ``/``- and dash-separated runs are expanded. This grep finds 146 of the 148::
 
         grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' \\
             skills/dev-loop/loop-engine.md | wc -l
@@ -310,7 +310,7 @@ class PipelineStepOrderTests(unittest.TestCase):
       reference goes **out of range** -- whether because someone edited it to a
       number no heading defines, or because the heading run shrank or was
       rebased off zero. Stated bluntly, for whoever implements #31: **inserting
-      a step mid-pipeline and renumbering everything after it leaves all 110 numbers (across 106 sites)
+      a step mid-pipeline and renumbering everything after it leaves all 152 numbers (across 148 sites)
       references pointing at the wrong step with the whole suite green.** A
       green run is not evidence the cross-references were correctly renumbered.
     * **Consumer configs, for restatement #6.** Every onboarded repo's
@@ -457,7 +457,7 @@ class PipelineStepOrderTests(unittest.TestCase):
     # Both are 2 today; they are not required to stay equal, since a deliberate
     # prose reference would raise the total and leave this alone.
     _EXPECTED_SKELETON_STEP_REFERENCES = 2
-    # Well below the 110 numbers currently present (106 reference sites,
+    # Well below the 152 numbers currently present (148 reference sites,
     # some listing several), so ordinary prose edits never trip it, and well
     # above zero, so a regex broken by a reword fails here instead of passing on
     # an empty list. The headroom is a deliberate choice, not a
@@ -1209,6 +1209,143 @@ class MutationNaReasonTests(unittest.TestCase):
             "mentions the path beside the runnable command; the property is that no "
             "reference uses any other root.",
         )
+
+
+class PlanGateFrozenBlockTests(unittest.TestCase):
+    """#28's always-on plan-gate stop hangs on one heading spelled the same everywhere.
+
+    Step 4 WRITES a frozen pre-image of the plan's approach under a fixed heading;
+    step 5 LOOKS FOR that heading to diff against; the ``issue-<N>.plan.md`` template
+    declares it; Resume names it in the write-once guard. If those spellings drift
+    apart the mechanism is **dead while every word of the prose still reads correctly**
+    -- step 5 finds no block, and an absent pre-image is exactly the case the engine
+    now has to treat as material.
+
+    This is one mechanically-checkable part of an invariant restated across many sites
+    (``CLAUDE.md`` enumerates them). The rest is
+    prose agreement, which a check would guard only fragilely or vacuously (the #76
+    ``~~~markdown`` span problem) -- see ``CLAUDE.md``. What is asserted here is a
+    *string* coupling, not a meaning, which is why it is neither.
+
+    **Anchored per region, not counted globally, and the distinction is the whole
+    value of the test.** An earlier draft asserted ``count(heading) == 4`` over the
+    file. A fresh reviewer broke it twice while the suite stayed green: paraphrase
+    Resume's occurrence and add a spare mention in step 4's prose (total still 4), or
+    delete the block from the plan template and mention it inside the *progress.md*
+    fence instead. Both leave the mechanism dead. A global total cannot tell *which*
+    sites carry the heading, which is the only thing worth knowing here.
+
+    Whitespace is normalized deliberately: one occurrence is line-wrapped, the same
+    hazard that hid two step references from the naive grep ``CLAUDE.md`` quotes. The
+    em dash is normalized too. So this asserts that the heading *appears*, normalized,
+    in each of four located regions -- not byte-identity, not equality, and not a
+    property of "sites". ``CLAUDE.md`` must not claim more.
+    """
+
+    _HEADING = (
+        "## Approach as reviewed (frozen before the design gate) "
+        "-- write-once, do not edit"
+    )
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
+
+    def _engine(self) -> str:
+        return _ENGINE.read_text(encoding="utf-8")
+
+    def _span(self, text: str, start: str, end: str, label: str) -> str:
+        i = text.find(start)
+        self.assertNotEqual(
+            i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it."
+        )
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it."
+        )
+        return text[i:j]
+
+    def _plan_template_fence(self, text: str) -> str:
+        # The plan template specifically -- NOT just any ```markdown fence. The engine
+        # has several; an earlier draft accepted any of them and passed while the
+        # heading had been moved into the progress.md one.
+        section = self._span(
+            text,
+            "### `issue-<N>.plan.md`",
+            "### Lifecycle & commit policy",
+            "issue-<N>.plan.md template section",
+        )
+        fences = re.findall(r"```markdown(.*?)```", section, flags=re.S)
+        self.assertEqual(
+            len(fences), 1,
+            "expected exactly one ```markdown fence in the issue-<N>.plan.md template "
+            f"section; found {len(fences)}. This test anchors on that fence being the "
+            "plan template -- re-anchor it rather than loosening the match.",
+        )
+        fence = fences[0]
+        self.assertIn(
+            "# Plan: #<N>", fence,
+            "the fence found in the issue-<N>.plan.md template section is not the plan "
+            "template (no `# Plan: #<N>` line). Re-anchor this test.",
+        )
+        return fence
+
+    def _regions(self):
+        text = self._engine()
+        return {
+            "step 4 (writes the frozen block)": self._span(
+                text, "### 4. Architect gate", "### 5. Human gate", "step 4"
+            ),
+            "step 5 (diffs against it)": self._span(
+                text, "### 5. Human gate", "### 6. Implement", "step 5"
+            ),
+            "the issue-<N>.plan.md template": self._plan_template_fence(text),
+            "Resume (write-once guard)": self._span(
+                text, "## Resume after", "## Routing table", "Resume"
+            ),
+        }
+
+    def test_every_site_that_writes_or_reads_the_frozen_block_spells_it_the_same(
+        self,
+    ) -> None:
+        missing = sorted(
+            label
+            for label, body in self._regions().items()
+            if self._HEADING not in self._normalize(body)
+        )
+        self.assertEqual(
+            missing,
+            [],
+            "these region(s) of loop-engine.md do not carry the frozen-approach "
+            f"heading: {missing}.\n\n"
+            f"Expected (normalized): {self._HEADING!r}\n\n"
+            "A MISMATCH IS SILENT. Step 5 looks the block up by name, so a heading "
+            "that drifts at one site means the diff finds nothing -- and 'no evidence "
+            "of a material change' reads as 'not material', so the always-on stop "
+            "passes without ever running. That is exactly the self-assessment #28 "
+            "removed, failing in the direction that looks like success.\n\n"
+            "Each region is checked SEPARATELY on purpose: a global count of the "
+            "heading passes when one site loses it and another gains a spare "
+            "mention. If you renamed the heading deliberately, rename it in all four "
+            "regions and update _HEADING. Never delete a region from _regions() to "
+            "make this pass.",
+        )
+
+    def test_the_heading_is_a_section_not_a_subsection(self) -> None:
+        # `## Foo` is a substring of `### Foo`, so a level change would slip past a
+        # plain containment check while producing a different block in the plan file.
+        for label, body in self._regions().items():
+            with self.subTest(region=label):
+                self.assertNotIn(
+                    "#" + self._HEADING,
+                    self._normalize(body),
+                    f"{label} writes the frozen-approach block at a deeper heading "
+                    "level (### rather than ##). The orchestrator writes the plan "
+                    "file from these strings, so a level change produces a block "
+                    "step 5's lookup does not match.",
+                )
 
 
 if __name__ == "__main__":
