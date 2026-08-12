@@ -586,14 +586,13 @@ project-bound: a porting project has nothing to set here, and that is a decision
 oversight — the parameter that once sat here was retired, not left unfilled. The case that looks
 like it needs one is a host where isolation is unavailable or ruinously expensive, and it is
 precisely the case the predicate already answers: with no satisfying form available, nothing may be
-spawned to write concurrently at all. **Note what that settles and what it does not.** *Who may run
-concurrently* is the whole of what this policy governs. Where the parent's own sequential path is
-itself destructive — the acceptance gate's in-tree mutation rung is the one such path — whether you
-may take it is decided by the safety envelope there, which sends you to the human and treats a
-declined choice as a gate-error rather than a quiet proceed. That is not configurable either. A
-binding could therefore only ever restate what the predicate derives, or license the "be careful"
-form ruled out just above; the first is redundant and the second is an off switch for a safety
-invariant. Nor is the other cost a counterexample — not the cost of copies, already dealt with, but
+spawned to write concurrently at all. **Note what that settles and what it does not:** who may run
+concurrently, not what the parent may then do on its own path. A destructive step there is governed
+by the Escalation rubric's destructive/irreversible clause and, at the acceptance gate, by its
+safety envelope (AC-verifier → Part 2), which sends you to the human and treats a declined choice as
+a gate-error rather than a quiet proceed. Neither is configurable. A binding could only ever restate
+what the predicate derives, or license the "be careful" form ruled out just above; the first is
+redundant and the second is an off switch for a safety invariant. Nor is the other cost a counterexample — not the cost of copies, already dealt with, but
 agent spend. What varies by project there is how much of it you can afford, and that is budgeted
 **elsewhere and differently**, by the `subagent-cap` circuit-breaker named in the read-only form
 above: a per-run ledger field the human sets, not a project binding, bounding *volume*
