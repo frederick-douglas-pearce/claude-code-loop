@@ -582,17 +582,22 @@ There is no third form: an agent that would write to the parent's tree does not 
 carefully, it gets a copy first.
 
 **And there is no binding that loosens any of this.** This policy is deliberately *not*
-project-bound: a porting project has nothing to set here, and that absence is the design, not a gap
-awaiting a parameter. The case that looks like it needs one is a host where isolation is unavailable
-or ruinously expensive — and it is precisely the case the predicate already answers, since with no
-satisfying form available a writing agent falls to the parent-only sequential path on its own. A
+project-bound: a porting project has nothing to set here, and that is a decision rather than an
+oversight — the parameter that once sat here was retired, not left unfilled. The case that looks
+like it needs one is a host where isolation is unavailable or ruinously expensive, and it is
+precisely the case the predicate already answers: with no satisfying form available, nothing may be
+spawned to write concurrently at all. **Note what that settles and what it does not.** *Who may run
+concurrently* is the whole of what this policy governs. Where the parent's own sequential path is
+itself destructive — the acceptance gate's in-tree mutation rung is the one such path — whether you
+may take it is decided by the safety envelope there, which sends you to the human and treats a
+declined choice as a gate-error rather than a quiet proceed. That is not configurable either. A
 binding could therefore only ever restate what the predicate derives, or license the "be careful"
 form ruled out just above; the first is redundant and the second is an off switch for a safety
-invariant. Nor is the other cost a counterexample — not the cost of copies disposed of above, but
+invariant. Nor is the other cost a counterexample — not the cost of copies, already dealt with, but
 agent spend. What varies by project there is how much of it you can afford, and that is budgeted
-**elsewhere and differently**: by `subagent-cap` in the `queue.md` header — a per-run ledger field
-the human sets, not a project binding — which bounds *volume* retrospectively and cannot distinguish
-simultaneity from throughput.
+**elsewhere and differently**, by the `subagent-cap` circuit-breaker named in the read-only form
+above: a per-run ledger field the human sets, not a project binding, bounding *volume*
+retrospectively and unable to tell simultaneity from throughput.
 
 **Your own writes are governed by this policy too — never stage or commit while a writing subagent's
 isolated copy is live.** The window opens when you spawn that agent and closes only when **you have
