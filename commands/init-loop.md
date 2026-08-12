@@ -174,7 +174,6 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `PR_TEMPLATE` | <inferred / — if none> | replicate in the PR body if the repo enforces it |
 | `MERGE_METHOD` | <inferred / TODO(init-loop)> | e.g. squash, `--delete-branch`, explicit `--subject` scope |
 | `APPEND_ONLY_FILES` | protected files are declared for the guard hook in `.claude/loop.append-guard.json` (the machine SSOT); `TODO(init-loop)` if this repo protects none | do **not** restate paths here — the sidecar is authoritative |
-| `PERMISSION_POSTURE` | <TODO(init-loop): e.g. background agents validate-only → parent implements> | shapes fan-out |
 | `LEDGER_ROOT` | `.claude/loop/` | **gitignored** — local working state, never committed |
 | `RELEASE_SCHEME` | <inferred / "no release cycle"> | merge gate reads "≤ patch bump or no bump" |
 

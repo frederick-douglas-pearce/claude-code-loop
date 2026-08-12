@@ -581,6 +581,19 @@ of on whether someone remembered to add it to a list. It has two satisfying form
 There is no third form: an agent that would write to the parent's tree does not get spawned more
 carefully, it gets a copy first.
 
+**And there is no binding that loosens any of this.** This policy is deliberately *not*
+project-bound: a porting project has nothing to set here, and that absence is the design, not a gap
+awaiting a parameter. The case that looks like it needs one is a host where isolation is unavailable
+or ruinously expensive — and it is precisely the case the predicate already answers, since with no
+satisfying form available a writing agent falls to the parent-only sequential path on its own. A
+binding could therefore only ever restate what the predicate derives, or license the "be careful"
+form ruled out just above; the first is redundant and the second is an off switch for a safety
+invariant. Nor is the other cost a counterexample — not the cost of copies disposed of above, but
+agent spend. What varies by project there is how much of it you can afford, and that is budgeted
+**elsewhere and differently**: by `subagent-cap` in the `queue.md` header — a per-run ledger field
+the human sets, not a project binding — which bounds *volume* retrospectively and cannot distinguish
+simultaneity from throughput.
+
 **Your own writes are governed by this policy too — never stage or commit while a writing subagent's
 isolated copy is live.** The window opens when you spawn that agent and closes only when **you have
 removed the copy**, *not* when the agent exits — an isolated tree outlives the agent that wrote to
