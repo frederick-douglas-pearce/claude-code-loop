@@ -350,7 +350,11 @@ valid and valuable result** — do not read "no survivors this time" as the gate
 ### 8. Commit + PR
 Commit with correct `COMMIT_CONV` scope — **staging explicit paths and reading `git diff --cached`
 first** (step 6), since this is a commit boundary like any other and the tree may have gained an
-agent's files since you last looked. Open the PR; **replicate `PR_TEMPLATE` fully** in
+agent's files since you last looked. This is the pipeline's standing commit boundary immediately
+downstream of a writing agent: step 7's mutation pass takes a copy, so **confirm none is still live
+(`git worktree list`) and remove it before you stage** — that copy is yours to remove, and a commit
+taken while it stands is the case the Execution policy (Tool surface) forbids rather than a hazard
+to stage around. Open the PR; **replicate `PR_TEMPLATE` fully** in
 the body; make the Security-review choice up front. Advance the row to `in-pr` and record the
 PR number. Wait for CI; fix until green.
 
@@ -362,9 +366,9 @@ that works in practice — is **parallel finder subagents over `git diff main...
 that confirms each finding**, journaled under the gate's name. (`main...HEAD` is the right form
 *here*: the commit has already happened by this gate. The acceptance gate deliberately diffs the
 working tree instead, because it runs before the commit — do not "fix" one to match the other.)
-Running those finders at once is permitted because they are read-only, the first of the two forms
-the Execution policy (Tool surface) allows — see it there for what that permission does and does
-not extend to. A review skill marked
+Running those finders at once is permitted because they are read-only — the **read-only** form the
+Execution policy (Tool surface) allows; see it there for what that permission does and does not
+extend to. A review skill marked
 `disable-model-invocation` is **user-triggered only and cannot be invoked from here at all**: if
 `CODE_REVIEW` is bound to one, the gate is unsatisfiable and silently does nothing. Such a skill is
 a *human* escalation, never a binding. On finding one bound here: run the finder procedure for this
@@ -392,7 +396,10 @@ review misses most of what a diff carries. Scale the count with the surface: one
 `docs`, more when the diff touches a production or public-API path.
 
 Implement viable findings; decline others with a one-line rationale; then **commit the fixes** and
-**verify recs were applied — by a fresh checker, never by yourself.** This is the Fresh-re-check
+**verify recs were applied — by a fresh checker, never by yourself.** If you *delegated* any fix,
+that agent wrote to its own copy: collect the diff, apply it, and **remove the copy before you
+commit** (Execution policy, Tool surface) — directing a fix is authorship, and it is also the one
+spawn at this gate that opens the staging window. This is the Fresh-re-check
 invariant's sharpest instance (see Gates): you wrote the fixes, so confirming them yourself is the
 author agreeing with himself, not a gate. **Commit before spawning it** — the checker reads
 `main...HEAD` like the rest of this gate, so an uncommitted fix is invisible to it and the re-check
@@ -550,19 +557,22 @@ comes later. `git worktree list` has neither blind spot. A host whose isolated t
 the repository discharges the first duty for free and still owes the other two.
 
 **Execution policy — the parent owns the tree, and nothing may concurrently mutate it.** Pipeline
-steps run one after another, and the parent thread owns the working tree throughout. The rule that
-does the work is not about step ordering, though: it is that **within a step, subagents may run
-concurrently only when they do not mutate that shared tree.** That is a predicate with exactly two
-satisfying forms, and it is stated as a predicate rather than as a list of blessed fan-out sites on
-purpose — a fan-out added later is then permitted or forbidden on its own merits, instead of on
-whether someone remembered to add it to a list:
+steps run one after another — **do not overlap them**; the parent thread owns the working tree
+throughout. Ordering is not the whole rule, though: **within a step, subagents may run concurrently
+only when they mutate nothing the parent owns** — its working tree first of all, and equally its
+index and refs, the ledger, and the PR. That is a predicate rather than a list of blessed fan-out
+sites, on purpose: a fan-out added later is then permitted or forbidden on its own merits, instead
+of on whether someone remembered to add it to a list. It has two satisfying forms:
 
 - **Read-only.** The step 9 `CODE_REVIEW` finder fan-out is the standing example and is **permitted
   by name**: several finders on distinct angles, running at once, reading the diff and the
   acceptance criteria. Angle diversity is what makes that gate find anything, so nothing *in this
-  policy* bounds the fan-out — read-only agents hold no copy and cannot collide with you or with
-  each other. Other bounds still apply and are unaffected: `subagent-cap` counts each finder
-  separately (progress.md → the Budget line), and step 9 scales the count with the risk surface.
+  policy* bounds the fan-out — read-only agents hold no copy and cannot corrupt your tree. The
+  converse duty is yours: do not mutate the tree in place while a reader is in flight over it (Part
+  2's in-tree rung is the one place you would). Other bounds are unaffected: each finder counts
+  separately toward the **next** iteration's `subagent-cap` check (progress.md → the Budget line) —
+  retrospective, and advisory on a manual re-invoke — so step 9's scale-with-risk-surface rule is
+  the only bound that acts on the fan-out you are about to launch.
 - **Isolated.** An agent that writes runs against **its own copy** of the tree, per the isolation
   duty above. **The escape hatch is isolation, not care** — "be careful not to collide" is not an
   available option, because the duties that make writing safe are ones the agent cannot discharge
@@ -574,20 +584,25 @@ carefully, it gets a copy first.
 **Your own writes are governed by this policy too — never stage or commit while a writing subagent's
 isolated copy is live.** The window opens when you spawn that agent and closes only when **you have
 removed the copy**, *not* when the agent exits — an isolated tree outlives the agent that wrote to
-it, which is why step 6 fixes the same closing edge. A blanket `git add` inside that window lands
-the copy as a gitlink rather than as the wall of files you would scan for. Read-only fan-out opens
-no such window at all: there is no copy, so there is nothing to sweep up — step 6 states the window
-over any subagent, which is the more conservative form and is left that way deliberately. Defining
-this window in terms of the copy loses nothing, because a writing agent without one is already
-forbidden above; there is no third form.
+it, which is why step 6 fixes the same closing edge. Where the host materializes the copy inside the
+repository, a blanket `git add` inside that window lands it as a gitlink rather than as the wall of
+files you would scan for; where the host puts it outside, the reason survives anyway — a commit
+taken before you have collected the agent's output commits a half-collected change.
+
+Step 6 states this window over **any** subagent, which is the more conservative form and is left
+that way deliberately: "read-only" here is a property of the prompt you wrote, not of a tool grant
+the host enforces, so a reader that writes a scratch file is a misclassification you want step 6 to
+catch. Treat the copy as what makes the window *outlast* the agent, never as what makes it exist.
 
 **This does not retire explicit-path staging — it sequences around it.** The two rules answer
 different questions and neither replaces the other: *when* you may reach a commit boundary at all
 (here), and *how* you stage once you are at one (step 6, at **every** boundary, which is why it is
-called the control both above and in Part 2's envelope). Sequence your commits **outside** the
-window — step 9 already has you commit before spawning its re-checker — and the question of what a
-blanket `git add` would have swept up does not arise. Where a boundary genuinely falls inside the
-window, explicit-path staging is what makes it survivable, not a licence to stop sequencing.
+called the control both above and in Part 2's envelope). **No commit boundary legitimately falls
+inside the window.** Every one the pipeline defines is sequenceable outside it — step 7's mutation
+copy is removed before step 8 commits, and a fix you delegated at step 9 is collected, applied, and
+its copy removed before the fix commit. Removing the copy is always available to you, so remove it
+first. If you believe a boundary must fall inside the window, that is a finding to journal and hand
+to the human, not a case to stage carefully and proceed through.
 
 ---
 
