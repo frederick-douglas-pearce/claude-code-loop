@@ -165,6 +165,8 @@ iterating on itself.
 - **Only `--delete-branch` the PR's own branch.**
 - **Never blanket-stage** (`git add -A`/`git add .`) and never `git add` unrelated pre-existing
   working-tree changes. It stages explicit paths and reads back what it staged before each commit.
+- **Never stage or commit while a subagent's isolated copy of your tree is live** — that window
+  closes when the loop removes the copy, not when the agent finishes.
 - **Never edit your user-global subagent definitions.**
 - **Never edit its own `loop.config.md`** — a binding that looks wrong gets journalled and handed to
   you, so the loop can't quietly rewrite its own gates to match its reading of them.

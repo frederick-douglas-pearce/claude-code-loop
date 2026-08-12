@@ -361,7 +361,10 @@ Advance the row to `in-review`. Run `CODE_REVIEW` on the diff.
 that works in practice — is **parallel finder subagents over `git diff main...HEAD`, plus a pass
 that confirms each finding**, journaled under the gate's name. (`main...HEAD` is the right form
 *here*: the commit has already happened by this gate. The acceptance gate deliberately diffs the
-working tree instead, because it runs before the commit — do not "fix" one to match the other.) A review skill marked
+working tree instead, because it runs before the commit — do not "fix" one to match the other.)
+Running those finders at once is permitted because they are read-only, the first of the two forms
+the Execution policy (Tool surface) allows — see it there for what that permission does and does
+not extend to. A review skill marked
 `disable-model-invocation` is **user-triggered only and cannot be invoked from here at all**: if
 `CODE_REVIEW` is bound to one, the gate is unsatisfiable and silently does nothing. Such a skill is
 a *human* escalation, never a binding. On finding one bound here: run the finder procedure for this
@@ -510,8 +513,10 @@ This skill intentionally runs with the full session toolset (no `allowed-tools` 
 an orchestrator needs Write/Edit, Bash(git+gh+tests), Agent (`SCOPE_AGENT`/`DESIGN_AGENT`/
 AC-verifier), and the built-in review skills. With that power come hard limits — never force-push;
 never bypass failing CI (no admin-merge, never merge red); only `--delete-branch` the PR's own
-branch; never `git add` unrelated pre-existing working-tree changes; never edit the
-user-global `SCOPE_AGENT`/`DESIGN_AGENT` definitions; **never edit `loop.config.md`** — a binding
+branch; never `git add` unrelated pre-existing working-tree changes; **never stage or commit while a
+writing subagent's isolated copy is live** (Execution policy, below — the window closes when *you*
+remove the copy, not when the agent exits); never edit the user-global
+`SCOPE_AGENT`/`DESIGN_AGENT` definitions; **never edit `loop.config.md`** — a binding
 that looks wrong is a finding you journal and hand to the human, because a gate you rebind to match
 your own reading entrenches your misreading instead of correcting it. The C1 append-only guard and
 the human/merge gates are the enforced backstops; the rest of this list is your contract.
@@ -543,6 +548,46 @@ acceptance gate's untracked scan to find a stray copy: it is `git ls-files --oth
 after seeing one appear — sees nothing, and the scan runs at step 7 while a copy created at step 9
 comes later. `git worktree list` has neither blind spot. A host whose isolated trees land *outside*
 the repository discharges the first duty for free and still owes the other two.
+
+**Execution policy — the parent owns the tree, and nothing may concurrently mutate it.** Pipeline
+steps run one after another, and the parent thread owns the working tree throughout. The rule that
+does the work is not about step ordering, though: it is that **within a step, subagents may run
+concurrently only when they do not mutate that shared tree.** That is a predicate with exactly two
+satisfying forms, and it is stated as a predicate rather than as a list of blessed fan-out sites on
+purpose — a fan-out added later is then permitted or forbidden on its own merits, instead of on
+whether someone remembered to add it to a list:
+
+- **Read-only.** The step 9 `CODE_REVIEW` finder fan-out is the standing example and is **permitted
+  by name**: several finders on distinct angles, running at once, reading the diff and the
+  acceptance criteria. Angle diversity is what makes that gate find anything, so nothing *in this
+  policy* bounds the fan-out — read-only agents hold no copy and cannot collide with you or with
+  each other. Other bounds still apply and are unaffected: `subagent-cap` counts each finder
+  separately (progress.md → the Budget line), and step 9 scales the count with the risk surface.
+- **Isolated.** An agent that writes runs against **its own copy** of the tree, per the isolation
+  duty above. **The escape hatch is isolation, not care** — "be careful not to collide" is not an
+  available option, because the duties that make writing safe are ones the agent cannot discharge
+  from inside its own copy.
+
+There is no third form: an agent that would write to the parent's tree does not get spawned more
+carefully, it gets a copy first.
+
+**Your own writes are governed by this policy too — never stage or commit while a writing subagent's
+isolated copy is live.** The window opens when you spawn that agent and closes only when **you have
+removed the copy**, *not* when the agent exits — an isolated tree outlives the agent that wrote to
+it, which is why step 6 fixes the same closing edge. A blanket `git add` inside that window lands
+the copy as a gitlink rather than as the wall of files you would scan for. Read-only fan-out opens
+no such window at all: there is no copy, so there is nothing to sweep up — step 6 states the window
+over any subagent, which is the more conservative form and is left that way deliberately. Defining
+this window in terms of the copy loses nothing, because a writing agent without one is already
+forbidden above; there is no third form.
+
+**This does not retire explicit-path staging — it sequences around it.** The two rules answer
+different questions and neither replaces the other: *when* you may reach a commit boundary at all
+(here), and *how* you stage once you are at one (step 6, at **every** boundary, which is why it is
+called the control both above and in Part 2's envelope). Sequence your commits **outside** the
+window — step 9 already has you commit before spawning its re-checker — and the question of what a
+blanket `git add` would have swept up does not arise. Where a boundary genuinely falls inside the
+window, explicit-path staging is what makes it survivable, not a licence to stop sequencing.
 
 ---
 
