@@ -581,6 +581,23 @@ of on whether someone remembered to add it to a list. It has two satisfying form
 There is no third form: an agent that would write to the parent's tree does not get spawned more
 carefully, it gets a copy first.
 
+**And there is no binding that loosens any of this.** This policy is deliberately *not*
+project-bound: a porting project has nothing to set here, and that is a decision rather than an
+oversight — the parameter that once sat here was retired, not left unfilled. The case that looks
+like it needs one is a host where isolation is unavailable or ruinously expensive, and it is
+precisely the case the predicate already answers: with no satisfying form available, nothing may be
+spawned to write concurrently at all. **Note what that settles and what it does not:** who may run
+concurrently, not what the parent may then do on its own path. A destructive step there is governed
+by the Escalation rubric's destructive/irreversible clause and, at the acceptance gate, by its
+safety envelope (AC-verifier → Part 2), which sends you to the human and treats a declined choice as
+a gate-error rather than a quiet proceed. Neither is configurable. A binding could only ever restate
+what the predicate derives, or license the "be careful" form ruled out just above; the first is
+redundant and the second is an off switch for a safety invariant. Nor is the other cost a counterexample — not the cost of copies, already dealt with, but
+agent spend. What varies by project there is how much of it you can afford, and that is budgeted
+**elsewhere and differently**, by the `subagent-cap` circuit-breaker named in the read-only form
+above: a per-run ledger field the human sets, not a project binding, bounding *volume*
+retrospectively and unable to tell simultaneity from throughput.
+
 **Your own writes are governed by this policy too — never stage or commit while a writing subagent's
 isolated copy is live.** The window opens when you spawn that agent and closes only when **you have
 removed the copy**, *not* when the agent exits — an isolated tree outlives the agent that wrote to
