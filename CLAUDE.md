@@ -240,7 +240,7 @@ even though nothing will fail loudly:
   do not summarize it.**
   - `loop-engine.md` step 4 — the freeze-invoke-apply ordering, the pre-image, write-once,
     no-back-dating, and the record-it-in-`## Approach` rule
-  - step 5 — the condition, the materiality test, the absent-pre-image rule, the
+  - step 5 — the condition, the materiality test, the absent-pre-image rule,
     and the architect-pass-by-any-actor definition
   - the Escalation rubric · the `mode:` shared paragraph · the `calibration` bullet · the
     `escalation-only` bullet · step 11's "only gate `mode` changes" aside · the gate table row

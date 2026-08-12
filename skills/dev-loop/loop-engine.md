@@ -274,8 +274,8 @@ merge gate only, so a graduated route still stops here:
 
   **A consultation *after* this gate is out of scope here, deliberately.** The pipeline offers no
   path back to step 5 from `plan-approved`, and an approved plan later invalidated by a fresh
-  consultation is the plan-currency problem (#33), not this condition. Do not improvise a stop for it
-  here: with no pre-image to diff, any rule stated at this step would be self-assessment — the very
+  consultation is the plan-currency problem (#89, in the same family as #33), not this
+  condition. Do not improvise a stop for it here: with no pre-image to diff, any rule stated at this step would be self-assessment — the very
   thing this condition exists to replace.
 
   **Present the frozen-vs-final diff at the stop**, not a re-read of the whole plan. The cost of this
