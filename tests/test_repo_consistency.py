@@ -1211,5 +1211,82 @@ class MutationNaReasonTests(unittest.TestCase):
         )
 
 
+class PlanGateFrozenBlockTests(unittest.TestCase):
+    """#28's always-on plan-gate stop hangs on one heading spelled the same everywhere.
+
+    Step 4 WRITES a frozen pre-image of the plan's approach under a fixed heading;
+    step 5 LOOKS FOR that heading to diff against; the ``issue-<N>.plan.md`` template
+    declares it; Resume names it in the write-once guard. If those spellings drift
+    apart the mechanism is **dead while every word of the prose still reads correctly**
+    -- step 5 finds no block, and an absent pre-image is exactly the case the engine
+    now has to treat as material.
+
+    This is the one mechanically-checkable part of a nine-site invariant. The rest is
+    prose agreement, which a check would guard only fragilely or vacuously (the #76
+    ``~~~markdown`` span problem) -- see ``CLAUDE.md``. What is asserted here is a
+    *string* coupling, not a meaning, which is why it is neither.
+
+    Whitespace is normalized deliberately: one of the four occurrences is line-wrapped,
+    the same hazard that hid two step references from the naive grep ``CLAUDE.md``
+    quotes. A literal check would pass while guarding three sites out of four.
+    """
+
+    # Written by step 4, read by step 5, declared by the template, named by Resume.
+    _EXPECTED_SITES = 4
+
+    _HEADING = (
+        "## Approach as reviewed (frozen before the design gate) "
+        "-- write-once, do not edit"
+    )
+
+    def _normalized_engine(self) -> str:
+        # Collapse every run of whitespace so a line-wrapped occurrence reads the
+        # same as an inline one, and normalize the em dash the engine writes.
+        text = _ENGINE.read_text(encoding="utf-8").replace("\u2014", "--")
+        return re.sub(r"\s+", " ", text)
+
+    def test_frozen_block_heading_is_identical_at_every_site(self) -> None:
+        found = self._normalized_engine().count(self._HEADING)
+        self.assertEqual(
+            found,
+            self._EXPECTED_SITES,
+            f"loop-engine.md spells the frozen-approach heading {found} time(s); "
+            f"expected {self._EXPECTED_SITES} identical occurrences -- step 4 (which "
+            "writes the block), step 5 (which diffs against it), the "
+            "issue-<N>.plan.md template, and Resume's write-once guard.\n\n"
+            "A MISMATCH IS SILENT: step 5 looks the block up by name, so a heading "
+            "that drifts at one site means the diff finds nothing, and 'no evidence "
+            "of a material change' reads as 'not material' -- the always-on stop "
+            "passes without ever running. That is the self-assessment #28 removed.\n\n"
+            "If you renamed the heading deliberately, rename it at ALL of them and "
+            "update _HEADING. Do NOT relax the count to make this pass: a lower "
+            "number is the defect, not the new baseline.",
+        )
+
+    def test_the_heading_the_template_declares_is_the_one_step_5_diffs(self) -> None:
+        # Guards the count above against a degenerate pass: four occurrences of a
+        # heading that no longer appears in the plan template would still total 4.
+        engine = self._normalized_engine()
+        template_marker = re.sub(
+            r"\s+", " ", "## Acceptance criteria (verbatim from issue)"
+        )
+        self.assertIn(
+            template_marker,
+            engine,
+            "the issue-<N>.plan.md template is not where this test thinks it is; "
+            "re-anchor before trusting the count above.",
+        )
+        # The heading must sit inside the fenced template block, not only in prose.
+        fenced = re.findall(r"```markdown(.*?)```", engine, flags=re.S)
+        self.assertTrue(
+            any(self._HEADING in block for block in fenced),
+            "the frozen-approach heading does not appear inside any ```markdown "
+            "fence in loop-engine.md. The template is what an orchestrator copies "
+            "when it writes issue-<N>.plan.md, so a heading that lives only in the "
+            "prose around it is never actually written to a plan file -- and step 5 "
+            "then diffs against a block that no run produces.",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
