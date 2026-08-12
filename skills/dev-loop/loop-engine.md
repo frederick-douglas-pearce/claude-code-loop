@@ -179,6 +179,19 @@ If any `ARCHITECT_TRIGGERS` condition fires OR you are unsure about the design, 
 `DESIGN_AGENT` with the plan; address `blocking`/`important` concerns before coding. Skip for docs
 and trivial research.
 
+**Before you invoke `DESIGN_AGENT`, freeze the plan's approach.** Copy `## Approach` verbatim into a
+`## Approach as reviewed (frozen before the design gate)` block in `issue-<N>.plan.md`. That block
+is the **pre-image** step 5's materiality test diffs against — without it the test has nothing to
+compare and degrades to self-assessment, which is what it exists to replace. (The ledger is
+gitignored, so there is no git pre-image to recover instead.) The freeze is owed only when you are
+actually invoking the gate; a skipped architect pass can rewrite nothing.
+
+**The block is write-once: if it already exists, never rewrite it.** Re-running the copy after the
+architect has edited `## Approach` would overwrite the pre-image with the post-architect text — the
+step-5 diff would then come back empty and the gate would **silently pass**, which is precisely the
+failure the test exists to catch. This is the same write-once discipline Resume already applies to
+this step's other side effect (the issue comment); both are stated there.
+
 ### 5. Human gate (conditional — every mode)
 The plan gate is **conditional in every mode** — `mode:` gates the merge gate only (step 11), never
 this one. It is **value-first**: present the step-3 value framing (user-story map / value statement)
@@ -189,6 +202,34 @@ change is risky/irreversible; SCOPE/DESIGN agents disagree or punt; or you are o
 Otherwise proceed (note "auto-approved" + why in the journal). Route scope/value questions to
 `SCOPE_AGENT` and design questions to `DESIGN_AGENT` BEFORE escalating to the human. On approval
 (human or auto), advance the row to `plan-approved`.
+
+**One stop condition is ALWAYS-ON.** The conditions above are judgment calls; this one is not, and
+it fires under **every** mode. Route graduation cannot reach it — `escalation-only` loosens the
+merge gate only, so a graduated route still stops here:
+
+- **The architect materially changed the plan.** A *decisive* architect that **redirects** the plan
+  is a **stronger** reason for a human look than one that punts or disagrees, not a weaker one: the
+  plan you would have approved is now a different plan, and nobody has seen it. Read that inversion
+  literally — **"the agents agreed and ruled cleanly, so I proceeded" is not a reason to auto-approve,
+  it is the trigger.** (The condition above it keys on disagreement; this one keys on the opposite,
+  and both stop.)
+
+  **The test is a diff, not a self-assessment.** Compare the frozen `## Approach as reviewed (frozen
+  before the design gate)` block (step 4) against the live `## Approach`. The change is **material**
+  if any of: a step was added, removed, or reordered; the files-to-touch set changed; a different
+  fork was chosen; an acceptance criterion was reinterpreted. Pure wording is not material.
+  **The list is sufficient, not exhaustive — extend it, never prune it**, and **if you are unsure
+  whether an edit is material, it is material** (default-deny, as at every other gate). The
+  catch-all is what makes extension safe and pruning a regression.
+
+  **Present the frozen-vs-final diff at the stop**, not a re-read of the whole plan. The cost of this
+  condition is the human's attention, and a diff is what keeps it cheap.
+
+  **A narrowing or reduction of an acceptance criterion is never absorbed here.** The gate may adopt
+  a rewrite; it may not quietly deliver less than the ACs ask. Reading down an AC's *wording* while
+  delivering its intent is interpretive and belongs to the gate; **reducing its intent is an issue
+  amendment** — record it on the issue and file the removed scope, or the acceptance gate (step 7)
+  will certify an AC that was never met.
 
 ### 6. Implement (you, the parent thread)
 Advance the row to `implementing`. Create the branch (`BRANCH_FMT`). Implement code + tests +
@@ -495,8 +536,11 @@ re-invokes with fresh context for the next issue.)
 ### Escalation rubric (when unsure)
 Scope/priority/requirements — including any plan whose value story lacks a credible user or a
 checkable falsifier (step 3) — → `SCOPE_AGENT`, before implementing. Design/implementation →
-`DESIGN_AGENT`. Escalate to the HUMAN only when those disagree/punt, ACs are unresolvable, an
-action is destructive/irreversible, a review finding is contested, or the same step failed twice.
+`DESIGN_AGENT`. Escalate to the HUMAN when those disagree/punt, ACs are unresolvable, an
+action is destructive/irreversible, a review finding is contested, or the same step failed twice —
+**and, always-on, when the architect *decides*: a material redirect of the plan escalates exactly as
+a punt does** (step 5). "Only when those disagree/punt" would read a decisive rewrite as a reason to
+proceed, which inverts the point of the gate.
 
 **A gate that produced no verdict does not get reasoned about here.** Do not weigh whether its
 absence "matters" — apply the **Gate-outcome invariant (evidence-bound pass)** under Gates,
@@ -657,8 +701,9 @@ resume.
 
 The header carries a `mode:` field that gates **the merge gate only** — it does
 **not** change the plan gate, which is conditional in *every* mode (step 5: the
-plan gate stops only on ambiguous ACs, risk/irreversibility, agent disagreement, or genuine
-uncertainty — never merely because of `mode:`). The two modes:
+plan gate stops on ambiguous ACs, risk/irreversibility, agent disagreement, or genuine
+uncertainty — never merely because of `mode:` — **plus one always-on condition `mode:` cannot reach,
+a material architect rewrite of the plan**). The two modes:
 - **`calibration`** (default) — the human approves **every** merge; the loop never auto-merges
   (step 11). Plan gate conditional.
 - **`escalation-only`** — the human loosens the **merge gate per route**: a route the human has
@@ -971,6 +1016,12 @@ Add a source-fidelity note if the rationale leans on any externally-cited source
 
 ## Approach
 <steps, files to touch, tests to add>
+
+## Approach as reviewed (frozen before the design gate) — write-once, do not edit
+<Verbatim copy of `## Approach` taken at step 4 BEFORE `DESIGN_AGENT` was invoked; omit this
+section entirely if the architect gate was skipped. It is the pre-image step 5 diffs the live
+`## Approach` against to decide whether the architect materially changed the plan. Never
+regenerated — see Resume.>
 
 ## Architect triggers hit
 <which ARCHITECT_TRIGGERS fired, or "none">
@@ -1416,10 +1467,18 @@ row, check whether its branch exists, whether a PR is open (or already merged), 
 status, and resume at the matching pipeline stage — git wins on any conflict with a stale status.
 Stages 4/7/10 need no distinct status because the surrounding statuses bracket them: a
 `plan-approved` row re-enters at implement (step 6), so the architect/human gates are NOT re-run.
-The one external-side-effect stage is the architect (step 4) — it posts a comment to the issue —
-so on the rare resume of a `planning` row, check for an existing architect comment and skip
-re-invoking if present (do not double-post). AC-verify (step 7) is side-effect-free; security (step
-10) re-labeling is a no-op. Security (step 10) re-labeling is a no-op. **Working-tree reconciliation:** if a crashed prior
+The architect (step 4) carries **two** side effects, and on the rare resume of a `planning` row both
+are **write-once** — check for the artifact and skip the action if it is present:
+1. it posts a comment to the issue — check for an existing architect comment, do not double-post;
+2. it freezes `## Approach as reviewed (frozen before the design gate)` into `issue-<N>.plan.md`
+   **before** invoking the agent — **if that block exists, leave it exactly as it is.** Re-running
+   the copy on resume would capture the *post*-architect approach as the pre-image, so step 5's
+   materiality diff would come back empty and the always-on stop would **silently pass**. A resumed
+   iteration is the one case where the pre-image and the live text have already diverged, which is
+   precisely when the guard matters.
+
+AC-verify (step 7) is side-effect-free; security (step
+10) re-labeling is a no-op. **Working-tree reconciliation:** if a crashed prior
 attempt left uncommitted changes, inspect them before proceeding — keep and continue if they
 match the plan, or `git restore`/stash if they're partial/unrelated. **One check first, because it
 inverts that instruction:** leftovers from an interrupted *mutation* pass are partial and
@@ -1464,7 +1523,7 @@ Gate table:
 |------|-----|------|--------|
 | Plan | orchestrator | every issue | `issue-<N>.plan.md` |
 | Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure | issue comment |
-| Human (plan) | user | only if uncertain/irreversible | approve/redirect |
+| Human (plan) | user | if uncertain/irreversible; **always** when the architect materially changed the plan (step 5's frozen-vs-live diff — decisiveness escalates exactly as a punt does, and no mode or route graduation reaches this one) | approve/redirect |
 | Build commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`) | orchestrator | step 6, each per its own binding; `HERMETIC_TEST_CMD` additionally requires Route `code` **and** a change that adds or modifies a test, **whatever the binding says** — on such a row an absent or `TODO` binding is unknown, and unknown is due (the gate's four-state table) | **exit status per command**; non-zero blocks |
 | AC-verify | fresh subagent (+`VERIFY`); **any re-check a fresh instance too** (Fresh-re-check invariant) | every issue with acceptance criteria (step 7 is unconditional; the **mutation pass within it** is scoped — Routing table) | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors); **either class blocks** |
 | Code review | `CODE_REVIEW` (parallel finders you run — step 9); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes |

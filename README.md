@@ -82,6 +82,14 @@ you mid-pipeline when it hits ambiguous acceptance criteria, risk, agent disagre
 a gate finding that is still there after one fresh re-check, or genuine uncertainty.
 Wherever eligibility is unclear the rule is **default-deny**: fall back to the human.
 
+**When its design reviewer rewrites the plan, you see the plan.** One mid-pipeline stop is
+unconditional — no mode setting and no route graduation can loosen it: if the architect review
+**materially changed** the approach, the loop stops and shows you what changed before writing any
+code. A reviewer that decides is treated as a stronger reason to interrupt you than one that hedges,
+because the plan you would have approved is no longer the plan being built. The test is a diff
+against the approach as it stood before the review, not the loop's own opinion of whether the change
+was significant.
+
 **A gate that did not run is never reported as one that passed.** For every gate the loop
 runs — plan, architect, your build commands, acceptance, code review, security, merge — it may
 record a pass only with

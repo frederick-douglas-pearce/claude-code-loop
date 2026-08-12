@@ -62,13 +62,13 @@ Three modules, and the split between them matters:
   `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
   `description`** (`plan→architect→implement→review→merge` — the string the model reads when
   deciding to invoke the skill, so a behavior surface, not prose), the engine's in-prose
-  `step N` cross-references — **106 sites, 110 numbers** — and `commands/init-loop.md`'s
+  `step N` cross-references — **114 sites, 118 numbers** — and `commands/init-loop.md`'s
   `engine step N` (below). *"Four files" is newly true, not newly written:* the previous five
   restatements live in **three** files (`loop-engine.md` ×2, `SKILL.md` ×2, `plugin.json`), so the
   standing "five restatements in four files" was off by one on the file count; `init-loop.md` is what
   makes four correct. That grep
   (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) reports
-  only 104: the other two are line-wrapped, which is exactly how they went unguarded until review
+  only 112: the other two are line-wrapped, which is exactly how they went unguarded until review
   caught it. It checks numbering and label correspondence **only** — never whether a
   step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
   `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
@@ -84,7 +84,7 @@ Three modules, and the split between them matters:
   that is semantics, which this module does not do. It fires when a reference goes **out of range** —
   whether edited to a number no heading defines, or left behind when the heading run shrank or was
   rebased off zero. Stated bluntly, because this is the case #31 will actually hit: **insert a step
-  mid-pipeline, renumber everything after it, and all 106 reference sites (110 numbers) point at the
+  mid-pipeline, renumber everything after it, and all 114 reference sites (118 numbers) point at the
   wrong step with the whole suite green.** Confirmed by mutation (#44), along with the milder shapes — appending a step
   and updating `SKILL.md` passes, as does rewriting a `(step 9)` to `(step 7)`. **A green run is not
   evidence the cross-references were correctly renumbered.** Reference *forms* the regex does not
@@ -220,6 +220,22 @@ even though nothing will fail loudly:
   split this bullet used to carry — isolation live, mutation pass dormant — **closed with #60's
   second PR**: the pass now runs the harness, so every one of those sites describes live behavior
   and none of them may be re-fenced as dormant.
+- **The always-on plan-gate stop is a second multi-site invariant with no test guarding it** (#28).
+  "A material architect rewrite stops for the human, under every mode" now lives at **eight** sites:
+  `loop-engine.md` step 4 (the frozen pre-image + its write-once rule), step 5 (the condition and its
+  materiality test), the Escalation rubric, the `mode:` passage, the gate table, the
+  `issue-<N>.plan.md` template, and Resume — plus `SKILL.md`'s fail-safe list and the README trust
+  model. **No mechanical check was added, deliberately:** the architect ruled that a check over eight
+  prose sites would be fragile or vacuous — the same problem #76 documents for the `~~~markdown` span
+  — so the absence is recorded here rather than papered over. Two failure modes to watch, because
+  each is a silent reversal: (1) any site restored to "escalate **only** when the agents
+  disagree/punt" re-inverts the logic the change exists to fix, and the Escalation rubric is where
+  that wording actually lived; (2) the step-4 freeze losing its **write-once** guard makes the
+  step-5 diff come back empty on a resumed row, so the gate passes silently — the mechanism failing
+  in the one direction that looks like success. The materiality list is **sufficient, not
+  exhaustive**: extend it, never prune it. Its "if unsure, material" catch-all is what makes it the
+  opposite polarity to `ALLOWED_NON_BINDINGS`/`_STOPWORDS` — additions can only strengthen it, so it
+  is not the stale-allow-list failure those two flag.
 
 ## The append-only guard hook
 

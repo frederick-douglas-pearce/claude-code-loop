@@ -40,6 +40,12 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   admin-merge, only `--delete-branch` the PR's own branch.
 - **Escalate rather than guess.** Scope/value → `SCOPE_AGENT`; design → `DESIGN_AGENT`; unresolved,
   contested, or irreversible → the human.
+- **A decisive architect escalates exactly as a punting one does.** If the architect **materially
+  changed the plan**, STOP for the human — under every mode, whatever the route. The plan you would
+  have approved is now a different plan and nobody has seen it, so "the agents ruled cleanly" is the
+  trigger, not a reason to proceed. The engine's test is a diff against the approach frozen before
+  the architect ran; **absent that frozen block, treat the change as material** rather than assuming
+  it was not.
 - **A gate that did not run is never recorded as one that passed.** Journal a gate as passed only
   with its own verdict as evidence — **no verdict ⇒ not passed.** An unbound, `TODO`-valued, or
   uninvocable binding is not permission to skip the gate: fall back to the engine's inline
