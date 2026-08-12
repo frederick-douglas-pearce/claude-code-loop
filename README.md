@@ -86,9 +86,9 @@ Wherever eligibility is unclear the rule is **default-deny**: fall back to the h
 unconditional — no mode setting and no route graduation can loosen it: if the architect review
 **materially changed** the approach, the loop stops and shows you what changed before writing any
 code. A reviewer that decides is treated as a stronger reason to interrupt you than one that hedges,
-because the plan you would have approved is no longer the plan being built. The test is a diff
-against the approach as it stood before the review, not the loop's own opinion of whether the change
-was significant.
+because the plan you would have approved is no longer the plan being built. The comparison is made
+against a copy of the approach frozen before the review ran, so the loop is reading a record rather
+than its own memory of what it had intended.
 
 **A gate that did not run is never reported as one that passed.** For every gate the loop
 runs — plan, architect, your build commands, acceptance, code review, security, merge — it may
