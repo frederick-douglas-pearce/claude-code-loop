@@ -1226,66 +1226,124 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
     ``~~~markdown`` span problem) -- see ``CLAUDE.md``. What is asserted here is a
     *string* coupling, not a meaning, which is why it is neither.
 
-    Whitespace is normalized deliberately: one of the four occurrences is line-wrapped,
-    the same hazard that hid two step references from the naive grep ``CLAUDE.md``
-    quotes. A literal check would pass while guarding three sites out of four.
-    """
+    **Anchored per region, not counted globally, and the distinction is the whole
+    value of the test.** An earlier draft asserted ``count(heading) == 4`` over the
+    file. A fresh reviewer broke it twice while the suite stayed green: paraphrase
+    Resume's occurrence and add a spare mention in step 4's prose (total still 4), or
+    delete the block from the plan template and mention it inside the *progress.md*
+    fence instead. Both leave the mechanism dead. A global total cannot tell *which*
+    sites carry the heading, which is the only thing worth knowing here.
 
-    # Written by step 4, read by step 5, declared by the template, named by Resume.
-    _EXPECTED_SITES = 4
+    Whitespace is normalized deliberately: one occurrence is line-wrapped, the same
+    hazard that hid two step references from the naive grep ``CLAUDE.md`` quotes. The
+    em dash is normalized too. So this asserts *normalized* equality at four located
+    sites -- not byte-identity, and ``CLAUDE.md`` must not claim more.
+    """
 
     _HEADING = (
         "## Approach as reviewed (frozen before the design gate) "
         "-- write-once, do not edit"
     )
 
-    def _normalized_engine(self) -> str:
-        # Collapse every run of whitespace so a line-wrapped occurrence reads the
-        # same as an inline one, and normalize the em dash the engine writes.
-        text = _ENGINE.read_text(encoding="utf-8").replace("\u2014", "--")
-        return re.sub(r"\s+", " ", text)
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
 
-    def test_frozen_block_heading_is_identical_at_every_site(self) -> None:
-        found = self._normalized_engine().count(self._HEADING)
+    def _engine(self) -> str:
+        return _ENGINE.read_text(encoding="utf-8")
+
+    def _span(self, text: str, start: str, end: str, label: str) -> str:
+        i = text.find(start)
+        self.assertNotEqual(
+            i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it."
+        )
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it."
+        )
+        return text[i:j]
+
+    def _plan_template_fence(self, text: str) -> str:
+        # The plan template specifically -- NOT just any ```markdown fence. The engine
+        # has several; an earlier draft accepted any of them and passed while the
+        # heading had been moved into the progress.md one.
+        section = self._span(
+            text,
+            "### `issue-<N>.plan.md`",
+            "### Lifecycle & commit policy",
+            "issue-<N>.plan.md template section",
+        )
+        fences = re.findall(r"```markdown(.*?)```", section, flags=re.S)
         self.assertEqual(
-            found,
-            self._EXPECTED_SITES,
-            f"loop-engine.md spells the frozen-approach heading {found} time(s); "
-            f"expected {self._EXPECTED_SITES} identical occurrences -- step 4 (which "
-            "writes the block), step 5 (which diffs against it), the "
-            "issue-<N>.plan.md template, and Resume's write-once guard.\n\n"
-            "A MISMATCH IS SILENT: step 5 looks the block up by name, so a heading "
-            "that drifts at one site means the diff finds nothing, and 'no evidence "
-            "of a material change' reads as 'not material' -- the always-on stop "
-            "passes without ever running. That is the self-assessment #28 removed.\n\n"
-            "If you renamed the heading deliberately, rename it at ALL of them and "
-            "update _HEADING. Do NOT relax the count to make this pass: a lower "
-            "number is the defect, not the new baseline.",
+            len(fences), 1,
+            "expected exactly one ```markdown fence in the issue-<N>.plan.md template "
+            f"section; found {len(fences)}. This test anchors on that fence being the "
+            "plan template -- re-anchor it rather than loosening the match.",
+        )
+        fence = fences[0]
+        self.assertIn(
+            "# Plan: #<N>", fence,
+            "the fence found in the issue-<N>.plan.md template section is not the plan "
+            "template (no `# Plan: #<N>` line). Re-anchor this test.",
+        )
+        return fence
+
+    def _regions(self):
+        text = self._engine()
+        return {
+            "step 4 (writes the frozen block)": self._span(
+                text, "### 4. Architect gate", "### 5. Human gate", "step 4"
+            ),
+            "step 5 (diffs against it)": self._span(
+                text, "### 5. Human gate", "### 6. Implement", "step 5"
+            ),
+            "the issue-<N>.plan.md template": self._plan_template_fence(text),
+            "Resume (write-once guard)": self._span(
+                text, "## Resume after", "## Routing table", "Resume"
+            ),
+        }
+
+    def test_every_site_that_writes_or_reads_the_frozen_block_spells_it_the_same(
+        self,
+    ) -> None:
+        missing = sorted(
+            label
+            for label, body in self._regions().items()
+            if self._HEADING not in self._normalize(body)
+        )
+        self.assertEqual(
+            missing,
+            [],
+            "these region(s) of loop-engine.md do not carry the frozen-approach "
+            f"heading: {missing}.\n\n"
+            f"Expected (normalized): {self._HEADING!r}\n\n"
+            "A MISMATCH IS SILENT. Step 5 looks the block up by name, so a heading "
+            "that drifts at one site means the diff finds nothing -- and 'no evidence "
+            "of a material change' reads as 'not material', so the always-on stop "
+            "passes without ever running. That is exactly the self-assessment #28 "
+            "removed, failing in the direction that looks like success.\n\n"
+            "Each region is checked SEPARATELY on purpose: a global count of the "
+            "heading passes when one site loses it and another gains a spare "
+            "mention. If you renamed the heading deliberately, rename it in all four "
+            "regions and update _HEADING. Never delete a region from _regions() to "
+            "make this pass.",
         )
 
-    def test_the_heading_the_template_declares_is_the_one_step_5_diffs(self) -> None:
-        # Guards the count above against a degenerate pass: four occurrences of a
-        # heading that no longer appears in the plan template would still total 4.
-        engine = self._normalized_engine()
-        template_marker = re.sub(
-            r"\s+", " ", "## Acceptance criteria (verbatim from issue)"
-        )
-        self.assertIn(
-            template_marker,
-            engine,
-            "the issue-<N>.plan.md template is not where this test thinks it is; "
-            "re-anchor before trusting the count above.",
-        )
-        # The heading must sit inside the fenced template block, not only in prose.
-        fenced = re.findall(r"```markdown(.*?)```", engine, flags=re.S)
-        self.assertTrue(
-            any(self._HEADING in block for block in fenced),
-            "the frozen-approach heading does not appear inside any ```markdown "
-            "fence in loop-engine.md. The template is what an orchestrator copies "
-            "when it writes issue-<N>.plan.md, so a heading that lives only in the "
-            "prose around it is never actually written to a plan file -- and step 5 "
-            "then diffs against a block that no run produces.",
-        )
+    def test_the_heading_is_a_section_not_a_subsection(self) -> None:
+        # `## Foo` is a substring of `### Foo`, so a level change would slip past a
+        # plain containment check while producing a different block in the plan file.
+        for label, body in self._regions().items():
+            with self.subTest(region=label):
+                self.assertNotIn(
+                    "#" + self._HEADING,
+                    self._normalize(body),
+                    f"{label} writes the frozen-approach block at a deeper heading "
+                    "level (### rather than ##). The orchestrator writes the plan "
+                    "file from these strings, so a level change produces a block "
+                    "step 5's lookup does not match.",
+                )
 
 
 if __name__ == "__main__":

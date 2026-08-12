@@ -243,6 +243,15 @@ merge gate only, so a graduated route still stops here:
   the architect was **skipped**, the block is legitimately absent and the condition is not due at
   all — the distinction is whether the gate ran, never whether the artifact is there.
 
+  **"Skipped" means `DESIGN_AGENT` was never consulted — not merely that step 4 skipped it.** This
+  step routes design questions to `DESIGN_AGENT` before escalating, so the agent can first run
+  *here*, after step 4 declined it. **The freeze is owed by any `DESIGN_AGENT` invocation, wherever
+  it happens**: freeze `## Approach` before consulting, and apply the outcome to the plan text
+  before deciding. A consultation at this step that redirects the plan is material on the same
+  terms — otherwise the one architect call the freeze rule forgot to name becomes the path the
+  whole condition is bypassed through, journalled `n/a: architect skipped` while an agent was in
+  fact consulted and did in fact redirect.
+
   **Present the frozen-vs-final diff at the stop**, not a re-read of the whole plan. The cost of this
   condition is the human's attention, and a diff is what keeps it cheap.
 
@@ -837,6 +846,23 @@ of the first three spellings, or takes the fourth path, which writes none:
 - **no `- Hermetic:` line at all** — the gate produced no verdict, so a `- gate-error:` carries it
   instead and the iteration stops. Three states reach here, all of them on a row the trigger DID
   fire on: bound but unable to execute; `—` with no reason; and absent or `TODO`-valued.
+
+The **`- Plan-gate:`** line records the always-on stop's frozen-vs-live diff (step 5), which is
+otherwise invisible for the same reason: it resolves before implementation, so a run that never took
+the diff and a run that took it and found nothing leave an identical ledger. It is also the only
+evidence this condition's falsifier can ever be evaluated against. Every iteration writes exactly one:
+- **`- Plan-gate: material (<what changed>) → STOPPED`** — the diff showed a material change and the
+  human was asked. Name the axis (a step added, the files-to-touch set changed, a fork re-chosen, an
+  AC reinterpreted), not just the verdict.
+- **`- Plan-gate: no material change (frozen-vs-live diff taken)`** — the diff was taken and came
+  back immaterial. The parenthetical is the point: it is what distinguishes this from the line never
+  being written.
+- **`- Plan-gate: material (pre-image absent, architect ran) → STOPPED`** — the block was missing on
+  a row where `DESIGN_AGENT` was consulted. There is nothing to name as "what changed" because the
+  evidence is what is missing; that is a stop, never a pass.
+- **`- Plan-gate: n/a: architect skipped (<route/reason>)`** — `DESIGN_AGENT` was never consulted,
+  at step 4 **or** at step 5, so the condition was not due. If it was consulted anywhere, this
+  spelling is unavailable.
 
 **An absent or `TODO`-valued binding is never an `n/a: no offline/hermetic tier declared`** — that
 reason quotes a config that did not give one. On a row the trigger fires on it is unknown, unknown
@@ -1509,7 +1535,13 @@ are **write-once** — check for the artifact and skip the action if it is prese
    silently, on the one path this guard was added to harden;
 2. it freezes `## Approach as reviewed (frozen before the design gate) — write-once, do not edit`
    into `issue-<N>.plan.md`
-   **before** invoking the agent — **if that block exists, leave it exactly as it is.** Re-running
+   **before** invoking the agent — **if that block exists, leave it exactly as it is, and if it does
+   not exist, do not create it now.** Both halves matter and they fail in opposite directions: a
+   rewrite overwrites the pre-image, while a *late* freeze manufactures one out of the already-
+   redirected `## Approach` — either way step 5 diffs a text against itself, gets nothing, and the
+   always-on stop passes silently. A block that was never written is the **absent pre-image** case
+   (step 5): if the architect ran, that is **material**, and no freeze performed now can turn it back
+   into evidence. Re-running
    the copy on resume would capture the *post*-architect approach as the pre-image, so step 5's
    materiality diff would come back empty and the always-on stop would **silently pass**. A resumed
    iteration is the one case where the pre-image and the live text have already diverged, which is
