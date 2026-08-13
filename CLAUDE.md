@@ -420,20 +420,60 @@ past a patch bump: it renumbers the pipeline, adds an `in-acceptance` status, re
 reverses a multi-site invariant, so it is a minor bump.
 
 [#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1) is now the **findings
-index (F1–F21), not a work item** — "no PR should ever be opened for #1." Findings surfaced by real
+index, not a work item** — "no PR should ever be opened for #1." Findings surfaced by real
 runs (the first external adoption
 [us-presidential-vote-analysis](https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis),
-the AgentFluent dogfood, and #6's smoke test) are recorded there with where they surfaced, the gap, a
+the AgentFluent dogfood, #6's smoke test, and — since 2026-07-28 — this repo's own dogfood) are
+recorded there with where they surfaced, the gap, a
 *generic* fix (removing the AgentFluent-ism rather than special-casing), and a severity; the detail
 lives in its comments, which are the only copy. They are scoped into **seven epics and ~21 stories**
-under the milestone, and #1 closes when the last child does.
+under the milestone.
+
+**The index outgrew its own title, so do not read either as a range.** The issue is still *titled*
+"F1–F21"; its comments now carry findings through **F42**, the overwhelming majority filed by this
+repo's dogfood runs rather than by the three original sources. The title is human-owned and stale —
+treat the comments as authoritative and don't infer the count from either the title or this
+paragraph. (This is the same enumerable-assertion trap documented twice above; the fix is to state
+where the number lives, not to restate the number.)
+
+**#1 closes when the last child does — and that is now known to be after the v0.2.0 release.** #30
+was deferred to `v0.3.0` at its plan gate on 2026-08-13, and #30 *is* epic **#15**'s third acceptance
+criterion verbatim, so **#15 and #1 both stay open past the bump.** Accepted deliberately: E4's
+load-bearing half (F2 — the plan gate, #28 + #29) shipped, and what deferred is the recommendation
+half. The epic rows are `deferred` in the ledger, so nothing blocks #36.
 
 **The batching convention was superseded 2026-07-28: batch the *release*, not the PRs.** One version
 bump and one consumer re-install, but multiple coherent PRs. The old "never cut per-finding PRs" rule
 existed to avoid re-installing per finding — a release cost, not a PR cost.
 
-**`v0.3.0`** — two deferrals scoped out of v0.2.0 rather than dropped: the `TEST_EFFICACY_AGENT`
-binding (#37) and `REVIEW_TIERS` (#38). Both wait on corpus, not on effort.
+**`v0.3.0` — the deferral milestone, and it is no longer the two-issue footnote this file described
+until 2026-08-13.** It opened as exactly that: `TEST_EFFICACY_AGENT` (#37) and `REVIEW_TIERS` (#38),
+"both wait on corpus, not on effort." It now holds **13** issues — check the milestone, don't trust
+this number, which is the point of the paragraph below.
+
+**The organizing criterion still holds and is the useful part: work lands here when it waits on
+*corpus*, not on effort.** That is what makes it a real milestone rather than a backlog of things we
+didn't get to, and it is the test to apply when deciding whether something belongs here. #30 (the
+hand-mirrors-a-subsystem architect trigger, F9) is the worked example, deferred 2026-08-13 at its
+plan gate: the plan's own corpus pass returned **n=1 and wholly retrospective**, against a falsifier
+that only a *prospective* instance can discharge.
+
+**The reason #30 deferred is worth carrying, because it generalizes past #30.** Cheapness did not
+save it. Its AC3 would have written the new wording into the `/init-loop` **skeleton**, which copies
+into consumer `loop.config.md` files that **no later release touches** — so unvalidated wording there
+is *stranded*, not corrected by the next bump. That is the same asymmetry the sixth-restatement
+section documents above, and it is a general rule: **the evidence bar for anything landing in the
+skeleton is higher than for the same wording landing in the engine**, because the engine's copy is
+reachable and the skeleton's copy is not.
+
+**A deferral needs a capture mechanism or it is just a delay.** "If it matters it will recur" is only
+true if something records recurrences. Nothing did for F9 — the second instance surfaced solely
+because #30's plan grepped `progress.md` for it, and F9's own thesis is that nobody writes this
+trigger down unprompted, so while it does not exist nobody is looking. The fix was a **recurrence log
+on #1** that also separates the *mechanisms* two findings can share (for F9: behavioral-mirror vs.
+list-drift), which is what stops a count re-inflating by absorbing a related-but-different failure
+mode — exactly how #30's evidence first got overstated as n=2. Do the same for any future corpus
+deferral.
 
 ### Standing convention: the README status block ships with the version bump
 
