@@ -19,7 +19,7 @@ invariants below without them:
    to for this repo).
 2. **`${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/loop-engine.md`** — the generic engine: the numbered pipeline
    (step 0 load/resume → 1 select → 2 route → 3 plan → 4 architect → 5 human gate → 6 implement →
-   7 AC-verify → 8 commit/PR → 9 code-review → 10 security → 11 merge → 12 journal), plus the
+   7 commit/PR → 8 code-review → 9 security → 10 AC-verify → 11 merge → 12 journal), plus the
    ledger format, router, AC-verifier, initialization, resume, routing table, and
    gate/convergence/park-hold/budget semantics.
 

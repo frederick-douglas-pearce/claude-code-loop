@@ -248,8 +248,8 @@ class PipelineStepOrderTests(unittest.TestCase):
     breaks: ``SKILL.md``'s **frontmatter** ``description`` chain -- the string
     the model reads when deciding whether to invoke the skill, so a behavior
     surface rather than internal prose -- and the engine's in-prose ``step N``
-    / ``Stages N/M`` cross-references: **161 reference sites, 165 numbers** once
-    ``/``- and dash-separated runs are expanded. This grep finds 159 of the 161::
+    / ``Stages N/M`` cross-references: **179 reference sites, 182 numbers** once
+    ``/``- and dash-separated runs are expanded. This grep finds 175 of the 179::
 
         grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' \\
             skills/dev-loop/loop-engine.md | wc -l
@@ -261,7 +261,7 @@ class PipelineStepOrderTests(unittest.TestCase):
     essentially every structural edit to the engine.)
 
     The **sixth** was added by #45: ``commands/init-loop.md``'s ``(engine step
-    9)`` in the ``CODE_REVIEW`` skeleton row -- the only restatement that will
+    8)`` in the ``CODE_REVIEW`` skeleton row -- the only restatement that will
     ship into repos this plugin cannot reach, since ``/init-loop`` copies that
     skeleton into each newly-onboarded repo's ``loop.config.md``.
 
@@ -285,8 +285,8 @@ class PipelineStepOrderTests(unittest.TestCase):
 
     The original three are not string-identical and cannot be made so: the engine has
     13 numbered headings, SKILL.md restates all 13 with numbers, and the
-    description gives 11 unnumbered labels -- omitting the two internal steps
-    (load/resume, commit/PR) and saying ``review`` where the engine says ``Code
+    description gives 12 unnumbered labels -- omitting the one internal step
+    (load/resume) and saying ``review`` where the engine says ``Code
     review``. So correspondence is by normalised word overlap: two labels
     correspond when their content words intersect, and each label binds to its
     *best*-overlapping candidate rather than its first (see ``_assign`` and
@@ -307,12 +307,13 @@ class PipelineStepOrderTests(unittest.TestCase):
       check.
     * **What a renumber does to the cross-references.** The cross-reference
       check asserts *resolvability only* -- that every referenced N is a real
-      heading number. It cannot know that ``step 9`` still means *code review*;
+      heading number. It cannot know that ``step 8`` still means *code review*;
       that is semantics, which this module does not do. It fires when a
       reference goes **out of range** -- whether because someone edited it to a
       number no heading defines, or because the heading run shrank or was
       rebased off zero. Stated bluntly, for whoever implements #31: **inserting
-      a step mid-pipeline and renumbering everything after it leaves all 165 numbers (across 161 sites)
+      a step mid-pipeline and renumbering everything after it leaves all 182
+      numbers (across 179 sites)
       references pointing at the wrong step with the whole suite green.** A
       green run is not evidence the cross-references were correctly renumbered.
     * **Consumer configs, for restatement #6.** Every onboarded repo's
@@ -371,19 +372,19 @@ class PipelineStepOrderTests(unittest.TestCase):
     _EXPECTED_FRONTMATTER_LABELS = 5
 
     # The engine's in-prose cross-references, in every form it actually uses:
-    # `step 9`, `Step 11`, `step-1`, `step 0.1`, `step 0/1`, `steps 0–1`,
-    # `Stages 4/7/10`. The trailing run picks up `/`- and dash-separated lists.
+    # `step 8`, `Step 11`, `step-1`, `step 0.1`, `step 0/1`, `steps 0–1`,
+    # `Stages 4/9`. The trailing run picks up `/`- and dash-separated lists.
     #
     # The newline branch is load-bearing, not defensive: the engine is
-    # hard-wrapped, and TWO references sit astride a wrap today ("(step\n   1)"
-    # and "(step\n10)"). A separator of plain `[ -]` silently missed both --
+    # hard-wrapped, and FOUR references sit astride a wrap today ("(step\n   1)",
+    # "(step\n10)", "step\n11" and "step\n9"). A separator of plain `[ -]` silently missed them --
     # found by review, and exactly the invisible-coverage failure this check
     # exists to prevent.
     #
     # Separators inside a run are NOT space-padded, deliberately. Allowing
     # `\s*` there made an ordinary prose aside -- "(step 12 — 40 lines max)" --
     # parse as a run of 12 and 40 and report a dangling "step 40" nobody wrote.
-    # All three real runs (`0–1`, `0/1`, `4/7/10`) are tight, so the padding
+    # All three real runs (`0–1`, `0/1`, `4/9`) are tight, so the padding
     # bought nothing and cost a false failure.
     _STEP_REFERENCE = re.compile(
         r"\b(?:[Ss]teps?|[Ss]tages?)(?:[ -]|[ \t]*\n[ \t]*)"
@@ -459,7 +460,7 @@ class PipelineStepOrderTests(unittest.TestCase):
     # Both are 2 today; they are not required to stay equal, since a deliberate
     # prose reference would raise the total and leave this alone.
     _EXPECTED_SKELETON_STEP_REFERENCES = 2
-    # Well below the 165 numbers currently present (161 reference sites,
+    # Well below the 182 numbers currently present (179 reference sites,
     # some listing several), so ordinary prose edits never trip it, and well
     # above zero, so a regex broken by a reword fails here instead of passing on
     # an empty list. The headroom is a deliberate choice, not a
@@ -467,7 +468,7 @@ class PipelineStepOrderTests(unittest.TestCase):
     # goes stale on any edit that adds a reference: it was 15 when 40 was
     # picked, and 40 has not been revisited since
     # -- and note its cost: a reword that breaks only PART of the
-    # matcher (say, `Stages 4/7/10` -> `Stages 4, 7 and 10`, a form this regex
+    # matcher (say, `Stages 4/9` -> `Stages 4 and 9`, a form this regex
     # does not match) drops a few numbers and still clears the floor. Raising
     # this as the engine grows is fine; lowering it to make a red run green is
     # working around the check (cf. _STOPWORDS, ALLOWED_NON_BINDINGS).
@@ -850,11 +851,11 @@ class PipelineStepOrderTests(unittest.TestCase):
         )
 
     def test_every_engine_step_reference_resolves_to_a_real_heading(self) -> None:
-        """Restatement #5: 93 in-prose `step N` sites. RESOLVABILITY ONLY.
+        """Restatement #5: 179 in-prose `step N` sites. RESOLVABILITY ONLY.
 
         This asserts that every referenced N is a real heading number -- not
-        that it still points at the step it meant. `step 9` continuing to
-        resolve after a renumber says nothing about whether 9 is still *Code
+        that it still points at the step it meant. `step 8` continuing to
+        resolve after a renumber says nothing about whether 8 is still *Code
         review*; that is semantics, and CLAUDE.md is explicit that this module
         must not grow into a semantic test of the engine. Sub-item suffixes
         (the `.1` in `step 0.1`) are likewise not resolved -- only the step.
@@ -863,7 +864,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         removed, or the run rebased off zero). It does NOT catch a renumber
         that only adds steps, nor a reference that shifted meaning while
         staying in range -- including the case that matters most, inserting a
-        step mid-pipeline, which leaves all 97 references pointing one step off
+        step mid-pipeline, which leaves all 182 references pointing one step off
         and every test green.
 
         Nor does it see reference FORMS the regex does not match: `steps 3 and
@@ -974,7 +975,7 @@ class PipelineStepOrderTests(unittest.TestCase):
 
         Same bar as the engine's own cross-reference check, deliberately:
         **resolvability only**. It fires when a reference goes out of range. It
-        cannot know that ``engine step 9`` still means *Code review*, so a #31
+        cannot know that ``engine step 8`` still means *Code review*, so a #31
         renumber that inserts a step mid-pipeline leaves this reference in range,
         pointing at the wrong step, with the suite green. It reuses
         ``_engine_steps()`` for the valid set so the two checks can never

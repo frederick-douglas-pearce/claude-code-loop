@@ -56,7 +56,7 @@ invocation resumes correctly.
    `hold`/`parked` rows) and the tail of `progress.md`.
 3. **Resume before selecting (see the Resume procedure below).** If any row sits in an *interrupted*
    status — non-terminal and NOT `queued`/`routed`/`hold`/`parked` (i.e. `planning`/`plan-approved`/
-   `implementing`/`in-pr`/`in-review`) — a prior iteration was cut off. Reconcile it against
+   `implementing`/`in-pr`/`in-review`/`in-acceptance`) — a prior iteration was cut off. Reconcile it against
    LIVE git/PR state as the source of truth — branch exists? PR open? already merged? CI
    status? — plus the working tree (status is only a coarse anchor; git wins on conflict),
    then re-enter the pipeline at the matching stage and FINISH that issue BEFORE selecting a
@@ -89,7 +89,7 @@ exact `- surfaced-join:` / `- surfaced-leave:` lines:
 - **Left** (a non-terminal `queue.md` row whose issue is no longer in the roster, not already
   recorded) → surface once: "#N left <run> — eject, or keep? (never auto-ejected)." Record
   `- surfaced-leave: #N`. On "keep", write the decision to the row's Notes (`kept: out-of-<run>
-  roster (curation)`) so it self-dedups; on "eject", an in-flight leaver (`planning`..`in-review`,
+  roster (curation)`) so it self-dedups; on "eject", an in-flight leaver (`planning`..`in-acceptance`,
   open PR) is **finish-then-reconsider**, not a bare eject (only a pre-pipeline row ejects cleanly —
   close/clean its PR+branch first), then set the row `deferred` with a curation Notes reason.
 This paragraph is the sub-unit the step-0.1 parked path invokes standalone.
@@ -335,7 +335,7 @@ never be a reason to record less.**
   **A narrowing or reduction of an acceptance criterion is never absorbed here.** The gate may adopt
   a rewrite; it may not quietly deliver less than the ACs ask. Reading down an AC's *wording* while
   delivering its intent is interpretive and belongs to the gate; **reducing its intent is an issue
-  amendment** — record it on the issue and file the removed scope, or the acceptance gate (step 7)
+  amendment** — record it on the issue and file the removed scope, or the acceptance gate (step 10)
   will certify an AC that was never met.
 
 ### 6. Implement (you, the parent thread)
@@ -353,8 +353,12 @@ holds at that instant, and from the moment you spawn a subagent until you have c
 that includes files you did not write. The window is **not** "while the agent runs" — an isolated
 worktree outlives the agent that wrote to it (Tool surface), so the exposure runs until the parent
 removes it. So: **name the paths you mean**, and **read `git diff --cached` before every commit**
-rather than trusting what you meant to stage. It applies at every commit boundary — step 8, and the
-fix commits at step 9 — not just the first.
+rather than trusting what you meant to stage. It applies at every commit boundary — step 7, the fix
+commits at step 8, **and the acceptance gate's own fix commits at step 10** — not just the first.
+(Step 9 defines no commit of its own; where a security finding needs code, it is fixed and committed
+under step 8's rule.)
+The last of those is the newest and the most exposed: the acceptance gate's mutation pass takes a
+copy of the tree, so a blanket stage there can land a deliberately-broken one.
 
 **Know what you are looking for**, because the worst case does not look like the mess it is. A
 blanket `git add` over an isolated worktree nested in the repository does **not** stage its files:
@@ -417,16 +421,16 @@ one.** Withhold your conclusions. An unprompted checker hedges, and a hedge read
 this gate goes quietly soft.
 
 This borrows the *shape* of the Fresh-re-check invariant without being governed by it: that
-invariant covers the two gates carrying a round cap (step 7 and step 9), and this gate carries none —
+invariant covers the two gates carrying a round cap (step 8 and step 10), and this gate carries none —
 it blocks until green, like any other step-6 command. So there is no round to count and no cap to
 consume. **If the fresh read comes back dirty, or cannot tell, escalate to the human and STOP** —
 do not absorb it, and do not fix-and-re-ask in a loop. A hermetic finding you stop on never reaches
 the merge gate; the always-escalate entry at step 11 is there for the other path, where a row somehow
 arrives carrying one.
 
-**A test added later re-arms the trigger.** Step 7 and step 9 routinely add tests — the Class B limit
+**A test added later re-arms the trigger.** Step 8 and step 10 routinely add tests — the Class B limit
 case is fixed by adding one, and review findings often are too. A gate journalled `n/a: no test
-change` at step 6 and then handed a new test at step 7 has left the tier unrun on an issue that
+change` at step 6 and then handed a new test at step 10 has left the tier unrun on an issue that
 *did* add a test, which is precisely what this gate is due on. Re-evaluate the trigger before you
 commit the fixes, and let the `- Hermetic:` line record the final state rather than the first
 reading.
@@ -474,46 +478,48 @@ comment *defeats* the reviewer rather than merely failing to help, and it does s
 when it sits directly on top of the gap. A **named** claim that does not resolve is worse still: it
 buys that credibility with a citation the reader is now less likely to check. A comment that
 misdescribes the code it sits on is the same defect without the citation — write neither. This is
-an authoring rule, not a binding; step 9's finders check the diff against it.
+an authoring rule, not a binding; step 8's finders check the diff against it.
 
-### 7. Verify done (independent, fresh context)
-Run the AC-verifier (below): a fresh check that the diff satisfies EVERY acceptance
-criterion — verify state, not your claim. If gaps, fix and re-verify **once**: round 1 was the
-gate's own first run, so that re-verify is **round 2 of this gate's 2-round cap**, and if it comes
-back dirty, escalate. **The re-verify is a fresh instance, never the author of the fix**
-(Fresh-re-check invariant, under Gates: a new spawn, not you and not the round-1 agent
-re-contacted).
-**"Gaps" means a finding of either class** — an unmet criterion or a surviving
-mutant both send you back to fix and re-verify under the same cap.
+**Before you leave this step, walk the acceptance criteria once and name a `file:line` for each.**
+For every AC, point at the change that satisfies it. If you cannot point at anything, you have not
+implemented it — go back and do so now.
 
-The gate returns **two result classes, and they are never summed into one "findings" count**:
-**Class A — AC-satisfaction findings** (a criterion judged not met) and **Class B — mutation
-survivors** (a test this change adds or modifies that stays green when the behavior it guards is
-broken — or, when the change alters behavior and adds no test at all, that absence).
-Class B comes from the **mutation pass**, which is **scoped by risk surface** rather than run
-unconditionally: step 7 itself remains due on every issue with acceptance criteria, but the mutation
-pass *within* it is conditional (AC-verifier → Part 2). **A clean Class B after a dirty one is a
-valid and valuable result** — do not read "no survivors this time" as the gate going soft.
+**This is a tripwire, not a gate, and it is explicitly not sufficient.** It exists because of where
+the acceptance gate now sits. That gate is step 10, after the PR is open, after CI is green, after
+review and after security — so "you did not implement AC-3 at all" is discovered at the most
+expensive point in the pipeline available. Under the old ordering it cost one cheap fix loop with no
+PR and no CI. This walk is a cheap catch for **gross omission** and buys nothing else:
+- it does **not** substitute for step 10, which still runs unconditionally and independently;
+- a `file:line` you can name is **not evidence the criterion is met** — only that something was
+  written toward it. Judging *met* is the fresh verifier's job, on the diff, not yours on your
+  memory;
+- **do not journal it as a gate outcome.** It produces no verdict, so it cannot be recorded as one
+  (Gate-outcome invariant), and a `- AC-verify:` line may only ever carry step 10's result.
 
-### 8. Commit + PR
+It does not conflict with the rule that the parent cannot self-certify. That rule is about **test
+assertions** — whether a guard would notice a regression, which is exactly what you cannot judge
+about your own work. *Whether a criterion was implemented at all* is a different question, answerable
+by looking, and the one reader who can answer it fastest is the one who just wrote the change.
+
+### 7. Commit + PR
 Commit with correct `COMMIT_CONV` scope — **staging explicit paths and reading `git diff --cached`
 first** (step 6), since this is a commit boundary like any other and the tree may have gained an
-agent's files since you last looked. This is the pipeline's standing commit boundary immediately
-downstream of a writing agent: step 7's mutation pass takes a copy, so **confirm none is still live
-(`git worktree list`) and remove it before you stage** — that copy is yours to remove, and a commit
-taken while it stands is the case the Execution policy (Tool surface) forbids rather than a hazard
-to stage around. Open the PR; **replicate `PR_TEMPLATE` fully** in
+agent's files since you last looked. Open the PR; **replicate `PR_TEMPLATE` fully** in
 the body; make the Security-review choice up front. Advance the row to `in-pr` and record the
 PR number. Wait for CI; fix until green.
 
-### 9. Code review
+### 8. Code review
 Advance the row to `in-review`. Run `CODE_REVIEW` on the diff.
 
 `CODE_REVIEW` names a **procedure you run, not a command you call**. The default — and the pattern
 that works in practice — is **parallel finder subagents over `git diff main...HEAD`, plus a pass
 that confirms each finding**, journaled under the gate's name. (`main...HEAD` is the right form
-*here*: the commit has already happened by this gate. The acceptance gate deliberately diffs the
-working tree instead, because it runs before the commit — do not "fix" one to match the other.)
+*here*: step 7 has committed and opened the PR, so the branch head **is** the change. The
+acceptance gate at step 10 deliberately diffs the **working tree** instead, and still does now that
+it too runs post-commit — but for a changed reason: it is the gate of record for the merge
+candidate, so it must be able to **detect** a fix that is written but not yet committed. Detecting
+one is not certifying it; step 10 requires such a fix committed before it certifies. The two bases
+differ on purpose — do not "fix" one to match the other.)
 Running those finders at once is permitted because they are read-only — the **read-only** form the
 Execution policy (Tool surface) allows; see it there for what that permission does and does not
 extend to. A review skill marked
@@ -526,7 +532,7 @@ rebind you recommend, and surface it to the human — **do not edit `loop.config
 
 **Give every finder the issue's acceptance criteria alongside the diff.** You cannot judge whether
 code is *right* without knowing what it was meant to do; a finder holding the ACs catches "this
-doesn't actually do AC-3", a class the diff alone cannot reveal. (This does not make step 7
+doesn't actually do AC-3", a class the diff alone cannot reveal. (This does not make step 10
 redundant — the acceptance gate still runs independently.)
 
 **Give every finder one standing check in its prompt too, whatever angle it is working: flag any
@@ -558,13 +564,61 @@ recipe and its licence to object are under Gates. Bounded to 2 rounds (round 1 b
 itself, that re-check being round 2) — contested findings, and **any** finding the re-check returns,
 whether one round 1 raised or one only the fix introduced, escalate to the human, do not loop.
 
-### 10. Security review (by route)
+### 9. Security review (by route)
 Run `SECURITY_REVIEW` per the routing in `loop.config.md` (the local-skill-vs-label choice and any
 host-repo Git incantation are project specifics; this engine only fixes the gate's position and
 that findings ≥ the project's confidence bar are addressed):
 - A `.claude/`-only (tooling-only) change → the **local** review path.
-- Otherwise, if a sensitive surface is touched → the **labeled** review path, applied ONLY now
-  (dev-complete). Skip for docs/no-surface changes.
+- Otherwise, if a sensitive surface is touched → the **labeled** review path. Skip for
+  docs/no-surface changes.
+
+**This gate is no longer last, so "run it once, at dev-complete" is no longer a safe reading.** Step
+10 can produce code — a Class A finding is fixed and committed there — and that code lands
+*downstream* of this gate. Re-evaluate this trigger against any acceptance-gate fix before step 11:
+if such a fix touches a sensitive surface it has not been security-reviewed, so it **escalates at
+the merge gate under the existing "touched security surface" always-escalate condition** (step
+11) — the earlier clean verdict does not cover it. The general rule this instances — which gates a post-gate change re-arms, and
+from which sources — is #33's to state.
+
+### 10. Verify done (independent, fresh context)
+Advance the row to `in-acceptance`. Run the AC-verifier (below): a fresh check that the diff
+satisfies EVERY acceptance
+criterion — verify state, not your claim. If gaps, fix and re-verify **once**: round 1 was the
+gate's own first run, so that re-verify is **round 2 of this gate's 2-round cap**, and if it comes
+back dirty, escalate. **The re-verify is a fresh instance, never the author of the fix**
+(Fresh-re-check invariant, under Gates: a new spawn, not you and not the round-1 agent
+re-contacted).
+**"Gaps" means a finding of either class** — an unmet criterion or a surviving
+mutant both send you back to fix and re-verify under the same cap.
+
+**This gate is last, so it owns its own commit boundary — there is no later step that will pick its
+fixes up.** Every earlier gate's fixes flowed into a commit downstream of it; nothing sits between
+this gate and the merge (step 11) but the merge itself. So **commit the fixes here**, under the
+same explicit-path staging rule as every other boundary (step 6), and **before** spawning the fresh
+re-verify — an uncommitted fix is not on the PR branch, and a gate that certifies work the merge
+candidate does not contain has certified nothing. **Confirm no mutation copy is still live
+(`git worktree list`) and remove it before you stage** — Part 2 below creates one, this is the
+boundary immediately downstream of it, and the untracked scan cannot see a copy the repo gitignores
+(Tool surface).
+
+**A source-changing fix here has no gate downstream of it.** Steps 8 and 9 already ran against a
+head that did not contain this code, so a Class A fix that **adds or changes source** — implementing
+a missed criterion, not correcting a citation or doc line — has been reviewed by nobody. **Finish
+this gate first — commit the fix and run its re-verify — then escalate to the human before step 11.**
+Escalating is not a reason to skip your own remaining round, and **do not merge on the earlier
+verdicts** — a gate that never saw a change has not passed it (Gate-outcome invariant). A fix that changes **no** source — a citation, a doc line, a test
+name — re-arms nothing and needs no escalation. **Whether such a fix may instead be routed back
+through review/security under a budget, rather than escalated, is #33's to state**; this step only
+records that the reorder creates the gap and defaults it to the human.
+
+The gate returns **two result classes, and they are never summed into one "findings" count**:
+**Class A — AC-satisfaction findings** (a criterion judged not met) and **Class B — mutation
+survivors** (a test this change adds or modifies that stays green when the behavior it guards is
+broken — or, when the change alters behavior and adds no test at all, that absence).
+Class B comes from the **mutation pass**, which is **scoped by risk surface** rather than run
+unconditionally: step 10 itself remains due on every issue with acceptance criteria, but the mutation
+pass *within* it is conditional (AC-verifier → Part 2). **A clean Class B after a dirty one is a
+valid and valuable result** — do not read "no survivors this time" as the gate going soft.
 
 ### 11. Merge
 Read the run `mode` and `graduated-routes` from the `queue.md` header. The merge gate is the
@@ -580,7 +634,7 @@ only when ALL of these hold:
 - the row is **not** `hold`, AND
 - none of the always-escalate conditions apply: a `feat:`/breaking change, a risky/irreversible
   change, a touched security surface, a contested review finding, **an unresolved Class B
-  mutation survivor from the acceptance gate** (step 7 — a guard that does not guard is exactly the
+  mutation survivor from the acceptance gate** (step 10 — a guard that does not guard is exactly the
   defect an auto-merge has no human to catch), or **an unresolved hermetic-tier finding** (step 6 —
   same shape: a declared invariant that is not true, with no human in the path to notice).
 
@@ -593,7 +647,7 @@ If the row is **not** auto-merge-eligible — which includes *every* row under `
 WRITE the hold to the row before stopping** — set Status `hold` (record the reason in Notes) so
 it persists across `/clear`; resume (step 0.3), step 1, and this gate all key on Status `hold` and
 honor it until the human clears it (restoring the row's prior status). When the row **is**
-auto-merge-eligible (or the human has approved), and CI + security are green AND the row is not
+auto-merge-eligible (or the human has approved), and CI + security + acceptance are green AND the row is not
 `hold`:
 merge via `MERGE_METHOD` with an explicit `--subject` carrying the correct `COMMIT_CONV` scope,
 `--delete-branch`. Confirm the issue closed.
@@ -710,8 +764,9 @@ report back, and answers for a copy left behind by an agent that errored or was 
 case where you have no handle at all and the one where the duty matters most. Do not rely on the
 acceptance gate's untracked scan to find a stray copy: it is `git ls-files --others
 --exclude-standard`, so a repo that gitignores the isolation path — which is what a maintainer does
-after seeing one appear — sees nothing, and the scan runs at step 7 while a copy created at step 9
-comes later. `git worktree list` has neither blind spot. A host whose isolated trees land *outside*
+after seeing one appear — sees nothing. Its position is no help either: that scan runs in the
+acceptance gate's Part 1, *before* Part 2 creates the copy most likely to be stranded.
+`git worktree list` has neither blind spot. A host whose isolated trees land *outside*
 the repository discharges the first duty for free and still owes the other two.
 
 **Execution policy — the parent owns the tree, and nothing may concurrently mutate it.** Pipeline
@@ -722,14 +777,14 @@ index and refs, the ledger, and the PR. That is a predicate rather than a list o
 sites, on purpose: a fan-out added later is then permitted or forbidden on its own merits, instead
 of on whether someone remembered to add it to a list. It has two satisfying forms:
 
-- **Read-only.** The step 9 `CODE_REVIEW` finder fan-out is the standing example and is **permitted
+- **Read-only.** The step 8 `CODE_REVIEW` finder fan-out is the standing example and is **permitted
   by name**: several finders on distinct angles, running at once, reading the diff and the
   acceptance criteria. Angle diversity is what makes that gate find anything, so nothing *in this
   policy* bounds the fan-out — read-only agents hold no copy and cannot corrupt your tree. The
   converse duty is yours: do not mutate the tree in place while a reader is in flight over it (Part
   2's in-tree rung is the one place you would). Other bounds are unaffected: each finder counts
   separately toward the **next** iteration's `subagent-cap` check (progress.md → the Budget line) —
-  retrospective, and advisory on a manual re-invoke — so step 9's scale-with-risk-surface rule is
+  retrospective, and advisory on a manual re-invoke — so step 8's scale-with-risk-surface rule is
   the only bound that acts on the fan-out you are about to launch.
 - **Isolated.** An agent that writes runs against **its own copy** of the tree, per the isolation
   duty above. **The escape hatch is isolation, not care** — "be careful not to collide" is not an
@@ -773,9 +828,11 @@ catch. Treat the copy as what makes the window *outlast* the agent, never as wha
 different questions and neither replaces the other: *when* you may reach a commit boundary at all
 (here), and *how* you stage once you are at one (step 6, at **every** boundary, which is why it is
 called the control both above and in Part 2's envelope). **No commit boundary legitimately falls
-inside the window.** Every one the pipeline defines is sequenceable outside it — step 7's mutation
-copy is removed before step 8 commits, and a fix you delegated at step 9 is collected, applied, and
-its copy removed before the fix commit. Removing the copy is always available to you, so remove it
+inside the window.** Every one the pipeline defines is sequenceable outside it — a fix you delegated
+at step 8 is collected, applied, and its copy removed before that step's fix commit, and step 10's
+mutation copy is removed before the acceptance gate's own fix commit. Both copies are created and
+retired *within* the step that opened them; neither may still be live when the next boundary
+arrives. Removing the copy is always available to you, so remove it
 first. If you believe a boundary must fall inside the window, that is a finding to journal and hand
 to the human, not a case to stage carefully and proceed through.
 
@@ -791,7 +848,14 @@ Dependency-ordered. One row per issue. **`Route` and `Status` are separate colum
 can be Route `research`, Status `blocked`). **Pipeline statuses** — advanced by the
 orchestrator as the issue moves through the pipeline, so an interrupted run leaves a non-terminal
 status resume keys on (see Resume): `queued → routed → planning → plan-approved → implementing →
-in-pr → in-review`. **Terminal statuses** — the run converges when every row is terminal:
+in-pr → in-review → in-acceptance`. **`in-acceptance` brackets the acceptance gate (step 10) and the
+merge (step 11)**, and
+exists because that gate is now the last one: without it `in-review` would span review, security,
+acceptance and merge, so any `/clear` in that span would resume by replaying the entire code-review
+fan-out. A crash during **security** still resumes under
+`in-review` and replays the review fan-out, which is a residual this status does not close.
+It is a **pipeline** status like the seven before it — never a resting one, so it takes no
+part in the `hold`/`parked` machinery below. **Terminal statuses** — the run converges when every row is terminal:
 `done`; `deferred` (Route `stub-defer`); `blocked` (an unmet in-run dependency; `blocked:
 too-large` awaiting a split; or a recurring `gate-error:` awaiting a config repair — see the
 Gate-outcome invariant). The last two wait on a human, not on another row. **Two non-terminal, resting statuses** sit outside both
@@ -828,7 +892,7 @@ rewrite of the plan**. The two modes:
   decision log — never frozen into this mechanism definition (the lesson: graduation *state* is
   evidence, not a rule). The human merge gate is **retained** for every non-graduated route and,
   regardless of route, for any of: a `feat:`/breaking change, a risky/irreversible change, a touched
-  security surface, a contested review finding, an unresolved Class B mutation survivor (step 7),
+  security surface, a contested review finding, an unresolved Class B mutation survivor (step 10),
   an unresolved hermetic-tier finding (step 6), or a `hold` row — **and, by default-deny, whenever
   route graduation or any always-escalate condition is uncertain, fall back to the human merge
   gate.** Initialization pairs it with `plan-gate: conditional` (step 5) — **and neither that
@@ -924,10 +988,10 @@ This is the audit trail and the resume anchor.
 - Human gate: plan approved by the human (plan-gate: always).
 - Implemented: <path>; recorded findings in <path>.
 - Hermetic: n/a: research route.
-- Restore: n/a: no mutation applied.
-- AC-verify: Class A 3/3 acceptance criteria met. Class B: mutation pass not due (research route).
 - PR: #<pr> (chore scope). CI: green.
 - Code-review: 0 findings. Security: n/a (no deps added).
+- Restore: n/a: no mutation applied.
+- AC-verify: Class A 3/3 acceptance criteria met. Class B: mutation pass not due (research route).
 - Budget: subagent-runs=3 · gate-rounds=architect=0,code-review=1(correctness,robustness),ac-verify=1 · ac-findings=0 · mutation-survivors=n/a: research route · wall-clock=18m · tokens=deferred
 - Merged: squash #<pr>. Issue #<N> closed.
 - Next: #<M> now unblocked.
@@ -1083,9 +1147,10 @@ Fields:
   is findings-vs-escapes, which is a different axis): criteria the gate found unmet, **counted
   cumulatively across all of that gate's
   rounds** (the final round's count is 0 on every iteration that merged, so a final-round reading
-  erases the signal); and defects that escaped the gate and surfaced later in the same iteration —
-  in code review, security, or at the merge gate, the window running from the gate to this journal
-  entry. A survivor found in a *later* iteration is recorded on that iteration's line, naming the
+  erases the signal); and defects that escaped the gate and surfaced later — within this iteration
+  only at the merge gate, since code review and security now run *before* the acceptance gate; the
+  window running from the gate to this journal entry. The larger channel is a later iteration.
+  A survivor found in a *later* iteration is recorded on that iteration's line, naming the
   one it escaped; this journal is append-only and is never rewritten to add it. Collapsed into one
   number these cancel out — a gate that found nothing and a gate that missed something read
   identically, and two stories measuring opposite signals off this line would each think they were
@@ -1306,8 +1371,9 @@ failing the other.
      A third, distinct from those: an **isolated agent tree** the host placed inside the repository
      is neither stray scratch nor AC evidence but an artifact the parent still owes cleanup on
      (Tool surface) — never cite a `file:line` inside one. Its presence here says it was not
-     removed; its **absence here says nothing**, since this scan honors `.gitignore` and runs before
-     any copy a later step creates. `git worktree list` is what actually answers that question.
+     removed; its **absence here says nothing**, since this scan honors `.gitignore` and runs in
+     Part 1, before Part 2 below creates its own copy. `git worktree list` is what actually answers
+     that question.
    If the diff plus that content will not fit one context window, report `input-too-large` and
    not-done rather than silently reading a truncated subset.
 
@@ -1323,7 +1389,7 @@ failing the other.
    reason to call a criterion unmet. Verify the diff actually does this; do not assume. Return a
    checklist + overall done/not-done."*
 2. For behavior that needs runtime proof, also run `VERIFY` (runs the app).
-3. `CODE_REVIEW` (step 9) provides the adversarial bug pass.
+3. `CODE_REVIEW` (step 8) provides the adversarial bug pass.
 Promote to a dedicated `ac-verifier` agent only if the composed approach proves too loose.
 
 **Part 2 — Class B: mutation survivors.** A test that this change adds or modifies, which stays
@@ -1393,10 +1459,15 @@ the copy **before** the mutating run begins.
 
 **Its second precondition, and the one whose failure is silent: the copy must contain the change
 under verification — check it, never assume it.** How a host materializes an isolated tree is a
-**host** fact this engine deliberately does not know (Tool surface), and step 7 certifies work in
+**host** fact this engine deliberately does not know (Tool surface), and step 10 certifies work in
 every commit state including **wholly uncommitted** (Part 1). A copy taken from a commit therefore
-carries none of the uncommitted remainder — which is most of the change, on most iterations, at this
-point in the pipeline. Confirm with `git -C <copy> diff "$BASE" --stat`, using the **same `$BASE`**
+carries none of the uncommitted remainder. **At this point in the pipeline that remainder is usually
+small — and the check matters anyway.** Step 7 committed and opened the PR, and step 8 committed its
+fixes, so on most iterations the change is already committed here; the residue is a fix
+written but not yet committed, or whatever a crash left behind. That is a **narrower** target than
+it once was, not a safer one: a copy missing the one uncommitted fix mutates the code as it stood
+*before* that fix, and reports clean. Do not read the shrinking remainder as licence to skip the
+check. Confirm with `git -C <copy> diff "$BASE" --stat`, using the **same `$BASE`**
 Part 1 resolved: every file the change adds or modifies must appear, and **the added or modified
 test above all**, since that guard is the whole object of the pass. **Pair it with `git -C <copy>
 ls-files --others --exclude-standard`, for the reason Part 1 pairs them:** a diff never shows an
@@ -1406,9 +1477,11 @@ the gate is most due on — and would miss it *silently*, since a copy lacking t
 mutates the old code instead.
 
 **Both failure shapes are real, and only one of them is loud.** If the spec's `find` strings are
-absent from the copy the harness errors — safe, but if that happens on every uncommitted iteration
-the fallback below stops being an escalation and becomes a per-iteration click-through, which is how
-an escalation quietly turns into a default. The silent shape is the dangerous one: where the change
+absent from the copy the harness errors — safe, and now rare, since the change is normally committed
+by the time this gate runs. **Rarity is what makes it worth naming, not what retires it:** an
+escalation that fires on most iterations degrades into a per-iteration click-through, while one that
+fires on few is the one nobody has kept in mind when it finally does. The silent shape is the
+dangerous one: where the change
 edits an **existing** file, the old text still matches, the copy's **old** suite — the one without
 the new test — kills the mutant, and the pass exits clean. **The gate then certifies that the new
 guard guards, having never seen the new guard.** That is the manufactured confidence this whole part
@@ -1416,9 +1489,11 @@ exists to refuse, and nothing downstream can detect it: the harness has no notio
 so no exit code distinguishes this from a real clean pass. The check above is the only thing that
 does.
 
-**Materialize the change in the copy before mutating** — applying the step-7 working-tree diff into
-it is the obvious mechanism. **Do not commit the parent's work to create it**: step 8 owns the
-commit, and a gate written to certify uncommitted work must not require a commit to run. If the
+**Materialize the change in the copy before mutating** — applying the step-10 working-tree diff into
+it is the obvious mechanism. **Do not commit the parent's work merely to create it**: this gate
+owns exactly one commit boundary — the one that lands *its own fixes* (step 10) — and committing
+the parent's work early, to make a copy convenient, is not that. A gate written to certify work in
+any commit state must not require a commit to run. If the
 change cannot be materialized in the copy, the copy is unusable for this pass and takes exactly the
 rung below.
 
@@ -1653,8 +1728,12 @@ pipeline row). The on-disk ledger row status is only a **coarse anchor** (which 
 git/PR state is the source of truth** for the details (the ledger is uncommitted): for an in-flight
 row, check whether its branch exists, whether a PR is open (or already merged), and the PR's CI
 status, and resume at the matching pipeline stage — git wins on any conflict with a stale status.
-Stages 4/7/10 need no distinct status because the surrounding statuses bracket them: a
+Stages 4/9 need no distinct status because the surrounding statuses bracket them: a
 `plan-approved` row re-enters at implement (step 6), so the architect/human gates are NOT re-run.
+**The acceptance gate is no longer one of them.** It is now the last gate (step 10), so `in-review`
+would otherwise bracket review, security, acceptance *and* merge — and a resume anywhere in that
+span would replay the whole code-review fan-out. `in-acceptance` is what stops that: a row resuming
+under it re-enters at acceptance, not at review.
 The architect pass (step 4, or step 5 where that step first consults `DESIGN_AGENT`) carries **two**
 side effects, and on the resume of a `planning` row both
 are **write-once** — check for the artifact and skip the action if it is present. **Expect this
@@ -1694,8 +1773,11 @@ has not left it.
    iteration is the one case where the pre-image and the live text have already diverged, which is
    precisely when the guard matters.
 
-AC-verify (step 7) is side-effect-free; security (step
-10) re-labeling is a no-op. **Working-tree reconciliation:** if a crashed prior
+AC-verify (step 10) has **no write-once artifact to double-create** — nothing it does is a side
+effect resume must avoid repeating, which is the only property this paragraph turns on. (It is not
+side-effect-*free*: its mutation pass writes, and it now commits its own fixes. Squaring that with
+the working-tree rule below is #32's.) Security (step
+9) re-labeling is a no-op. **Working-tree reconciliation:** if a crashed prior
 attempt left uncommitted changes, inspect them before proceeding — keep and continue if they
 match the plan, or `git restore`/stash if they're partial/unrelated. **One check first, because it
 inverts that instruction:** leftovers from an interrupted *mutation* pass are partial and
@@ -1742,10 +1824,10 @@ Gate table:
 | Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure | issue comment |
 | Human (plan) | user | **every issue under `plan-gate: always`** (the default under `calibration`; absent or unrecognized reads as `always`); under `plan-gate: conditional`, if uncertain/irreversible. Under **both**, **always** when the architect materially changed the plan (step 5's frozen-vs-live diff — decisiveness escalates exactly as a punt does, and neither `mode:`, `plan-gate:`, nor route graduation reaches this one) | approve/redirect |
 | Build commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`) | orchestrator | step 6, each per its own binding; `HERMETIC_TEST_CMD` additionally requires Route `code` **and** a change that adds or modifies a test, **whatever the binding says** — on such a row an absent or `TODO` binding is unknown, and unknown is due (the gate's four-state table) | **exit status per command**; non-zero blocks |
-| AC-verify | fresh subagent (+`VERIFY`); **any re-check a fresh instance too** (Fresh-re-check invariant) | every issue with acceptance criteria (step 7 is unconditional; the **mutation pass within it** is scoped — Routing table) | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors); **either class blocks** |
-| Code review | `CODE_REVIEW` (parallel finders you run — step 9); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes |
-| Security | `SECURITY_REVIEW` (local or label) | by route | clean/findings |
-| Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI+security green | `MERGE_METHOD` |
+| Code review | `CODE_REVIEW` (parallel finders you run — step 8); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes |
+| Security | `SECURITY_REVIEW` (local or label) | by route (step 9) | clean/findings |
+| AC-verify | fresh subagent (+`VERIFY`); **any re-check a fresh instance too** (Fresh-re-check invariant) | every issue with acceptance criteria (step 10 is unconditional; the **mutation pass within it** is scoped — Routing table). **Last gate before merge**, so it certifies the merge candidate and owns the commit boundary for its own fixes | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors); **either class blocks** |
+| Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI + security + acceptance green | `MERGE_METHOD` |
 
 **Gate-outcome invariant (evidence-bound pass).** Applies to every gate in the table above that
 returns a verdict, **on the rows that gate is due on** — due-ness is decided where it always was (the
@@ -1762,7 +1844,7 @@ one is a `- gate-error:`. This is what the `mutation-survivors` slot already ass
 "an unrunnable `TEST_CMD` is a `- gate-error:`" (progress.md → the Budget line); stating it here puts
 the whole class on the rule instead of on that one aside. **Three of the four need no journal slot
 of their own:** `LINT_CMD`/`TYPE_CMD`/`TEST_CMD` run on every issue and the iteration cannot reach
-step 8 until each exits zero, so *the absence of a `- gate-error:` naming one is the record that it
+step 7 until each exits zero, so *the absence of a `- gate-error:` naming one is the record that it
 passed*. **A `—`-plus-a-reason build command is the exception and is written out**, as
 `- Lint: n/a: <reason>` (likewise `- Type:`, `- Test:`): the invariant requires a deliberate
 not-applicable to be *visible*, and an absence cannot carry a reason. Absence means "it ran and the
@@ -1787,7 +1869,7 @@ are *inspection*, so a binding naming a skill, agent or command absent from them
 anything that surfaces only when the thing is actually run is **dynamic**.
 - **Cannot run (static)** — by inspection, the binding is absent, `TODO`-valued, or names something
   missing from your toolset or that you are not permitted to invoke. Fall back to the engine's
-  inline composition where one is defined, otherwise escalate to the human. Step 9 is this branch's
+  inline composition where one is defined, otherwise escalate to the human. Step 8 is this branch's
   worked instance: a `CODE_REVIEW` bound to a `disable-model-invocation` skill is unsatisfiable, so
   the orchestrator runs the finder procedure itself, journals the misbinding, and surfaces it.
 - **Ran and errored (dynamic)** — the gate was **attempted** — invoked, or its required inputs
@@ -1822,7 +1904,7 @@ forms, because only one of them is a recurrence signal:
 
 **Fresh-re-check invariant (a fix is never checked by its author).** Applies to the two gates that
 carry a round cap, and so re-check a fix inside the pipeline under a bounded budget: the
-**acceptance gate** (step 7, *both* result classes) and **code review** (step 9). When a gate comes
+**acceptance gate** (step 10, *both* result classes) and **code review** (step 8). When a gate comes
 back dirty
 and you fix what it found, the re-check is performed by a **fresh instance**. You wrote the fix, so
 you are the one reader who cannot check it: the belief that produced the defect is still present
@@ -1831,9 +1913,9 @@ delegated** — directing a fix is authorship for this rule, so handing the writ
 reading it yourself satisfies nothing.
 
 **Read this as a rule about round *two*, and about three clauses in particular** — both gates
-already spawn fresh subagents for the first round they actually run today (step 7 Part 1, step 9's
+already spawn fresh subagents for the first round they actually run today (step 10 Part 1, step 8's
 finders), so the parts that actually bind are narrow:
-- **Step 9's "verify recs were applied" is the sharpest hole it closes.** Confirming your own
+- **Step 8's "verify recs were applied" is the sharpest hole it closes.** Confirming your own
   remediation is not a gate; it is the author agreeing with himself. Spawn a checker for it.
 - **A re-check must not collapse into the parent thread** re-reading its own diff — the commonest
   shape, because it is the cheapest.
@@ -1843,7 +1925,7 @@ finders), so the parts that actually bind are narrow:
 **What the fresh checker receives — and it differs by gate.** In every case it gets **none of your
 conclusions about whether the fix worked**; that is the exclusion Part 1 already draws (it withholds
 your *conclusions*, not the instructions the checker needs).
-- **Acceptance gate (step 7), Class A — re-run Part 1's recipe unchanged:** the acceptance criteria
+- **Acceptance gate (step 10), Class A — re-run Part 1's recipe unchanged:** the acceptance criteria
   verbatim, the resolved `$BASE`, and the commands under **Verifier runs**, with nothing added. The
   criteria are the yardstick, so a round-2 checker that re-derives met/not-met from scratch is *more*
   independent than one handed a list of claimed repairs. **Do not relax Part 1's `ONLY` here** — a
@@ -1883,7 +1965,7 @@ your *conclusions*, not the instructions the checker needs).
   sufficient there,
   precisely because the survivor was established by running rather than by reading. That re-run is a
   fresh instance too, per the invariant above.)
-- **Code review (step 9) — the change as it now stands, plus the list of what you claimed to fix.**
+- **Code review (step 8) — the change as it now stands, plus the list of what you claimed to fix.**
   Review has no fixed yardstick to re-derive from, so that list is what gives the checker something
   to test rather than a blank re-review. It **reads the change itself and reports what it saw** — a
   claimed fix is a claim, not evidence — and states for each whether the code now does it, citing

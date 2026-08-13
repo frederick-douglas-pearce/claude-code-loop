@@ -66,13 +66,13 @@ Three modules, and the split between them matters:
   `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
   `description`** (`plan→architect→implement→review→merge` — the string the model reads when
   deciding to invoke the skill, so a behavior surface, not prose), the engine's in-prose
-  `step N` cross-references — **161 sites, 165 numbers** — and `commands/init-loop.md`'s
+  `step N` cross-references — **179 sites, 182 numbers** — and `commands/init-loop.md`'s
   `engine step N` (below). *"Four files" is newly true, not newly written:* the previous five
   restatements live in **three** files (`loop-engine.md` ×2, `SKILL.md` ×2, `plugin.json`), so the
   standing "five restatements in four files" was off by one on the file count; `init-loop.md` is what
   makes four correct. That grep
   (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) reports
-  only 159: the remainder are line-wrapped, which is exactly how they went unguarded until review
+  only 175: the remainder are line-wrapped, which is exactly how they went unguarded until review
   caught it. It checks numbering and label correspondence **only** — never whether a
   step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
   `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
@@ -82,22 +82,32 @@ Three modules, and the split between them matters:
   **label count is pinned** (`_EXPECTED_FRONTMATTER_LABELS`) because a *shortened* chain is still a
   valid subsequence and would otherwise pass while checking less.
 
-  **What a renumber still slips past** — the coverage claim is deliberately narrow, so read it
-  before assuming #31 is done. The cross-reference check asserts **resolvability only**: every
-  referenced N is a real heading number. It cannot know that `step 9` still *means* code review —
+  **What a renumber still slips past** — the coverage claim is deliberately narrow, and **#31 has
+  now run, so read this as a report rather than a warning.** The cross-reference check asserts
+  **resolvability only**: every referenced N is a real heading number. It cannot know that `step 8`
+  still *means* code review —
   that is semantics, which this module does not do. It fires when a reference goes **out of range** —
   whether edited to a number no heading defines, or left behind when the heading run shrank or was
-  rebased off zero. Stated bluntly, because this is the case #31 will actually hit: **insert a step
+  rebased off zero. Stated bluntly, because this is the case #31 actually hit: **insert a step
   mid-pipeline, renumber everything after it, and every one of those reference sites points at the
   wrong step with the whole suite green.** Confirmed by mutation (#44), along with the milder shapes — appending a step
   and updating `SKILL.md` passes, as does rewriting a `(step 9)` to `(step 7)`. **A green run is not
-  evidence the cross-references were correctly renumbered.** Reference *forms* the regex does not
+  evidence the cross-references were correctly renumbered.** (Those two numbers are #44's mutation as
+  it was actually run, against the pre-#31 numbering — a historical record, deliberately not
+  re-mapped.) **What #31 confirmed in practice:** it rotated 7–10 across 39 sites and the suite was
+  green before a single one had been *read*. **Several** of the sites that changed meaning carried
+  **no step number at all** — they reasoned from ordering in prose — so no matcher could have reached
+  them. (No count here on purpose: three separate readings each found some and missed others, which
+  is the same reason this file states mechanisms rather than tallies.)
+  The evidence that a renumber is correct is a site-by-site reading; it is not available from this
+  module and never will be. Reference *forms* the regex does not
   match (`steps 3 and 7`, `steps 3, 7`, `step #7`) are invisible too; none is used today, and each
   is excluded deliberately — treating `,`/`and` as separators makes ordinary prose ("step 12 — 40
   lines max") parse as a step range and fail.
 
   **The sixth restatement — guarded since #45, and the only one that will ship into repos this plugin
-  cannot reach.** `commands/init-loop.md` carries two — the `CODE_REVIEW` row's `(engine step 9)` and,
+  cannot reach.** `commands/init-loop.md` carries two — the `CODE_REVIEW` row's `(engine step 8)`
+  (`step 9` until #31 rotated the pipeline) and,
   since #39, the `HERMETIC_TEST_CMD` row's `engine step 6` — both in skeleton rows that `/init-loop`
   copies into each newly-onboarded repo's `loop.config.md`. Drift in the other
   five ships a wrong number *in the plugin*, and the next release corrects it; drift here strands one
@@ -124,8 +134,10 @@ Three modules, and the split between them matters:
   deliberately does **not** use it (it reads the whole file, and is loose in the way #76 describes);
   hardening the span is #76's job and the answer there is not a fifth regex.
 
-  **Not yet copied anywhere — and that is the point.** The `engine step 9` row entered the skeleton
-  in-tree with #10; the *installed* 0.0.1 that onboarded all three consumers still binds
+  **Not yet copied anywhere — and that is the point.** The `CODE_REVIEW` row entered the skeleton
+  in-tree with #10 (citing `engine step 9`, rotated to `step 8` by #31 — so the number has already
+  changed once, and will change again at the next renumber, all before a consumer ever sees it,
+  which is precisely the propagation window this paragraph is about); the *installed* 0.0.1 that onboarded all three consumers still binds
   `CODE_REVIEW` to `/code-review` and contains no `engine step` at all. So the guard lands **before**
   propagation begins, at the #36 re-install — the useful time for it. Do not read the field as
   already carrying it: this repo's own `.claude/loop.config.md:49` has it only as the deliberate
@@ -234,7 +246,8 @@ even though nothing will fail loudly:
   evidence** — the latter is contradicted by the next re-check and destabilizes resume.
 - **The tree-isolation / staging rule is a new multi-site invariant with no test guarding it** (#25).
   "Any agent that must write to the tree gets its own copy", and the explicit-path staging rule that
-  backstops it, are now restated across `loop-engine.md` (step 6, step 8, Tool surface, the
+  backstops it, are now restated across `loop-engine.md` (step 6, step 7, **step 10's own commit
+  boundary, added by #31**, Tool surface, the
   `- Restore:` line, the AC-verifier untracked scan, Part 2's envelope, Resume), plus `SKILL.md`'s
   fail-safe list and the README trust model. Nothing checks their agreement, so an edit to one
   desyncs the rest silently — the same shape as the `mode:`-gating restatements above. The scope
@@ -354,9 +367,12 @@ that arrangement are easy to forget mid-run and change what the evidence means:
 from `~/.claude/plugins/cache/claude-code-loop/dev-loop/<version>/`; edits to `skills/` and
 `commands/` here do not take effect until re-install (#36). This is a **safety property** — a run
 cannot mutate the engine driving it — but it also means the loop keeps exhibiting the defects we are
-fixing. Known ones to journal rather than silently work around: **#19/F15** (the AC-verifier diffs
-`main...HEAD` at step 7, *before* the step-8 commit, so an uncommitted branch certifies an empty
-diff — **fixed in-tree by #48, still live in the installed 0.0.1 until the #36 re-install**) and
+fixing. Known ones to journal rather than silently work around: **#19/F15** (in the installed 0.0.1
+the AC-verifier is **step 7** and diffs `main...HEAD` *before* the step-8 commit, so an uncommitted
+branch certifies an empty diff — **fixed in-tree by #48, still live in the installed 0.0.1 until the
+#36 re-install**; note the step numbers in that sentence are 0.0.1's, and **#31 has since rotated the
+in-tree pipeline** so that acceptance is step 10 and runs *after* the step-7 commit — when reading a
+run's journal, check which numbering the engine driving it used) and
 **#21/F14** (an unbound binding skips its gate silently instead of erroring — **fixed in-tree by
 the gate-outcome invariant, still live in the installed 0.0.1 until the #36 re-install**).
 
@@ -401,7 +417,7 @@ change falls on, open the PR.
 
 This exception is for ad-hoc human/interactive edits. It does **not** apply to the `dev-loop` skill
 working a routed issue: the engine's `docs` route still goes through commit → PR → light review
-(step 8/9), and the loop must never bypass its own gates.
+(step 7/8), and the loop must never bypass its own gates.
 
 ## Issue tracking
 
