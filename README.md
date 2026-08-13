@@ -77,13 +77,24 @@ Auto-merge exists only under the opt-in `escalation-only` mode, and even there i
 per-route, limited to routes you have explicitly *graduated*, and withheld for feature
 or breaking changes, risky or irreversible changes, anything touching a security
 surface, contested review findings, unresolved acceptance-gate findings of
-either kind, and an unresolved offline-tier finding. Independently of mode, the loop stops and asks
-you mid-pipeline when it hits ambiguous acceptance criteria, risk, agent disagreement,
-a gate finding that is still there after one fresh re-check, or genuine uncertainty.
+either kind, and an unresolved offline-tier finding.
 Wherever eligibility is unclear the rule is **default-deny**: fall back to the human.
 
+**By default you approve every plan before any code is written.** The plan gate is a separate
+setting from the merge gate — a `plan-gate:` field in the run's ledger header — set to `always` for
+a new run under `calibration`, meaning the loop writes a plan, shows it to you, and stops, on
+**every** issue. **This arrives with v0.2.0** — the released v0.0.1 has no `plan-gate:` field and
+gates the plan only on uncertainty, so this paragraph describes the posture the next release ships
+with, stated before it lands rather than after. Set the field to `conditional` and the loop stops
+when it hits ambiguous acceptance criteria, risk, agent disagreement, a value story that doesn't
+hold, or genuine uncertainty. The two settings are deliberately independent: relaxing how much of
+the planning you review never loosens what gets merged without you, and a ledger that doesn't
+mention the field at all is read as `always`. Neither setting reaches the loop's other mid-pipeline
+stops — such as the architect-rewrite stop below, or a gate finding still there after one fresh
+re-check, which stop and ask you regardless of both.
+
 **When its design reviewer rewrites the plan, you see the plan.** One mid-pipeline stop is
-unconditional — no mode setting and no route graduation can loosen it: if the architect review
+unconditional — no mode setting, no `plan-gate:` value, and no route graduation can loosen it: if the architect review
 **materially changed** the approach, the loop stops and shows you what changed before writing any
 code. A reviewer that decides is treated as a stronger reason to interrupt you than one that hedges,
 because the plan you would have approved is no longer the plan being built. The comparison is made

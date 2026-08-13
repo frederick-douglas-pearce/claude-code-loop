@@ -52,7 +52,8 @@ invocation resumes correctly.
        row terminal, so no interrupted pipeline row can coexist).
    - `RUN RESUMED` or no sentinel → continue to step 2 (a released or never-parked run runs
      normally).
-2. Read `queue.md` (note its `mode:` / `graduated-routes:` header and any `hold`/`parked` rows) and the tail of `progress.md`.
+2. Read `queue.md` (note its `mode:` / `graduated-routes:` / `plan-gate:` header and any
+   `hold`/`parked` rows) and the tail of `progress.md`.
 3. **Resume before selecting (see the Resume procedure below).** If any row sits in an *interrupted*
    status — non-terminal and NOT `queued`/`routed`/`hold`/`parked` (i.e. `planning`/`plan-approved`/
    `implementing`/`in-pr`/`in-review`) — a prior iteration was cut off. Reconcile it against
@@ -201,9 +202,13 @@ text, so treat the block as **absent** — which step 5 reads as material. Never
 **(b) THEN invoke, and (c) write the outcome into `## Approach` before step 5 — not at implement
 time.** "Address the
 concerns before coding" is satisfied too late if you carry the architect's rulings in your head to
-step 6: `## Approach` would still read exactly as frozen, step 5's diff would come back **empty on
-precisely the run the gate exists to catch**, and the row would auto-approve by *literal
-compliance*. **You** perform this edit, not the agent — `DESIGN_AGENT` returns an issue comment and
+step 6: `## Approach` would still read exactly as frozen, and step 5's diff would come back **empty
+on precisely the run the gate exists to catch** — the always-on condition reporting "no material
+change" by *literal compliance*, on the run where the architect rewrote the plan. **This bites under
+every `plan-gate:` value, and `always` is not a reprieve from it.** Under `conditional` the row
+auto-approves outright; under `always` the human is stopped but shown a diff that says nothing
+changed, which is the same failure wearing a stop as a disguise — the gate exists to show them
+*what* the architect changed, and an empty diff withholds exactly that. **You** perform this edit, not the agent — `DESIGN_AGENT` returns an issue comment and
 never writes to the tree (Tool surface), so an unedited `## Approach` is the orchestrator's omission
 and never evidence that nothing changed. Adopt, adapt, or decline each `blocking`/`important`
 finding **in the plan text** first; a declined finding is recorded with its one-line rationale, and
@@ -222,20 +227,55 @@ step-5 diff would then come back empty and the gate would **silently pass**, whi
 failure the test exists to catch. This is the same write-once discipline Resume already applies to
 this step's other side effect (the issue comment); both are stated there.
 
-### 5. Human gate (conditional — every mode — plus one always-on condition)
-The plan gate is **conditional in every mode** — `mode:` gates the merge gate only (step 11), never
-this one. It is **value-first**: present the step-3 value framing (user-story map / value statement)
-alongside the approach, and treat a **non-credible value story — no plausible user, or no
-checkable falsifier — as itself a reason to STOP**, not just ambiguous ACs. Present the plan and
-STOP for approval when: the value story doesn't hold; acceptance criteria are ambiguous; the
-change is risky/irreversible; SCOPE/DESIGN agents disagree or punt; or you are otherwise unsure.
-Otherwise proceed (note "auto-approved" + why in the journal). Route scope/value questions to
-`SCOPE_AGENT` and design questions to `DESIGN_AGENT` BEFORE escalating to the human. On approval
-(human or auto), advance the row to `plan-approved`.
+### 5. Human gate (posture set by `plan-gate:` — plus one always-on condition)
+**Read `plan-gate:` from the `queue.md` header** (Ledger format → queue.md). That field, and never
+`mode:`, sets this gate's posture — `mode:` gates the merge gate only (step 11), never this one:
+- **`plan-gate: always`** — what Initialization writes under `mode: calibration`. **STOP for plan
+  approval on every issue.** Whether to stop is not a judgment call under this value. **What you
+  put in front of the human still is** — work through the rest of this step before stopping, and in
+  particular evaluate the always-on condition below and prepare its frozen-vs-live diff for
+  presentation. Stopping with the plan but without that diff satisfies this bullet and still fails
+  the gate.
+- **`plan-gate: conditional`** — what Initialization writes for a project with prior route
+  graduation. Stop on the judgment conditions below, plus the always-on condition that follows them.
+
+**Read the field, never derive it from `mode:`.** Those are the values Initialization *writes*, not
+a rule for computing one — the fields are independent afterwards, so a run may legitimately sit at
+`escalation-only` with `plan-gate: always`. The case this distinction exists for is the common one:
+a ledger created before this field existed, under either mode, has no `plan-gate:` line at all, and
+it reads as `always` by the rule below — never as `conditional` inferred from its `mode:`.
+
+**An absent or unrecognized value reads as `always`.** A ledger written before this field existed,
+or a typo (`plan-gate: alway`), gets the **over-gating** reading — never "conditional by
+fallthrough". Same default-deny posture as every other gate: the failure that costs you an
+unnecessary approval is recoverable, the one that skips it is not.
+
+Under **either** value this gate is **value-first**: present the step-3 value framing (user-story
+map / value statement) alongside the approach, and treat a **non-credible value story — no plausible
+user, or no checkable falsifier — as itself a reason to STOP**, not just ambiguous ACs.
+
+**Under `plan-gate: conditional`**, present the plan and STOP for approval when: the value story
+doesn't hold; acceptance criteria are ambiguous; the change is risky/irreversible; SCOPE/DESIGN
+agents disagree or punt; or you are otherwise unsure. Otherwise proceed (note "auto-approved" + why
+in the journal). **Under `plan-gate: always` there is no "otherwise"** — every issue stops, and
+"auto-approved" is never a legitimate journal entry for this gate. Route scope/value questions to
+`SCOPE_AGENT` and design questions to `DESIGN_AGENT` BEFORE escalating to the human, under either
+value — `always` removes the judgment call about *stopping*, never the consultations that inform
+what you present. On approval — the human's, or under `conditional` only, an auto-approval —
+advance the row to `plan-approved`.
 
 **One stop condition is ALWAYS-ON.** The conditions above are judgment calls; this one is not, and
-it fires under **every** mode. Route graduation cannot reach it — `escalation-only` loosens the
-merge gate only, so a graduated route still stops here:
+it fires under **every** mode **and both `plan-gate:` values**. Route graduation cannot reach it —
+`escalation-only` loosens the merge gate only, so a graduated route still stops here:
+
+**Under `plan-gate: always` this condition is not moot, and skipping its diff is a silent
+regression.** `always` subsumes the **stop decision** — you were stopping anyway — but it subsumes
+**nothing about the record**. Take the frozen-vs-live diff and write its `- Plan-gate:` line on
+every iteration that reaches this step, whatever the field says. Reasoning "we stop regardless, so
+the diff is moot" kills the mechanism below while leaving every word of it in place: the stop still
+happens, the prose still reads correctly, the suite stays green, and the evidence this condition's
+own falsifier is read against silently stops accruing. **A posture that makes a gate stricter must
+never be a reason to record less.**
 
 - **The architect materially changed the plan.** A *decisive* architect that **redirects** the plan
   is a **stronger** reason for a human look than one that punts or disagrees, not a weaker one: the
@@ -528,8 +568,9 @@ that findings ≥ the project's confidence bar are addressed):
 
 ### 11. Merge
 Read the run `mode` and `graduated-routes` from the `queue.md` header. The merge gate is the
-**only** gate `mode` changes (step 5 is conditional in every mode — plus one always-on condition
-no mode reaches). A row is **auto-merge-eligible**
+**only** gate `mode` changes (step 5's posture comes from the separate `plan-gate:` field, which
+`mode:` never sets after Initialization — plus one always-on condition neither reaches). A row is
+**auto-merge-eligible**
 only when ALL of these hold:
 - `mode: escalation-only`, AND
 - the row's Route is listed in the header's `graduated-routes` field, AND
@@ -609,6 +650,11 @@ action is destructive/irreversible, a review finding is contested, or the same s
 **and, always-on, when the architect *decides*: a material redirect of the plan escalates exactly as
 a punt does** (step 5). "Only when those disagree/punt" would read a decisive rewrite as a reason to
 proceed, which inverts the point of the gate.
+
+**This list is what "unsure" triggers; it is not the whole of when the plan gate stops.** Under
+`plan-gate: always` — the shipped default, and what an absent field reads as — step 5 stops on
+**every** issue, whether or not anything here fires. Read this rubric as the floor, never as the
+condition set: nothing on it needs to be true for the plan gate to be owed.
 
 **A gate that produced no verdict does not get reasoned about here.** Do not weigh whether its
 absence "matters" — apply the **Gate-outcome invariant (evidence-bound pass)** under Gates,
@@ -768,12 +814,12 @@ in roster", "no PR yet") — the latter is contradicted by a later live re-check
 resume.
 
 The header carries a `mode:` field that gates **the merge gate only** — it does
-**not** change the plan gate, which is conditional in *every* mode (step 5: the
-plan gate stops on ambiguous ACs, risk/irreversibility, agent disagreement, or genuine
-uncertainty — never merely because of `mode:` — **plus one always-on condition `mode:` cannot reach,
-a material architect rewrite of the plan**). The two modes:
+**not** change the plan gate, whose posture comes from the separate **`plan-gate:`** field described
+below (step 5) — **plus one always-on condition neither field can reach, a material architect
+rewrite of the plan**. The two modes:
 - **`calibration`** (default) — the human approves **every** merge; the loop never auto-merges
-  (step 11). Plan gate conditional — plus its one always-on condition (step 5).
+  (step 11). Initialization pairs it with `plan-gate: always` (step 5) — plus that always-on
+  condition.
 - **`escalation-only`** — the human loosens the **merge gate per route**: a route the human has
   *graduated* auto-merges when CI + AC-verifier + review are green and the change produces no
   release-artifact bump (or ≤ patch where `RELEASE_SCHEME` defines one — a `docs`/`chore` change,
@@ -785,10 +831,13 @@ a material architect rewrite of the plan**). The two modes:
   security surface, a contested review finding, an unresolved Class B mutation survivor (step 7),
   an unresolved hermetic-tier finding (step 6), or a `hold` row — **and, by default-deny, whenever
   route graduation or any always-escalate condition is uncertain, fall back to the human merge
-  gate.** Plan gate conditional (unchanged) — **and its one always-on condition is not loosened by
-  graduating a route**: a material architect rewrite of the plan stops for the human on every route,
-  in this mode as in `calibration` (step 5). Graduation buys an unattended *merge*, never an
-  unattended change of plan. Loosening to `escalation-only` presupposes the
+  gate.** Initialization pairs it with `plan-gate: conditional` (step 5) — **and neither that
+  pairing nor graduating a route loosens the always-on condition**: a material architect rewrite of
+  the plan stops for the human on every route, in this mode as in `calibration` (step 5).
+  Graduation buys an unattended *merge*, never an unattended change of plan. **Note what the pairing
+  is and is not:** it is the value Initialization *writes* for a project that has already graduated
+  routes, not a coupling — a run may sit at `escalation-only` with `plan-gate: always`, and
+  switching `mode:` later never rewrites the field. Loosening to `escalation-only` presupposes the
   calibration prerequisites are met (these pinned mode semantics, plus per-iteration budget
   journaling — the `- Budget:` record and `iteration-cap:`/`subagent-cap:` fields below); it cannot
   run headless.
@@ -797,6 +846,37 @@ The set of graduated routes is recorded in a `graduated-routes:` header field be
 (default `none`; e.g. `graduated-routes: docs, research`). Under `mode: calibration` it is inert.
 *Which* routes graduate and the criteria for promoting one are out of scope here; this field only
 gives the merge gate (step 11) a place to read the human's decision from.
+
+The header also carries **`plan-gate:`**, which sets the plan gate's posture (step 5) exactly as
+`mode:` sets the merge gate's. Two values:
+- **`always`** — stop for plan approval on **every** issue.
+- **`conditional`** — stop on step 5's judgment conditions (ambiguous ACs, risk/irreversibility,
+  agent disagreement, a value story that doesn't hold, genuine uncertainty).
+
+Under **both**, step 5's always-on condition still fires and its `- Plan-gate:` line is still
+written. **Absent or unrecognized ⇒ `always`**: a ledger predating this field, or a typo, gets the
+over-gating reading rather than a silent fallthrough to the looser one.
+
+Initialization writes it per mode — `calibration` ⇒ `always`, a project with prior route graduation
+⇒ `conditional`. **After that the two fields are independent, and this is load-bearing rather than
+incidental.** Changing `mode:` never re-derives `plan-gate:`, in either direction: flipping to
+`escalation-only` does not loosen the plan gate, and flipping back to `calibration` does not
+re-tighten it. Were they coupled, a project that found a mandatory plan stop too heavy could only
+escape it by loosening its **merge** gate — trading away the protection it actually wanted to keep
+in order to adjust the one it did not. Consumers at different trust levels need to set these
+independently, which is the whole reason this is a field rather than a property of `mode:`.
+
+**That independence holds *within* a run.** A **new** run's Initialization re-derives the default
+from the mode branch, so a `plan-gate:` value a human sets by hand is **not yet carried across runs**
+the way a graduated `mode:` is — re-set it after init if the run's posture should differ from the
+mode default.
+
+**`plan-gate:` is human-owned.** Initialization writes it once, deriving the default from the mode
+branch it already takes (below); every value after that first write is a human decision recorded in
+the header, exactly like `mode:`, `graduated-routes:` and the budget caps. **The orchestrator never
+rewrites this field after Initialization** — not at step 5, and not on the observation that recent
+approvals looked routine. A gate that can switch itself off on its own reading of its own history is
+not a gate.
 
 The header also carries two **budget caps** (both default `none` = uncapped):
 `iteration-cap:` (max **issues per run** — in this engine one "iteration" = one issue) and
@@ -816,6 +896,7 @@ already covered by the default-deny/always-escalate machinery above.
 # Loop run: <run-slug>
 _mode: calibration_
 _graduated-routes: none_
+_plan-gate: always_         # always | conditional; absent or unrecognized = always
 _iteration-cap: none_       # max issues per run; none = uncapped
 _subagent-cap: none_        # max subagent runs per iteration; none = uncapped
 _Last updated: <ISO8601 by orchestrator>_
@@ -840,7 +921,7 @@ This is the audit trail and the resume anchor.
 - Plan: issue-<N>.plan.md written.
 - Architect: skipped (research scaffolding, no shared-interface impact).
 - Plan-gate: n/a: architect skipped (research scaffolding).
-- Human gate: plan auto-approved (route=research, low ambiguity).
+- Human gate: plan approved by the human (plan-gate: always).
 - Implemented: <path>; recorded findings in <path>.
 - Hermetic: n/a: research route.
 - Restore: n/a: no mutation applied.
@@ -877,6 +958,12 @@ of the first three spellings, or takes the fourth path, which writes none:
 - **no `- Hermetic:` line at all** — the gate produced no verdict, so a `- gate-error:` carries it
   instead and the iteration stops. Three states reach here, all of them on a row the trigger DID
   fire on: bound but unable to execute; `—` with no reason; and absent or `TODO`-valued.
+
+The **`- Human gate:`** line records how the plan gate resolved. Under `plan-gate: always` (the
+shipped default) every issue stops, so the line reads as an approval by the human and
+**`plan auto-approved` is never legitimate for this gate** — name the posture, as the worked example
+does. Under `plan-gate: conditional` an unstopped issue reads `plan auto-approved (<why>)`, the
+`<why>` being the judgment call that let it pass (e.g. route and low ambiguity).
 
 The **`- Plan-gate:`** line records the always-on stop's frozen-vs-live diff (step 5), which is
 otherwise invisible for the same reason: it resolves before implementation, so a run that never took
@@ -1541,7 +1628,13 @@ time" as the gate going soft.
    for this project** — check the decision log and, if so, init `mode: escalation-only` + the
    graduated `graduated-routes:` instead, so a prior graduation persists across runs rather than
    silently resetting to calibration. Step 11 reads `mode`/`graduated-routes` to gate **the merge
-   gate**, per route; it never affects the plan gate. Also set `iteration-cap: none` and
+   gate**, per route; it never affects the plan gate. **Set `plan-gate:` on the same branch you just
+   took** — `calibration` ⇒ `plan-gate: always`; the prior-graduation branch ⇒
+   `plan-gate: conditional` — so the plan gate's posture starts consistent with the trust level the
+   project has actually established. Write it explicitly even though an absent field would read as
+   `always` (step 5): the human tunes what they can see, and a field that only exists once someone
+   needs to loosen it is one they will not know to look for. After init the two are independent —
+   a later `mode:` change never rewrites `plan-gate:`. Also set `iteration-cap: none` and
    `subagent-cap: none` (the human sets them when loosening).
 5. Append an "init" block to `progress.md`. (Ledger is gitignored — not committed.)
 
@@ -1563,8 +1656,22 @@ status, and resume at the matching pipeline stage — git wins on any conflict w
 Stages 4/7/10 need no distinct status because the surrounding statuses bracket them: a
 `plan-approved` row re-enters at implement (step 6), so the architect/human gates are NOT re-run.
 The architect pass (step 4, or step 5 where that step first consults `DESIGN_AGENT`) carries **two**
-side effects, and on the rare resume of a `planning` row both
-are **write-once** — check for the artifact and skip the action if it is present:
+side effects, and on the resume of a `planning` row both
+are **write-once** — check for the artifact and skip the action if it is present. **Expect this
+resume to be common, not exceptional:** under `plan-gate: always` every issue stops at step 5 with
+its row still `planning`, and `planning` is on step 0.3's interrupted list — so any `/clear` between
+the plan gate and the human's approval lands here. The write-once guards below are what make that
+safe; do not relax them on the assumption that this path is rare.
+
+**A `planning` row is by definition unapproved — it re-enters at step 5, never past it.** The
+status vocabulary is the whole record here: step 3 sets `planning`, and step 5 advances to
+`plan-approved` *only* on an approval. So a row still reading `planning` did not get one, however
+complete its artifacts look. **A `- Plan-gate:` line already in `progress.md` is not evidence of
+approval** — it records what the architect's frozen-vs-live diff returned, which resolves *before*
+the human answers; finding one means the gate was reached, not that it was passed. Neither does a
+posted architect comment, a written frozen block, or an updated `## Approach`. The carry-forward
+rule for gates decided in a prior iteration applies to rows that re-enter *past* step 5; this one
+has not left it.
 1. it posts a comment to the issue — check for an existing architect comment, do not double-post.
    **But do not treat the comment as the whole of the step:** if a comment exists and `## Approach`
    does not yet reflect its `blocking`/`important` outcome, the crash landed between the two, so
@@ -1633,7 +1740,7 @@ Gate table:
 |------|-----|------|--------|
 | Plan | orchestrator | every issue | `issue-<N>.plan.md` |
 | Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure | issue comment |
-| Human (plan) | user | if uncertain/irreversible; **always** when the architect materially changed the plan (step 5's frozen-vs-live diff — decisiveness escalates exactly as a punt does, and no mode or route graduation reaches this one) | approve/redirect |
+| Human (plan) | user | **every issue under `plan-gate: always`** (the default under `calibration`; absent or unrecognized reads as `always`); under `plan-gate: conditional`, if uncertain/irreversible. Under **both**, **always** when the architect materially changed the plan (step 5's frozen-vs-live diff — decisiveness escalates exactly as a punt does, and neither `mode:`, `plan-gate:`, nor route graduation reaches this one) | approve/redirect |
 | Build commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`) | orchestrator | step 6, each per its own binding; `HERMETIC_TEST_CMD` additionally requires Route `code` **and** a change that adds or modifies a test, **whatever the binding says** — on such a row an absent or `TODO` binding is unknown, and unknown is due (the gate's four-state table) | **exit status per command**; non-zero blocks |
 | AC-verify | fresh subagent (+`VERIFY`); **any re-check a fresh instance too** (Fresh-re-check invariant) | every issue with acceptance criteria (step 7 is unconditional; the **mutation pass within it** is scoped — Routing table) | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors); **either class blocks** |
 | Code review | `CODE_REVIEW` (parallel finders you run — step 9); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes |

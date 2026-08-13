@@ -1,6 +1,6 @@
 ---
 name: dev-loop
-description: Run one routed iteration of the supervised dev loop over a backlog (milestone/label). Selects the next unblocked issue, routes it, drives plan→architect→implement→review→merge with human gates on uncertainty, and journals to the ledger. Invoke once per issue; re-invoke (or drive via /loop) for the next. Use when the user wants to work a backlog as a loop, "run the dev loop", or "do the next issue".
+description: Run one routed iteration of the supervised dev loop over a backlog (milestone/label). Selects the next unblocked issue, routes it, drives plan→architect→implement→review→merge stopping by default for human approval of every plan and every merge, and journals to the ledger. Invoke once per issue; re-invoke (or drive via /loop) for the next. Use when the user wants to work a backlog as a loop, "run the dev loop", or "do the next issue".
 ---
 
 # Dev Loop — orchestrator (ONE issue per invocation)
@@ -40,6 +40,13 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   admin-merge, only `--delete-branch` the PR's own branch.
 - **Escalate rather than guess.** Scope/value → `SCOPE_AGENT`; design → `DESIGN_AGENT`; unresolved,
   contested, or irreversible → the human.
+- **The plan gate stops on every issue unless the ledger says otherwise.** The `queue.md` header's
+  `plan-gate:` field sets this gate's posture, and **an absent or unrecognized value means stop** —
+  present the plan and wait. Only an explicit `plan-gate: conditional` narrows it, and only to the
+  engine's judgment conditions — so **if you are reading this without `loop-engine.md` loaded, treat
+  the gate as `always` whatever the field says**: you cannot apply conditions you have not read, and
+  "no condition I know of fired" is not one of them. `mode:` never narrows this gate in either
+  direction, and the field is the human's — you never rewrite it after Initialization.
 - **A decisive architect escalates exactly as a punting one does.** If the architect **materially
   changed the plan**, STOP for the human — under every mode, whatever the route. The plan you would
   have approved is now a different plan and nobody has seen it, so "the agents ruled cleanly" is the

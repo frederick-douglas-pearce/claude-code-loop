@@ -1,7 +1,7 @@
 {
   "name": "dev-loop",
   "version": "0.0.1",
-  "description": "Supervised dev-loop engine for Claude Code: runs exactly one routed backlog issue per invocation (select -> route -> plan -> architect -> human gate -> implement -> AC-verify -> review -> security -> merge -> journal), with human gates on uncertainty and durable ledger state.",
+  "description": "Supervised dev-loop engine for Claude Code: runs exactly one routed backlog issue per invocation (select -> route -> plan -> architect -> human gate -> implement -> AC-verify -> review -> security -> merge -> journal), stopping by default for human approval of every plan and every merge, with durable ledger state.",
   "author": {
     "name": "Frederick Douglas Pearce"
   },
