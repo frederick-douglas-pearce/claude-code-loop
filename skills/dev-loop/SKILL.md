@@ -1,6 +1,6 @@
 ---
 name: dev-loop
-description: Run one routed iteration of the supervised dev loop over a backlog (milestone/label). Selects the next unblocked issue, routes it, drives plan→architect→implement→review→merge with human gates on uncertainty, and journals to the ledger. Invoke once per issue; re-invoke (or drive via /loop) for the next. Use when the user wants to work a backlog as a loop, "run the dev loop", or "do the next issue".
+description: Run one routed iteration of the supervised dev loop over a backlog (milestone/label). Selects the next unblocked issue, routes it, drives plan→architect→implement→review→merge stopping for human approval of every plan by default and of every merge, and journals to the ledger. Invoke once per issue; re-invoke (or drive via /loop) for the next. Use when the user wants to work a backlog as a loop, "run the dev loop", or "do the next issue".
 ---
 
 # Dev Loop — orchestrator (ONE issue per invocation)
@@ -40,6 +40,11 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   admin-merge, only `--delete-branch` the PR's own branch.
 - **Escalate rather than guess.** Scope/value → `SCOPE_AGENT`; design → `DESIGN_AGENT`; unresolved,
   contested, or irreversible → the human.
+- **The plan gate stops on every issue unless the ledger says otherwise.** The `queue.md` header's
+  `plan-gate:` field sets this gate's posture, and **an absent or unrecognized value means stop** —
+  present the plan and wait. Only an explicit `plan-gate: conditional` narrows it to the engine's
+  judgment conditions; `mode:` never does, in either direction. If you have not read that field,
+  you have not earned the right to skip the stop.
 - **A decisive architect escalates exactly as a punting one does.** If the architect **materially
   changed the plan**, STOP for the human — under every mode, whatever the route. The plan you would
   have approved is now a different plan and nobody has seen it, so "the agents ruled cleanly" is the

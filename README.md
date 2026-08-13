@@ -5,7 +5,8 @@ A reusable **Claude Code plugin** that packages a battle-tested, supervised
 [AgentFluent](https://github.com/frederick-douglas-pearce/agentfluent) (where it
 ran the v0.10.x / v0.11.0 releases). Install it once, drop a small per-project
 `loop.config.md` into a target repo, and run your backlog as a loop: one routed
-issue per invocation, with human gates on uncertainty and durable ledger state.
+issue per invocation, stopping for human approval of every plan by default and of
+every merge, and durable ledger state.
 
 > **Status — v0.0.1, working and in use, not yet stable.** All three pieces are in
 > place: the `dev-loop` skill (`SKILL.md` + `loop-engine.md`), the `/init-loop`
@@ -77,10 +78,18 @@ Auto-merge exists only under the opt-in `escalation-only` mode, and even there i
 per-route, limited to routes you have explicitly *graduated*, and withheld for feature
 or breaking changes, risky or irreversible changes, anything touching a security
 surface, contested review findings, unresolved acceptance-gate findings of
-either kind, and an unresolved offline-tier finding. Independently of mode, the loop stops and asks
-you mid-pipeline when it hits ambiguous acceptance criteria, risk, agent disagreement,
-a gate finding that is still there after one fresh re-check, or genuine uncertainty.
+either kind, and an unresolved offline-tier finding.
 Wherever eligibility is unclear the rule is **default-deny**: fall back to the human.
+
+**By default you approve every plan before any code is written.** The plan gate is a separate
+setting from the merge gate — a `plan-gate:` field in the run's ledger header — and it ships as
+`always`, meaning the loop writes a plan, shows it to you, and stops, on **every** issue. Set it to
+`conditional` and the loop stops only when it hits ambiguous acceptance criteria, risk, agent
+disagreement, a value story that doesn't hold, or genuine uncertainty. The two settings are
+deliberately independent: relaxing how much of the planning you review never loosens what gets
+merged without you, and a ledger that doesn't mention the field at all is read as `always`.
+Neither setting reaches the loop's other mid-pipeline stops — a gate finding still there after one
+fresh re-check stops and asks you regardless of both.
 
 **When its design reviewer rewrites the plan, you see the plan.** One mid-pipeline stop is
 unconditional — no mode setting and no route graduation can loosen it: if the architect review

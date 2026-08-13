@@ -66,13 +66,13 @@ Three modules, and the split between them matters:
   `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
   `description`** (`plan→architect→implement→review→merge` — the string the model reads when
   deciding to invoke the skill, so a behavior surface, not prose), the engine's in-prose
-  `step N` cross-references — **148 sites, 152 numbers** — and `commands/init-loop.md`'s
+  `step N` cross-references — **156 sites, 160 numbers** — and `commands/init-loop.md`'s
   `engine step N` (below). *"Four files" is newly true, not newly written:* the previous five
   restatements live in **three** files (`loop-engine.md` ×2, `SKILL.md` ×2, `plugin.json`), so the
   standing "five restatements in four files" was off by one on the file count; `init-loop.md` is what
   makes four correct. That grep
   (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) reports
-  only 146: the other two are line-wrapped, which is exactly how they went unguarded until review
+  only 154: the other two are line-wrapped, which is exactly how they went unguarded until review
   caught it. It checks numbering and label correspondence **only** — never whether a
   step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
   `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
@@ -209,15 +209,21 @@ even though nothing will fail loudly:
   awaiting an external event, released only by explicit human un-park), and held/pending (no
   sentinel). `progress.md` is append-only and the **most recent** sentinel wins.
 - **Default-deny at the merge gate:** uncertainty about auto-merge eligibility means fall back to
-  the human. `mode:` currently gates the merge gate *only* — the plan gate is conditional in every
-  mode, and the engine restates this in ~5 places (step 5, step 11, both `queue.md` header mode
-  descriptions, the gate table) plus `SKILL.md`. **Issue #1 / F2 reverses this** (calibration will
-  make the plan gate unconditional); when implementing it, every restatement must change together.
-  **Half of it has landed: #28 shipped F2's always-on condition**, so the gate is now conditional
-  *plus* one condition no mode or route graduation reaches — and this bullet's five-site list is no
-  longer the whole set. The always-on plan-gate bullet below enumerates the current sites (step 11's
-  aside appears in both). **#29 is the remaining half**, and it is the one that would make the gate
-  unconditional; do not read this bullet as still describing untouched ground.
+  the human. `mode:` gates the merge gate *only*. **F2 is complete** — #28 shipped the always-on
+  condition (a material architect rewrite stops under every mode), and **#29 shipped the
+  `plan-gate:` header field**, so the plan gate's posture no longer comes from `mode:` at all:
+  - `plan-gate: always` (Initialization's value under `calibration`) stops on **every** issue;
+    `plan-gate: conditional` (its value where routes were already graduated) stops on step 5's
+    judgment conditions. **Absent or unrecognized reads as `always`** — the over-gating direction.
+  - **The two fields are independent after init, deliberately.** A `mode:` change never re-derives
+    `plan-gate:` in either direction. Coupling them would mean a project could only escape a
+    mandatory plan stop by loosening its *merge* gate, which is the trade the field exists to avoid.
+    Do not "simplify" this back into `mode:`.
+  - The always-on condition sits under **both** values, and `plan-gate: always` does **not** excuse
+    skipping its frozen-vs-live diff or its `- Plan-gate:` line — stricter posture, same record.
+  Restatement sites are enumerated in the always-on plan-gate bullet below (step 11's aside and the
+  gate table appear in both lists). **#35 will reduce these to one canonical passage; until it does,
+  every restatement changes together.**
 - **Notes on `parked`/`blocked` rows record the durable curation DECISION, never mutable live
   evidence** — the latter is contradicted by the next re-check and destabilizes resume.
 - **The tree-isolation / staging rule is a new multi-site invariant with no test guarding it** (#25).
@@ -244,6 +250,9 @@ even though nothing will fail loudly:
     and the architect-pass-by-any-actor definition
   - the Escalation rubric · the `mode:` shared paragraph · the `calibration` bullet · the
     `escalation-only` bullet · step 11's "only gate `mode` changes" aside · the gate table row
+  - the `plan-gate:` field paragraph (added by #29) — it restates that the condition fires under
+    **both** values and that `always` does not excuse skipping the diff or its `- Plan-gate:` line;
+    step 5's always-on block carries the same point at length
   - Ledger format — the `- Plan-gate:` spelling enumeration (the **canonical** one; step 5 points
     at it rather than restating, after a draft where the two lists disagreed) and the `progress.md`
     worked example
@@ -430,8 +439,9 @@ part of "done" for a release, not a separate chore.
 
 The README's **trust-model section** ("What the loop can do to your repo") has the same property for
 a different trigger: it restates the engine's gating posture and hard limits, so a change to the
-merge gate, the mode semantics, or the guard hook's scope must update it in the same PR. **F2 (#28 +
-#29) is the live example** — making the plan gate unconditional under `calibration` changes what that
-section says about mid-pipeline stops. The section is worded to survive that change, but re-read it
-when F2 lands. #36 / AC3 carries this for the release, and F5 (#31), F8 (#25) and F16 (#26/#27)
+merge gate, the mode semantics, the **plan-gate posture**, or the guard hook's scope must update it
+in the same PR. **F2 (#28 + #29) was the live example and has now landed** — the trust-model section
+gained a paragraph stating that you approve every plan by default, that `plan-gate:` and `mode:` are
+independent settings, and that an absent field reads as `always`. It is no longer a pending
+re-read. #36 / AC3 carries this for the release, and F5 (#31), F8 (#25) and F16 (#26/#27)
 change it too.
