@@ -76,9 +76,9 @@ a *wording* decision with multi-site consequences, which is cheap to review and 
 wrong. Skip for pure `README.md`/`LICENSE` edits.
 
 - **A multi-site invariant changes.** The engine restates several invariants in 3–6 places
-  (mode/gate semantics, the pipeline step order, the plan-gate-is-conditional rule). Any change that
-  must land in every restatement at once is an architect trigger — a partial edit leaves the engine
-  self-contradictory, and a *partially loaded* engine then under-gates.
+  (mode/gate semantics, the pipeline step order, the plan-gate posture and the always-on plan-gate
+  stop). Any change that must land in every restatement at once is an architect trigger — a partial
+  edit leaves the engine self-contradictory, and a *partially loaded* engine then under-gates.
 - **A `CAPS` parameter is added, renamed, or removed.** The three-layer contract binds
   `loop-engine.md` ↔ `commands/init-loop.md` §1 skeleton ↔ the inference map. `CapsVocabularyTests`
   catches only engine→skeleton; the inference map and Notes column are unenforced.
@@ -87,8 +87,10 @@ wrong. Skip for pure `README.md`/`LICENSE` edits.
 - **The guard hook's fail posture changes** (`hooks/guard_append_only.py`). The fail-open/fail-closed
   asymmetry is deliberate and load-bearing; "tightening" validation can silently invalidate the
   shipped example sidecar and leave consuming projects protecting nothing.
-- **A stated invariant is reversed** — e.g. F2 (#28/#29) making the plan gate unconditional. A
-  reversal must update the README trust-model section in the same change.
+- **A stated invariant is reversed** — F2 (#28 + #29) was the worked example and **landed
+  2026-08-13**: the plan gate's posture now comes from the `queue.md` header's `plan-gate:` field,
+  not from `mode:`, and defaults to stopping on every issue. A reversal must update the README
+  trust-model section in the same change.
 - **A change would require the engine to know something project-specific.** That is the signal to
   introduce a new `CAPS` parameter instead — always an architect question, never a judgment call
   made inline.
