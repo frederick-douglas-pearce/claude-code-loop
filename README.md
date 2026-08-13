@@ -102,7 +102,7 @@ against a copy of the approach frozen before the review ran, so the loop is read
 than its own memory of what it had intended.
 
 **A gate that did not run is never reported as one that passed.** For every gate the loop
-runs — plan, architect, your build commands, acceptance, code review, security, merge — it may
+runs — plan, architect, your build commands, code review, security, acceptance, merge — it may
 record a pass only with
 that gate's own output as evidence: **no verdict means not passed**. A binding you left blank in
 `loop.config.md` is not a switch that turns the gate off; it makes the loop fall back to a built-in
@@ -111,7 +111,21 @@ falls back at all — the loop will not substitute a check of its own devising a
 escalates. (A gate the route legitimately skips is journalled as *skipped*, which is also not a
 pass.)
 
-**The acceptance gate asks whether your tests would notice a regression.** It reports two kinds of
+**A pull request appears before any review has run — that is the order, not a slip.** The loop
+implements, then **immediately commits and opens the PR**, and only then runs code review, security,
+and the acceptance gate. So an open PR on your repo means "the loop has reached the review gates",
+never "the loop is finished with this and wants your merge." Nothing merges without the merge gate
+below, and CI is green before review starts. **This arrives with v0.2.0** — the released v0.0.1
+opens the PR after acceptance rather than before review, so this paragraph describes the posture the
+next release ships with, stated before it lands rather than after.
+
+Two consequences worth knowing. **The acceptance gate now runs last**, immediately before the merge
+gate, so the diff it certifies is the diff that merges — under v0.0.1 it ran before review, and
+every review round after it silently invalidated its verdict. And **the loop still stops in the same
+places it did**: reordering the gates moved none of them. What changed is which one is last.
+
+**The acceptance gate asks whether your tests would notice a regression.** It runs after code review
+and security — last of the gates. It reports two kinds of
 finding, kept separate and never added together: a criterion the change did not meet, and a **guard
 that does not guard** — a test that would stay green even if the code it protects broke. The second
 is protection you believe you have and do not, so the loop reports it as prominently as a bug. What

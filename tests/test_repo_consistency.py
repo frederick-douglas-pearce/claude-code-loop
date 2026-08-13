@@ -248,8 +248,8 @@ class PipelineStepOrderTests(unittest.TestCase):
     breaks: ``SKILL.md``'s **frontmatter** ``description`` chain -- the string
     the model reads when deciding whether to invoke the skill, so a behavior
     surface rather than internal prose -- and the engine's in-prose ``step N``
-    / ``Stages N/M`` cross-references: **161 reference sites, 165 numbers** once
-    ``/``- and dash-separated runs are expanded. This grep finds 159 of the 161::
+    / ``Stages N/M`` cross-references: **171 reference sites, 175 numbers** once
+    ``/``- and dash-separated runs are expanded. This grep finds 169 of the 171::
 
         grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' \\
             skills/dev-loop/loop-engine.md | wc -l
@@ -312,7 +312,8 @@ class PipelineStepOrderTests(unittest.TestCase):
       reference goes **out of range** -- whether because someone edited it to a
       number no heading defines, or because the heading run shrank or was
       rebased off zero. Stated bluntly, for whoever implements #31: **inserting
-      a step mid-pipeline and renumbering everything after it leaves all 165 numbers (across 161 sites)
+      a step mid-pipeline and renumbering everything after it leaves all 175
+      numbers (across 171 sites)
       references pointing at the wrong step with the whole suite green.** A
       green run is not evidence the cross-references were correctly renumbered.
     * **Consumer configs, for restatement #6.** Every onboarded repo's
@@ -459,7 +460,7 @@ class PipelineStepOrderTests(unittest.TestCase):
     # Both are 2 today; they are not required to stay equal, since a deliberate
     # prose reference would raise the total and leave this alone.
     _EXPECTED_SKELETON_STEP_REFERENCES = 2
-    # Well below the 165 numbers currently present (161 reference sites,
+    # Well below the 175 numbers currently present (171 reference sites,
     # some listing several), so ordinary prose edits never trip it, and well
     # above zero, so a regex broken by a reword fails here instead of passing on
     # an empty list. The headroom is a deliberate choice, not a
