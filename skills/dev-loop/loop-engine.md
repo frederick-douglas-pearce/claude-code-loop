@@ -603,9 +603,10 @@ boundary immediately downstream of it, and the untracked scan cannot see a copy 
 
 **A source-changing fix here has no gate downstream of it.** Steps 8 and 9 already ran against a
 head that did not contain this code, so a Class A fix that **adds or changes source** — implementing
-a missed criterion, not correcting a citation or doc line — has been reviewed by nobody. **Escalate
-to the human; do not merge on the earlier verdicts** — a gate that never saw a change has not passed
-it (Gate-outcome invariant). A fix that changes **no** source — a citation, a doc line, a test
+a missed criterion, not correcting a citation or doc line — has been reviewed by nobody. **Finish
+this gate first — commit the fix and run its re-verify — then escalate to the human before step 11.**
+Escalating is not a reason to skip your own remaining round, and **do not merge on the earlier
+verdicts** — a gate that never saw a change has not passed it (Gate-outcome invariant). A fix that changes **no** source — a citation, a doc line, a test
 name — re-arms nothing and needs no escalation. **Whether such a fix may instead be routed back
 through review/security under a budget, rather than escalated, is #33's to state**; this step only
 records that the reorder creates the gap and defaults it to the human.
