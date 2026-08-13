@@ -66,13 +66,13 @@ Three modules, and the split between them matters:
   `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
   `description`** (`plan→architect→implement→review→merge` — the string the model reads when
   deciding to invoke the skill, so a behavior surface, not prose), the engine's in-prose
-  `step N` cross-references — **171 sites, 175 numbers** — and `commands/init-loop.md`'s
+  `step N` cross-references — **178 sites, 181 numbers** — and `commands/init-loop.md`'s
   `engine step N` (below). *"Four files" is newly true, not newly written:* the previous five
   restatements live in **three** files (`loop-engine.md` ×2, `SKILL.md` ×2, `plugin.json`), so the
   standing "five restatements in four files" was off by one on the file count; `init-loop.md` is what
   makes four correct. That grep
   (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) reports
-  only 169: the remainder are line-wrapped, which is exactly how they went unguarded until review
+  only 175: the remainder are line-wrapped, which is exactly how they went unguarded until review
   caught it. It checks numbering and label correspondence **only** — never whether a
   step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
   `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
@@ -95,8 +95,10 @@ Three modules, and the split between them matters:
   evidence the cross-references were correctly renumbered.** (Those two numbers are #44's mutation as
   it was actually run, against the pre-#31 numbering — a historical record, deliberately not
   re-mapped.) **What #31 confirmed in practice:** it rotated 7–10 across 39 sites and the suite was
-  green before a single one had been *read*. Two of the sites that changed meaning carried **no step
-  number at all** — they reasoned from ordering in prose — so no matcher could have reached them.
+  green before a single one had been *read*. **Several** of the sites that changed meaning carried
+  **no step number at all** — they reasoned from ordering in prose — so no matcher could have reached
+  them. (No count here on purpose: three separate readings each found some and missed others, which
+  is the same reason this file states mechanisms rather than tallies.)
   The evidence that a renumber is correct is a site-by-site reading; it is not available from this
   module and never will be. Reference *forms* the regex does not
   match (`steps 3 and 7`, `steps 3, 7`, `step #7`) are invisible too; none is used today, and each
@@ -133,9 +135,9 @@ Three modules, and the split between them matters:
   hardening the span is #76's job and the answer there is not a fifth regex.
 
   **Not yet copied anywhere — and that is the point.** The `CODE_REVIEW` row entered the skeleton
-  in-tree with #10 (citing `engine step 9`, rotated to `step 8` by #31 — a number that has therefore
-  changed *twice* before ever reaching a consumer, which is precisely the propagation window this
-  paragraph is about); the *installed* 0.0.1 that onboarded all three consumers still binds
+  in-tree with #10 (citing `engine step 9`, rotated to `step 8` by #31 — so the number has already
+  changed once, and will change again at the next renumber, all before a consumer ever sees it,
+  which is precisely the propagation window this paragraph is about); the *installed* 0.0.1 that onboarded all three consumers still binds
   `CODE_REVIEW` to `/code-review` and contains no `engine step` at all. So the guard lands **before**
   propagation begins, at the #36 re-install — the useful time for it. Do not read the field as
   already carrying it: this repo's own `.claude/loop.config.md:49` has it only as the deliberate

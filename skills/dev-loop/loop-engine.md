@@ -354,8 +354,9 @@ that includes files you did not write. The window is **not** "while the agent ru
 worktree outlives the agent that wrote to it (Tool surface), so the exposure runs until the parent
 removes it. So: **name the paths you mean**, and **read `git diff --cached` before every commit**
 rather than trusting what you meant to stage. It applies at every commit boundary — step 7, the fix
-commits at step 8 and step 9, **and the acceptance gate's own fix commits at step 10** — not just
-the first.
+commits at step 8, **and the acceptance gate's own fix commits at step 10** — not just the first.
+(Step 9 defines no commit of its own; where a security finding needs code, it is fixed and committed
+under step 8's rule.)
 The last of those is the newest and the most exposed: the acceptance gate's mutation pass takes a
 copy of the tree, so a blanket stage there can land a deliberately-broken one.
 
@@ -515,9 +516,10 @@ that works in practice — is **parallel finder subagents over `git diff main...
 that confirms each finding**, journaled under the gate's name. (`main...HEAD` is the right form
 *here*: step 7 has committed and opened the PR, so the branch head **is** the change. The
 acceptance gate at step 10 deliberately diffs the **working tree** instead, and still does now that
-it too runs post-commit: it is the gate of record for the merge candidate, so it must also see a
-fix that is written but not yet committed rather than silently certifying the commit beneath it.
-The two bases differ on purpose — do not "fix" one to match the other.)
+it too runs post-commit — but for a changed reason: it is the gate of record for the merge
+candidate, so it must be able to **detect** a fix that is written but not yet committed. Detecting
+one is not certifying it; step 10 requires such a fix committed before it certifies. The two bases
+differ on purpose — do not "fix" one to match the other.)
 Running those finders at once is permitted because they are read-only — the **read-only** form the
 Execution policy (Tool surface) allows; see it there for what that permission does and does not
 extend to. A review skill marked
@@ -567,8 +569,16 @@ Run `SECURITY_REVIEW` per the routing in `loop.config.md` (the local-skill-vs-la
 host-repo Git incantation are project specifics; this engine only fixes the gate's position and
 that findings ≥ the project's confidence bar are addressed):
 - A `.claude/`-only (tooling-only) change → the **local** review path.
-- Otherwise, if a sensitive surface is touched → the **labeled** review path, applied ONLY now
-  (dev-complete). Skip for docs/no-surface changes.
+- Otherwise, if a sensitive surface is touched → the **labeled** review path. Skip for
+  docs/no-surface changes.
+
+**This gate is no longer last, so "run it once, at dev-complete" is no longer a safe reading.** Step
+10 can produce code — a Class A finding is fixed and committed there — and that code lands
+*downstream* of this gate. Re-evaluate this trigger against any acceptance-gate fix before step 11:
+if such a fix touches a sensitive surface, it has not been security-reviewed, and **an unreviewed
+sensitive surface is an always-escalate condition at the merge gate**, never something the earlier
+clean verdict covers. The general rule this instances — which gates a post-gate change re-arms, and
+from which sources — is #33's to state.
 
 ### 10. Verify done (independent, fresh context)
 Advance the row to `in-acceptance`. Run the AC-verifier (below): a fresh check that the diff
@@ -586,7 +596,25 @@ fixes up.** Every earlier gate's fixes flowed into a commit downstream of it; no
 this gate and the merge (step 11) but the merge itself. So **commit the fixes here**, under the
 same explicit-path staging rule as every other boundary (step 6), and **before** spawning the fresh
 re-verify — an uncommitted fix is not on the PR branch, and a gate that certifies work the merge
-candidate does not contain has certified nothing. Remove any mutation copy first (Part 2 below).
+candidate does not contain has certified nothing. **Confirm no mutation copy is still live
+(`git worktree list`) and remove it before you stage** — Part 2 below creates one, this is the
+boundary immediately downstream of it, and the untracked scan cannot see a copy the repo gitignores
+(Tool surface).
+
+**A fix here has no gate downstream of it, so decide which one it re-arms.** Steps 8 and 9 have
+already run; the fresh re-verify judges *met/not-met* against the acceptance criteria and is not a
+bug pass. So a Class A fix that **adds or changes source** — implementing a criterion that was
+missed, rather than correcting a citation or a doc line — has been reviewed by nobody:
+- **Re-arm the gates it invalidates.** A source-changing fix returns to **step 8** for a review pass
+  scoped to that fix, and re-evaluates step 9's trigger (Security review). Both are bounded to the
+  fix, not the whole diff.
+- **If that is not proportionate, escalate — do not merge on the earlier verdicts.** They were
+  produced against a head that did not contain this code, and a gate that never saw a change has not
+  passed it (Gate-outcome invariant).
+- **A fix that changes no source** — a citation, a doc line, a test name — re-arms nothing.
+Journal which of the three applied. **The general rule — every source of post-gate change and what
+each re-arms — is #33's**; this is the one instance the reorder creates, stated here because it is
+this step that creates it.
 
 The gate returns **two result classes, and they are never summed into one "findings" count**:
 **Class A — AC-satisfaction findings** (a criterion judged not met) and **Class B — mutation
@@ -828,7 +856,9 @@ status resume keys on (see Resume): `queued → routed → planning → plan-app
 in-pr → in-review → in-acceptance`. **`in-acceptance` brackets the acceptance gate (step 10)**, and
 exists because that gate is now the last one: without it `in-review` would span review, security,
 acceptance and merge, so any `/clear` in that span would resume by replaying the entire code-review
-fan-out. It is a **pipeline** status like the seven before it — never a resting one, so it takes no
+fan-out. It brackets acceptance and merge; a crash during **security** still resumes under
+`in-review` and replays the review fan-out, which is a residual this status does not close.
+It is a **pipeline** status like the seven before it — never a resting one, so it takes no
 part in the `hold`/`parked` machinery below. **Terminal statuses** — the run converges when every row is terminal:
 `done`; `deferred` (Route `stub-defer`); `blocked` (an unmet in-run dependency; `blocked:
 too-large` awaiting a split; or a recurring `gate-error:` awaiting a config repair — see the
@@ -1436,8 +1466,8 @@ under verification — check it, never assume it.** How a host materializes an i
 **host** fact this engine deliberately does not know (Tool surface), and step 10 certifies work in
 every commit state including **wholly uncommitted** (Part 1). A copy taken from a commit therefore
 carries none of the uncommitted remainder. **At this point in the pipeline that remainder is usually
-small — and the check matters anyway.** Step 7 committed and opened the PR, and steps 8–9 committed
-their fixes, so on most iterations the change is already committed here; the residue is a fix
+small — and the check matters anyway.** Step 7 committed and opened the PR, and step 8 committed its
+fixes, so on most iterations the change is already committed here; the residue is a fix
 written but not yet committed, or whatever a crash left behind. That is a **narrower** target than
 it once was, not a safer one: a copy missing the one uncommitted fix mutates the code as it stood
 *before* that fix, and reports clean. Do not read the shrinking remainder as licence to skip the
@@ -1800,8 +1830,8 @@ Gate table:
 | Build commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`) | orchestrator | step 6, each per its own binding; `HERMETIC_TEST_CMD` additionally requires Route `code` **and** a change that adds or modifies a test, **whatever the binding says** — on such a row an absent or `TODO` binding is unknown, and unknown is due (the gate's four-state table) | **exit status per command**; non-zero blocks |
 | Code review | `CODE_REVIEW` (parallel finders you run — step 8); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes |
 | Security | `SECURITY_REVIEW` (local or label) | by route (step 9) | clean/findings |
-| AC-verify | fresh subagent (+`VERIFY`); **any re-check a fresh instance too** (Fresh-re-check invariant) | every issue with acceptance criteria (step 10 is unconditional; the **mutation pass within it** is scoped — Routing table). **Last of the gates**, so it certifies the merge candidate and owns the commit boundary for its own fixes | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors); **either class blocks** |
-| Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI+security green | `MERGE_METHOD` |
+| AC-verify | fresh subagent (+`VERIFY`); **any re-check a fresh instance too** (Fresh-re-check invariant) | every issue with acceptance criteria (step 10 is unconditional; the **mutation pass within it** is scoped — Routing table). **Last gate before merge**, so it certifies the merge candidate and owns the commit boundary for its own fixes | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors); **either class blocks** |
+| Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI + security + acceptance green | `MERGE_METHOD` |
 
 **Gate-outcome invariant (evidence-bound pass).** Applies to every gate in the table above that
 returns a verdict, **on the rows that gate is due on** — due-ness is decided where it always was (the

@@ -121,11 +121,13 @@ next release ships with, stated before it lands rather than after.
 
 Two consequences worth knowing. **The acceptance gate now runs last**, immediately before the merge
 gate, so the diff it certifies is the diff that merges — under v0.0.1 it ran before review, and
-every review round after it silently invalidated its verdict. And **the loop still stops in the same
-places it did**: reordering the gates moved none of them. What changed is which one is last.
+every review round after it silently invalidated its verdict. And **no gate was removed** — the loop stops at the
+same set of gates it always did. What changed is which one is last, and therefore what your repo
+looks like when a stop happens: an acceptance-gate stop used to find no PR and no CI run, and now
+finds a PR already open with CI green.
 
 **The acceptance gate asks whether your tests would notice a regression.** It runs after code review
-and security — last of the gates. It reports two kinds of
+and security — the last gate before merge. It reports two kinds of
 finding, kept separate and never added together: a criterion the change did not meet, and a **guard
 that does not guard** — a test that would stay green even if the code it protects broke. The second
 is protection you believe you have and do not, so the loop reports it as prominently as a bug. What
