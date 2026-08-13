@@ -575,9 +575,9 @@ that findings ≥ the project's confidence bar are addressed):
 **This gate is no longer last, so "run it once, at dev-complete" is no longer a safe reading.** Step
 10 can produce code — a Class A finding is fixed and committed there — and that code lands
 *downstream* of this gate. Re-evaluate this trigger against any acceptance-gate fix before step 11:
-if such a fix touches a sensitive surface, it has not been security-reviewed, and **an unreviewed
-sensitive surface is an always-escalate condition at the merge gate**, never something the earlier
-clean verdict covers. The general rule this instances — which gates a post-gate change re-arms, and
+if such a fix touches a sensitive surface it has not been security-reviewed, so it **escalates at
+the merge gate under the existing "touched security surface" always-escalate condition** (step
+11) — the earlier clean verdict does not cover it. The general rule this instances — which gates a post-gate change re-arms, and
 from which sources — is #33's to state.
 
 ### 10. Verify done (independent, fresh context)
@@ -601,20 +601,14 @@ candidate does not contain has certified nothing. **Confirm no mutation copy is 
 boundary immediately downstream of it, and the untracked scan cannot see a copy the repo gitignores
 (Tool surface).
 
-**A fix here has no gate downstream of it, so decide which one it re-arms.** Steps 8 and 9 have
-already run; the fresh re-verify judges *met/not-met* against the acceptance criteria and is not a
-bug pass. So a Class A fix that **adds or changes source** — implementing a criterion that was
-missed, rather than correcting a citation or a doc line — has been reviewed by nobody:
-- **Re-arm the gates it invalidates.** A source-changing fix returns to **step 8** for a review pass
-  scoped to that fix, and re-evaluates step 9's trigger (Security review). Both are bounded to the
-  fix, not the whole diff.
-- **If that is not proportionate, escalate — do not merge on the earlier verdicts.** They were
-  produced against a head that did not contain this code, and a gate that never saw a change has not
-  passed it (Gate-outcome invariant).
-- **A fix that changes no source** — a citation, a doc line, a test name — re-arms nothing.
-Journal which of the three applied. **The general rule — every source of post-gate change and what
-each re-arms — is #33's**; this is the one instance the reorder creates, stated here because it is
-this step that creates it.
+**A source-changing fix here has no gate downstream of it.** Steps 8 and 9 already ran against a
+head that did not contain this code, so a Class A fix that **adds or changes source** — implementing
+a missed criterion, not correcting a citation or doc line — has been reviewed by nobody. **Escalate
+to the human; do not merge on the earlier verdicts** — a gate that never saw a change has not passed
+it (Gate-outcome invariant). A fix that changes **no** source — a citation, a doc line, a test
+name — re-arms nothing and needs no escalation. **Whether such a fix may instead be routed back
+through review/security under a budget, rather than escalated, is #33's to state**; this step only
+records that the reorder creates the gap and defaults it to the human.
 
 The gate returns **two result classes, and they are never summed into one "findings" count**:
 **Class A — AC-satisfaction findings** (a criterion judged not met) and **Class B — mutation
@@ -652,7 +646,7 @@ If the row is **not** auto-merge-eligible — which includes *every* row under `
 WRITE the hold to the row before stopping** — set Status `hold` (record the reason in Notes) so
 it persists across `/clear`; resume (step 0.3), step 1, and this gate all key on Status `hold` and
 honor it until the human clears it (restoring the row's prior status). When the row **is**
-auto-merge-eligible (or the human has approved), and CI + security are green AND the row is not
+auto-merge-eligible (or the human has approved), and CI + security + acceptance are green AND the row is not
 `hold`:
 merge via `MERGE_METHOD` with an explicit `--subject` carrying the correct `COMMIT_CONV` scope,
 `--delete-branch`. Confirm the issue closed.
@@ -853,10 +847,11 @@ Dependency-ordered. One row per issue. **`Route` and `Status` are separate colum
 can be Route `research`, Status `blocked`). **Pipeline statuses** — advanced by the
 orchestrator as the issue moves through the pipeline, so an interrupted run leaves a non-terminal
 status resume keys on (see Resume): `queued → routed → planning → plan-approved → implementing →
-in-pr → in-review → in-acceptance`. **`in-acceptance` brackets the acceptance gate (step 10)**, and
+in-pr → in-review → in-acceptance`. **`in-acceptance` brackets the acceptance gate (step 10) and the
+merge (step 11)**, and
 exists because that gate is now the last one: without it `in-review` would span review, security,
 acceptance and merge, so any `/clear` in that span would resume by replaying the entire code-review
-fan-out. It brackets acceptance and merge; a crash during **security** still resumes under
+fan-out. A crash during **security** still resumes under
 `in-review` and replays the review fan-out, which is a residual this status does not close.
 It is a **pipeline** status like the seven before it — never a resting one, so it takes no
 part in the `hold`/`parked` machinery below. **Terminal statuses** — the run converges when every row is terminal:

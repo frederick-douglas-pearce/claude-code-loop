@@ -249,7 +249,7 @@ class PipelineStepOrderTests(unittest.TestCase):
     the model reads when deciding whether to invoke the skill, so a behavior
     surface rather than internal prose -- and the engine's in-prose ``step N``
     / ``Stages N/M`` cross-references: **178 reference sites, 181 numbers** once
-    ``/``- and dash-separated runs are expanded. This grep finds 175 of the 178::
+    ``/``- and dash-separated runs are expanded. This grep finds 174 of the 178::
 
         grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' \\
             skills/dev-loop/loop-engine.md | wc -l
@@ -376,15 +376,15 @@ class PipelineStepOrderTests(unittest.TestCase):
     # `Stages 4/9`. The trailing run picks up `/`- and dash-separated lists.
     #
     # The newline branch is load-bearing, not defensive: the engine is
-    # hard-wrapped, and TWO references sit astride a wrap today ("(step\n   1)"
-    # and "(step\n10)"). A separator of plain `[ -]` silently missed both --
+    # hard-wrapped, and FOUR references sit astride a wrap today ("(step\n   1)",
+    # "(step\n10)", "step\n11" and "step\n9"). A separator of plain `[ -]` silently missed them --
     # found by review, and exactly the invisible-coverage failure this check
     # exists to prevent.
     #
     # Separators inside a run are NOT space-padded, deliberately. Allowing
     # `\s*` there made an ordinary prose aside -- "(step 12 — 40 lines max)" --
     # parse as a run of 12 and 40 and report a dangling "step 40" nobody wrote.
-    # All three real runs (`0–1`, `0/1`, `4/7/10`) are tight, so the padding
+    # All three real runs (`0–1`, `0/1`, `4/9`) are tight, so the padding
     # bought nothing and cost a false failure.
     _STEP_REFERENCE = re.compile(
         r"\b(?:[Ss]teps?|[Ss]tages?)(?:[ -]|[ \t]*\n[ \t]*)"
@@ -468,7 +468,7 @@ class PipelineStepOrderTests(unittest.TestCase):
     # goes stale on any edit that adds a reference: it was 15 when 40 was
     # picked, and 40 has not been revisited since
     # -- and note its cost: a reword that breaks only PART of the
-    # matcher (say, `Stages 4/7/10` -> `Stages 4, 7 and 10`, a form this regex
+    # matcher (say, `Stages 4/9` -> `Stages 4 and 9`, a form this regex
     # does not match) drops a few numbers and still clears the floor. Raising
     # this as the engine grows is fine; lowering it to make a red run green is
     # working around the check (cf. _STOPWORDS, ALLOWED_NON_BINDINGS).
