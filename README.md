@@ -5,8 +5,8 @@ A reusable **Claude Code plugin** that packages a battle-tested, supervised
 [AgentFluent](https://github.com/frederick-douglas-pearce/agentfluent) (where it
 ran the v0.10.x / v0.11.0 releases). Install it once, drop a small per-project
 `loop.config.md` into a target repo, and run your backlog as a loop: one routed
-issue per invocation, stopping for human approval of every plan by default and of
-every merge, and durable ledger state.
+issue per invocation, stopping by default for human approval of every plan and
+every merge, with durable ledger state.
 
 > **Status — v0.0.1, working and in use, not yet stable.** All three pieces are in
 > place: the `dev-loop` skill (`SKILL.md` + `loop-engine.md`), the `/init-loop`
@@ -35,8 +35,8 @@ every merge, and durable ledger state.
 
 This is a **structured, routed loop**, not a graph orchestrator: a single
 supervised orchestrator handles **exactly one issue end-to-end per invocation**,
-delegates to specialized agents (scope, design, AC-verify, code-review), gates on
-human judgement when uncertain, and journals everything to a ledger that lives
+delegates to specialized agents (scope, design, AC-verify, code-review), stops for
+human approval of every plan by default, and journals everything to a ledger that lives
 outside the model's context so a fresh invocation resumes correctly. It is the
 kind of well-instrumented loop that "graph engineering" treats as a single node.
 
@@ -82,17 +82,20 @@ either kind, and an unresolved offline-tier finding.
 Wherever eligibility is unclear the rule is **default-deny**: fall back to the human.
 
 **By default you approve every plan before any code is written.** The plan gate is a separate
-setting from the merge gate — a `plan-gate:` field in the run's ledger header — and it ships as
-`always`, meaning the loop writes a plan, shows it to you, and stops, on **every** issue. Set it to
-`conditional` and the loop stops only when it hits ambiguous acceptance criteria, risk, agent
-disagreement, a value story that doesn't hold, or genuine uncertainty. The two settings are
-deliberately independent: relaxing how much of the planning you review never loosens what gets
-merged without you, and a ledger that doesn't mention the field at all is read as `always`.
-Neither setting reaches the loop's other mid-pipeline stops — a gate finding still there after one
-fresh re-check stops and asks you regardless of both.
+setting from the merge gate — a `plan-gate:` field in the run's ledger header — set to `always` for
+a new run under `calibration`, meaning the loop writes a plan, shows it to you, and stops, on
+**every** issue. **This arrives with v0.2.0** — the released v0.0.1 has no `plan-gate:` field and
+gates the plan only on uncertainty, so this paragraph describes the posture the next release ships
+with, stated before it lands rather than after. Set the field to `conditional` and the loop stops
+when it hits ambiguous acceptance criteria, risk, agent disagreement, a value story that doesn't
+hold, or genuine uncertainty. The two settings are deliberately independent: relaxing how much of
+the planning you review never loosens what gets merged without you, and a ledger that doesn't
+mention the field at all is read as `always`. Neither setting reaches the loop's other mid-pipeline
+stops — the architect-rewrite stop below, and a gate finding still there after one fresh re-check,
+stop and ask you regardless of both.
 
 **When its design reviewer rewrites the plan, you see the plan.** One mid-pipeline stop is
-unconditional — no mode setting and no route graduation can loosen it: if the architect review
+unconditional — no mode setting, no `plan-gate:` value, and no route graduation can loosen it: if the architect review
 **materially changed** the approach, the loop stops and shows you what changed before writing any
 code. A reviewer that decides is treated as a stronger reason to interrupt you than one that hedges,
 because the plan you would have approved is no longer the plan being built. The comparison is made

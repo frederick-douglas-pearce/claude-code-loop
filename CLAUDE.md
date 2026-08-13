@@ -66,13 +66,13 @@ Three modules, and the split between them matters:
   `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
   `description`** (`plan→architect→implement→review→merge` — the string the model reads when
   deciding to invoke the skill, so a behavior surface, not prose), the engine's in-prose
-  `step N` cross-references — **156 sites, 160 numbers** — and `commands/init-loop.md`'s
+  `step N` cross-references — **161 sites, 165 numbers** — and `commands/init-loop.md`'s
   `engine step N` (below). *"Four files" is newly true, not newly written:* the previous five
   restatements live in **three** files (`loop-engine.md` ×2, `SKILL.md` ×2, `plugin.json`), so the
   standing "five restatements in four files" was off by one on the file count; `init-loop.md` is what
   makes four correct. That grep
   (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) reports
-  only 154: the other two are line-wrapped, which is exactly how they went unguarded until review
+  only 158: the other two are line-wrapped, which is exactly how they went unguarded until review
   caught it. It checks numbering and label correspondence **only** — never whether a
   step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
   `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
@@ -221,9 +221,13 @@ even though nothing will fail loudly:
     Do not "simplify" this back into `mode:`.
   - The always-on condition sits under **both** values, and `plan-gate: always` does **not** excuse
     skipping its frozen-vs-live diff or its `- Plan-gate:` line — stricter posture, same record.
-  Restatement sites are enumerated in the always-on plan-gate bullet below (step 11's aside and the
-  gate table appear in both lists). **#35 will reduce these to one canonical passage; until it does,
-  every restatement changes together.**
+  **The posture's restatement sites are not enumerated anywhere, and this bullet does not enumerate
+  them either.** The list in the always-on plan-gate bullet below is scoped to a *different*
+  invariant (the material-architect-rewrite stop) and does not cover posture sites — #29 changed at
+  least five that appear in no list: step 0.2's header read, Initialization step 4, the `queue.md`
+  skeleton fence, Ledger format's `- Human gate:` paragraph, and `SKILL.md`'s plan-gate bullet.
+  Do not read that list as the posture's site list. **#35 will reduce all of this to one canonical
+  passage; until it does, grep before editing — every restatement changes together.**
 - **Notes on `parked`/`blocked` rows record the durable curation DECISION, never mutable live
   evidence** — the latter is contradicted by the next re-check and destabilizes resume.
 - **The tree-isolation / staging rule is a new multi-site invariant with no test guarding it** (#25).

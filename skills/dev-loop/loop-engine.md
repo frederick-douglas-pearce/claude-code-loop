@@ -231,8 +231,11 @@ this step's other side effect (the issue comment); both are stated there.
 **Read `plan-gate:` from the `queue.md` header** (Ledger format → queue.md). That field, and never
 `mode:`, sets this gate's posture — `mode:` gates the merge gate only (step 11), never this one:
 - **`plan-gate: always`** — what Initialization writes under `mode: calibration`. **STOP for plan
-  approval on every issue.** There is no judgment call to make and nothing to weigh: present the
-  plan and wait.
+  approval on every issue.** Whether to stop is not a judgment call under this value. **What you
+  put in front of the human still is** — work through the rest of this step before stopping, and in
+  particular evaluate the always-on condition below and prepare its frozen-vs-live diff for
+  presentation. Stopping with the plan but without that diff satisfies this bullet and still fails
+  the gate.
 - **`plan-gate: conditional`** — what Initialization writes for a project with prior route
   graduation. Stop on the judgment conditions below, plus the always-on condition that follows them.
 
@@ -257,7 +260,9 @@ agents disagree or punt; or you are otherwise unsure. Otherwise proceed (note "a
 in the journal). **Under `plan-gate: always` there is no "otherwise"** — every issue stops, and
 "auto-approved" is never a legitimate journal entry for this gate. Route scope/value questions to
 `SCOPE_AGENT` and design questions to `DESIGN_AGENT` BEFORE escalating to the human, under either
-value. On approval (human or auto), advance the row to `plan-approved`.
+value — `always` removes the judgment call about *stopping*, never the consultations that inform
+what you present. On approval — the human's, or under `conditional` only, an auto-approval —
+advance the row to `plan-approved`.
 
 **One stop condition is ALWAYS-ON.** The conditions above are judgment calls; this one is not, and
 it fires under **every** mode **and both `plan-gate:` values**. Route graduation cannot reach it —
@@ -861,11 +866,11 @@ escape it by loosening its **merge** gate — trading away the protection it act
 in order to adjust the one it did not. Consumers at different trust levels need to set these
 independently, which is the whole reason this is a field rather than a property of `mode:`.
 
-**The posture is meant to be walked back on evidence, not on friction.** `always` is the shipped
-default because an unreviewed plan is cheap to stop and expensive to discover later. If a project
-finds that its plan approvals are consistently rubber stamps — approved as-presented, with no
-redirect — that is the signal to set `conditional`; a run of approvals that *did* redirect the plan
-is the signal to leave it alone.
+**`plan-gate:` is set by the human, and only there.** Initialization writes it once (below); after
+that it is a human decision recorded in the header, exactly like `mode:`, `graduated-routes:` and
+the budget caps. **The orchestrator never edits this field** — not from Initialization, not at step
+5, and not on the observation that recent approvals looked routine. A gate that can switch itself
+off on its own reading of its own history is not a gate.
 
 The header also carries two **budget caps** (both default `none` = uncapped):
 `iteration-cap:` (max **issues per run** — in this engine one "iteration" = one issue) and
@@ -951,8 +956,8 @@ of the first three spellings, or takes the fourth path, which writes none:
 The **`- Human gate:`** line records how the plan gate resolved. Under `plan-gate: always` (the
 shipped default) every issue stops, so the line reads as an approval by the human and
 **`plan auto-approved` is never legitimate for this gate** — name the posture, as the worked example
-does. Under `plan-gate: conditional` an unstopped issue reads `plan auto-approved (<why>)`; the
-worked example's `(route=research, low ambiguity)` is that shape.
+does. Under `plan-gate: conditional` an unstopped issue reads `plan auto-approved (<why>)`, the
+`<why>` being the judgment call that let it pass (e.g. route and low ambiguity).
 
 The **`- Plan-gate:`** line records the always-on stop's frozen-vs-live diff (step 5), which is
 otherwise invisible for the same reason: it resolves before implementation, so a run that never took
@@ -1651,6 +1656,16 @@ resume to be common, not exceptional:** under `plan-gate: always` every issue st
 its row still `planning`, and `planning` is on step 0.3's interrupted list — so any `/clear` between
 the plan gate and the human's approval lands here. The write-once guards below are what make that
 safe; do not relax them on the assumption that this path is rare.
+
+**A `planning` row is by definition unapproved — it re-enters at step 5, never past it.** The
+status vocabulary is the whole record here: step 3 sets `planning`, and step 5 advances to
+`plan-approved` *only* on an approval. So a row still reading `planning` did not get one, however
+complete its artifacts look. **A `- Plan-gate:` line already in `progress.md` is not evidence of
+approval** — it records what the architect's frozen-vs-live diff returned, which resolves *before*
+the human answers; finding one means the gate was reached, not that it was passed. Neither does a
+posted architect comment, a written frozen block, or an updated `## Approach`. The carry-forward
+rule for gates decided in a prior iteration applies to rows that re-enter *past* step 5; this one
+has not left it.
 1. it posts a comment to the issue — check for an existing architect comment, do not double-post.
    **But do not treat the comment as the whole of the step:** if a comment exists and `## Approach`
    does not yet reflect its `blocking`/`important` outcome, the crash landed between the two, so
