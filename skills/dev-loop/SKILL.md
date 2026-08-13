@@ -46,7 +46,7 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   engine's judgment conditions — so **if you are reading this without `loop-engine.md` loaded, treat
   the gate as `always` whatever the field says**: you cannot apply conditions you have not read, and
   "no condition I know of fired" is not one of them. `mode:` never narrows this gate in either
-  direction, and the field is set by the human — never written or rewritten by you.
+  direction, and the field is the human's — you never rewrite it after Initialization.
 - **A decisive architect escalates exactly as a punting one does.** If the architect **materially
   changed the plan**, STOP for the human — under every mode, whatever the route. The plan you would
   have approved is now a different plan and nobody has seen it, so "the agents ruled cleanly" is the

@@ -88,7 +88,7 @@ Three modules, and the split between them matters:
   that is semantics, which this module does not do. It fires when a reference goes **out of range** —
   whether edited to a number no heading defines, or left behind when the heading run shrank or was
   rebased off zero. Stated bluntly, because this is the case #31 will actually hit: **insert a step
-  mid-pipeline, renumber everything after it, and all 148 reference sites (152 numbers) point at the
+  mid-pipeline, renumber everything after it, and every one of those reference sites points at the
   wrong step with the whole suite green.** Confirmed by mutation (#44), along with the milder shapes — appending a step
   and updating `SKILL.md` passes, as does rewriting a `(step 9)` to `(step 7)`. **A green run is not
   evidence the cross-references were correctly renumbered.** Reference *forms* the regex does not
