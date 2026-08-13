@@ -72,7 +72,7 @@ Three modules, and the split between them matters:
   standing "five restatements in four files" was off by one on the file count; `init-loop.md` is what
   makes four correct. That grep
   (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) reports
-  only 158: the other two are line-wrapped, which is exactly how they went unguarded until review
+  only 159: the remainder are line-wrapped, which is exactly how they went unguarded until review
   caught it. It checks numbering and label correspondence **only** — never whether a
   step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
   `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
@@ -224,8 +224,10 @@ even though nothing will fail loudly:
   **The posture's restatement sites are not enumerated anywhere, and this bullet does not enumerate
   them either.** The list in the always-on plan-gate bullet below is scoped to a *different*
   invariant (the material-architect-rewrite stop) and does not cover posture sites — #29 changed at
-  least five that appear in no list: step 0.2's header read, Initialization step 4, the `queue.md`
-  skeleton fence, Ledger format's `- Human gate:` paragraph, and `SKILL.md`'s plan-gate bullet.
+  least five that the always-on bullet's site list below does not cover: step 0.2's header read,
+  Initialization step 4, the `queue.md` skeleton fence, Ledger format's `- Human gate:` paragraph,
+  and `SKILL.md`'s plan-gate bullet (that list names `SKILL.md`'s fail-safe list for the *other*
+  invariant, not this one).
   Do not read that list as the posture's site list. **#35 will reduce all of this to one canonical
   passage; until it does, grep before editing — every restatement changes together.**
 - **Notes on `parked`/`blocked` rows record the durable curation DECISION, never mutable live

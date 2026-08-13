@@ -5,8 +5,7 @@ A reusable **Claude Code plugin** that packages a battle-tested, supervised
 [AgentFluent](https://github.com/frederick-douglas-pearce/agentfluent) (where it
 ran the v0.10.x / v0.11.0 releases). Install it once, drop a small per-project
 `loop.config.md` into a target repo, and run your backlog as a loop: one routed
-issue per invocation, stopping by default for human approval of every plan and
-every merge, with durable ledger state.
+issue per invocation, with human gates on uncertainty and durable ledger state.
 
 > **Status — v0.0.1, working and in use, not yet stable.** All three pieces are in
 > place: the `dev-loop` skill (`SKILL.md` + `loop-engine.md`), the `/init-loop`
@@ -35,8 +34,8 @@ every merge, with durable ledger state.
 
 This is a **structured, routed loop**, not a graph orchestrator: a single
 supervised orchestrator handles **exactly one issue end-to-end per invocation**,
-delegates to specialized agents (scope, design, AC-verify, code-review), stops for
-human approval of every plan by default, and journals everything to a ledger that lives
+delegates to specialized agents (scope, design, AC-verify, code-review), gates on
+human judgement when uncertain, and journals everything to a ledger that lives
 outside the model's context so a fresh invocation resumes correctly. It is the
 kind of well-instrumented loop that "graph engineering" treats as a single node.
 
@@ -91,8 +90,8 @@ when it hits ambiguous acceptance criteria, risk, agent disagreement, a value st
 hold, or genuine uncertainty. The two settings are deliberately independent: relaxing how much of
 the planning you review never loosens what gets merged without you, and a ledger that doesn't
 mention the field at all is read as `always`. Neither setting reaches the loop's other mid-pipeline
-stops — the architect-rewrite stop below, and a gate finding still there after one fresh re-check,
-stop and ask you regardless of both.
+stops — such as the architect-rewrite stop below, or a gate finding still there after one fresh
+re-check, which stop and ask you regardless of both.
 
 **When its design reviewer rewrites the plan, you see the plan.** One mid-pipeline stop is
 unconditional — no mode setting, no `plan-gate:` value, and no route graduation can loosen it: if the architect review

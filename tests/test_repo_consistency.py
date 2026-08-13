@@ -249,14 +249,16 @@ class PipelineStepOrderTests(unittest.TestCase):
     the model reads when deciding whether to invoke the skill, so a behavior
     surface rather than internal prose -- and the engine's in-prose ``step N``
     / ``Stages N/M`` cross-references: **161 reference sites, 165 numbers** once
-    ``/``- and dash-separated runs are expanded. This grep finds 158 of the 161::
+    ``/``- and dash-separated runs are expanded. This grep finds 159 of the 161::
 
         grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' \\
             skills/dev-loop/loop-engine.md | wc -l
 
-    The 2 it misses are line-wrapped (``(step\\n   1)``, ``(step\\n10)``) --
-    which is the point: a one-line grep cannot see them, ``_STEP_REFERENCE``'s
-    newline branch can, and before review caught it neither could.
+    The ones it misses are line-wrapped -- which is the point: a one-line grep
+    cannot see them, ``_STEP_REFERENCE``'s newline branch can, and before review
+    caught it neither could. (Deliberately not enumerated, and not counted: this
+    sentence carried a literal list and an exact count, and both went stale on
+    essentially every structural edit to the engine.)
 
     The **sixth** was added by #45: ``commands/init-loop.md``'s ``(engine step
     9)`` in the ``CODE_REVIEW`` skeleton row -- the only restatement that will

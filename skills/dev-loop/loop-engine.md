@@ -866,11 +866,17 @@ escape it by loosening its **merge** gate — trading away the protection it act
 in order to adjust the one it did not. Consumers at different trust levels need to set these
 independently, which is the whole reason this is a field rather than a property of `mode:`.
 
-**`plan-gate:` is set by the human, and only there.** Initialization writes it once (below); after
-that it is a human decision recorded in the header, exactly like `mode:`, `graduated-routes:` and
-the budget caps. **The orchestrator never edits this field** — not from Initialization, not at step
-5, and not on the observation that recent approvals looked routine. A gate that can switch itself
-off on its own reading of its own history is not a gate.
+**That independence holds *within* a run.** A **new** run's Initialization re-derives the default
+from the mode branch, so a `plan-gate:` value a human sets by hand is **not yet carried across runs**
+the way a graduated `mode:` is — re-set it after init if the run's posture should differ from the
+mode default.
+
+**`plan-gate:` is human-owned.** Initialization writes it once, deriving the default from the mode
+branch it already takes (below); every value after that first write is a human decision recorded in
+the header, exactly like `mode:`, `graduated-routes:` and the budget caps. **The orchestrator never
+rewrites this field after Initialization** — not at step 5, and not on the observation that recent
+approvals looked routine. A gate that can switch itself off on its own reading of its own history is
+not a gate.
 
 The header also carries two **budget caps** (both default `none` = uncapped):
 `iteration-cap:` (max **issues per run** — in this engine one "iteration" = one issue) and
