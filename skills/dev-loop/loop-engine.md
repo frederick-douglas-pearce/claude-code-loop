@@ -580,8 +580,9 @@ that findings ≥ the project's confidence bar are addressed):
 *downstream* of this gate. Re-evaluate this trigger against any acceptance-gate fix before step 11:
 if such a fix touches a sensitive surface it has not been security-reviewed, so it **escalates at
 the merge gate under the existing "touched security surface" always-escalate condition** (step
-11) — the earlier clean verdict does not cover it. The general rule this instances — which gates a post-gate change re-arms, and
-from which sources — is #33's to state.
+11) — the earlier clean verdict does not cover it. This is one instance of the general rule; **which
+gates a post-gate change re-arms, and from which sources, is the Gate-outcome invariant's currency
+clause** (under Gates).
 
 ### 10. Verify done (independent, fresh context)
 Advance the row to `in-acceptance`. Run the AC-verifier (below): a fresh check that the diff
@@ -610,9 +611,16 @@ a missed criterion, not correcting a citation or doc line — has been reviewed 
 this gate first — commit the fix and run its re-verify — then escalate to the human before step 11.**
 Escalating is not a reason to skip your own remaining round, and **do not merge on the earlier
 verdicts** — a gate that never saw a change has not passed it (Gate-outcome invariant). A fix that changes **no** source — a citation, a doc line, a test
-name — re-arms nothing and needs no escalation. **Whether such a fix may instead be routed back
-through review/security under a budget, rather than escalated, is #33's to state**; this step only
-records that the reorder creates the gap and defaults it to the human.
+name — re-arms nothing and needs no escalation. **A source-changing fix is not routed back through
+review or security: it escalates, and that is the rule, not a fail-safe default awaiting a better
+one.** A re-arm would need three things this gate cannot supply:
+- **an ordering** — a re-armed step 8 commits its fixes *downstream* of the acceptance verdict,
+  re-creating exactly the superseded-commit staleness this gate order exists to remove;
+- **a round** — this gate's cap is 2 and round 2 **is** the re-verify, so no round remains to
+  certify re-armed work, and a gate round invented to fit is a cap that does not bind;
+- **a status** — the row is `in-acceptance` and Resume re-enters *here*, so a re-armed review
+  would be skipped in silence by the next `/clear`.
+The human is the path because the human is the only actor outside those three constraints.
 
 The gate returns **two result classes, and they are never summed into one "findings" count**:
 **Class A — AC-satisfaction findings** (a criterion judged not met) and **Class B — mutation
@@ -654,6 +662,13 @@ auto-merge-eligible (or the human has approved), and CI + security + acceptance 
 `hold`:
 merge via `MERGE_METHOD` with an explicit `--subject` carrying the correct `COMMIT_CONV` scope,
 `--delete-branch`. Confirm the issue closed.
+
+**Green means green on the commit you are about to merge** — the Gate-outcome invariant's currency
+clause, at the one step where nothing downstream can catch a stale verdict. **This gate is itself a
+source of change:** a fix the human asks for here, or bringing the branch up to date because the
+host will not merge it otherwise, changes the candidate after every verdict above was recorded. When
+that happens the row is **not** mergeable on those verdicts — re-run whatever the change re-armed,
+or STOP and escalate; a human approving a change is not a gate certifying it.
 
 ### 12. Journal + stop
 Append the iteration block to `progress.md`, including a `- Budget:` line (Ledger format →
@@ -1941,6 +1956,35 @@ forms, because only one of them is a recurrence signal:
 
 **A gate that did not run — static or dynamic — is never recorded as a gate that passed.**
 
+**Currency — a verdict is bound to the commit it ran on.** The two branches above are about a gate
+that produced **no** verdict. This is the third way a gate ends up not having passed, and it is the
+one that looks like success: the gate ran, returned clean, and then **the merge candidate changed
+underneath it**. A later commit is a commit no gate ran on, so the earlier verdict does not reach
+it. Step 10's "a gate that never saw a change has not passed it" is this clause applied at that
+gate; the clause itself binds **every** gate in the table above, not only that one.
+
+**It holds whatever produced the change** — the rule is about the *change*, never about its author.
+The sources below are the ones this pipeline is known to produce; treat the list as **sufficient,
+not exhaustive**, and extend it rather than reading an unlisted source as exempt:
+- a fix the **acceptance gate itself** made (step 10) — the one the gate order newly creates;
+- a **CI fix** after a gate has run (CI first runs at step 7, but the branch can redden later);
+- a change the **human asked for at the merge gate** (step 11);
+- **bringing the branch up to date with its base**, where the host requires that before merging —
+  no one authored it, and it still changes the tree the gates certified.
+
+Review and security fixes (steps 8 and 9) are deliberately **absent** from that list: they land
+*before* the acceptance gate, so it already covers them. That is the gate order's payoff, and
+re-running acceptance for them is the waste this rule must not create.
+
+**Scope it by what the change touches, not by which step you are standing in.** A change that
+alters **no source** — a citation, a doc line, a test name — re-arms nothing, the same line step 10
+already draws for its own fixes; and a route's gates can only be re-armed if that route ran them
+(nothing re-arms security on a `docs` route). What a re-armed gate then costs — which rounds, under
+which status — is the gate's own business: **step 10 states it for itself**, and `HERMETIC_TEST_CMD`
+is the worked precedent, where a test added at step 8 or 10 re-arms a step-6 trigger already
+journalled `n/a` (step 6). Re-evaluate before you commit, and let the journal line record the final
+state rather than the first reading.
+
 **Fresh-re-check invariant (a fix is never checked by its author).** Applies to the two gates that
 carry a round cap, and so re-check a fix inside the pipeline under a bounded budget: the
 **acceptance gate** (step 10, *both* result classes) and **code review** (step 8). When a gate comes
@@ -2016,7 +2060,16 @@ your *conclusions*, not the instructions the checker needs).
 **The bound — one fresh re-check, then escalate; there is no ladder.** The fresh re-check **is**
 round 2 of the 2-round cap each gate already carries, never a round on top of it. If round 2 comes
 back dirty — **whether it is a finding round 1 raised or one only the fix introduced** — escalate to
-the human; there is no round 3. Cost: **one extra subagent per dirty class per iteration** — so two
+the human; there is no round 3.
+
+**Reaching a cap is a handoff, never a terminal state.** "Escalate" here means the decision moves to
+the human and **the iteration continues on what they decide** — the cap ends the *round*, not the
+run and not the issue. It does not mark the row `blocked` (that status is for an unmet dependency or
+a recurring `gate-error:`, and a dirty round 2 is neither), and it is not a verdict: an escalated
+gate has still returned no pass, so the Gate-outcome invariant governs what may be journalled. The
+decision that comes back is frequently **not** "run another round" — narrowing the change, splitting
+it, or diagnosing why the fixes keep landing dirty are all live answers, and the cap exists to force
+that question rather than to end anything. Cost: **one extra subagent per dirty class per iteration** — so two
 at the acceptance gate when Class A and Class B are both dirty, since their inputs differ and cannot
 be merged into one checker. Bounded either way, and it cannot grow into an unbounded ladder.
 
