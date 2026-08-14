@@ -169,7 +169,22 @@ be aware the loop then has one fewer way to notice a stray one. And
 **the loop is responsible for removing it**: your host only auto-cleans a copy the agent never wrote
 to, which is never the case that matters, so removal is an instruction the loop follows rather than a
 guarantee something enforces. An iteration that dies partway can leave one behind; `git worktree
-list` will show it.
+list` will show it — and **as of v0.2.0 the loop sweeps for one itself** when it resumes a row that
+was in review or acceptance, which is where a copy can still be open.
+
+**If the loop crashes late in an iteration and then resumes, it will discard uncommitted changes in
+your tree it cannot account for.** This is a deliberate reversal of the older behavior — which kept
+anything that "looked like it matched the plan" — and it is the one place the loop may throw away
+work you did not commit, so it is worth knowing the exact scope. It applies **only** when resuming a
+row that was in **review or acceptance**, the two stages where a mutation pass can have left
+deliberately-broken code in the tree. A mutation is built to look like a small, sane edit to your
+code, so "it looks plausible" is precisely the test it is designed to pass — which is why plausible
+is no longer good enough there. **Resuming an interrupted implementation is unchanged**: work in
+progress is kept, because that is real work rather than a suspected mutation. Where the loop does
+restore, it restores from its own pre-mutation snapshots wherever it has them, never from git; where
+it has neither an explanation nor a snapshot, it stops and asks you rather than improvising. **The
+practical protection is the ordinary one** — commit or stash work you care about before leaving an
+iteration mid-flight, since a committed change is attributable by definition.
 
 **If you bind a command for your offline test tier, the loop runs it and treats a failure as a bug.**
 Where `HERMETIC_TEST_CMD` names one, any `code`-route change that adds or modifies a test runs that
