@@ -1351,5 +1351,77 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
                 )
 
 
+class ResumeHandoffPointerTests(unittest.TestCase):
+    """#32's Resume hands its recovery procedure off to Part 2 by NAME.
+
+    Resume's working-tree reconciliation deliberately does not restate the
+    interrupted-pass recovery apparatus -- an earlier draft of #32 did, and every
+    blocking defect that review round found lived in the restatement. The architect's
+    scope ruling replaced it with a pointer: *"hand off to AC-verifier -> Part 2,
+    Interrupted-pass recovery, which owns the diagnosis, the repair, and when to
+    escalate -- do not re-derive it here."*
+
+    That makes the label a **load-bearing string**. Rename Part 2's block and the
+    pointer dangles: Resume tells the orchestrator to go somewhere that no longer
+    exists, so AC2's prune and the whole mutation-recovery path have no owner --
+    **while every word of the prose still reads correctly.** That is the same failure
+    mode ``PlanGateFrozenBlockTests`` exists for, and it was confirmed by execution
+    rather than argued: the acceptance gate for #32 renamed Part 2's heading to
+    "Recovery from an interrupted pass" and the suite stayed green (137 tests, OK).
+
+    What is asserted is a *string* coupling in two located regions, not a meaning and
+    not a global count -- for the reasons that test's docstring gives at length. It
+    says nothing about whether the delegation is a good idea, only that its two ends
+    still name the same thing.
+
+    Whitespace is normalized because Resume's occurrence is **line-wrapped**, which is
+    exactly how the coupling would otherwise evade a naive grep.
+    """
+
+    _LABEL = "Interrupted-pass recovery"
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
+
+    def _span(self, start: str, end: str, label: str) -> str:
+        text = _ENGINE.read_text(encoding="utf-8")
+        i = text.find(start)
+        self.assertNotEqual(
+            i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it.",
+        )
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it.",
+        )
+        return text[i:j]
+
+    def _regions(self):
+        return {
+            "Part 2 (defines the block)": self._span(
+                "**Part 2 ", "## Initialization procedure", "Part 2",
+            ),
+            "Resume (points at it)": self._span(
+                "## Resume after", "## Routing table", "Resume",
+            ),
+        }
+
+    def test_both_ends_of_the_handoff_name_the_same_block(self) -> None:
+        for label, body in self._regions().items():
+            with self.subTest(region=label):
+                self.assertIn(
+                    self._LABEL,
+                    self._normalize(body),
+                    f"{label} no longer carries the string {self._LABEL!r}. Resume "
+                    "delegates its recovery procedure to Part 2 by this name instead "
+                    "of restating it, so if the two ends stop agreeing the pointer "
+                    "dangles and the procedure has no owner -- with the prose still "
+                    "reading correctly. Re-point both ends together; do not drop a "
+                    "region to make this pass.",
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
