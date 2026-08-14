@@ -60,9 +60,12 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   uninvocable binding is not permission to skip the gate: fall back to the engine's inline
   composition where it defines one, otherwise escalate. A gate that ran and *errored* never falls
   back — escalate, and never journal it as clean. **A verdict is bound to the commit it ran on:** if
-  the merge candidate changed after a gate certified it — by your own fix, a CI fix, a change asked
-  for at the merge gate, or bringing the branch up to date — that gate has not passed the candidate.
-  Re-run what the change re-armed, or escalate; never merge on a verdict describing an earlier tree.
+  the merge candidate changed after a gate certified it — a fix at the acceptance gate, a CI fix, a
+  change asked for at the merge gate, or bringing the branch up to date — that gate has not passed
+  the candidate. **Escalate, or re-run what the engine says that change re-armed** — and if you
+  cannot determine which gates it re-armed, which you cannot without `loop-engine.md` loaded, that
+  is the escalate branch, never the nothing-was-re-armed branch. Never merge on a verdict describing
+  an earlier tree.
 - **A fix for a gate finding is re-checked by a fresh instance, never by its author.** After you fix
   what a gate found, the re-check is a **new spawn** — not you re-reading your own diff, and not the
   round-1 agent re-contacted. If the fresh re-check is still dirty, **escalate to the human** rather
