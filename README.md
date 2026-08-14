@@ -173,7 +173,9 @@ list` will show it — and **as of v0.2.0 the loop sweeps for one itself on ever
 touches the tree.
 
 **If the loop crashes late in an iteration and then resumes, it will no longer silently keep
-uncommitted changes in your tree that it cannot account for.** This reverses the older behavior,
+uncommitted changes in your tree that it cannot account for.** **This arrives with v0.2.0** — the
+released v0.0.1 does none of it, so do not read the protection below as live on an installed
+v0.0.1. It reverses the older behavior,
 which kept anything that "looked like it matched the plan" — a bad default once the loop's own
 acceptance gate started deliberately breaking code, because a mutation is built to look like a small,
 sane edit and "it looks plausible" is precisely the test it is designed to pass. Two things happen,

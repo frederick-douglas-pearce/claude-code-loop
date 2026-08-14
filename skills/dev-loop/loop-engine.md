@@ -1827,6 +1827,7 @@ sets the default.**
   **incomplete is expected here — never on its own a reason to discard.** Use `git restore`/stash
   only where a change belongs to no plan step at all. This is the default only; (a) has already run
   regardless of status.
+
 A resumed `implementing` row is NOT "stuck" (stuck
 keys on a repeated error signature, not status re-entry — see Guardrails).
 
