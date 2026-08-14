@@ -169,7 +169,31 @@ be aware the loop then has one fewer way to notice a stray one. And
 **the loop is responsible for removing it**: your host only auto-cleans a copy the agent never wrote
 to, which is never the case that matters, so removal is an instruction the loop follows rather than a
 guarantee something enforces. An iteration that dies partway can leave one behind; `git worktree
-list` will show it.
+list` will show it — and **as of v0.2.0 the loop sweeps for one itself on every resume**, before it
+touches the tree.
+
+**If the loop crashes late in an iteration and then resumes, it will no longer silently keep
+uncommitted changes in your tree that it cannot account for.** **This arrives with v0.2.0** — the
+released v0.0.1 does none of it, so do not read the protection below as live on an installed
+v0.0.1. It reverses the older behavior,
+which kept anything that "looked like it matched the plan" — a bad default once the loop's own
+acceptance gate started deliberately breaking code, because a mutation is built to look like a small,
+sane edit and "it looks plausible" is precisely the test it is designed to pass. Two things happen,
+and it is worth being exact about which is which.
+
+**On every resume, the loop looks for the marks of a mutation pass that did not finish** — a stray
+worktree copy, or a retained snapshot directory. If it finds them it repairs from its own
+pre-mutation snapshots, **never from git**, touching only the files it can attribute; and if those
+snapshots are gone, it **stops and asks you** rather than improvising a repair.
+
+**Separately, when it resumes a row that was in review or acceptance, a change to your code it cannot
+attribute is neither kept nor discarded — it stops and asks you.** This is the case most likely to
+involve your work, so the loop is not permitted to resolve it alone: not keeping something and
+destroying it are different actions, and only you choose the second. **Resuming an interrupted
+implementation is unchanged** — work in progress that belongs to the plan is kept, and being
+half-finished is never on its own a reason to discard it. **The practical protection is the ordinary
+one** — commit or stash work you care about before leaving an
+iteration mid-flight, since a committed change is attributable by definition.
 
 **If you bind a command for your offline test tier, the loop runs it and treats a failure as a bug.**
 Where `HERMETIC_TEST_CMD` names one, any `code`-route change that adds or modifies a test runs that

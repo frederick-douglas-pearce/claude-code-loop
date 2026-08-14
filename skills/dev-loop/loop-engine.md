@@ -208,8 +208,10 @@ change" by *literal compliance*, on the run where the architect rewrote the plan
 every `plan-gate:` value, and `always` is not a reprieve from it.** Under `conditional` the row
 auto-approves outright; under `always` the human is stopped but shown a diff that says nothing
 changed, which is the same failure wearing a stop as a disguise — the gate exists to show them
-*what* the architect changed, and an empty diff withholds exactly that. **You** perform this edit, not the agent — `DESIGN_AGENT` returns an issue comment and
-never writes to the tree (Tool surface), so an unedited `## Approach` is the orchestrator's omission
+*what* the architect changed, and an empty diff withholds exactly that. **You** perform this edit, not the agent — `DESIGN_AGENT` returns its review and
+**never writes to the tree** (Tool surface); **you** record the outcome wherever this project
+records architect decisions (an issue comment, an issue-body marker, or a decision-log entry — see
+step 4's write-once note under Resume). So an unedited `## Approach` is the orchestrator's omission
 and never evidence that nothing changed. Adopt, adapt, or decline each `blocking`/`important`
 finding **in the plan text** first; a declined finding is recorded with its one-line rationale, and
 a decline that alters no text is itself the record that the approach stands.
@@ -225,7 +227,8 @@ the gate.
 architect has edited `## Approach` would overwrite the pre-image with the post-architect text — the
 step-5 diff would then come back empty and the gate would **silently pass**, which is precisely the
 failure the test exists to catch. This is the same write-once discipline Resume already applies to
-this step's other side effect (the issue comment); both are stated there.
+this step's other side effect (the recorded architect outcome, however this project records it);
+both are stated there.
 
 ### 5. Human gate (posture set by `plan-gate:` — plus one always-on condition)
 **Read `plan-gate:` from the `queue.md` header** (Ledger format → queue.md). That field, and never
@@ -1748,11 +1751,20 @@ status vocabulary is the whole record here: step 3 sets `planning`, and step 5 a
 complete its artifacts look. **A `- Plan-gate:` line already in `progress.md` is not evidence of
 approval** — it records what the architect's frozen-vs-live diff returned, which resolves *before*
 the human answers; finding one means the gate was reached, not that it was passed. Neither does a
-posted architect comment, a written frozen block, or an updated `## Approach`. The carry-forward
+recorded architect outcome — however this project records it — a written frozen block, or an updated
+`## Approach`. The carry-forward
 rule for gates decided in a prior iteration applies to rows that re-enter *past* step 5; this one
 has not left it.
-1. it posts a comment to the issue — check for an existing architect comment, do not double-post.
-   **But do not treat the comment as the whole of the step:** if a comment exists and `## Approach`
+1. it records the architect's outcome — check for an existing record, do not double-post.
+   **Look wherever *this* project records architect decisions, not only in issue comments.** The
+   surfaces in use across real consumers are an **issue comment**, an **issue-body marker** (a line
+   in the body itself, e.g. "Architect review complete — approved <date>"), and a **decision-log
+   entry** in the repo. A project may use more than one, and some use no comments at all — so
+   "no comment found" is **not** evidence the architect never ran, and treating it as such
+   re-invokes a gate that already ran and, worse, invites the back-dated freeze that (2) below bars.
+   If you cannot establish which surface this project uses, that is a question for the human, not a
+   reason to re-invoke.
+   **But do not treat the record as the whole of the step:** if a record exists and `## Approach`
    does not yet reflect its `blocking`/`important` outcome, the crash landed between the two, so
    **apply the outcome now** (step 4) before reaching step 5. Skipping the re-invoke while leaving
    the outcome unapplied strands it — the diff comes back empty and the always-on stop passes
@@ -1774,22 +1786,49 @@ has not left it.
    precisely when the guard matters.
 
 AC-verify (step 10) has **no write-once artifact to double-create** — nothing it does is a side
-effect resume must avoid repeating, which is the only property this paragraph turns on. (It is not
-side-effect-*free*: its mutation pass writes, and it now commits its own fixes. Squaring that with
-the working-tree rule below is #32's.) Security (step
-9) re-labeling is a no-op. **Working-tree reconciliation:** if a crashed prior
-attempt left uncommitted changes, inspect them before proceeding — keep and continue if they
-match the plan, or `git restore`/stash if they're partial/unrelated. **One check first, because it
-inverts that instruction:** leftovers from an interrupted *mutation* pass are partial and
-unrelated-looking by construction — deliberately broken code matching no plan — and `git restore` is
-exactly what must not touch them (AC-verifier → Part 2: it restores from the index, which does not
-know about the surrounding work in progress). Before restoring anything, look for the marks of a
-pass that did not finish: a `- Restore:` line missing or reading `finding` on the interrupted
-iteration, a retained snapshot directory on disk, or a leftover copy in `git worktree list`. The
-two artifacts are what recovery keys on, because they self-clear and a journal line does not
-(AC-verifier → Part 2). If you find them, restore from the snapshots and do not use `git restore`;
-if the snapshots themselves are gone the safe repair is gone with them, so escalate rather than
-improvise. A resumed `implementing` row is NOT "stuck" (stuck
+effect resume must avoid repeating, which is the only property this paragraph turns on. **It is not
+side-effect-*free*:** its mutation pass deliberately breaks source, and it commits its own fixes.
+That is why the rule below exists in the shape it does — but note what it does **not** license. The
+mutation check (a) is deliberately **not** scoped by status, because a crash can leave a status
+stale. Only (b)'s default turns on the row's status. Security (step 9) re-labeling is a no-op.
+
+**Working-tree reconciliation — two mechanisms, and collapsing them is the failure mode.** If a
+crashed prior attempt left uncommitted changes, inspect them before proceeding. Run (a) first,
+always; **if (a) escalates, stop there — (b) is not reached**; otherwise apply (b).
+
+**(a) The unfinished-mutation check, which runs on every resume whatever the row's status.** Before
+any other work on the tree, run `git worktree list` and list the system temp dir for a retained
+snapshot directory. **If either is present, hand off to AC-verifier → Part 2, *Interrupted-pass
+recovery*, which owns the diagnosis, the repair, and when to escalate — do not re-derive it here.**
+Two things are worth knowing before you hand off, because they decide whether you hand off at all:
+the trigger is the *artifacts*, never the status (a crash can leave a status stale, so keying this
+check on one would let a mislabeled row carry a live mutation straight past it), and `git restore`
+is exactly what must not repair a mutation (it restores from the index, which does not know about
+the surrounding work in progress). Once Part 2's recovery completes **without escalating**, remove
+any leftover copy per Part 2 and Tool surface's **collect-then-remove** duty — the copy's contents
+are sometimes the deliverable, so that duty governs and this paragraph does not override it.
+
+**(b) What to do with uncommitted changes (a) did not account for — the one place the row's status
+sets the default.**
+- **On an `in-review` or `in-acceptance` resume: do not keep a production-code delta you cannot
+  attribute.** Attributable means you can place it in something specific — a fix this gate's own
+  round wrote, or a review finding it answers — and **not** merely that it looks plausible.
+  **Plausibility is what a mutation counterfeits:** it is built to be a small, sane-looking edit, so
+  "it matches the plan" is the one test it is designed to pass, which is why the plan is not an
+  attribution source on these rows. These rows are past implement, so no stage is still legitimately
+  producing *unexplained* work in the tree. Where the change **is** this gate's own uncommitted fix,
+  that is attributable and **kept** — step 10 mandates a window in which such a fix is written and
+  not yet committed, so expect to meet it here.
+- **Where you cannot attribute it, STOP and ask the human — do not `git restore` it.** The same
+  inability to attribute it is an inability to recover it, and keeping it is equally wrong.
+  **Not-keeping and destroying are different actions, and only the human chooses the second.**
+- **On any other resume (`implementing` above all): keep and continue where you can place the
+  changes in the plan.** An interrupted implement step leaves *legitimate* work in progress, and
+  **incomplete is expected here — never on its own a reason to discard.** Use `git restore`/stash
+  only where a change belongs to no plan step at all. This is the default only; (a) has already run
+  regardless of status.
+
+A resumed `implementing` row is NOT "stuck" (stuck
 keys on a repeated error signature, not status re-entry — see Guardrails).
 
 ---
@@ -1821,7 +1860,7 @@ Gate table:
 | Gate | Who | When | Output |
 |------|-----|------|--------|
 | Plan | orchestrator | every issue | `issue-<N>.plan.md` |
-| Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure | issue comment |
+| Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure | the agent's review, **recorded by you** wherever this project records architect decisions — issue comment, issue-body marker, or decision-log entry (Resume) |
 | Human (plan) | user | **every issue under `plan-gate: always`** (the default under `calibration`; absent or unrecognized reads as `always`); under `plan-gate: conditional`, if uncertain/irreversible. Under **both**, **always** when the architect materially changed the plan (step 5's frozen-vs-live diff — decisiveness escalates exactly as a punt does, and neither `mode:`, `plan-gate:`, nor route graduation reaches this one) | approve/redirect |
 | Build commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`) | orchestrator | step 6, each per its own binding; `HERMETIC_TEST_CMD` additionally requires Route `code` **and** a change that adds or modifies a test, **whatever the binding says** — on such a row an absent or `TODO` binding is unknown, and unknown is due (the gate's four-state table) | **exit status per command**; non-zero blocks |
 | Code review | `CODE_REVIEW` (parallel finders you run — step 8); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes |
