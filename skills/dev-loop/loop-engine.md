@@ -1762,14 +1762,8 @@ has not left it.
    entry** in the repo. A project may use more than one, and some use no comments at all — so
    "no comment found" is **not** evidence the architect never ran, and treating it as such
    re-invokes a gate that already ran and, worse, invites the back-dated freeze that (2) below bars.
-   **Resolve it against the frozen block, not against the record surfaces**, which is what makes this
-   answerable in a project whose conventions you have not been told: (2) writes that block **before**
-   the agent is invoked, so it is the local mark that this step started. **No frozen block → the
-   architect never ran** (invoke it normally). **Block present and a record found → it ran** (do not
-   re-invoke; apply the outcome per the paragraph below). **Block present and no record on any
-   surface → genuinely ambiguous, and the one case to put to the human** — the pass may have died
-   before recording, or this project may record somewhere you have not looked. Do not resolve that
-   one by re-invoking.
+   If you cannot establish which surface this project uses, that is a question for the human, not a
+   reason to re-invoke.
    **But do not treat the record as the whole of the step:** if a record exists and `## Approach`
    does not yet reflect its `blocking`/`important` outcome, the crash landed between the two, so
    **apply the outcome now** (step 4) before reaching step 5. Skipping the re-invoke while leaving
@@ -1796,69 +1790,38 @@ effect resume must avoid repeating, which is the only property this paragraph tu
 side-effect-*free*:** its mutation pass deliberately breaks source, and it commits its own fixes.
 That is why the rule below exists in the shape it does — but note what it does **not** license. The
 mutation check (a) is deliberately **not** scoped by status, because a crash can leave a status
-stale. Only (b)'s default turns on the row's status, and it does so because the *cost of guessing
-wrong* differs by stage — never because a mutation can only exist at those stages. Security (step
-9) re-labeling is a no-op.
+stale. Only (b)'s default turns on the row's status. Security (step 9) re-labeling is a no-op.
 
 **Working-tree reconciliation — two mechanisms, and collapsing them is the failure mode.** If a
 crashed prior attempt left uncommitted changes, inspect them before proceeding. Run (a) first,
-always; only then apply (b).
+always; **if (a) escalates, stop there — (b) is not reached**; otherwise apply (b).
 
-**(a) The unfinished-mutation check — runs on every resume, whatever the row's status.** Its trigger
-is the *artifacts*, never the status and never the journal: a status is a coarse anchor that a crash
-can leave stale, so keying this check on one would let a row mislabeled at an earlier stage carry a
-live mutation straight past it. **Start with `git worktree list`, before any other work on the
-tree** — a leftover isolated copy is one of this check's marks, at **any** status (steps 6 and 8
-spawn writing agents too, not only step 10's pass), and acting on the tree first can destroy the
-signal. Then look for the other marks: a retained snapshot directory (in the system temp dir —
-invisible to both `git status` and `git worktree list`), and the interrupted iteration's
-`- Restore:` line.
-
-**Two of those three are state; the third is corroboration only, and confusing them decides this
-check's outcome in both directions.** A retained snapshot directory and a leftover isolated copy
-**self-clear**, so either one alone means recovery is owed. The `- Restore:` line does not:
-`progress.md` is append-only, so a crashed iteration never writes one and a human repair never comes
-back to close one — it is **audit, not state** (AC-verifier → Part 2). A missing or `finding` line
-with **neither artifact present is therefore not an interrupted pass**; it is an unjournalled
-iteration. Do not escalate on that line alone, and never let its absence argue away an artifact that
-is present.
-
-Where an artifact **is** present, **AC-verifier → Part 2, *Interrupted-pass recovery*, owns what
-happens next — follow it there rather than re-deriving it here.** The shape of what you are
-delegating to, so you can recognise it: leftovers from an interrupted mutation pass are partial and
-unrelated-looking **by construction** — deliberately broken code matching no plan — and `git restore`
-is exactly what must not touch them (it restores from the index, which does not know about the
-surrounding work in progress). Restore from the snapshots, per file and only where Part 2's spec
-attributes them; the rest of the tree is left alone. If the snapshots themselves are gone the safe
-repair is gone with them, so **escalate rather than improvise.**
-
-**Removing a leftover copy — after (a), and never unread.** Only once (a) has completed **without
-escalating**, remove the copy; **if (a) escalated, leave it exactly as it is**, because it is the
-evidence the human was just asked about. Identify it before removing it: **Tool surface's
-collect-then-remove duty governs here and this paragraph does not override it.** A copy left by a
-*delegated fix* — step 8's, which the Execution policy names — holds a diff the parent still owes
-collection on, and discarding it unread destroys that work. Only a mutation copy is discarded unread.
-If you cannot tell which one you are looking at, escalate rather than discard. To remove it:
-`git worktree remove --force <path>`, then `git worktree prune`. Plain `remove` refuses a copy
-carrying modifications — which a mutation copy always has — and `prune` alone clears only stale
-administrative records, leaving the copy in place while reporting success.
+**(a) The unfinished-mutation check, which runs on every resume whatever the row's status.** Before
+any other work on the tree, run `git worktree list` and list the system temp dir for a retained
+snapshot directory. **If either is present, hand off to AC-verifier → Part 2, *Interrupted-pass
+recovery*, which owns the diagnosis, the repair, and when to escalate — do not re-derive it here.**
+Two things are worth knowing before you hand off, because they decide whether you hand off at all:
+the trigger is the *artifacts*, never the status (a crash can leave a status stale, so keying this
+check on one would let a mislabeled row carry a live mutation straight past it), and `git restore`
+is exactly what must not repair a mutation (it restores from the index, which does not know about
+the surrounding work in progress). Once Part 2's recovery completes **without escalating**, remove
+any leftover copy per Part 2 and Tool surface's **collect-then-remove** duty — the copy's contents
+are sometimes the deliverable, so that duty governs and this paragraph does not override it.
 
 **(b) What to do with uncommitted changes (a) did not account for — the one place the row's status
 sets the default.**
 - **On an `in-review` or `in-acceptance` resume: do not keep a production-code delta you cannot
   attribute.** Attributable means you can place it in something specific — a fix this gate's own
-  round wrote, a review finding it answers, a step the plan calls for — and **not** merely that it
-  looks plausible. **Plausibility is what a mutation counterfeits:** it is built to be a small,
-  sane-looking edit, so "it matches the plan" is the one test it is designed to pass. These rows are
-  past implement, so no stage is still legitimately producing *unexplained* work in the tree. Where
-  the change **is** this gate's own uncommitted fix, that is attributable and **kept** — step 10
-  mandates a window in which such a fix is written and not yet committed, so expect to meet it here.
-- **Where you cannot attribute it, STOP and ask the human — do not `git restore` it.** Discarding it
-  blind is not the safe direction it looks like: if (a) found no artifacts then no mutation pass was
-  interrupted, so there is nothing for a restore to be undoing — only work whose provenance you
-  failed to establish, and the same inability to attribute it is an inability to recover it. Keeping
-  it is equally wrong. **Not-keeping and destroying are different actions, and only the human
-  chooses the second.**
+  round wrote, or a review finding it answers — and **not** merely that it looks plausible.
+  **Plausibility is what a mutation counterfeits:** it is built to be a small, sane-looking edit, so
+  "it matches the plan" is the one test it is designed to pass, which is why the plan is not an
+  attribution source on these rows. These rows are past implement, so no stage is still legitimately
+  producing *unexplained* work in the tree. Where the change **is** this gate's own uncommitted fix,
+  that is attributable and **kept** — step 10 mandates a window in which such a fix is written and
+  not yet committed, so expect to meet it here.
+- **Where you cannot attribute it, STOP and ask the human — do not `git restore` it.** The same
+  inability to attribute it is an inability to recover it, and keeping it is equally wrong.
+  **Not-keeping and destroying are different actions, and only the human chooses the second.**
 - **On any other resume (`implementing` above all): keep and continue where you can place the
   changes in the plan.** An interrupted implement step leaves *legitimate* work in progress, and
   **incomplete is expected here — never on its own a reason to discard.** Use `git restore`/stash
