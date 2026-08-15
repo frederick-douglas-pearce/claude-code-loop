@@ -483,8 +483,10 @@ existed to avoid re-installing per finding — a release cost, not a PR cost.
 
 **`v0.3.0` — the deferral milestone, and it is no longer the two-issue footnote this file described
 until 2026-08-13.** It opened as exactly that: `TEST_EFFICACY_AGENT` (#37) and `REVIEW_TIERS` (#38),
-"both wait on corpus, not on effort." It now holds **13** issues — check the milestone, don't trust
-this number, which is the point of the paragraph below.
+"both wait on corpus, not on effort." It has since grown by an order of magnitude — **check the
+milestone for the count.** No number is stated here on purpose: the two previous drafts of this
+sentence each named one and each went stale within a fortnight, which is the enumerable-assertion
+trap this file documents three times above.
 
 **The organizing criterion still holds and is the useful part: work lands here when it waits on
 *corpus*, not on effort.** That is what makes it a real milestone rather than a backlog of things we
@@ -509,6 +511,41 @@ on #1** that also separates the *mechanisms* two findings can share (for F9: beh
 list-drift), which is what stops a count re-inflating by absorbing a related-but-different failure
 mode — exactly how #30's evidence first got overstated as n=2. Do the same for any future corpus
 deferral.
+
+### The scope brake, and why the milestone needed one (2026-08-15)
+
+**v0.2.0 was frozen on 2026-08-15 after a scope review.** The measured problem: in the 15-day
+execution window 7/31–8/15, **19 issues closed and 31 new ones were filed** — 12 into v0.2.0, 15 into
+v0.3.0, 4 left unmilestoned, with the rate showing no decay (four filed in the final two days). The
+milestone could not converge because it was also the intake queue.
+
+**The generator is the loop's own gates, working correctly.** The adversarial review and mutation
+passes surface real couplings; that is what they are for. The defect was never the finding rate — it
+was that **every finding got a milestone automatically**, with no human between "finding generated"
+and "scope committed." Three rules now sit in that gap:
+
+1. **Findings default to the index (#1), not to a milestone.** A finding surfaced by a run lands as
+   an F-comment on #1 and nowhere else. Moving it into a release milestone is a deliberate human
+   triage decision. This is the load-bearing rule — the other two are corollaries.
+2. **A frozen release milestone accepts nothing new** except a blocker for one of its remaining ship
+   items. Freezing is what makes any ship estimate hold.
+3. **A guard on a guard is categorically never in a shipping release.** A finding whose fix is a test
+   guarding *test infrastructure* or *doc accuracy* — #62 and #76 are the worked examples — has zero
+   consumer impact and goes to `tech-debt`. This is the rule that caps `epic:release-safety`, which
+   produced five of the seven issues cut from v0.2.0.
+
+**The `tech-debt` label exists so v0.3.0 keeps meaning something.** Work that waits on *effort*
+rather than *corpus* does not belong in the deferral milestone — putting it there would dissolve the
+one criterion that makes v0.3.0 a category instead of a junk drawer. #35, #62 and #76 carry the label
+and no milestone. Corpus- or evidence-gated work (#49, #61, #71) still goes to v0.3.0 proper. When
+deferring, pick the bucket by *what the work waits on*, and never widen v0.3.0's criterion to avoid
+the choice.
+
+**The v0.2.0 cut line, for the record:** ship #74 → #40 → #34 → #67 → #36, with #60 closing out as
+already-merged (PRs #79/#80) and #57's corrections absorbed into #36/AC3. Two ordering constraints
+are load-bearing and not arbitrary: **#74 must precede #36**, because #36/AC5 as written propagates a
+correction to a *phantom* defect (F7 is false) into consumer configs no later release can reach; and
+**#74 must precede #40**, or they collide on `commands/init-loop.md`, which #40 rewrites broadly.
 
 ### Standing convention: the README status block ships with the version bump
 
