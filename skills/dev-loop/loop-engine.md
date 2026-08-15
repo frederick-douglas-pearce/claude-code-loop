@@ -1966,7 +1966,10 @@ is Resume's rule, not this one.
 journal or merge on the superseded verdict.** Where the gate's own step states what a re-run costs,
 follow it; **where no step states one, escalate — an unowned re-arm is escalated, never absorbed.**
 A step-9 fix re-arming code review is *owned*: step 8 states its cost, so it is re-checked under
-**step 8's own round budget** by a fresh checker (Fresh-re-check invariant), not escalated.
+**step 8's own round budget** by a fresh checker (Fresh-re-check invariant), not escalated. **A
+budget already spent does not make it owned anyway** — if step 8 used both rounds, nothing remains
+to certify the re-arm, so it becomes an unowned re-arm and **escalates**. Ownership is a live round,
+not a step that once had one; a round invented to fit is a cap that does not bind (step 10).
 Escalation is for a re-arm no step owns — at the acceptance gate, every source-changing fix, per
 step 10's three constraints.
 And **commit the change first**, under step 6's explicit-path staging rule: the acceptance gate
