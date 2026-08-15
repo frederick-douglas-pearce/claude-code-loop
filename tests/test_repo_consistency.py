@@ -1451,27 +1451,36 @@ class CurrencyExemptionAgreementTests(unittest.TestCase):
     It says nothing about whether the exemption is a good idea -- only that its
     two statements still say the same thing, and that neither has re-acquired the
     test-shaped item that made it fail open.
+
+    **What this class deliberately does NOT guard, and why you should not add it.**
+    Neither the *polarity* nor the *predicate* of the test-only carve-out is
+    pinned. Both passages must also say a test-only change is **not** exempt (step
+    6's hermetic trigger fires on any added or modified test), and nothing here
+    checks that. Three successive attempts were made and each was judged
+    outcome-shaped by a fresh checker, every one defeated by a one-word edit:
+    asserting the token ``test-only`` appears (delete the ``not``); then matching
+    ``test-only change is not`` (reword to ``is not excluded from that set``);
+    then a closed alternation of accepted phrasings -- rejected before it was
+    written, because an enumerated list of blessed wordings is the
+    ``ALLOWED_NON_BINDINGS``/``_STOPWORDS`` shape this file's own header warns
+    about, where the easy way to fix a failing test is to append the new phrasing.
+
+    The ruling that ended it (architect, #33 pass 3) generalizes past this class:
+    **a mechanical guard can pin a coupling's identity and existence, never a
+    proposition's truth.** The other prose guards here pin *labels* -- arbitrary
+    strings where any change is a real change. Polarity is not that, and chasing
+    it displaces the defect one token at a time forever. The real fix is a product
+    fix -- word the engine so the dangerous reading requires *adding* a claim
+    rather than deleting a word -- which is filed separately, not bolted on here.
+    Polarity is review's to own. Do not "complete" this class by adding it back.
     """
 
     # The lead-in differs by design (step 10 speaks of "its own fixes", the clause
     # of any change), so the anchor is the shared consequent, not the whole sentence.
     _LIST_RE = re.compile(r"--\s*(a [^-]+?)\s*--\s*re-arms nothing")
 
-    # The carve-out's POLARITY, not merely its presence. Both regions word the
-    # sentence differently ("not sourceless" / "not in that set"), so what is
-    # shared -- and what a mutation must destroy to reopen the fail-open -- is
-    # the negated predicate itself.
-    _CARVE_OUT_RE = re.compile(r"test-only change is not\b")
-
     @staticmethod
     def _normalize(text: str) -> str:
-        """Collapse whitespace, fold the em dash, and drop markdown emphasis.
-
-        Emphasis is stripped because the negation this class pins is bolded in
-        one region (``is **not** sourceless``) and bare in the other, so a
-        pattern that did not fold ``*`` would match one region and silently
-        miss the other -- the vacuity this file keeps having to design against.
-        """
         return re.sub(r"\s+", " ", text.replace("—", "--").replace("*", ""))
 
     def _span(self, start: str, end: str, label: str) -> str:
@@ -1542,41 +1551,6 @@ class CurrencyExemptionAgreementTests(unittest.TestCase):
                     "skips a gate that is due -- the fail-open #33's review caught. "
                     "If the exemption genuinely needs to cover a test, change step "
                     "6's trigger first and say so there.",
-                )
-
-    def test_both_regions_keep_the_test_only_carve_out(self) -> None:
-        """The list is the illustration; the carve-out is the predicate.
-
-        Found by #33's own acceptance gate, which walked a mutation the three
-        assertions above all survive: delete step 10's parenthetical and it reads
-        "a fix that changes **no** source -- a citation, a doc line -- re-arms
-        nothing". The list is untouched, so the lists still agree and neither
-        names a test -- but an orchestrator reading step 10 alone now resolves a
-        test-only fix as sourceless, which is the originating fail-open restored
-        in its more dangerous form. The predicate is where the ambiguity lives,
-        so it is pinned separately from the items that illustrate it.
-
-        **This assertion observes the negation, not the phrase.** Its first draft
-        asserted that the token ``test-only`` merely *appeared* in each region,
-        and the gate's re-check called that out as outcome-shaped by the engine's
-        own yardstick: "carve-out stated" and "carve-out inverted" produce an
-        identical observable, so deleting one word -- ``A test-only change is
-        ~~not~~ in that set`` -- restored the fail-open with the whole suite
-        green. Matching ``test-only change is not`` is what makes the polarity
-        the thing under test. Keep it that way: an assertion that a string is
-        *present* can never distinguish a rule from its inverse.
-        """
-        regions, _ = self._exemptions()
-        for label, body in regions.items():
-            with self.subTest(region=label):
-                self.assertRegex(
-                    self._normalize(body).lower(), self._CARVE_OUT_RE,
-                    f"{label} no longer states that a test-only change is NOT "
-                    "exempt. Both passages must keep the negated form: dropped or "
-                    "inverted, the exemption reads as covering a test-only fix, "
-                    "which skips step 6's hermetic trigger while the prose still "
-                    "reads correctly. Reword both together, keeping the negation; "
-                    "do not drop a region to make this pass.",
                 )
 
 
