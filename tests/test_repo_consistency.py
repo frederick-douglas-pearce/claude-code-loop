@@ -1475,7 +1475,7 @@ class CurrencyExemptionAgreementTests(unittest.TestCase):
         )
         return text[i:j]
 
-    def _exemptions(self) -> dict:
+    def _exemptions(self) -> tuple:
         regions = {
             "step 10 (draws the line)": self._span(
                 "### 10. Verify done", "### 11. Merge", "step 10",
@@ -1529,6 +1529,31 @@ class CurrencyExemptionAgreementTests(unittest.TestCase):
                     "skips a gate that is due -- the fail-open #33's review caught. "
                     "If the exemption genuinely needs to cover a test, change step "
                     "6's trigger first and say so there.",
+                )
+
+    def test_both_regions_keep_the_test_only_carve_out(self) -> None:
+        """The list is the illustration; the carve-out is the predicate.
+
+        Found by #33's own acceptance gate, which walked a mutation the three
+        assertions above all survive: delete step 10's parenthetical and it reads
+        "a fix that changes **no** source -- a citation, a doc line -- re-arms
+        nothing". The list is untouched, so the lists still agree and neither
+        names a test -- but an orchestrator reading step 10 alone now resolves a
+        test-only fix as sourceless, which is the originating fail-open restored
+        in its more dangerous form. The predicate is where the ambiguity lives,
+        so it is pinned separately from the items that illustrate it.
+        """
+        regions, _ = self._exemptions()
+        for label, body in regions.items():
+            with self.subTest(region=label):
+                self.assertIn(
+                    "test-only", self._normalize(body).lower(),
+                    f"{label} no longer carves test-only changes out of the "
+                    "exemption. Both passages must keep saying it: without the "
+                    "carve-out the exemption reads as covering a test-only fix, "
+                    "which skips step 6's hermetic trigger while the prose still "
+                    "reads correctly. Do not drop it from one region to make the "
+                    "two agree.",
                 )
 
 
