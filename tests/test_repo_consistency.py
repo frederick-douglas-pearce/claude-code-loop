@@ -1423,5 +1423,136 @@ class ResumeHandoffPointerTests(unittest.TestCase):
                 )
 
 
+class CurrencyExemptionAgreementTests(unittest.TestCase):
+    """#33's currency clause claims step 10 already draws the same exemption line.
+
+    The Gate-outcome invariant's currency clause says a change touching neither
+    source nor tests re-arms nothing, **"the same line step 10 already draws for
+    its own fixes."** That phrase is a claim about another passage, so the two
+    exemption lists are a coupling: edit one and the claim silently becomes false.
+
+    **This is not hypothetical -- it is the defect this test was written for.**
+    #33's own code review caught it at the round cap. The fix round dropped
+    ``a test name`` from the clause's list and left step 10's copy carrying it,
+    so the clause asserted an agreement that no longer held **and** step 10 kept
+    telling the orchestrator that a test-only fix re-arms nothing. That is a live
+    fail-open at the acceptance gate: step 6's hermetic trigger fires on *any*
+    added or modified test ("over-running costs one command, under-running is the
+    entire defect"), so the exemption skipped a gate that was due. The whole suite
+    was green across that desync.
+
+    What is asserted is a **string** coupling in two located regions -- the same
+    shape, and for the same reasons, as ``ResumeHandoffPointerTests`` and
+    ``PlanGateFrozenBlockTests``. The lists are *extracted from the prose and
+    compared to each other*, never compared to a copy pinned here: a pinned copy
+    would pass for any edit that changed both regions in the same wrong direction
+    only by accident, and would need updating on every legitimate reword.
+
+    It says nothing about whether the exemption is a good idea -- only that its
+    two statements still say the same thing, and that neither has re-acquired the
+    test-shaped item that made it fail open.
+
+    **What this class deliberately does NOT guard, and why you should not add it.**
+    Neither the *polarity* nor the *predicate* of the test-only carve-out is
+    pinned. Both passages must also say a test-only change is **not** exempt (step
+    6's hermetic trigger fires on any added or modified test), and nothing here
+    checks that. Three successive attempts were made and each was judged
+    outcome-shaped by a fresh checker, every one defeated by a one-word edit:
+    asserting the token ``test-only`` appears (delete the ``not``); then matching
+    ``test-only change is not`` (reword to ``is not excluded from that set``);
+    then a closed alternation of accepted phrasings -- rejected before it was
+    written, because an enumerated list of blessed wordings is the
+    ``ALLOWED_NON_BINDINGS``/``_STOPWORDS`` shape this file's own header warns
+    about, where the easy way to fix a failing test is to append the new phrasing.
+
+    The ruling that ended it (architect, #33 pass 3) generalizes past this class:
+    **a mechanical guard can pin a coupling's identity and existence, never a
+    proposition's truth.** The other prose guards here pin *labels* -- arbitrary
+    strings where any change is a real change. Polarity is not that, and chasing
+    it displaces the defect one token at a time forever. The real fix is a product
+    fix -- word the engine so the dangerous reading requires *adding* a claim
+    rather than deleting a word -- which is filed separately, not bolted on here.
+    Polarity is review's to own. Do not "complete" this class by adding it back.
+    """
+
+    # The lead-in differs by design (step 10 speaks of "its own fixes", the clause
+    # of any change), so the anchor is the shared consequent, not the whole sentence.
+    _LIST_RE = re.compile(r"--\s*(a [^-]+?)\s*--\s*re-arms nothing")
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", text.replace("—", "--").replace("*", ""))
+
+    def _span(self, start: str, end: str, label: str) -> str:
+        text = _ENGINE.read_text(encoding="utf-8")
+        i = text.find(start)
+        self.assertNotEqual(
+            i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it.",
+        )
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it.",
+        )
+        return text[i:j]
+
+    def _exemptions(self) -> tuple:
+        regions = {
+            "step 10 (draws the line)": self._span(
+                "### 10. Verify done", "### 11. Merge", "step 10",
+            ),
+            "currency clause (claims to match it)": self._span(
+                "**Currency — a verdict is bound to the commit it ran on.**",
+                "**Fresh-re-check invariant",
+                "currency clause",
+            ),
+        }
+        found = {}
+        for label, body in regions.items():
+            match = self._LIST_RE.search(self._normalize(body))
+            if match is not None:
+                found[label] = match.group(1).strip()
+        return regions, found
+
+    def test_the_extractor_actually_finds_both_exemption_lists(self) -> None:
+        """Guards the guard: an unmatched region would silently assert nothing."""
+        regions, found = self._exemptions()
+        missing = sorted(set(regions) - set(found))
+        self.assertEqual(
+            missing, [],
+            f"the exemption list could not be extracted from: {missing}. This test "
+            "compares the two lists against each other, so a region that stops "
+            "matching makes it vacuous rather than failing loudly. Re-anchor "
+            "_LIST_RE against the current wording; do not delete a region to make "
+            "this pass.",
+        )
+
+    def test_both_statements_of_the_exemption_agree(self) -> None:
+        _, found = self._exemptions()
+        lists = set(found.values())
+        self.assertEqual(
+            len(lists), 1,
+            "step 10 and the currency clause state DIFFERENT exemption lists: "
+            f"{found!r}. The clause claims 'the same line step 10 already draws', "
+            "so the two must agree or that claim is false while both passages "
+            "still read correctly. Edit them together.",
+        )
+
+    def test_neither_statement_exempts_a_test_only_change(self) -> None:
+        _, found = self._exemptions()
+        for label, items in found.items():
+            with self.subTest(region=label):
+                self.assertNotIn(
+                    "test", items.lower(),
+                    f"{label} lists {items!r} as re-arming nothing, and it names a "
+                    "test. A test-only change is NOT sourceless: step 6's hermetic "
+                    "trigger fires on any added or modified test, so exempting one "
+                    "skips a gate that is due -- the fail-open #33's review caught. "
+                    "If the exemption genuinely needs to cover a test, change step "
+                    "6's trigger first and say so there.",
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

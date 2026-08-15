@@ -111,6 +111,15 @@ falls back at all — the loop will not substitute a check of its own devising a
 escalates. (A gate the route legitimately skips is journalled as *skipped*, which is also not a
 pass.)
 
+**A gate's pass covers the exact commit it ran on — and expires when that changes.** **This arrives
+with v0.2.0**; the released v0.0.1 has no such rule. If anything changes the pull request after a
+gate certified it — a fix the loop made at the acceptance gate, a fix for CI that went red later, a
+change you asked for at the merge gate, or bringing the branch up to date with your main branch —
+the loop treats the gates that change re-armed as **not** having passed the new code. It re-runs
+them or stops and asks you; it does not merge on the older result. This is the failure mode that
+looks most like success, because every gate genuinely did pass — just not on the code you would be
+merging.
+
 **A pull request appears before any review has run — that is the order, not a slip.** The loop
 implements, then **immediately commits and opens the PR**, and only then runs code review, security,
 and the acceptance gate. So an open PR on your repo means "the loop has reached the review gates",

@@ -159,6 +159,25 @@ allow-list means the test is being worked around rather than the vocabulary kept
 `PipelineStepOrderTests._STOPWORDS` has the identical property: padding it is the easy way to make a
 failing label comparison pass, and it is just as much a worked-around test.
 
+**The ceiling on a prose guard: it can pin a coupling's *identity*, never a proposition's *truth*.**
+Established by ruling on #33 (PR #96) after three successive attempts to guard the *polarity* of an
+engine claim were each judged outcome-shaped by a fresh checker, and each defeated by a one-word
+edit — assert the token appears, and the negation is deleted; match the negation, and the predicate
+it attaches to is reworded; enumerate the accepted phrasings, and you have built
+`ALLOWED_NON_BINDINGS` again, where the cheap fix for a red run is to append the new wording. Note
+what the guards that *do* work here pin: `PlanGateFrozenBlockTests` and `ResumeHandoffPointerTests`
+both pin **labels and headings** — arbitrary strings where any change is a real change — and
+`CurrencyExemptionAgreementTests` pins two passages **against each other**, so drift in either
+direction fails. All three assert that a coupling still exists and still names the same thing. None
+asserts that a sentence means what it says, because no regex over prose can.
+
+Two consequences, and the second is the useful one. **Do not "complete" a guard by adding the
+polarity assertion back** — that is the displacement loop, not a gap someone forgot. And **when a
+claim's polarity is load-bearing, the fix is a product fix, not a test**: word the instruction so
+the dangerous reading requires *adding* a claim rather than deleting a word, which moves the
+property into structure where a guard can reach it. Failing that, polarity is review's to own, and
+saying so in the test's docstring is the honest record.
+
 ## Architecture — the three-layer split
 
 The load-bearing design is a strict separation between **generic engine**, **per-project bindings**,
