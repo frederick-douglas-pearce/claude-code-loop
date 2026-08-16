@@ -982,11 +982,13 @@ class PipelineStepOrderTests(unittest.TestCase):
         disagree about what a heading is.
 
         What it does NOT reach: consumer configs. This repo's own
-        ``.claude/loop.config.md`` carries six step references (one of them a
-        hand-written ``engine step 9``, deviating from the installed skeleton
-        per the F7 note in that file), and no check here sees any of them --
-        consumer configs are outside the shipped plugin. #45 guards the
-        *generator*, which is the only end of that pipe this repo owns.
+        ``.claude/loop.config.md`` carries hand-written engine step
+        references, and no check here sees any of them -- consumer configs are
+        outside the shipped plugin. No count is given deliberately: an earlier
+        version of this docstring pinned one, and #31's renumber stranded it
+        along with two of the references themselves, neither caught by any
+        matcher (F44). #45 guards the *generator*, which is the only end of
+        that pipe this repo owns.
         """
         valid = {number for number, _ in self._engine_steps()}
         dangling = sorted(
