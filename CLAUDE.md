@@ -140,8 +140,10 @@ Three modules, and the split between them matters:
   which is precisely the propagation window this paragraph is about); the *installed* 0.0.1 that onboarded all three consumers still binds
   `CODE_REVIEW` to `/code-review` and contains no `engine step` at all. So the guard lands **before**
   propagation begins, at the #36 re-install — the useful time for it. Do not read the field as
-  already carrying it: this repo's own `.claude/loop.config.md:49` has it only as the deliberate
-  hand-written deviation documented in that file's F7 note, and the vote repo's `:49` likewise
+  already carrying it: this repo's own `.claude/loop.config.md` has it only in its `CODE_REVIEW` row,
+  as the deliberate hand-written deviation documented in that file's F7 note (no line number here on
+  purpose — the one this sentence used to cite was stranded by #74's own edit to the block above it),
+  and the vote repo's `:49` likewise
   hand-writes one in a section the skeleton does not contain. Across the three live configs there
   are 10 step references, 6 of them engine-anchored, and none arrived from the generator. No check
   reaches any consumer config — they are outside the shipped plugin. #45 guards the *generator*, the only end of that pipe this repo owns; #40 and #36
