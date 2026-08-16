@@ -225,8 +225,10 @@ even though nothing will fail loudly:
   retain their semantic Route (`code`/`research`/`docs`/`stub-defer`).
 - **Gate parameters that name a *procedure* must never be bound to a user-triggered skill.** A skill
   marked `disable-model-invocation` cannot be invoked by the orchestrator, so binding one makes the
-  gate **silently inert** — it does not error, it just never runs. **The rule has no live example,
-  and saying so is the point.** `CODE_REVIEW` was cited as one here from 2026-07-27 until #74 unwound
+  gate **unsatisfiable as bound** — it does not error, it simply never runs on its own terms. Since
+  F14 (#21) that is no longer *silent*: the Gate-outcome invariant makes the orchestrator fall back
+  to the engine's inline composition where one is defined, record a `- gate-fallback:` line, and
+  surface the misbinding. **The rule has no live example, and saying so is the point.** `CODE_REVIEW` was cited as one here from 2026-07-27 until #74 unwound
   it, and the citation was false: `/code-review` **is** model-invocable at any ordinary effort level
   (its `ultra` argument is gated, and degrades silently rather than refusing). What #74 retracts is
   **F7's invocability claim only** — F7's *second half*, that finder angles should be chosen from the
@@ -413,8 +415,8 @@ it. This repo inherited them because they were unfixed everywhere, which illustr
 above, not this one.
 
 **The instance that does qualify is #10 itself, and it is still live.** Its commits landed in-tree
-2026-07-27 (`1d3ddbc`, `90de201`); this repo onboarded the next day (`c6dea09`, 2026-07-28). All
-three of #10's engine changes remain **absent from the installed 0.0.1** — so every iteration run
+2026-07-27 (`1d3ddbc`, `90de201`); this repo onboarded the next day (`c6dea09`, 2026-07-28). #10's
+engine changes remain **absent from the installed 0.0.1** — so every iteration run
 here has been driven by an engine whose hard-limit list stops before *"never edit
 `loop.config.md`"*. The orchestrator honors that rule from the in-tree copy, not from the engine
 actually executing. Fixed at the #36 re-install, like the rest.
