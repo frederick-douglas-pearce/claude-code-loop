@@ -226,9 +226,12 @@ even though nothing will fail loudly:
 - **Gate parameters that name a *procedure* must never be bound to a user-triggered skill.** A skill
   marked `disable-model-invocation` cannot be invoked by the orchestrator, so binding one makes the
   gate **silently inert** — it does not error, it just never runs. **The rule has no live example,
-  and saying so is the point.** `CODE_REVIEW` was cited as one here for seven weeks and the citation
-  was false: `/code-review` is model-invocable, and only its `ultra` argument is user-gated (F7,
-  unwound by #74). The rule stands on its own — F14 (#21) generalizes it to the whole class, where an
+  and saying so is the point.** `CODE_REVIEW` was cited as one here from 2026-07-27 until #74 unwound
+  it, and the citation was false: `/code-review` **is** model-invocable. What #74 retracts is **F7's
+  invocability claim only** — F7's *second half*, that finder angles should be chosen from the diff's
+  risk surface rather than a fixed list, is untouched and is live work under
+  [#38](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/38) (`REVIEW_TIERS`).
+  The rule stands on its own — F14 (#21) generalizes it to the whole class, where an
   unbound or `TODO(init-loop)` binding never means "skip the gate" — but an invariant illustrated by
   a fictional instance is the exact shape this project keeps having to retract, so do not reach for a
   replacement example unless you have verified one exists. Any new gate binding still gets the same
@@ -399,16 +402,22 @@ run's journal, check which numbering the engine driving it used) and
 the gate-outcome invariant, still live in the installed 0.0.1 until the #36 re-install**).
 
 **The window between an in-tree fix and a consumer re-install is when new consumers get onboarded
-with the old bug.** The two defects named just above are the live instances: this repo was onboarded
-2026-07-28 against the installed 0.0.1 and inherited both — F15's pre-commit AC-verifier diff and
-F14's silently-skipped gates — each already fixed in-tree at the time.
+with the old bug.** Stated abstractly on purpose: **this repo currently has no true instance of it,
+and two false ones have already been written here.** The window needs a defect fixed in-tree *before*
+an onboarding yet still live in the installed plugin at that moment. F15/#19 and F14/#21 do not
+qualify — both were filed on the 2026-07-28 onboarding day and fixed in-tree on 2026-08-01 and
+2026-08-05, *after* it; this repo inherited them because they were unfixed everywhere, which
+illustrates the paragraph above, not this one. F7 was the only clean fit, and #74 withdrew it. **Do
+not substitute a third example without checking the dates.**
 
-**This paragraph used to illustrate the point with F7 instead, and that illustration is withdrawn.**
-The history it cited is accurate — the 0.0.1 skeleton did bind `CODE_REVIEW` to `/code-review`, and
-#10 did unbind it — but the reading was not: `/code-review` **is** model-invocable, so the gate would
-never have been inert and #10 corrected a non-bug (#74). `.claude/loop.config.md` still deviates from
-the 0.0.1 skeleton, and that deviation is now a **design choice** — the finder fan-out, kept on its
-own merits — rather than a workaround for a constraint that was never there.
+**What F7 illustrated here is withdrawn.** The history is accurate — the 0.0.1 skeleton did bind
+`CODE_REVIEW` to `/code-review`, and #10 did unbind it — but the reading was not: `/code-review`
+**is** model-invocable, so that gate would never have been inert. **Only #10's *rebinding* rested on
+the false premise; the rest of #10 stands** — finders receive the issue's acceptance criteria
+(`loop-engine.md:536`), angles come from the diff's risk surface (`:549`), and the orchestrator is
+forbidden to edit its own `loop.config.md`, which is still load-bearing. `.claude/loop.config.md`
+still deviates from the 0.0.1 skeleton, and that deviation is now a **design choice** — the finder
+fan-out, kept on its own merits — rather than a workaround for a constraint that was never there.
 
 **Why this consumer is worth the overhead:** its deliverable is *markdown an agent executes*, which
 neither AgentFluent nor the vote repo produces. That breaks the router's assumption that markdown
