@@ -31,9 +31,17 @@ See `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/loop-engine.md` for the operating pro
 >      is what produced the evidence that the old spec certifies 0 files pre-commit.
 >    - **#21 (F14)** — an unbound or `TODO(init-loop)` binding does not error; it silently skips the
 >      gate. Every `TODO` below is therefore a **live inert gate**, not a harmless blank.
->    - **F7 (#10, fixed in-tree, still shipped in 0.0.1)** — the 0.0.1 `/init-loop` skeleton binds
->      `CODE_REVIEW` to `/code-review`, a `disable-model-invocation` skill. This config deliberately
->      **deviates from the installed skeleton** and uses the corrected in-tree binding.
+>    - **F7's invocability claim — WITHDRAWN 2026-08-16 (#74). Not a defect.** The 0.0.1 skeleton
+>      does bind `CODE_REVIEW` to `/code-review`, and #10 did unbind it — but `/code-review` is
+>      **model-invocable**. So the gate that binding produces is not inert. **Only #10's *rebinding*
+>      rested on the false premise**; #10's other changes stand, including the rule forbidding the
+>      orchestrator from editing this very file. **Scope note: this retracts F7's *first half*
+>      only.** F7's second half — finder angles chosen from the diff's risk surface, not a fixed
+>      list — is untouched and **already ships** as engine prose (from #10); what remains open under
+>      **#38** is only whether to formalize it as a `REVIEW_TIERS` matrix. This config still deviates
+>      from the 0.0.1 skeleton, and that deviation is now a **design choice recorded on its merits**
+>      (§1, §5) rather than a workaround. Left in this list, not deleted, because the withdrawal is
+>      the useful record.
 
 ---
 
@@ -46,7 +54,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `BACKLOG_SOURCE` | GitHub milestone **`v0.2.0`** | `gh issue list --milestone v0.2.0 --state open`. 29 open (7 epic trackers + 21 stories + #1). `v0.3.0` holds two deferrals (#37, #38) — out of this run. |
 | `SCOPE_AGENT` | the **`pm`** subagent | user-global; scope/priority/requirements. Confirmed present in this session's agent roster. |
 | `DESIGN_AGENT` | the **`architect`** subagent | user-global; reviews plans pre-implementation. Confirmed present. |
-| `CODE_REVIEW` | parallel finder subagents over `git diff main...HEAD` **+ the issue's acceptance criteria**, angles chosen per the diff's risk surface (engine step 9), then a pass confirming each finding | **the orchestrator runs this itself.** Do **not** bind `/code-review` — it is `disable-model-invocation`, so the gate would silently do nothing (F7/#10). Keep `/code-review` as a *human* escalation only. |
+| `CODE_REVIEW` | parallel finder subagents over `git diff main...HEAD` **+ the issue's acceptance criteria**, angles chosen per the diff's risk surface (engine step 8), then a pass confirming each finding | **the orchestrator runs this itself — a design choice, not a constraint.** `/code-review <effort>` (`low`→`max`) **is** model-invocable and could be bound here; only `ultra` is user-triggered, and that form degrades silently to a local review rather than refusing (F7's invocability claim withdrawn, #74). **One ground carries the decision:** this repo is **#38's corpus generator**, and per-lens `- Budget:` data is the instrument #38 needs to decide `REVIEW_TIERS` — the skill reports a flat finding list with no angle attribution (verified by extracting the live skill's report path from the CLI binary: a single findings call carrying file/line/summary/failure-scenario per finding, and no lens field), so binding it here starves that experiment. Structural, and independent of which angles the skill runs. **A second ground was considered and is recorded as NOT carrying the decision** — that the skill's remit excludes the engine's standing authoring check (every finder flags prose claiming a test/guard/invariant that does not resolve). The skill runs a **conventions angle at higher effort that reads this repo's `CLAUDE.md` and flags violations of the rules it states**, which is closer to that check than "its remit is X only" implied. A residual gap is plausible — the standing check covers claims that must *resolve*, not only rules `CLAUDE.md` *states* — but it has **never been measured (n=0)**. Do not cite it as decisive. **The counter-case, recorded because it is strong:** **n for "fan-out beats the skill" is also zero.** The corpus supports *diversity beats single-angle*, never this mechanism over one agent at high effort. Cost differs by roughly an order of magnitude at this gate (≈15–25 subagent runs on a hard issue vs. one invocation). **Revisit after #71** — an *open* question, not a ruling — which would make a skill binding journal its inability to carry the standing check instead of dropping it silently. |
 | `SECURITY_REVIEW` | the **`/security-review`** skill (local, model-invocable), scoped per §4 | no labeled workflow exists in this repo — `.github/workflows/` contains only `test.yml`. Local path only. |
 | `VERIFY` | `—` (no runnable app) | the deliverable is prompt artifacts + one hook; there is nothing to launch. Runtime proof for the hook comes from `TEST_CMD`. |
 | `PRIORITY_LABELS` | **no `priority:*` labels exist.** Selection order is the explicit `**Delivery order:** PR <n>` line in each issue body, then `Depends on:`, tiebreak issue-number ascending | ⚠ **vocabulary gap** — the engine's step 1 assumes a *label* ordering. This repo encodes priority as prose in the body. Candidate finding: `PRIORITY_LABELS` needs a body-derived form (see §5). |
@@ -140,7 +148,7 @@ wrong. Skip for pure `README.md`/`LICENSE` edits.
 ## 4. Security routing
 
 The host is GitHub. There is **no labeled security workflow** in this repo (`.github/workflows/`
-contains only `test.yml`), so the labeled path from the engine's step 10 does not exist here and the
+contains only `test.yml`), so the labeled path from the engine's step 9 does not exist here and the
 local path is the whole story.
 
 > ### ⛔ Precondition — `origin/HEAD` must be set, or this gate dies before it runs
@@ -166,7 +174,8 @@ local path is the whole story.
 > the ref itself.**
 
 **Confirmed 2026-07-29: `/security-review` *is* model-invocable** — the orchestrator can run it
-directly. It is **not** an F7-class binding, and needs no inline fan-out (unlike `CODE_REVIEW`).
+directly. It is not an uninvocable binding, and needs no inline fan-out (unlike `CODE_REVIEW`, which
+keeps its fan-out by design — §1).
 Tested by invoking it; it loaded and executed, failing only on the `origin/HEAD` precondition above.
 
 - **Run the local `/security-review`** when the diff touches `hooks/` — `guard_append_only.py` parses
@@ -187,12 +196,17 @@ Tested by invoking it; it loaded and executed, failing only on the `origin/HEAD`
 Concrete instances this repo has produced, for the engine's triage/plan/journal steps to point at —
 and the running list of **dogfood findings this repo surfaces that the other two consumers cannot.**
 
-- **F7 reproduced at onboarding time (2026-07-28).** The installed v0.0.1 `/init-loop` skeleton
-  (line 130) instructs the generator to bind `CODE_REVIEW` to `/code-review`, a
-  `disable-model-invocation` skill. Following the skill literally would have onboarded this repo with
-  a silently-inert review gate. This config deviates deliberately. **Generic lesson:** a fix that
-  lands in the working tree is not a fix for consumers until re-install (#36) — and the window
-  between them is exactly when new consumers get onboarded with the old bug.
+- **F7 reproduced at onboarding time (2026-07-28) — and the finding it reproduced was itself false
+  (#74, 2026-08-16).** The installed v0.0.1 `/init-loop` skeleton (line 130) does instruct the
+  generator to bind `CODE_REVIEW` to `/code-review`, and this config deviated from it deliberately.
+  But `/code-review` **is** model-invocable, so following the skeleton literally would **not** have
+  produced a silently-inert gate. The deviation stands as a **design choice** (§1), not a repair.
+  **The generic lesson survives the retraction and is the reason this entry is kept:** a fix that
+  lands in the working tree is not a fix for consumers until re-install (#36), and the window between
+  them is when new consumers get onboarded with the old bug. **Note that this entry is no longer an
+  instance of that lesson** — it is an instance of a *non-defect* propagating, which is the same
+  mechanism running in the other direction. For a real instance, see #10: its changes landed in-tree
+  2026-07-27, this repo onboarded 2026-07-28, and they are still absent from the installed 0.0.1.
 
 - **F22 — the security gate's `origin/HEAD` precondition is stranded in AgentFluent's config
   (2026-07-29).** Filed as [F22](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1#issuecomment-5115966313).
@@ -205,10 +219,47 @@ and the running list of **dogfood findings this repo surfaces that the other two
   [#21](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/21#issuecomment-5115977369):
   a gate that *errors* is a third route to a skipped gate, alongside unbound and `TODO`-valued.
 
-- **Negative result — `/security-review` is model-invocable; `SECURITY_REVIEW` needs no fan-out
-  (2026-07-29).** The reasonable prior after F7 was that both built-in review skills are
-  `disable-model-invocation`. Tested directly: `/security-review` loads and executes; `/code-review`
-  does not. Recorded so it is not re-litigated.
+- **F7's invocability claim — RETRACTED 2026-08-16 (#74), and the retraction is the finding.**
+  (Scope: F7's *first half*. Its second half — angles from the diff's risk surface — already ships as
+  engine prose and is not retracted; only its formalization is open, under **#38**.) This entry
+  previously read: *"Tested directly: `/security-review` loads and executes; `/code-review` does not.
+  Recorded so it is not re-litigated."* The first half reproduces. **The second half does not.**
+  `/code-review` is model-invocable: it appears in the orchestrator's available-skills list, which is
+  by construction the invocable set, and the live skill's own definition — extracted from the CLI
+  binary — carries an effort ladder (`low`→`max`) with only the `ultra` form gated, where the gate is
+  a **silent fallback to a local review**, not a refusal. The most likely explanation for the
+  2026-07-29 observation is that a refusal of the `ultra` form was generalized to the whole skill.
+
+  **Evidence provenance, stated because getting this wrong is how F7 happened.** There are **three
+  distinct `code-review` implementations** on this machine: a marketplace plugin command (not enabled
+  here, no effort ladder), a VS Code session skill, and the live CLI built-in — **which is compiled
+  into the binary and exists on no filesystem path.** The load-bearing evidence is the binary
+  extraction. A `grep` over `~/.claude/` cannot speak to the live skill at all, and the marketplace
+  file's `disable-model-invocation: false` describes a different artifact. #74's own first pass cited
+  both as evidence; that was **the same locus error F7 died of**, caught at review.
+
+  **The method failure is the transferable part, and it is why this entry is rewritten rather than
+  deleted.** F7 was recorded 2026-07-27 from **n=1**, generalized past what that observation
+  established (locus: the refusal was about one argument, the claim was about the skill). **It was
+  then re-tested two days later — and the re-test got the same wrong answer**, which is this entry's
+  2026-07-29 observation. Only *after* that second failure was it given **explicit protection from
+  re-testing** by the words "recorded so it is not re-litigated," and it went unchecked from there
+  until #74 on 2026-08-09.
+
+  **That sequence is worse than "never re-checked," and more useful.** A re-check is not a safeguard
+  if it re-runs the same flawed procedure against the same wrong object — both passes confused a
+  refusal of the `ultra` form with the skill's invocability, so the second confirmed the first
+  instead of testing it. What made the error durable was the *fencing*, not the absence of a check:
+  **the one note saying "do not re-check this" is the one that was wrong.**
+
+  The engine already owns the right instrument pointed the wrong way — the plan step's
+  **source-fidelity check** (locus / evidence base / current relevance) is scoped to *externally*
+  cited sources. This was the identical failure with an internal one. Widening it is filed on #1
+  (F43); do not treat this paragraph as having fixed it.
+
+  **Standing rule this entry now carries in place of its old conclusion:** a finding recorded from a
+  single observation may be written down, but it may **never** be written down with an instruction
+  not to re-check it.
 
 - **Candidate finding — `PRIORITY_LABELS` assumes labels.** This backlog encodes selection order as
   a `**Delivery order:** PR <n>` line in the issue *body*, with `Depends on:` / `Blocks:` lines
@@ -274,8 +325,8 @@ and the running list of **dogfood findings this repo surfaces that the other two
   engine step 6 and the orchestrator edits three configs, breaking Tool surface. The only thing that
   stopped it here was the orchestrator reading the issue body closely enough to notice — which is
   exactly the "instruction to be more careful" the engine rejects everywhere else. **Same shape as
-  F14: a rule stated in prose that no mechanism enforces** (the *direction* is opposite — F7/F14 are
-  gates that fail open, this is a route that runs when it should not).
+  F14: a rule stated in prose that no mechanism enforces** (the *direction* is opposite — F14 is a
+  gate that fails open, this is a route that runs when it should not).
 
   **Generic fix (for #40): one "workable-by-this-actor" predicate the Router tests before assigning
   a route**, with two distinct detectors — (a) the change is confined to an artifact the orchestrator

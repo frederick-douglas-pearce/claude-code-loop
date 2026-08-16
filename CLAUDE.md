@@ -140,8 +140,10 @@ Three modules, and the split between them matters:
   which is precisely the propagation window this paragraph is about); the *installed* 0.0.1 that onboarded all three consumers still binds
   `CODE_REVIEW` to `/code-review` and contains no `engine step` at all. So the guard lands **before**
   propagation begins, at the #36 re-install — the useful time for it. Do not read the field as
-  already carrying it: this repo's own `.claude/loop.config.md:49` has it only as the deliberate
-  hand-written deviation documented in that file's F7 note, and the vote repo's `:49` likewise
+  already carrying it: this repo's own `.claude/loop.config.md` has it only in its `CODE_REVIEW` row,
+  as the deliberate hand-written deviation documented in that file's F7 note (no line number here on
+  purpose — the one this sentence used to cite was stranded by #74's own edit to the block above it),
+  and the vote repo's `:49` likewise
   hand-writes one in a section the skeleton does not contain. Across the three live configs there
   are 10 step references, 6 of them engine-anchored, and none arrived from the generator. No check
   reaches any consumer config — they are outside the shipped plugin. #45 guards the *generator*, the only end of that pipe this repo owns; #40 and #36
@@ -223,13 +225,24 @@ even though nothing will fail loudly:
   stage anchor. The ledger is gitignored in consuming repos, so it can be stale.
 - **Route and Status are separate columns.** `blocked`/`parked`/`hold` are Status overlays that
   retain their semantic Route (`code`/`research`/`docs`/`stub-defer`).
-- **Gate parameters that name a *procedure* must never be bound to a user-triggered skill.**
-  `CODE_REVIEW` is the live example: a skill marked `disable-model-invocation` cannot be invoked by
-  the orchestrator, so binding one makes the gate **silently inert** — it does not error, it just
-  never runs. The shipped `/init-loop` skeleton bound `/code-review` that way for the whole of
-  v0.0.1 (F7, fixed in #10; consumer configs still carry it, see #36 / AC5). Any new gate binding
-  gets the same scrutiny: name something the orchestrator can actually execute. F14 (#21) generalizes
-  this to the whole class — an unbound or `TODO(init-loop)` binding never means "skip the gate."
+- **Gate parameters that name a *procedure* must never be bound to a user-triggered skill.** A skill
+  marked `disable-model-invocation` cannot be invoked by the orchestrator, so binding one makes the
+  gate **unsatisfiable as bound** — it does not error, it simply never runs on its own terms. Since
+  F14 (#21) that is no longer *silent*: the Gate-outcome invariant makes the orchestrator fall back
+  to the engine's inline composition where one is defined, record a `- gate-fallback:` line, and
+  surface the misbinding. **The rule has no live example, and saying so is the point.** `CODE_REVIEW` was cited as one here from 2026-07-27 until #74 unwound
+  it, and the citation was false: `/code-review` **is** model-invocable at any ordinary effort level
+  (its `ultra` argument is gated, and degrades silently rather than refusing). What #74 retracts is
+  **F7's invocability claim only** — F7's *second half*, that finder angles should be chosen from the
+  diff's risk surface rather than a fixed list, is untouched and **already ships** as engine prose
+  (`loop-engine.md`, "Pick finder angles from the diff's risk surface", from #10); what remains open
+  under [#38](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/38) is only whether
+  to formalize it as a `REVIEW_TIERS` matrix.
+  The rule stands on its own — F14 (#21) generalizes it to the whole class, where an
+  unbound or `TODO(init-loop)` binding never means "skip the gate" — but an invariant illustrated by
+  a fictional instance is the exact shape this project keeps having to retract, so do not reach for a
+  replacement example unless you have verified one exists. Any new gate binding still gets the same
+  scrutiny: name something the orchestrator can actually execute.
 - **`HERMETIC_TEST_CMD` is the one gate whose due-ness is knowable only from its own binding**, so
   the Gate-outcome invariant carries an explicit carve-out for it: an absent or `TODO`-valued row is
   **unknown, and unknown is due**, never "the trigger never made it due" — which is the fail-open
@@ -396,10 +409,32 @@ run's journal, check which numbering the engine driving it used) and
 the gate-outcome invariant, still live in the installed 0.0.1 until the #36 re-install**).
 
 **The window between an in-tree fix and a consumer re-install is when new consumers get onboarded
-with the old bug.** Demonstrated at this repo's own onboarding: the installed v0.0.1 `/init-loop`
-skeleton still binds `CODE_REVIEW` to `/code-review`, the `disable-model-invocation` misbinding #10
-fixed in-tree — so following the skill literally would have produced a silently-inert review gate
-here. `.claude/loop.config.md` deviates deliberately and records why.
+with the old bug.** The test is exact — a defect fixed in-tree **before** an onboarding yet still
+live in the installed plugin at that moment — and **two illustrations written here have already
+failed it, so check both dates before naming an instance.** F15/#19 and F14/#21 do **not** qualify:
+both were filed on the 2026-07-28 onboarding day and fixed in-tree 2026-08-01 and 2026-08-05, *after*
+it. This repo inherited them because they were unfixed everywhere, which illustrates the paragraph
+above, not this one.
+
+**The instance that does qualify is #10 itself, and it is still live.** Its commits landed in-tree
+2026-07-27 (`1d3ddbc`, `90de201`); this repo onboarded the next day (`c6dea09`, 2026-07-28). #10's
+engine changes remain **absent from the installed 0.0.1** — so every iteration run
+here has been driven by an engine whose hard-limit list stops before *"never edit
+`loop.config.md`"*. The orchestrator honors that rule from the in-tree copy, not from the engine
+actually executing. Fixed at the #36 re-install, like the rest.
+
+**What F7 illustrated here is withdrawn.** The history is accurate — the 0.0.1 skeleton did bind
+`CODE_REVIEW` to `/code-review`, and #10 did unbind it — but the reading was not: `/code-review`
+**is** model-invocable, so that gate would never have been inert. **Only #10's *rebinding* rested on
+the false premise; the rest of #10 stands** — finders receive the issue's acceptance criteria
+("Give every finder the issue's acceptance criteria alongside the diff"), angles come from the diff's
+risk surface, and the orchestrator is forbidden to edit its own `loop.config.md`, which is still
+load-bearing. `.claude/loop.config.md` still deviates from the 0.0.1 skeleton, and that deviation is
+a **design choice** — the finder fan-out, kept on its own merits — rather than a workaround for a
+constraint that was never there. **The config itself has not yet been corrected**: it still records
+the withdrawn rationale at `:49` and in its §5 F7 notes. That edit is human-owned (#74/AC4) — the
+engine forbids the orchestrator from editing `loop.config.md` — so do not read this paragraph as
+describing the config's current text.
 
 **Why this consumer is worth the overhead:** its deliverable is *markdown an agent executes*, which
 neither AgentFluent nor the vote repo produces. That breaks the router's assumption that markdown
@@ -483,8 +518,10 @@ existed to avoid re-installing per finding — a release cost, not a PR cost.
 
 **`v0.3.0` — the deferral milestone, and it is no longer the two-issue footnote this file described
 until 2026-08-13.** It opened as exactly that: `TEST_EFFICACY_AGENT` (#37) and `REVIEW_TIERS` (#38),
-"both wait on corpus, not on effort." It now holds **13** issues — check the milestone, don't trust
-this number, which is the point of the paragraph below.
+"both wait on corpus, not on effort." It has since grown by an order of magnitude — **check the
+milestone for the count.** No number is stated here on purpose: the two previous drafts of this
+sentence each named one and each went stale within a fortnight, which is the enumerable-assertion
+trap this file documents three times above.
 
 **The organizing criterion still holds and is the useful part: work lands here when it waits on
 *corpus*, not on effort.** That is what makes it a real milestone rather than a backlog of things we
@@ -509,6 +546,42 @@ on #1** that also separates the *mechanisms* two findings can share (for F9: beh
 list-drift), which is what stops a count re-inflating by absorbing a related-but-different failure
 mode — exactly how #30's evidence first got overstated as n=2. Do the same for any future corpus
 deferral.
+
+### The scope brake, and why the milestone needed one (2026-08-15)
+
+**v0.2.0 was frozen on 2026-08-15 after a scope review.** The measured problem: in the 15-day
+execution window 7/31–8/15, **19 issues closed and 31 new ones were filed** — 12 into v0.2.0, 15 into
+v0.3.0, 4 left unmilestoned, with the rate showing no decay (four filed in the final two days). The
+milestone could not converge because it was also the intake queue.
+
+**The generator is the loop's own gates, working correctly.** The adversarial review and mutation
+passes surface real couplings; that is what they are for. The defect was never the finding rate — it
+was that **every finding got a milestone automatically**, with no human between "finding generated"
+and "scope committed." Three rules now sit in that gap:
+
+1. **Findings default to the index (#1), not to a milestone.** A finding surfaced by a run lands as
+   an F-comment on #1 and nowhere else. Moving it into a release milestone is a deliberate human
+   triage decision. This is the load-bearing rule — the other two are corollaries.
+2. **A frozen release milestone accepts nothing new** except a blocker for one of its remaining ship
+   items. Freezing is what makes any ship estimate hold.
+3. **A guard on a guard is categorically never in a shipping release.** A finding whose fix is a test
+   guarding *test infrastructure* or *doc accuracy* — #62 and #76 are the worked examples — has zero
+   consumer impact and goes to `tech-debt`. This is the rule that caps `epic:release-safety`, which
+   produced five of the seven issues cut from v0.2.0.
+
+**The `tech-debt` label exists so v0.3.0 keeps meaning something.** Work that waits on *effort*
+rather than *corpus* does not belong in the deferral milestone — putting it there would dissolve the
+one criterion that makes v0.3.0 a category instead of a junk drawer. #35, #62 and #76 carry the label
+and no milestone. Corpus- or evidence-gated work (#49, #61, #71) still goes to v0.3.0 proper. When
+deferring, pick the bucket by *what the work waits on*, and never widen v0.3.0's criterion to avoid
+the choice.
+
+**The v0.2.0 cut line, for the record:** ship #74 → #40 → #34 → #67 → #36, with #60 closing out as
+already-merged (PRs #79/#80) and #57's corrections absorbed into #36/AC3. Two ordering constraints
+are load-bearing and not arbitrary: **#74 must precede #36**, because #36/AC5 as written propagates a
+correction to a *phantom* defect (F7's invocability half is false) into consumer configs no later
+release can reach; and
+**#74 must precede #40**, or they collide on `commands/init-loop.md`, which #40 rewrites broadly.
 
 ### Standing convention: the README status block ships with the version bump
 
