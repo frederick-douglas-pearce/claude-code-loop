@@ -223,13 +223,16 @@ even though nothing will fail loudly:
   stage anchor. The ledger is gitignored in consuming repos, so it can be stale.
 - **Route and Status are separate columns.** `blocked`/`parked`/`hold` are Status overlays that
   retain their semantic Route (`code`/`research`/`docs`/`stub-defer`).
-- **Gate parameters that name a *procedure* must never be bound to a user-triggered skill.**
-  `CODE_REVIEW` is the live example: a skill marked `disable-model-invocation` cannot be invoked by
-  the orchestrator, so binding one makes the gate **silently inert** — it does not error, it just
-  never runs. The shipped `/init-loop` skeleton bound `/code-review` that way for the whole of
-  v0.0.1 (F7, fixed in #10; consumer configs still carry it, see #36 / AC5). Any new gate binding
-  gets the same scrutiny: name something the orchestrator can actually execute. F14 (#21) generalizes
-  this to the whole class — an unbound or `TODO(init-loop)` binding never means "skip the gate."
+- **Gate parameters that name a *procedure* must never be bound to a user-triggered skill.** A skill
+  marked `disable-model-invocation` cannot be invoked by the orchestrator, so binding one makes the
+  gate **silently inert** — it does not error, it just never runs. **The rule has no live example,
+  and saying so is the point.** `CODE_REVIEW` was cited as one here for seven weeks and the citation
+  was false: `/code-review` is model-invocable, and only its `ultra` argument is user-gated (F7,
+  unwound by #74). The rule stands on its own — F14 (#21) generalizes it to the whole class, where an
+  unbound or `TODO(init-loop)` binding never means "skip the gate" — but an invariant illustrated by
+  a fictional instance is the exact shape this project keeps having to retract, so do not reach for a
+  replacement example unless you have verified one exists. Any new gate binding still gets the same
+  scrutiny: name something the orchestrator can actually execute.
 - **`HERMETIC_TEST_CMD` is the one gate whose due-ness is knowable only from its own binding**, so
   the Gate-outcome invariant carries an explicit carve-out for it: an absent or `TODO`-valued row is
   **unknown, and unknown is due**, never "the trigger never made it due" — which is the fail-open
@@ -396,10 +399,16 @@ run's journal, check which numbering the engine driving it used) and
 the gate-outcome invariant, still live in the installed 0.0.1 until the #36 re-install**).
 
 **The window between an in-tree fix and a consumer re-install is when new consumers get onboarded
-with the old bug.** Demonstrated at this repo's own onboarding: the installed v0.0.1 `/init-loop`
-skeleton still binds `CODE_REVIEW` to `/code-review`, the `disable-model-invocation` misbinding #10
-fixed in-tree — so following the skill literally would have produced a silently-inert review gate
-here. `.claude/loop.config.md` deviates deliberately and records why.
+with the old bug.** The two defects named just above are the live instances: this repo was onboarded
+2026-07-28 against the installed 0.0.1 and inherited both — F15's pre-commit AC-verifier diff and
+F14's silently-skipped gates — each already fixed in-tree at the time.
+
+**This paragraph used to illustrate the point with F7 instead, and that illustration is withdrawn.**
+The history it cited is accurate — the 0.0.1 skeleton did bind `CODE_REVIEW` to `/code-review`, and
+#10 did unbind it — but the reading was not: `/code-review` **is** model-invocable, so the gate would
+never have been inert and #10 corrected a non-bug (#74). `.claude/loop.config.md` still deviates from
+the 0.0.1 skeleton, and that deviation is now a **design choice** — the finder fan-out, kept on its
+own merits — rather than a workaround for a constraint that was never there.
 
 **Why this consumer is worth the overhead:** its deliverable is *markdown an agent executes*, which
 neither AgentFluent nor the vote repo produces. That breaks the router's assumption that markdown
