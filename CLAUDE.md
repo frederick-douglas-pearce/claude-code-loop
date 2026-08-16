@@ -227,10 +227,13 @@ even though nothing will fail loudly:
   marked `disable-model-invocation` cannot be invoked by the orchestrator, so binding one makes the
   gate **silently inert** — it does not error, it just never runs. **The rule has no live example,
   and saying so is the point.** `CODE_REVIEW` was cited as one here from 2026-07-27 until #74 unwound
-  it, and the citation was false: `/code-review` **is** model-invocable. What #74 retracts is **F7's
-  invocability claim only** — F7's *second half*, that finder angles should be chosen from the diff's
-  risk surface rather than a fixed list, is untouched and is live work under
-  [#38](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/38) (`REVIEW_TIERS`).
+  it, and the citation was false: `/code-review` **is** model-invocable at any ordinary effort level
+  (its `ultra` argument is gated, and degrades silently rather than refusing). What #74 retracts is
+  **F7's invocability claim only** — F7's *second half*, that finder angles should be chosen from the
+  diff's risk surface rather than a fixed list, is untouched and **already ships** as engine prose
+  (`loop-engine.md`, "Pick finder angles from the diff's risk surface", from #10); what remains open
+  under [#38](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/38) is only whether
+  to formalize it as a `REVIEW_TIERS` matrix.
   The rule stands on its own — F14 (#21) generalizes it to the whole class, where an
   unbound or `TODO(init-loop)` binding never means "skip the gate" — but an invariant illustrated by
   a fictional instance is the exact shape this project keeps having to retract, so do not reach for a
@@ -402,22 +405,32 @@ run's journal, check which numbering the engine driving it used) and
 the gate-outcome invariant, still live in the installed 0.0.1 until the #36 re-install**).
 
 **The window between an in-tree fix and a consumer re-install is when new consumers get onboarded
-with the old bug.** Stated abstractly on purpose: **this repo currently has no true instance of it,
-and two false ones have already been written here.** The window needs a defect fixed in-tree *before*
-an onboarding yet still live in the installed plugin at that moment. F15/#19 and F14/#21 do not
-qualify — both were filed on the 2026-07-28 onboarding day and fixed in-tree on 2026-08-01 and
-2026-08-05, *after* it; this repo inherited them because they were unfixed everywhere, which
-illustrates the paragraph above, not this one. F7 was the only clean fit, and #74 withdrew it. **Do
-not substitute a third example without checking the dates.**
+with the old bug.** The test is exact — a defect fixed in-tree **before** an onboarding yet still
+live in the installed plugin at that moment — and **two illustrations written here have already
+failed it, so check both dates before naming an instance.** F15/#19 and F14/#21 do **not** qualify:
+both were filed on the 2026-07-28 onboarding day and fixed in-tree 2026-08-01 and 2026-08-05, *after*
+it. This repo inherited them because they were unfixed everywhere, which illustrates the paragraph
+above, not this one.
+
+**The instance that does qualify is #10 itself, and it is still live.** Its commits landed in-tree
+2026-07-27 (`1d3ddbc`, `90de201`); this repo onboarded the next day (`c6dea09`, 2026-07-28). All
+three of #10's engine changes remain **absent from the installed 0.0.1** — so every iteration run
+here has been driven by an engine whose hard-limit list stops before *"never edit
+`loop.config.md`"*. The orchestrator honors that rule from the in-tree copy, not from the engine
+actually executing. Fixed at the #36 re-install, like the rest.
 
 **What F7 illustrated here is withdrawn.** The history is accurate — the 0.0.1 skeleton did bind
 `CODE_REVIEW` to `/code-review`, and #10 did unbind it — but the reading was not: `/code-review`
 **is** model-invocable, so that gate would never have been inert. **Only #10's *rebinding* rested on
 the false premise; the rest of #10 stands** — finders receive the issue's acceptance criteria
-(`loop-engine.md:536`), angles come from the diff's risk surface (`:549`), and the orchestrator is
-forbidden to edit its own `loop.config.md`, which is still load-bearing. `.claude/loop.config.md`
-still deviates from the 0.0.1 skeleton, and that deviation is now a **design choice** — the finder
-fan-out, kept on its own merits — rather than a workaround for a constraint that was never there.
+("Give every finder the issue's acceptance criteria alongside the diff"), angles come from the diff's
+risk surface, and the orchestrator is forbidden to edit its own `loop.config.md`, which is still
+load-bearing. `.claude/loop.config.md` still deviates from the 0.0.1 skeleton, and that deviation is
+a **design choice** — the finder fan-out, kept on its own merits — rather than a workaround for a
+constraint that was never there. **The config itself has not yet been corrected**: it still records
+the withdrawn rationale at `:49` and in its §5 F7 notes. That edit is human-owned (#74/AC4) — the
+engine forbids the orchestrator from editing `loop.config.md` — so do not read this paragraph as
+describing the config's current text.
 
 **Why this consumer is worth the overhead:** its deliverable is *markdown an agent executes*, which
 neither AgentFluent nor the vote repo produces. That breaks the router's assumption that markdown
@@ -562,7 +575,8 @@ the choice.
 **The v0.2.0 cut line, for the record:** ship #74 → #40 → #34 → #67 → #36, with #60 closing out as
 already-merged (PRs #79/#80) and #57's corrections absorbed into #36/AC3. Two ordering constraints
 are load-bearing and not arbitrary: **#74 must precede #36**, because #36/AC5 as written propagates a
-correction to a *phantom* defect (F7 is false) into consumer configs no later release can reach; and
+correction to a *phantom* defect (F7's invocability half is false) into consumer configs no later
+release can reach; and
 **#74 must precede #40**, or they collide on `commands/init-loop.md`, which #40 rewrites broadly.
 
 ### Standing convention: the README status block ships with the version bump
