@@ -36,10 +36,12 @@ Let `TARGET = ${CLAUDE_PROJECT_DIR}` throughout. Artifacts:
 
 Resolve `TARGET` (fall back to `git -C . rev-parse --show-toplevel` if `${CLAUDE_PROJECT_DIR}` is
 unset). Confirm it is a git repo; if not, STOP and tell the human `/init-loop` expects a git repo
-root. **If `${CLAUDE_PROJECT_DIR}` was unset, `export CLAUDE_PROJECT_DIR="$TARGET"`.** Note this
-cannot repair the Steps 6–7 blocks retroactively — by Step 4's rule 2 those references were expanded
-before you read this file — so if those blocks came to you with an empty path, say so rather than
-running them. `mkdir -p "$TARGET/.claude"`. Record which of `CONFIG`, `GUARD`, `SETTINGS`,
+root. **If `${CLAUDE_PROJECT_DIR}` was unset, `export CLAUDE_PROJECT_DIR="$TARGET"`** — but do not
+rely on it reaching Steps 6–7: by Step 4's rule 2 their paths were expanded before you read this
+file, and shell state does not survive between commands either way. If those blocks came to you with
+an empty path, their own guards will refuse to run; **re-issue them with `$TARGET` substituted for the
+empty path**, and say at Step 8 that you did. `mkdir -p "$TARGET/.claude"`. Record which of `CONFIG`,
+`GUARD`, `SETTINGS`,
 `LEDGER`, and `$TARGET/.gitignore` already exist — this drives idempotency below.
 
 ## Step 1 — Idempotency gate
@@ -275,30 +277,31 @@ something that does not diff against `origin/HEAD`.
 `/security-review` opens by diffing against `origin/HEAD`. When that ref does not resolve, the gate
 exits with `fatal: ambiguous argument 'origin/HEAD...'` and reviews nothing.
 
-**An ordinary `git clone` of a non-empty repo sets this ref — a routine clone is not how you lose
-it.** It is *absent* when the working copy was built some other way: `git init` + `git remote add` +
-`git fetch`, which is what `gh repo create --source` and most CI checkouts do; a clone of a
-then-empty repo; or a `--bare`/`--mirror` clone, which has no `refs/remotes/origin/*` namespace at
-all (there the repair below cannot work — use a normal working copy). It can instead go **dangling**
-— present but pointing at a branch the upstream has since renamed or deleted — which fails the same
-way. The check below tests that the ref *resolves*, so it covers both.
+**When it is absent — the rule, not a list of cases.** The ref is set only if the remote's own default
+branch was among the refs your clone actually fetched. An ordinary full clone fetches it. It is
+**absent** after a `--single-branch` or `--depth` clone of some *other* branch or a tag (the usual CI
+checkout), a `--bare`/`--mirror` clone, a `git init` + `git remote add` + `git fetch`, or a clone of a
+then-empty repo. It can instead be **dangling** — present but pointing at a branch the upstream has
+renamed or deleted — which fails the same way. The check below tests that the ref *resolves*, so it
+covers both.
 
-**Repair — idempotent, safe to re-run, no-op once the ref resolves. It makes a network call**, so it
-can prompt or hang against an unreachable remote; `GIT_TERMINAL_PROMPT=0` suppresses git's own
-credential prompt but not `ssh`'s:
+**Repair.** These commands act on **the current directory**, so confirm where you are first — run
+from the repo root:
 
 ```bash
-export GIT_TERMINAL_PROMPT=0
-command -v timeout >/dev/null 2>&1 && TMO="timeout 20" || TMO=""
-if git remote get-url origin >/dev/null 2>&1 \
-   && ! git rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
-  $TMO git remote set-head origin -a
-fi
-git rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1 \
-  && echo "origin/HEAD resolves" || echo "origin/HEAD still does not resolve"
+git rev-parse --show-toplevel
+GIT_TERMINAL_PROMPT=0 git remote set-head origin -a
+git rev-parse --verify -q refs/remotes/origin/HEAD || echo "still unresolved -- see below"
 ```
 
-Offline, `git remote set-head origin <your-default-branch>` sets the ref with no network call.
+`set-head -a` makes a **network call**: it can hang on an unreachable remote (interrupt it), and
+`GIT_TERMINAL_PROMPT=0` suppresses git's own credential prompt but not `ssh`'s. If it reports
+`Not a valid ref` or `Cannot determine remote HEAD`, your clone never fetched the remote's default
+branch — fetch that branch first, then repeat:
+
+```bash
+git fetch origin '<default-branch>:refs/remotes/origin/<default-branch>'
+```
 
 **An erroring gate is not a passing gate.** Treat `fatal: ambiguous argument` from this gate as a
 missing ref, not as a clean review: repair it and re-run. Never journal it as clean.
@@ -386,11 +389,14 @@ cause.** A non-zero from `git remote get-url origin` has several (no remote, not
 under another name), and an earlier version of this block picked one and stated it as fact, which is
 the failure this whole command exists to stop. Relay the line it printed; do not add a diagnosis.
 
-This block and the `origin/HEAD` precondition in the generated §4 must stay **semantically
-identical in four respects: the existence test, the presence test, the repair, and the bound on it.**
-Change one and change the other. They are *not* identical in every respect — this one takes `-C`,
-runs silently, and is unattended, while §4's is pasted by a human inside the repo — so do not read the
-coupling as a promise that the two are interchangeable in all particulars.
+This block and the `origin/HEAD` precondition in the generated §4 share **the presence test
+(`rev-parse --verify`) and the repair (`remote set-head origin -a`)** — change one and change the
+other. They are deliberately **not** the same script otherwise, and the difference is not cosmetic:
+this one runs unattended, so it is anchored with `-C`, guarded, bounded and silent. §4's is **pasted
+by a human into an unknown shell and an unknown directory**, so it anchors by *showing* them where
+they are rather than by assuming, sets no environment variable that would outlive the paste, and uses
+no shell construct that depends on word-splitting (zsh does not split unquoted variables, and it is
+what a consumer is most likely to paste into). Do not "unify" them by copying this block into §4.
 
 ## Step 7 — Wire `enabledPlugins` in `settings.json` (deterministic, safe fallback)
 
@@ -442,9 +448,19 @@ Report, concisely:
   adding a cause**. If it says the ref does not resolve **and Step 2 found a remote named `origin`**,
   list it as an action item — the local review gate will fail until it is set. If Step 6 did not run,
   say so and why.
-- **Unexpanded tokens:** report `grep -n '@@' "$CONFIG" "$CONFIG.init-new" 2>/dev/null` — **both**,
-  since Step 1(b) writes the refresh to the `.init-new` sibling and that file ships the same pointer
-  line. Any hit means a `@@…@@` token was copied
+- **Unexpanded tokens:** run
+
+  ```bash
+  for f in "$TARGET/.claude/loop.config.md" "$TARGET/.claude/loop.config.md.init-new"; do
+    [ -e "$f" ] && { echo "checked $f"; grep -n '@@' "$f"; }
+  done
+  ```
+
+  covering **both**, since Step 1(b) writes the refresh to the `.init-new` sibling and that file
+  carries the same pointer line. **Write the paths out** — `$CONFIG` is this document's notation, not
+  a shell variable, and a `grep` against an unset one prints nothing and exits non-zero, which is
+  indistinguishable from a clean file. The `checked` line is the proof it ran at all; a silent result
+  counts only if you saw one. Any hit means a `@@…@@` token was copied
   through instead of expanded (rule 1) — fix it before reporting done. This is the one check that
   catches it: such a token is **not** a `TODO(init-loop)`, so the grep below will not see it, and the
   pointer line reads plausibly enough that a human reviewer may not either.
