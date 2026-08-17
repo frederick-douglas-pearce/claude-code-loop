@@ -36,9 +36,10 @@ Let `TARGET = ${CLAUDE_PROJECT_DIR}` throughout. Artifacts:
 
 Resolve `TARGET` (fall back to `git -C . rev-parse --show-toplevel` if `${CLAUDE_PROJECT_DIR}` is
 unset). Confirm it is a git repo; if not, STOP and tell the human `/init-loop` expects a git repo
-root. **If `${CLAUDE_PROJECT_DIR}` was unset, `export CLAUDE_PROJECT_DIR="$TARGET"`** so the
-deterministic blocks in Steps 6–7 (which reference `${CLAUDE_PROJECT_DIR}`) resolve to the repo
-root rather than `/`. `mkdir -p "$TARGET/.claude"`. Record which of `CONFIG`, `GUARD`, `SETTINGS`,
+root. **If `${CLAUDE_PROJECT_DIR}` was unset, `export CLAUDE_PROJECT_DIR="$TARGET"`.** Note this
+cannot repair the Steps 6–7 blocks retroactively — by Step 4's rule 2 those references were expanded
+before you read this file — so if those blocks came to you with an empty path, say so rather than
+running them. `mkdir -p "$TARGET/.claude"`. Record which of `CONFIG`, `GUARD`, `SETTINGS`,
 `LEDGER`, and `$TARGET/.gitignore` already exist — this drives idempotency below.
 
 ## Step 1 — Idempotency gate
@@ -66,14 +67,14 @@ TODO(init-loop): <what to supply> — written bare, per Step 4's rule 4.
 | `TEST_CMD` | pyproject/`tox`, `package.json` scripts (`test`), `Makefile` (`test:`), `Cargo.toml`, CI workflow steps |
 | `LINT_CMD` | ruff/flake8/eslint/clippy/golangci config; `lint` script; CI. Same rule as `TYPE_CMD` below: if there is none, `—` **plus a reason** |
 | `TYPE_CMD` | mypy/pyright config, `tsc`, `package.json` `typecheck`; where the language has no separate type step write `—` **plus the reason** (e.g. `— (no separate type step)`), never a bare dash — the engine reads a reasonless `—` as a blank and escalates on it |
-| `HERMETIC_TEST_CMD` | **First, whether an offline/hermetic tier is *declared* at all.** Signals are ecosystem-specific: prose in `CLAUDE.md`/`CONTRIBUTING`/README ("unit tests are offline — no network or DB"); Python — a marker or `addopts` exclusion (`-m 'not integration'`), split `tests/unit` vs `tests/integration`, a tox env; Go — `testing.Short()` with `-short`, or a `//go:build !integration` tag (the canonical Go form); Node — a `test:unit` script, `jest --testPathIgnorePatterns`, `nock.disableNetConnect()`; Rust — `cargo test --lib` vs `tests/`, `#[ignore]`; any ecosystem — a `test-unit`-style `Makefile` target or a CI job named for it. **If none is declared, emit `—` plus the reason "no offline/hermetic tier declared"** — the common case, and see the fail-open note below. If one *is* declared, the value is that tier's command wrapped in a socket-level block: prefer a blocker already in the project (`pytest --disable-socket`); otherwise on a **Linux** host propose `unshare -rn -- sh -c 'ip link set lo up && <the tier's command>'` — a fresh network namespace, which is language-agnostic and needs no test-framework support. **Do not drop the `ip link set lo up`:** a fresh netns has loopback DOWN, so `connect()` to `127.0.0.1` fails and every test using a local server, socket or TCP database breaks — which the engine would then report as a bug rather than an environment fault, the one false positive it is least able to dismiss. Note in the Notes that `ip` is iproute2 (absent from minimal images — `ifconfig lo up` is the fallback), that `-r` runs the tier as **uid 0**, and that the human must confirm the value. If a tier is declared and you can find no workable block, emit `TODO(init-loop)`, **never `—`** |
-| `CI_STATUS_CMD` | `gh pr checks <PR>` if GitHub host; else the host's equivalent or `TODO(init-loop)` |
+| `HERMETIC_TEST_CMD` | **First, whether an offline/hermetic tier is *declared* at all.** Signals are ecosystem-specific: prose in `CLAUDE.md`/`CONTRIBUTING`/README ("unit tests are offline — no network or DB"); Python — a marker or `addopts` exclusion (`-m 'not integration'`), split `tests/unit` vs `tests/integration`, a tox env; Go — `testing.Short()` with `-short`, or a `//go:build !integration` tag (the canonical Go form); Node — a `test:unit` script, `jest --testPathIgnorePatterns`, `nock.disableNetConnect()`; Rust — `cargo test --lib` vs `tests/`, `#[ignore]`; any ecosystem — a `test-unit`-style `Makefile` target or a CI job named for it. **If none is declared, emit `—` plus the reason "no offline/hermetic tier declared"** — the common case, and see the fail-open note below. If one *is* declared, the value is that tier's command wrapped in a socket-level block: prefer a blocker already in the project (`pytest --disable-socket`); otherwise on a **Linux** host propose `unshare -rn -- sh -c 'ip link set lo up && <the tier's command>'` — a fresh network namespace, which is language-agnostic and needs no test-framework support. **Do not drop the `ip link set lo up`:** a fresh netns has loopback DOWN, so `connect()` to `127.0.0.1` fails and every test using a local server, socket or TCP database breaks — which the engine would then report as a bug rather than an environment fault, the one false positive it is least able to dismiss. Note in the Notes that `ip` is iproute2 (absent from minimal images — `ifconfig lo up` is the fallback), that `-r` runs the tier as **uid 0**, and that the human must confirm the value. If a tier is declared and you can find no workable block, emit TODO(init-loop), **never `—`** |
+| `CI_STATUS_CMD` | `gh pr checks <PR>` if GitHub host; else the host's equivalent or TODO(init-loop) |
 | `BRANCH_FMT` | CLAUDE.md / CONTRIBUTING branch rules; else infer from existing `git branch -a` names |
 | `COMMIT_CONV` | CONTRIBUTING / CLAUDE.md; detect Conventional Commits from recent `git log` if unstated |
 | `PR_TEMPLATE` | `.github/PULL_REQUEST_TEMPLATE.md` (note "must replicate" if present) |
-| `MERGE_METHOD` | CONTRIBUTING / repo settings; default `TODO(init-loop)` |
-| `BACKLOG_SOURCE` | GitHub milestone/label if a GitHub remote exists; else a local `TODO.md`; else `TODO(init-loop)` |
-| `PRIORITY_LABELS` | `gh label list` for `priority:*` labels (GitHub host); else CONTRIBUTING/CLAUDE.md; else `TODO(init-loop)` |
+| `MERGE_METHOD` | CONTRIBUTING / repo settings; default TODO(init-loop) |
+| `BACKLOG_SOURCE` | GitHub milestone/label if a GitHub remote exists; else a local `TODO.md`; else TODO(init-loop) |
+| `PRIORITY_LABELS` | `gh label list` for `priority:*` labels (GitHub host); else CONTRIBUTING/CLAUDE.md; else TODO(init-loop) |
 | `RELEASE_SCHEME` | release-please / semantic-release config, `pyproject`/`package.json` version + publish; else "no release cycle" |
 | `SCOPE_AGENT` / `DESIGN_AGENT` | user-global subagents — cannot be inferred from the repo; default TODO(init-loop): name a scope/design subagent, or remove if none |
 
@@ -110,10 +111,12 @@ If you find nothing (or are unsure), do **not** invent a sidecar — leave `APPE
 
 Write `CONFIG` from the skeleton below, substituting inferred values and `TODO(init-loop)`
 placeholders. Keep all five sections. §1 is cross-ecosystem — fill it. §3 is lightly inferable
-(source layout) — fill what you can. **§2 and §4 are the project-specific porting surface** — emit
-them as stubs with the commented AgentFluent example so the human sees the shape. If the host is
-**not** GitHub, add a one-line `TODO(init-loop)` note in §4 flagging that every rule there is a
-GitHub-ism to be re-specified.
+(source layout) — fill what you can. **§2 and §4's routing rules are the project-specific porting
+surface** — emit them as stubs with the commented AgentFluent example so the human sees the shape.
+**§4 additionally carries a live `### ⛔ Precondition` block: it is uncommented, mandatory prose that
+must be copied into the generated config as-is. It is not a stub — never comment it out, and never
+drop it.** If the host is **not** GitHub, add a one-line `TODO(init-loop)` note in §4 flagging that
+every rule there is a GitHub-ism to be re-specified.
 
 ### Four rules about what you write into `CONFIG`
 
@@ -323,10 +326,13 @@ if git -C "${CLAUDE_PROJECT_DIR}" remote get-url origin >/dev/null 2>&1 \
    && ! git -C "${CLAUDE_PROJECT_DIR}" rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
   git -C "${CLAUDE_PROJECT_DIR}" remote set-head origin -a >/dev/null 2>&1 || true
 fi
-git -C "${CLAUDE_PROJECT_DIR}" remote get-url origin >/dev/null 2>&1 \
-  && { git -C "${CLAUDE_PROJECT_DIR}" rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1 \
-       && echo "origin/HEAD: ok" || echo "origin/HEAD: STILL UNRESOLVED -- report this"; } \
-  || echo "origin/HEAD: n/a (no origin remote)"
+if git -C "${CLAUDE_PROJECT_DIR}" rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
+  echo "origin/HEAD: resolves (the local /security-review gate can diff against it)"
+else
+  echo "origin/HEAD: does NOT resolve -- if this repo has an 'origin' remote, the local" \
+       "/security-review gate will die until this is set (see the generated config's §4" \
+       "precondition block)"
+fi
 ```
 
 Two things this block is deliberate about, both of which look like fussiness and are not:
@@ -337,15 +343,17 @@ Two things this block is deliberate about, both of which look like fussiness and
   **dangling** ref — one pointing at a branch the upstream has renamed or deleted — which fails at
   use exactly like a missing one. Testing that the ref *resolves* covers both states.
 
-The final line exists because `set-head -a` reaches the network: offline, or against an unreachable
-or auth-gated remote, it fails and the step would otherwise have nothing to report at Step 8. Report
-what the re-probe printed, not what you assume happened.
+The closing probe exists because `set-head -a` reaches the network: offline, or against an
+unreachable or auth-gated remote, it fails and the step would otherwise have nothing to report at
+Step 8. **It reports what it measured — whether the ref resolves — and deliberately does not name a
+cause.** A non-zero from `git remote get-url origin` has several (no remote, not a git repo, an unset
+`CLAUDE_PROJECT_DIR`), and an earlier version of this block picked one and stated it as fact, which is
+the failure this whole command exists to stop. Report the line it printed, not what you assume
+happened.
 
 This block and the `origin/HEAD` precondition in the generated §4 must stay **semantically
 identical** — same existence test, same presence test, same repair — so a human running §4's command
-by hand gets exactly what this step would have done. The differences are deliberate and confined to
-who is running it: this one selects the repo with `-C`, suppresses output because it runs unattended,
-and re-probes so it can report.
+by hand gets exactly what this step would have done.
 
 ## Step 7 — Wire `enabledPlugins` in `settings.json` (deterministic, safe fallback)
 
@@ -389,8 +397,8 @@ If the script prints a `SKIP:` line, relay the snippet to the human instead of e
 Report, concisely:
 - **Artifacts:** which of `CONFIG` / `GUARD` / `SETTINGS` / `.gitignore` / `LEDGER` were created,
   updated, or already present (skipped).
-- **`origin/HEAD`:** set, already present, or not applicable (no `origin` remote). Say which — Step 6
-  repairs it silently, and a repair nobody reports is one nobody knows to redo after a re-clone.
+- **`origin/HEAD`:** report exactly the `origin/HEAD:` line Step 6 printed. If it says the ref does
+  not resolve, list it as an action item — the local security gate will fail until it is fixed.
 - **Inferred parameters:** the values you filled and their provenance (mirror the Notes column).
 - **`TODO(init-loop)` blanks:** the list the human must resolve before the first run — `grep -n
   'TODO(init-loop)' "$CONFIG"`.
