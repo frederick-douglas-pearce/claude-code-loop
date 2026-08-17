@@ -289,9 +289,10 @@ credential prompt but not `ssh`'s:
 
 ```bash
 export GIT_TERMINAL_PROMPT=0
+command -v timeout >/dev/null 2>&1 && TMO="timeout 20" || TMO=""
 if git remote get-url origin >/dev/null 2>&1 \
    && ! git rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
-  git remote set-head origin -a
+  $TMO git remote set-head origin -a
 fi
 git rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1 \
   && echo "origin/HEAD resolves" || echo "origin/HEAD still does not resolve"
@@ -334,22 +335,24 @@ keeps its `TODO(init-loop)` row).
 Run these exact, idempotent commands:
 
 ```bash
-mkdir -p "${CLAUDE_PROJECT_DIR}/.claude/loop"
-grep -qxF '.claude/loop/' "${CLAUDE_PROJECT_DIR}/.gitignore" 2>/dev/null \
-  || printf '\n# dev-loop ledger (local working state, never committed)\n.claude/loop/\n' \
-       >> "${CLAUDE_PROJECT_DIR}/.gitignore"
-
-# Set origin/HEAD if a remote named `origin` exists and the ref does not resolve. Without it the
-# local /security-review dies on `fatal: ambiguous argument 'origin/HEAD...'` and reviews nothing.
-# `set-head -a` is a NETWORK call: bound it, and re-probe rather than trusting its exit status.
-export GIT_TERMINAL_PROMPT=0
-command -v timeout >/dev/null 2>&1 && TMO="timeout 20" || TMO=""
+# Refuse to run at all on an empty path. NEITHER half of this block fails safely without this
+# guard: `git -C ""` is a no-op (it acts on whatever repo you are standing in, including the
+# network write), and `/.claude` is writable in a container, devcontainer or CI runner, so the
+# filesystem half creates `/.claude/loop` and `/.gitignore` and reports success.
 if [ -z "${CLAUDE_PROJECT_DIR}" ]; then
-  # Do NOT fall through. `git -C ""` is a no-op, not an error: it leaves the working directory
-  # unchanged, so every command below would silently act on whatever repo you happen to be in --
-  # including the network write -- and then report a verdict about that repo instead of the target.
-  echo "origin/HEAD: NOT CHECKED -- CLAUDE_PROJECT_DIR arrived empty; nothing inspected or changed"
+  echo "STOP: CLAUDE_PROJECT_DIR arrived empty -- Steps 6-7 NOT run; nothing created or changed."
+  echo "Re-run them with the repo root (\$TARGET) in place of the empty path, and say so at Step 8."
 else
+  mkdir -p "${CLAUDE_PROJECT_DIR}/.claude/loop"
+  grep -qxF '.claude/loop/' "${CLAUDE_PROJECT_DIR}/.gitignore" 2>/dev/null \
+    || printf '\n# dev-loop ledger (local working state, never committed)\n.claude/loop/\n' \
+         >> "${CLAUDE_PROJECT_DIR}/.gitignore"
+
+  # Set origin/HEAD if a remote named `origin` exists and the ref does not resolve. Without it the
+  # local /security-review dies on `fatal: ambiguous argument 'origin/HEAD...'` and reviews nothing.
+  # `set-head -a` is a NETWORK call: bound it, and re-probe rather than trusting its exit status.
+  export GIT_TERMINAL_PROMPT=0
+  command -v timeout >/dev/null 2>&1 && TMO="timeout 20" || TMO=""
   if git -C "${CLAUDE_PROJECT_DIR}" remote get-url origin >/dev/null 2>&1 \
      && ! git -C "${CLAUDE_PROJECT_DIR}" rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
     $TMO git -C "${CLAUDE_PROJECT_DIR}" remote set-head origin -a >/dev/null 2>&1 || true
@@ -384,14 +387,19 @@ under another name), and an earlier version of this block picked one and stated 
 the failure this whole command exists to stop. Relay the line it printed; do not add a diagnosis.
 
 This block and the `origin/HEAD` precondition in the generated §4 must stay **semantically
-identical** — same existence test, same presence test, same repair — so a human running §4's command
-by hand gets exactly what this step would have done.
+identical in four respects: the existence test, the presence test, the repair, and the bound on it.**
+Change one and change the other. They are *not* identical in every respect — this one takes `-C`,
+runs silently, and is unattended, while §4's is pasted by a human inside the repo — so do not read the
+coupling as a promise that the two are interchangeable in all particulars.
 
 ## Step 7 — Wire `enabledPlugins` in `settings.json` (deterministic, safe fallback)
 
 Merge the plugin key without disturbing existing settings. Run:
 
 ```bash
+if [ -z "${CLAUDE_PROJECT_DIR}" ]; then
+  echo "STOP: CLAUDE_PROJECT_DIR arrived empty -- Step 7 NOT run (same reason as Step 6)."
+else
 python3 - "${CLAUDE_PROJECT_DIR}/.claude/settings.json" <<'PY'
 import json, sys, pathlib
 p = pathlib.Path(sys.argv[1])
@@ -420,6 +428,7 @@ else:
 p.write_text(json.dumps(data, indent=2) + "\n")
 print("enabled dev-loop@claude-code-loop")
 PY
+fi
 ```
 
 If the script prints a `SKIP:` line, relay the snippet to the human instead of editing the file.
@@ -433,7 +442,9 @@ Report, concisely:
   adding a cause**. If it says the ref does not resolve **and Step 2 found a remote named `origin`**,
   list it as an action item — the local review gate will fail until it is set. If Step 6 did not run,
   say so and why.
-- **Unexpanded tokens:** report `grep -n '@@' "$CONFIG"`. Any hit means a `@@…@@` token was copied
+- **Unexpanded tokens:** report `grep -n '@@' "$CONFIG" "$CONFIG.init-new" 2>/dev/null` — **both**,
+  since Step 1(b) writes the refresh to the `.init-new` sibling and that file ships the same pointer
+  line. Any hit means a `@@…@@` token was copied
   through instead of expanded (rule 1) — fix it before reporting done. This is the one check that
   catches it: such a token is **not** a `TODO(init-loop)`, so the grep below will not see it, and the
   pointer line reads plausibly enough that a human reviewer may not either.
