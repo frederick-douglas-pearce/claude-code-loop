@@ -57,7 +57,7 @@ Read whatever exists (skip missing files silently): `CLAUDE.md`, `AGENTS.md`, `C
 `.github/PULL_REQUEST_TEMPLATE.md`. Also run `git remote -v` and `git branch -a` for host + branch
 conventions. Infer the §1 parameters below. Put **how you inferred each value** in the Notes
 column (e.g. "from pyproject `[tool.pytest]`"); leave anything you cannot infer as
-`TODO(init-loop): <what to supply>`.
+TODO(init-loop): <what to supply> — written bare, per Step 4's rule 4.
 
 **Inference map (cross-ecosystem — do not assume Python/GitHub):**
 
@@ -75,7 +75,13 @@ column (e.g. "from pyproject `[tool.pytest]`"); leave anything you cannot infer 
 | `BACKLOG_SOURCE` | GitHub milestone/label if a GitHub remote exists; else a local `TODO.md`; else `TODO(init-loop)` |
 | `PRIORITY_LABELS` | `gh label list` for `priority:*` labels (GitHub host); else CONTRIBUTING/CLAUDE.md; else `TODO(init-loop)` |
 | `RELEASE_SCHEME` | release-please / semantic-release config, `pyproject`/`package.json` version + publish; else "no release cycle" |
-| `SCOPE_AGENT` / `DESIGN_AGENT` | user-global subagents — cannot be inferred from the repo; default `TODO(init-loop): name a scope/design subagent, or remove if none` |
+| `SCOPE_AGENT` / `DESIGN_AGENT` | user-global subagents — cannot be inferred from the repo; default TODO(init-loop): name a scope/design subagent, or remove if none |
+
+> **Backticks in the "Look here" column are this table's notation, not part of any value.** Where a
+> row says to emit a `TODO(init-loop)`, write it into `CONFIG` **bare** — Step 4's rule 4, and the
+> reason it exists. The defect that rule fixes was built exactly here: a generator composed a cell out
+> of two fragments from this column and produced `` `TODO(init-loop): … a local `TODO.md` …` ``, an
+> outer code span wrapped around an inner one, which does not nest and rendered as garbage.
 
 > ⚠ **`HERMETIC_TEST_CMD` is the one row where the generator fails *open*, and the human reviewing
 > this config is the only thing that catches it.** Emitting `—` says "this project declares no
@@ -122,15 +128,16 @@ out in pieces rather than shown assembled because an assembled one would not hav
 to you — which is rule 2. `@@PLUGIN_ROOT@@` is **not** a `TODO(init-loop)` and **not** a `<…>`
 fill-in: do not infer a value for it, do not ask the human about it, and do not leave it in place.
 
-**2. What reached you was already expanded — reverse it, never reproduce it.** The harness
+**2. Any absolute path you were handed is an artifact of delivery, not content to copy.** The harness
 substitutes environment variables into this command's text **before you read a word of it**,
-including inside backtick code spans. So wherever this file's author wrote a plugin-root or
-project-dir variable, what arrived in your prompt is an absolute path like
-`/home/<user>/.claude/plugins/cache/<marketplace>/<plugin>/<version>/skills/…`. **That expansion is
-an artifact of how you were handed this text, not content to copy.** If you are about to write an
-absolute path into `CONFIG` because you saw one here, you have just met this defect — reverse it.
-(Rule 1 exists because `@@PLUGIN_ROOT@@` is a token the harness cannot expand, so the skeleton's
-pointer line is the one that reaches you intact.)
+including inside backtick code spans. So wherever this file writes a project-dir variable, what
+arrived in your prompt is already an absolute path — and wherever a plugin-root variable is written,
+you would have received something like
+`/home/<user>/.claude/plugins/cache/<marketplace>/<plugin>/<version>/skills/…` instead. **Do not
+reproduce such a path in `CONFIG`; reverse it.** (Rule 1 is why you should not find a plugin-cache
+path in this file today: `@@PLUGIN_ROOT@@` is a token the harness cannot expand, so the skeleton's
+pointer line reaches you intact. This rule still binds — it governs any expanded path you meet
+anywhere, including in an existing config you were asked to refresh.)
 
 **3. A generated `loop.config.md` contains no absolute path into the plugin cache.** The plugin's
 install location is a fact about *this machine and this version*: it moves at every upgrade and
@@ -250,15 +257,20 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 Host-specific, like the rest of §4: this assumes git and a remote named `origin`. Delete this block
 if your host or remote differs, and re-specify the equivalent.
 
-`/security-review` opens by diffing against `origin/HEAD`. **On a fresh clone that ref is unset**, so
-the gate exits with `fatal: ambiguous argument 'origin/HEAD...'` and reviews nothing. `/init-loop`
-set it at onboarding, but a re-clone or a mirror push can lose it again.
+`/security-review` opens by diffing against `origin/HEAD`. When that ref does not resolve, the gate
+exits with `fatal: ambiguous argument 'origin/HEAD...'` and reviews nothing.
 
-**Repair — idempotent, safe to re-run, no-op once the ref exists:**
+**`git clone` sets this ref — cloning is not how you lose it.** It is *absent* when the working copy
+was built any other way: `git init` + `git remote add` + `git fetch`, which is what
+`gh repo create --source` and most CI checkouts do, or a clone of a then-empty repo. It can instead go
+**dangling** — present but pointing at a branch the upstream has since renamed or deleted — which
+fails the same way. The check below tests that the ref *resolves*, so it covers both.
+
+**Repair — idempotent, safe to re-run, no-op once the ref resolves:**
 
 ```bash
 if git remote get-url origin >/dev/null 2>&1 \
-   && ! git symbolic-ref -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
+   && ! git rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
   git remote set-head origin -a
 fi
 ```
@@ -303,22 +315,37 @@ grep -qxF '.claude/loop/' "${CLAUDE_PROJECT_DIR}/.gitignore" 2>/dev/null \
   || printf '\n# dev-loop ledger (local working state, never committed)\n.claude/loop/\n' \
        >> "${CLAUDE_PROJECT_DIR}/.gitignore"
 
-# Set origin/HEAD if a remote named `origin` exists and the ref is missing. Without it the local
-# /security-review dies on `fatal: ambiguous argument 'origin/HEAD...'` and reviews nothing.
+# Set origin/HEAD if a remote named `origin` exists and the ref does not resolve. Without it the
+# local /security-review dies on `fatal: ambiguous argument 'origin/HEAD...'` and reviews nothing.
+# `set-head -a` is a NETWORK call, so re-probe afterwards rather than trusting its exit status.
+export GIT_TERMINAL_PROMPT=0
 if git -C "${CLAUDE_PROJECT_DIR}" remote get-url origin >/dev/null 2>&1 \
-   && ! git -C "${CLAUDE_PROJECT_DIR}" symbolic-ref -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
+   && ! git -C "${CLAUDE_PROJECT_DIR}" rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
   git -C "${CLAUDE_PROJECT_DIR}" remote set-head origin -a >/dev/null 2>&1 || true
 fi
+git -C "${CLAUDE_PROJECT_DIR}" remote get-url origin >/dev/null 2>&1 \
+  && { git -C "${CLAUDE_PROJECT_DIR}" rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1 \
+       && echo "origin/HEAD: ok" || echo "origin/HEAD: STILL UNRESOLVED -- report this"; } \
+  || echo "origin/HEAD: n/a (no origin remote)"
 ```
 
-Use `git remote get-url origin`, **not** `git remote`, as the existence test: `git remote` exits **0**
-in a repo with no remotes at all, so it does not actually gate anything.
+Two things this block is deliberate about, both of which look like fussiness and are not:
+
+- **`git remote get-url origin`, not `git remote`, as the existence test.** `git remote` exits **0**
+  in a repo with no remotes at all, so it does not gate anything.
+- **`rev-parse --verify`, not `symbolic-ref`, as the presence test.** `symbolic-ref` succeeds on a
+  **dangling** ref — one pointing at a branch the upstream has renamed or deleted — which fails at
+  use exactly like a missing one. Testing that the ref *resolves* covers both states.
+
+The final line exists because `set-head -a` reaches the network: offline, or against an unreachable
+or auth-gated remote, it fails and the step would otherwise have nothing to report at Step 8. Report
+what the re-probe printed, not what you assume happened.
 
 This block and the `origin/HEAD` precondition in the generated §4 must stay **semantically
-identical** — same guard, same repair — so a human running the §4 command by hand after a re-clone
-gets exactly what this step would have done. The only differences are deliberate: this one selects
-the repo with `-C` and stays silent because it runs unattended; §4's is run by a human inside the
-repo, and shows its output.
+identical** — same existence test, same presence test, same repair — so a human running §4's command
+by hand gets exactly what this step would have done. The differences are deliberate and confined to
+who is running it: this one selects the repo with `-C`, suppresses output because it runs unattended,
+and re-probes so it can report.
 
 ## Step 7 — Wire `enabledPlugins` in `settings.json` (deterministic, safe fallback)
 
