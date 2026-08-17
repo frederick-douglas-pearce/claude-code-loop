@@ -109,6 +109,44 @@ them as stubs with the commented AgentFluent example so the human sees the shape
 **not** GitHub, add a one-line `TODO(init-loop)` note in §4 flagging that every rule there is a
 GitHub-ism to be re-specified.
 
+### Four rules about what you write into `CONFIG`
+
+These govern the *text* you emit, independently of any value you inferred in Step 2. Rules 1 and 2
+are two halves of one problem and are easiest to read together.
+
+**1. `@@PLUGIN_ROOT@@` is a token you expand yourself.** The skeleton's pointer line reads
+`See @@PLUGIN_ROOT@@/skills/dev-loop/loop-engine.md …`. Replace `@@PLUGIN_ROOT@@` — and nothing else
+on that line — with a **plugin-root variable reference**, which you compose from four pieces in this
+order: a dollar sign, an opening brace, the name `CLAUDE_PLUGIN_ROOT`, a closing brace. It is spelled
+out in pieces rather than shown assembled because an assembled one would not have survived the trip
+to you — which is rule 2. `@@PLUGIN_ROOT@@` is **not** a `TODO(init-loop)` and **not** a `<…>`
+fill-in: do not infer a value for it, do not ask the human about it, and do not leave it in place.
+
+**2. What reached you was already expanded — reverse it, never reproduce it.** The harness
+substitutes environment variables into this command's text **before you read a word of it**,
+including inside backtick code spans. So wherever this file's author wrote a plugin-root or
+project-dir variable, what arrived in your prompt is an absolute path like
+`/home/<user>/.claude/plugins/cache/<marketplace>/<plugin>/<version>/skills/…`. **That expansion is
+an artifact of how you were handed this text, not content to copy.** If you are about to write an
+absolute path into `CONFIG` because you saw one here, you have just met this defect — reverse it.
+(Rule 1 exists because `@@PLUGIN_ROOT@@` is a token the harness cannot expand, so the skeleton's
+pointer line is the one that reaches you intact.)
+
+**3. A generated `loop.config.md` contains no absolute path into the plugin cache.** The plugin's
+install location is a fact about *this machine and this version*: it moves at every upgrade and
+differs for every user. `CONFIG` is a project-scoped file that gets committed. A cache path written
+into it is wrong the moment the plugin is upgraded, and wrong immediately for anyone else who clones
+the repo. Paths into the *consuming project* are fine; paths into the *plugin* are not.
+
+**4. A `TODO(init-loop)` value is never written inside a code span.** Write it bare, with no
+surrounding backticks. The explanatory text that follows one routinely names a file or a command
+(`a local TODO.md`, `gh label list`) — and markdown code spans **do not nest**, so an outer span
+wrapped around an inner one terminates early and the remainder of the cell renders as garbage. The
+human reviewing `CONFIG` before the first run is the only control on every blank in it, so a `TODO`
+that renders as garbage is a blank that never gets filled. This rule is about a `TODO(init-loop)`
+written as a parameter's **value**; naming the marker in prose, as this sentence does, is not a value
+and needs no change.
+
 > **Maintainers of this file** (not part of an onboarding run): write any pipeline cross-reference
 > in the skeleton as **`engine step N`**, including the literal word "engine" — the `CODE_REVIEW`
 > row uses it today. A bare `step N` is indistinguishable from this file's own numbered onboarding
@@ -121,6 +159,14 @@ GitHub-ism to be re-specified.
 > stay inside the `~~~markdown` skeleton** — that block is the only part of this file copied into a
 > consuming repo, so a reference that drifts out into surrounding prose stops guarding anything that
 > ships, and a check enforces it.
+>
+> Second, **never write an environment-variable reference into the skeleton** — not the plugin-root
+> one, not the project-dir one. The harness expands them before the generating agent reads this file,
+> so the agent copies an absolute, version-pinned cache path into the config it writes, and that path
+> stops resolving at the next plugin upgrade. This is not hypothetical: it is what produced
+> [F20](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1), and a config already
+> in the field carries such a path today. Use an `@@…@@` token instead and give it an expansion rule
+> in Step 4's rule 1, which is what `@@PLUGIN_ROOT@@` is.
 
 For the `APPEND_ONLY_FILES` row use the **pointer form**, never a duplicated path — the sidecar
 JSON is the single source of truth for which files are protected:
@@ -134,7 +180,7 @@ porting project edits. A non-matching (non-Python / non-`src/` / non-GitHub) pro
 four sections** (parameters, architect triggers, source layout, security routing) — never the
 engine.
 
-See `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/loop-engine.md` for the operating procedure and semantics.
+See `@@PLUGIN_ROOT@@/skills/dev-loop/loop-engine.md` for the operating procedure and semantics.
 
 > ⚠ **Generated by `/init-loop` — review before the first run.** Values are best-effort inferences;
 > every `TODO(init-loop)` is a blank you must fill (or delete if it does not apply to this repo).
@@ -173,7 +219,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `COMMIT_CONV` | <inferred / TODO(init-loop)> | |
 | `PR_TEMPLATE` | <inferred / — if none> | replicate in the PR body if the repo enforces it |
 | `MERGE_METHOD` | <inferred / TODO(init-loop)> | e.g. squash, `--delete-branch`, explicit `--subject` scope |
-| `APPEND_ONLY_FILES` | protected files are declared for the guard hook in `.claude/loop.append-guard.json` (the machine SSOT); `TODO(init-loop)` if this repo protects none | do **not** restate paths here — the sidecar is authoritative |
+| `APPEND_ONLY_FILES` | protected files are declared for the guard hook in `.claude/loop.append-guard.json` (the machine SSOT); TODO(init-loop) if this repo protects none | do **not** restate paths here — the sidecar is authoritative |
 | `LEDGER_ROOT` | `.claude/loop/` | **gitignored** — local working state, never committed |
 | `RELEASE_SCHEME` | <inferred / "no release cycle"> | merge gate reads "≤ patch bump or no bump" |
 
@@ -198,6 +244,27 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 <!-- AgentFluent example: .claude/-only change → run local /security-review (labeled workflow -->
 <!-- excludes .claude/); otherwise sensitive surface → apply `needs-security-review` label ONLY when -->
 <!-- dev-complete (workflow triggers on [labeled], not push). Skip for docs/no-surface changes. -->
+
+### ⛔ Precondition — `origin/HEAD` must be set, or the local review gate dies before it runs
+
+Host-specific, like the rest of §4: this assumes git and a remote named `origin`. Delete this block
+if your host or remote differs, and re-specify the equivalent.
+
+`/security-review` opens by diffing against `origin/HEAD`. **On a fresh clone that ref is unset**, so
+the gate exits with `fatal: ambiguous argument 'origin/HEAD...'` and reviews nothing. `/init-loop`
+set it at onboarding, but a re-clone or a mirror push can lose it again.
+
+**Repair — idempotent, safe to re-run, no-op once the ref exists:**
+
+```bash
+if git remote get-url origin >/dev/null 2>&1 \
+   && ! git symbolic-ref -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
+  git remote set-head origin -a
+fi
+```
+
+**An erroring gate is not a passing gate.** Treat `fatal: ambiguous argument` from this gate as a
+missing ref, not as a clean review: repair it and re-run. Never journal it as clean.
 
 ## 5. Project examples referenced by the engine's guidance
 
@@ -226,7 +293,7 @@ Do not also write the path into `loop.config.md` — the pointer row already ref
 If Step 3 found nothing, skip this step entirely (leave any existing `GUARD` untouched; the config
 keeps its `TODO(init-loop)` row).
 
-## Step 6 — Ledger dir + `.gitignore` (deterministic)
+## Step 6 — Ledger dir, `.gitignore`, and `origin/HEAD` (deterministic)
 
 Run these exact, idempotent commands:
 
@@ -235,7 +302,23 @@ mkdir -p "${CLAUDE_PROJECT_DIR}/.claude/loop"
 grep -qxF '.claude/loop/' "${CLAUDE_PROJECT_DIR}/.gitignore" 2>/dev/null \
   || printf '\n# dev-loop ledger (local working state, never committed)\n.claude/loop/\n' \
        >> "${CLAUDE_PROJECT_DIR}/.gitignore"
+
+# Set origin/HEAD if a remote named `origin` exists and the ref is missing. Without it the local
+# /security-review dies on `fatal: ambiguous argument 'origin/HEAD...'` and reviews nothing.
+if git -C "${CLAUDE_PROJECT_DIR}" remote get-url origin >/dev/null 2>&1 \
+   && ! git -C "${CLAUDE_PROJECT_DIR}" symbolic-ref -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
+  git -C "${CLAUDE_PROJECT_DIR}" remote set-head origin -a >/dev/null 2>&1 || true
+fi
 ```
+
+Use `git remote get-url origin`, **not** `git remote`, as the existence test: `git remote` exits **0**
+in a repo with no remotes at all, so it does not actually gate anything.
+
+This block and the `origin/HEAD` precondition in the generated §4 must stay **semantically
+identical** — same guard, same repair — so a human running the §4 command by hand after a re-clone
+gets exactly what this step would have done. The only differences are deliberate: this one selects
+the repo with `-C` and stays silent because it runs unattended; §4's is run by a human inside the
+repo, and shows its output.
 
 ## Step 7 — Wire `enabledPlugins` in `settings.json` (deterministic, safe fallback)
 
@@ -279,6 +362,8 @@ If the script prints a `SKIP:` line, relay the snippet to the human instead of e
 Report, concisely:
 - **Artifacts:** which of `CONFIG` / `GUARD` / `SETTINGS` / `.gitignore` / `LEDGER` were created,
   updated, or already present (skipped).
+- **`origin/HEAD`:** set, already present, or not applicable (no `origin` remote). Say which — Step 6
+  repairs it silently, and a repair nobody reports is one nobody knows to redo after a re-clone.
 - **Inferred parameters:** the values you filled and their provenance (mirror the Notes column).
 - **`TODO(init-loop)` blanks:** the list the human must resolve before the first run — `grep -n
   'TODO(init-loop)' "$CONFIG"`.
