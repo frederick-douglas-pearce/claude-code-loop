@@ -115,8 +115,11 @@ placeholders. Keep all five sections. §1 is cross-ecosystem — fill it. §3 is
 surface** — emit them as stubs with the commented AgentFluent example so the human sees the shape.
 **§4 additionally carries a live `### ⛔ Precondition` block: it is uncommented, mandatory prose that
 must be copied into the generated config as-is. It is not a stub — never comment it out, and never
-drop it.** If the host is **not** GitHub, add a one-line `TODO(init-loop)` note in §4 flagging that
-every rule there is a GitHub-ism to be re-specified.
+drop it at generation time.** It is git-specific, not host-specific, so it survives a non-GitHub host;
+the block tells the *human* when they may remove it at first-run review, and that decision is theirs,
+not yours. If the host is **not** GitHub, add a one-line TODO(init-loop) note (bare, per rule 4) in §4
+flagging that every **routing rule** there is a GitHub-ism to be re-specified — the precondition block
+is not one of them.
 
 ### Four rules about what you write into `CONFIG`
 
@@ -137,16 +140,20 @@ including inside backtick code spans. So wherever this file writes a project-dir
 arrived in your prompt is already an absolute path — and wherever a plugin-root variable is written,
 you would have received something like
 `/home/<user>/.claude/plugins/cache/<marketplace>/<plugin>/<version>/skills/…` instead. **Do not
-reproduce such a path in `CONFIG`; reverse it.** (Rule 1 is why you should not find a plugin-cache
-path in this file today: `@@PLUGIN_ROOT@@` is a token the harness cannot expand, so the skeleton's
-pointer line reaches you intact. This rule still binds — it governs any expanded path you meet
-anywhere, including in an existing config you were asked to refresh.)
+reproduce a plugin-cache path in `CONFIG`; reverse it** to the variable reference of rule 1. (For
+project paths, see rule 3: write them repo-relative, never absolute.) Rule 1 is why no *expanded*
+plugin-cache path should reach you from this file today — `@@PLUGIN_ROOT@@` cannot be expanded, so the
+skeleton's pointer line arrives intact. The rule still binds for any such path you meet elsewhere,
+including one you carry forward into a `.init-new` refresh; but **never edit an existing `CONFIG` in
+place to fix one** — report it to the human at Step 8 instead (the never-overwrite invariant).
 
 **3. A generated `loop.config.md` contains no absolute path into the plugin cache.** The plugin's
 install location is a fact about *this machine and this version*: it moves at every upgrade and
 differs for every user. `CONFIG` is a project-scoped file that gets committed. A cache path written
 into it is wrong the moment the plugin is upgraded, and wrong immediately for anyone else who clones
-the repo. Paths into the *consuming project* are fine; paths into the *plugin* are not.
+the repo. **Relative** paths into the consuming project (`src/`, `.claude/loop/`) are fine — that is
+what the skeleton uses; absolute ones are machine-specific for the same reason and are not, and paths
+into the plugin are never.
 
 **4. A `TODO(init-loop)` value is never written inside a code span.** Write it bare, with no
 surrounding backticks. The explanatory text that follows one routinely names a file or a command
@@ -171,12 +178,15 @@ and needs no change.
 > ships, and a check enforces it.
 >
 > Second, **never write an environment-variable reference into the skeleton** — not the plugin-root
-> one, not the project-dir one. The harness expands them before the generating agent reads this file,
-> so the agent copies an absolute, version-pinned cache path into the config it writes, and that path
-> stops resolving at the next plugin upgrade. This is not hypothetical: it is what produced
+> one, not the project-dir one — because the harness expands them before the generating agent reads
+> this file, so the agent copies the expansion into the config it writes. For the plugin-root variable
+> that means an absolute, version-pinned cache path that stops resolving at the next plugin upgrade;
+> for the project-dir one it means an absolute path that is wrong for every other clone of the repo.
+> This is not hypothetical: it is what produced
 > [F20](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1), and a config already
 > in the field carries such a path today. Use an `@@…@@` token instead and give it an expansion rule
-> in Step 4's rule 1, which is what `@@PLUGIN_ROOT@@` is.
+> in Step 4's rule 1, which is what `@@PLUGIN_ROOT@@` is. **Nothing checks this one** — unlike the
+> step-reference rule above, it rests on you reading this note.
 
 For the `APPEND_ONLY_FILES` row use the **pointer form**, never a duplicated path — the sidecar
 JSON is the single source of truth for which files are protected:
@@ -257,26 +267,37 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 
 ### ⛔ Precondition — `origin/HEAD` must be set, or the local review gate dies before it runs
 
-Host-specific, like the rest of §4: this assumes git and a remote named `origin`. Delete this block
-if your host or remote differs, and re-specify the equivalent.
+**Git-specific, not host-specific** — unlike §4's routing rules above, this needs only git and a
+remote named `origin`, and applies on any git host. *You*, reviewing this config, may delete it if
+this project does not use git, names its remote something else, or binds `SECURITY_REVIEW` to
+something that does not diff against `origin/HEAD`.
 
 `/security-review` opens by diffing against `origin/HEAD`. When that ref does not resolve, the gate
 exits with `fatal: ambiguous argument 'origin/HEAD...'` and reviews nothing.
 
-**`git clone` sets this ref — cloning is not how you lose it.** It is *absent* when the working copy
-was built any other way: `git init` + `git remote add` + `git fetch`, which is what
-`gh repo create --source` and most CI checkouts do, or a clone of a then-empty repo. It can instead go
-**dangling** — present but pointing at a branch the upstream has since renamed or deleted — which
-fails the same way. The check below tests that the ref *resolves*, so it covers both.
+**An ordinary `git clone` of a non-empty repo sets this ref — a routine clone is not how you lose
+it.** It is *absent* when the working copy was built some other way: `git init` + `git remote add` +
+`git fetch`, which is what `gh repo create --source` and most CI checkouts do; a clone of a
+then-empty repo; or a `--bare`/`--mirror` clone, which has no `refs/remotes/origin/*` namespace at
+all (there the repair below cannot work — use a normal working copy). It can instead go **dangling**
+— present but pointing at a branch the upstream has since renamed or deleted — which fails the same
+way. The check below tests that the ref *resolves*, so it covers both.
 
-**Repair — idempotent, safe to re-run, no-op once the ref resolves:**
+**Repair — idempotent, safe to re-run, no-op once the ref resolves. It makes a network call**, so it
+can prompt or hang against an unreachable remote; `GIT_TERMINAL_PROMPT=0` suppresses git's own
+credential prompt but not `ssh`'s:
 
 ```bash
+export GIT_TERMINAL_PROMPT=0
 if git remote get-url origin >/dev/null 2>&1 \
    && ! git rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
   git remote set-head origin -a
 fi
+git rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1 \
+  && echo "origin/HEAD resolves" || echo "origin/HEAD still does not resolve"
 ```
+
+Offline, `git remote set-head origin <your-default-branch>` sets the ref with no network call.
 
 **An erroring gate is not a passing gate.** Treat `fatal: ambiguous argument` from this gate as a
 missing ref, not as a clean review: repair it and re-run. Never journal it as clean.
@@ -320,36 +341,47 @@ grep -qxF '.claude/loop/' "${CLAUDE_PROJECT_DIR}/.gitignore" 2>/dev/null \
 
 # Set origin/HEAD if a remote named `origin` exists and the ref does not resolve. Without it the
 # local /security-review dies on `fatal: ambiguous argument 'origin/HEAD...'` and reviews nothing.
-# `set-head -a` is a NETWORK call, so re-probe afterwards rather than trusting its exit status.
+# `set-head -a` is a NETWORK call: bound it, and re-probe rather than trusting its exit status.
 export GIT_TERMINAL_PROMPT=0
-if git -C "${CLAUDE_PROJECT_DIR}" remote get-url origin >/dev/null 2>&1 \
-   && ! git -C "${CLAUDE_PROJECT_DIR}" rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
-  git -C "${CLAUDE_PROJECT_DIR}" remote set-head origin -a >/dev/null 2>&1 || true
-fi
-if git -C "${CLAUDE_PROJECT_DIR}" rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
-  echo "origin/HEAD: resolves (the local /security-review gate can diff against it)"
+command -v timeout >/dev/null 2>&1 && TMO="timeout 20" || TMO=""
+if [ -z "${CLAUDE_PROJECT_DIR}" ]; then
+  # Do NOT fall through. `git -C ""` is a no-op, not an error: it leaves the working directory
+  # unchanged, so every command below would silently act on whatever repo you happen to be in --
+  # including the network write -- and then report a verdict about that repo instead of the target.
+  echo "origin/HEAD: NOT CHECKED -- CLAUDE_PROJECT_DIR arrived empty; nothing inspected or changed"
 else
-  echo "origin/HEAD: does NOT resolve -- if this repo has an 'origin' remote, the local" \
-       "/security-review gate will die until this is set (see the generated config's §4" \
-       "precondition block)"
+  if git -C "${CLAUDE_PROJECT_DIR}" remote get-url origin >/dev/null 2>&1 \
+     && ! git -C "${CLAUDE_PROJECT_DIR}" rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
+    $TMO git -C "${CLAUDE_PROJECT_DIR}" remote set-head origin -a >/dev/null 2>&1 || true
+  fi
+  if git -C "${CLAUDE_PROJECT_DIR}" rev-parse --verify -q refs/remotes/origin/HEAD >/dev/null 2>&1; then
+    echo "origin/HEAD: resolves (the local /security-review gate can diff against it)"
+  else
+    echo "origin/HEAD: does not resolve"
+  fi
 fi
 ```
 
-Two things this block is deliberate about, both of which look like fussiness and are not:
+Four things this block is deliberate about, all of which look like fussiness and are not:
 
 - **`git remote get-url origin`, not `git remote`, as the existence test.** `git remote` exits **0**
   in a repo with no remotes at all, so it does not gate anything.
 - **`rev-parse --verify`, not `symbolic-ref`, as the presence test.** `symbolic-ref` succeeds on a
   **dangling** ref — one pointing at a branch the upstream has renamed or deleted — which fails at
   use exactly like a missing one. Testing that the ref *resolves* covers both states.
+- **The empty-path guard.** `git -C ""` is a **no-op, not an error** — it leaves the working directory
+  unchanged. So without the guard, an empty `CLAUDE_PROJECT_DIR` does not make these commands fail; it
+  makes them act on whatever repo you are standing in, perform the network write there, and report a
+  verdict about it. That is the one failure mode here that is both silent and optimistic.
+- **A bound on the network call.** `GIT_TERMINAL_PROMPT=0` stops *git's own* credential prompt — it
+  does **not** cover `ssh`'s host-key or passphrase prompts, and it does nothing for a connect that
+  hangs. `timeout` supplies the missing bound where it exists (it is not present on every host, hence
+  the `command -v` probe).
 
-The closing probe exists because `set-head -a` reaches the network: offline, or against an
-unreachable or auth-gated remote, it fails and the step would otherwise have nothing to report at
-Step 8. **It reports what it measured — whether the ref resolves — and deliberately does not name a
-cause.** A non-zero from `git remote get-url origin` has several (no remote, not a git repo, an unset
-`CLAUDE_PROJECT_DIR`), and an earlier version of this block picked one and stated it as fact, which is
-the failure this whole command exists to stop. Report the line it printed, not what you assume
-happened.
+The closing probe **reports what it measured — whether the ref resolves — and deliberately names no
+cause.** A non-zero from `git remote get-url origin` has several (no remote, not a git repo, a remote
+under another name), and an earlier version of this block picked one and stated it as fact, which is
+the failure this whole command exists to stop. Relay the line it printed; do not add a diagnosis.
 
 This block and the `origin/HEAD` precondition in the generated §4 must stay **semantically
 identical** — same existence test, same presence test, same repair — so a human running §4's command
@@ -397,8 +429,14 @@ If the script prints a `SKIP:` line, relay the snippet to the human instead of e
 Report, concisely:
 - **Artifacts:** which of `CONFIG` / `GUARD` / `SETTINGS` / `.gitignore` / `LEDGER` were created,
   updated, or already present (skipped).
-- **`origin/HEAD`:** report exactly the `origin/HEAD:` line Step 6 printed. If it says the ref does
-  not resolve, list it as an action item — the local security gate will fail until it is fixed.
+- **`origin/HEAD`:** report exactly the `origin/HEAD:` line Step 6 printed, verbatim and **without
+  adding a cause**. If it says the ref does not resolve **and Step 2 found a remote named `origin`**,
+  list it as an action item — the local review gate will fail until it is set. If Step 6 did not run,
+  say so and why.
+- **Unexpanded tokens:** report `grep -n '@@' "$CONFIG"`. Any hit means a `@@…@@` token was copied
+  through instead of expanded (rule 1) — fix it before reporting done. This is the one check that
+  catches it: such a token is **not** a `TODO(init-loop)`, so the grep below will not see it, and the
+  pointer line reads plausibly enough that a human reviewer may not either.
 - **Inferred parameters:** the values you filled and their provenance (mirror the Notes column).
 - **`TODO(init-loop)` blanks:** the list the human must resolve before the first run — `grep -n
   'TODO(init-loop)' "$CONFIG"`.
