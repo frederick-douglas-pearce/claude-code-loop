@@ -289,6 +289,60 @@ generate that config (or write it by hand).
 hook is launched with bare `python3`, uses the standard library only, and is
 tested on 3.9 through 3.13 in CI.
 
+### Upgrading with a live ledger
+
+**Finish the in-flight work before you upgrade the plugin. Do not upgrade
+mid-iteration.** You are reading `.claude/loop/<run-slug>/queue.md` — the most
+recently modified run directory, if there are several; a project that rebound
+`LEDGER_ROOT` will have it elsewhere.
+
+**Treat every row as in flight unless its `Status` is one of these four:**
+
+- `queued` or `routed` — never entered the pipeline.
+- `done` or `deferred` — finished, or terminal by decision.
+
+Anything else is in flight until you show otherwise, **including a status you do not
+recognise**. Do not reason from the status name: a row can rest outside the loop's
+resume scan and still hold unfinished work. A `hold` is set at the *merge gate*, and
+releasing it restores the row's previous status. A row `blocked` on a repeated gate
+error can carry implemented work too — with or without an open PR, depending on which
+gate failed.
+
+Letting the loop finish such a row is the ordinary path and the one to prefer; it ends
+at `done`, or at `deferred` if you close the row out instead. A row you *cannot*
+finish — one waiting on a dependency, a split, a config repair, or an external event —
+is discharged only by showing the loop has produced nothing for it: **no
+`issue-<N>.plan.md` in the ledger directory, no branch, no uncommitted changes, and no
+open pull request** (the `PR` cell keeps its number after a merge, so check the state
+with `gh pr view <n>`, not the cell). **If you cannot tell, it is in flight** —
+waiting costs you nothing, and this is the same default-deny posture the loop takes at
+its own gates.
+
+Finish those rows, or leave them and upgrade later. **Do not park one to get there:**
+`parked` is assigned at triage, to work gated on an external event, and moving a
+mid-pipeline row into a resting status puts it outside the resume scan — the opposite
+of what you want across an upgrade.
+
+The reason any of this matters is that the ledger is local, gitignored state that
+**outlives the engine that wrote it**, and a release can change what a row means:
+
+- **Upgrading mid-iteration** hands your in-flight row to a newer engine. If that
+  release renumbered the pipeline, the row's status still resolves — it just brackets
+  a different gate than it did when it was written, and nothing reports that.
+- **Rolling back** hands a row to an older engine that may never have heard of its
+  status. v0.2.0 adds `in-acceptance`, which the released v0.0.1 does not define.
+
+**This arrives with v0.2.0:** the engine stops and asks you when it meets a row
+status it does not recognise, rather than guessing a stage. The released v0.0.1 has
+no such check. Where it does *not* save you: it cannot teach an older installed
+engine the same manners; it only catches an *unrecognised* status, so one that still
+exists but now sits at a different point in the pipeline looks valid to it; and it
+runs on the resume path, so a run resting at `RUN PARKED` — which re-derives its work
+from `queue.md` without that scan — is not separately covered.
+
+The rule above is a rule, not an enforcement: nothing in the plugin can stop you
+upgrading mid-iteration.
+
 ## Onboard a repo — `/init-loop`
 
 From inside the target repo, after installing the plugin:
