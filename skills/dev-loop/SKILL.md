@@ -34,7 +34,9 @@ engine is authoritative; on any conflict, follow the engine — but never do les
 - **One issue per invocation, then STOP and journal.** Never batch. The driver re-invokes with
   fresh context for the next issue.
 - **Resume before selecting.** If a ledger row is mid-pipeline (interrupted), finish it against
-  live git/PR state before starting anything new. One PR at a time; no stacked PRs.
+  live git/PR state before starting anything new. **If an open PR has no row at all, STOP and ask** —
+  do not adopt it and do not select new work. The ledger is gitignored and can be absent or stale, so
+  a missing row is never evidence that no work is in flight. One PR at a time; no stacked PRs.
 - **Never auto-merge under uncertainty.** Default-deny: if you are unsure whether a row is
   auto-merge-eligible, STOP and ask the human. Never merge red CI, never force-push, never
   admin-merge, only `--delete-branch` the PR's own branch.
