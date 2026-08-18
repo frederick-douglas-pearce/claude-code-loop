@@ -286,28 +286,46 @@ generate that config (or write it by hand).
 
 ### Upgrading with a live ledger
 
-**Finish or park every in-flight row before you upgrade the plugin. Do not upgrade
-mid-iteration.** An iteration is in flight whenever a `queue.md` row sits at a
-pipeline status (`planning` through `in-acceptance`) — finish it, or park it and
-let the run come to rest, and only then upgrade.
+**Finish the in-flight iteration before you upgrade the plugin. Do not upgrade
+mid-iteration.** A row is in flight when it sits at a pipeline status other than
+`queued`/`routed` — that is, `planning` through `in-acceptance`. The loop works one
+issue at a time, so there is at most one.
 
-The reason is that the ledger is local, gitignored state that **outlives the engine
-that wrote it**, and a release may change what a row means:
+Rows that have not entered the pipeline (`queued`, `routed`) and rows resting at
+`hold` or `parked` are safe to leave: they carry no stage to resume into.
+
+**Do not park an in-flight row to get there.** `parked` is assigned at triage, to
+work gated on an external event, and moving a mid-pipeline row into a resting status
+puts it *outside* the resume scan — the opposite of what you want across an upgrade.
+Finish the row, or leave it in flight and upgrade later.
+
+The reason any of this matters is that the ledger is local, gitignored state that
+**outlives the engine that wrote it**, and a release can change what a row means:
 
 - **Upgrading mid-iteration** hands your in-flight row to a newer engine. If that
   release renumbered the pipeline, the row's status still resolves — it just brackets
   a different gate than it did when it was written, and nothing anywhere reports
   that.
 - **Rolling back** hands a row to an older engine that may never have heard of its
-  status. v0.2.0 added `in-acceptance`, which v0.0.1 does not define.
+  status. **This arrives with v0.2.0** — it adds `in-acceptance`, which the released
+  v0.0.1 does not define.
 
-From v0.2.0 the engine **stops and asks you** when it meets a row status it does not
-recognise, rather than guessing a stage. Two honest limits on that: it protects
-against **future** status additions and cannot retroactively teach an older installed
-engine the same manners, and it only catches an *unrecognised* status — a status
-that still exists but now sits at a different point in the pipeline looks perfectly
-valid to it. The rule above is what covers that second case, and it is a rule, not
-an enforcement: nothing in the plugin can stop you upgrading mid-iteration.
+**This arrives with v0.2.0:** the engine stops and asks you when it meets a row
+status it does not recognise, rather than guessing a stage. The released v0.0.1 has
+no such check. Three limits, stated because each one is a case where it does not
+save you:
+
+- It protects against **future** status additions. It cannot retroactively teach an
+  older installed engine the same manners.
+- It only catches an *unrecognised* status. One that still exists but now sits at a
+  different point in the pipeline looks perfectly valid to it — that case is what the
+  rule above covers.
+- It runs on the **resume path**. A run resting at `RUN PARKED` re-derives its work
+  from `queue.md` without that scan, so a bogus status hand-written into a parked run
+  is not separately caught.
+
+The rule above is a rule, not an enforcement: nothing in the plugin can stop you
+upgrading mid-iteration.
 
 **Requirements: Python 3.9+**, and only for the optional append-only guard hook
 — the engine itself is pure prompt artifacts and needs nothing installed. The
