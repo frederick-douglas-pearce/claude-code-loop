@@ -195,6 +195,13 @@ worktree copy, or a retained snapshot directory. If it finds them it repairs fro
 pre-mutation snapshots, **never from git**, touching only the files it can attribute; and if those
 snapshots are gone, it **stops and asks you** rather than improvising a repair.
 
+**As of v0.2.0 the loop also checks your open PRs on every resume**, not only its own ledger rows —
+because that ledger is gitignored and can be absent or stale while the work it described is still
+open. An open PR it can attribute to its own earlier iteration is finished before it starts anything
+new. **An open PR it cannot attribute to itself stops the run and asks you**, rather than being
+adopted, so a PR of yours sitting open can pause the loop until you say whose it is. That is the
+deliberate direction: asking costs a question, and adopting your branch would change your work.
+
 **Separately, when it resumes a row that was in review or acceptance, a change to your code it cannot
 attribute is neither kept nor discarded — it stops and asks you.** This is the case most likely to
 involve your work, so the loop is not permitted to resolve it alone: not keeping something and

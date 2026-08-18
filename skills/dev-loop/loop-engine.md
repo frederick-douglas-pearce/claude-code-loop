@@ -48,8 +48,10 @@ invocation resumes correctly.
        human pulled in, or an in-run dep that has since cleared) fall through to step 1 **at
        selection** (the reconciliation just ran — do not repeat it); otherwise STOP and report
        "parked — awaiting <condition>" **without** running the step-3 resume or any per-row live
-       reconcile — skipping resume is provably safe here (a valid PARKED state has every non-`parked`
-       row terminal, so no interrupted pipeline row can coexist).
+       reconcile — skipping resume is provably safe **for rows** here (a valid PARKED state has every
+       non-`parked` row terminal, so no interrupted pipeline row can coexist). It proves nothing about
+       state with **no** row, which no row-status argument constrains, so **run step 0.3's orphan scan
+       before short-circuiting** — a park does not survive an orphaned PR.
    - `RUN RESUMED` or no sentinel → continue to step 0.2 (a released or never-parked run runs
      normally).
 2. Read `queue.md` (note its `mode:` / `graduated-routes:` / `plan-gate:` header and any
@@ -71,25 +73,33 @@ invocation resumes correctly.
    releases the merge, a `parked` row stays gated until its external condition is released (step
    1); neither blocks working other issues.
 
-   **Then scan for loop-created external state that has NO row at all — an interrupted iteration
-   need not have left one.** The scan above classifies *rows*; an iteration cut off before it wrote
-   its step-7 open record has none, so the row scan passes clean over an open PR and the run proceeds
-   to select new work, breaking one-PR-at-a-time. Check two things against live state:
-   - **an open PR** on this repo whose branch is not the default branch; and
-   - **a local branch that is ahead of the default branch, matches `BRANCH_FMT`, and has no open PR
-     covering it** — all three, because `BRANCH_FMT` is typically shaped like an ordinary human
-     branch, and a branch with no commits ahead is either untouched or belongs to a row the status
-     scan already caught.
+   **Then scan for an open PR that no row covers.** The scan above classifies *rows*, and a row is
+   created for every backlogged issue at init — so most interruptions do leave one. External state can
+   still exist with no row behind it: work that closes no issue and was never queued, a ledger lost or
+   replaced (it is gitignored, so it can be absent or stale while the PRs it described are still
+   open), or a PR left open by an earlier run. Enumerate the repo's **open PRs**.
 
-   **Then decide what it is, default-deny.** These are the only things that are **not** an
-   interruption: the default branch itself; a branch or PR belonging to a row already at a terminal
-   status; a PR the ledger records as merged; and work you can positively attribute to a human or
-   another tool rather than to this loop. **Everything else is an interruption**, including anything
-   whose owner you cannot establish — and **if you cannot tell, it is an interruption.** Reconcile it
-   as above (live git/PR wins), reconstructing the missing row from the PR, the branch, and any open
-   record in `progress.md`, and finish it before selecting new work. Where reconciling would mean
-   *guessing* which issue the work belongs to, STOP and ask the human instead. Over-escalating here
-   costs a question; under-escalating strands an open PR and silently starts a second one.
+   **Then decide what each one is, default-deny.** These are the only things that are **not** an
+   interruption: a PR belonging to **any `queue.md` row the scan above already classified** —
+   terminal, resting (`hold`/`parked`), or interrupted, because that scan owns those and this one
+   exists only for state no row covers; and work you can **positively** attribute to a human or
+   another tool rather than to this loop. **Everything else is an interruption**, and **if you cannot
+   tell, it is one.**
+
+   What follows differs by *how much* you can establish, and collapsing the two is the failure mode:
+   - **Where you can attribute it to this loop**, reconcile it as above (live git/PR wins) and finish
+     it before selecting new work, reconstructing the missing row from the PR, the branch, and any
+     open record in `progress.md`. That re-creates a row for work this loop already started; it is
+     **not** a roster join and does not bypass the curated-subset rule (Ledger format → queue.md).
+   - **Where you cannot — the owner is not established, or reconstructing would mean *guessing* which
+     issue, which Route, or which gates already ran — STOP and ask the human**, naming the PR. Asking
+     costs a question; adopting a PR that is not this loop's changes someone else's work.
+
+   **When you do reconstruct without an open record to read, take the earliest post-PR stage:** set
+   Status `in-pr` and re-run every gate downstream of it. Live state can tell you a PR exists; it
+   **cannot** tell you which gates ran on it — an open PR with green CI looks identical whether code
+   review, security, and acceptance ran or not. Re-running a gate is the harmless direction; assuming
+   one ran is the fail-open one.
 
 ### 1. Select
 **Budget cap (iteration start, retrospective).** Read `iteration-cap:` / `subagent-cap:` from the
@@ -535,22 +545,21 @@ Commit with correct `COMMIT_CONV` scope — **staging explicit paths and reading
 first** (step 6), since this is a commit boundary like any other and the tree may have gained an
 agent's files since you last looked. Open the PR; **replicate `PR_TEMPLATE` fully** in
 the body; make the Security-review choice up front. Advance the row to `in-pr` and record the
-PR number. Wait for CI; fix until green.
+PR number.
 
-**Append the iteration's open record to `progress.md` now — before you wait for CI.** Opening the PR
-is the moment this iteration first creates state **outside** this machine, and it is the first point
-at which an interrupted iteration is reconstructable from the ledger. Write the **open record**
-(Ledger format → `progress.md`, which carries the shape — do not re-derive it here): the issue, its
-Route, the branch, the PR number, and the row's Status.
+**Then append the iteration's open record to `progress.md`, before you wait for CI.** Write it as
+Ledger format → `progress.md` gives it; that template is the one statement of what it carries, so do
+not re-derive the fields here.
 
-**Write it here rather than at step 12, for the reason step 5 journals its `- Plan-gate:` line where
+**Write it now rather than at step 12, for the reason step 5 journals its `- Plan-gate:` line where
 that gate resolves.** A `/clear`, a compaction, or a crash between this step and step 12 otherwise
-leaves an **open PR with no ledger trace at all** — and the next invocation's step-0.3 scan keys on
-rows, so an iteration that never wrote one is not resumed, it is *invisible*. The orphan scan added
-at step 0.3 is the backstop for that case; this record is what lets it reconcile the row rather than
-merely detect a stranger. **Do not read this as making `progress.md` self-sufficient** — the standing
-contract is `queue.md` + `progress.md` + **live git/PR state**, which wins on conflict (Resume). This
-record makes an iteration *reconstructable*, not the ledger *authoritative*.
+leaves an **open PR with no ledger trace at all**. Step 0.3's orphan scan is the backstop for that
+case; this record is what lets it *reconcile* the row rather than merely detect a stranger. **Do not
+read this as making `progress.md` self-sufficient** — the standing contract is `queue.md` +
+`progress.md` + **live git/PR state**, which wins on conflict (Resume). This record makes an
+iteration *reconstructable*, not the ledger *authoritative*.
+
+Then wait for CI; fix until green.
 
 ### 8. Code review
 Advance the row to `in-review`. Run `CODE_REVIEW` on the diff.
@@ -709,8 +718,10 @@ merge via `MERGE_METHOD` with an explicit `--subject` carrying the correct `COMM
 
 ### 12. Journal + stop
 Append the iteration's **close record** to `progress.md` (Ledger format → progress.md, which carries
-its shape), including a `- Budget:` line. This is the second of the two required records — step 7
-wrote the open record; do not treat this one as the iteration's only journal:
+its shape), including a `- Budget:` line. Step 7 writes the open record; if this iteration re-entered
+*past* step 7 on resume, or was reconstructed by step 0.3's orphan scan, there may be none — **do not
+write one now.** Back-dating it would assert a record of a moment nobody observed, which is the same
+bar the architect freeze and the gate lines are under:
 `subagent-runs=<n>` · `gate-rounds=architect=<a>,code-review=<c>,ac-verify=<v>` ·
 `wall-clock=<elapsed, includes gate-wait — not a cap input>` · `tokens=deferred` (computed
 post-hoc from the loop's own JSONL by an out-of-band analyzer, not inside the skill; the named
@@ -1060,20 +1071,27 @@ _Last updated: <ISO8601 by orchestrator>_
 ```
 
 ### `progress.md` — append-only journal (survives /clear + compaction)
-The orchestrator APPENDS to this file; it is never rewritten. This is the audit trail and the resume
-anchor.
+The orchestrator APPENDS one block **per gate decision** and, over an iteration, the two records
+below; it is never rewritten. This is the audit trail and the resume anchor.
 
-**An iteration writes two required records, and the pipeline names the step that writes each:**
+**The pipeline names the step that writes each record, and each is owed only by an iteration that
+reaches that step:**
 
-| Record | Written at | Carries |
-|---|---|---|
-| **open record** | **step 7**, as soon as the PR is opened | issue, Route, branch, PR number, Status |
-| **close record** | **step 12** | the full iteration outcome, including the `- Budget:` line |
+| Record | Written at | Owed by | Carries |
+|---|---|---|---|
+| **open record** | **step 7**, as soon as the PR is opened | an iteration that opens a PR | issue, Route, branch, PR number, Status |
+| **close record** | **step 12** | an iteration that reaches step 12 | the full iteration outcome, including the `- Budget:` line |
 
-**Gate-decision blocks may be appended between them, and several gates require one** — step 5's
-`- Plan-gate:` line is written when that gate resolves, not held for step 12, and a gate that
-escalates or stops the iteration writes its own block too. So a single iteration commonly spans
-several appends; that is the intended shape, not drift.
+**An iteration that ends before step 7 writes neither, and its gate block is the record** — a plan
+gate that stops (under `plan-gate: always`, the shipped default, that is *every* issue until the
+human approves), a row deferred or blocked at step 2, a gate that escalates. This is the writes-none
+path, enumerated for the same reason `- Hermetic:` and `- Plan-gate:` enumerate theirs: a shape whose
+only legal rendering asserts that a record exists is a template that pressures you to invent one.
+
+**Gate-decision blocks are appended wherever the gate resolves — before, between, or after these
+two.** Step 5's `- Plan-gate:` line is written *at step 5*, which is **before** the open record, not
+between the two. So a single iteration commonly spans several appends; that is the intended shape,
+not drift.
 
 **Why the open record is a separate record and not a heading on the close record:** the two are
 written at different times *by different invocations of this skill*, and the whole point of the first
@@ -1092,10 +1110,11 @@ journal to step 12 — the failure this split exists to remove.
 - Status: in-pr
 ```
 
-Where the work **closes no issue** — a follow-up patching what a prior PR shipped, say — write the
-`queue.md` row key in place of `#<N>` and say what the PR refers to (`- Issue: row <k> — no issue
-(Refs #<M>)`). The branch and PR number are what the orphan scan reconciles against, so the record
-still does its job; leaving the line out because there is no issue number is what would break it.
+Where the work **closes no issue** — a follow-up patching what a prior PR shipped, say — such work is
+often not in `queue.md` at all, so do not assume a row key exists: head the record with the PR
+(`## <ISO8601> — PR #<pr> (<route>) — iteration open`) and write `- Issue: none (Refs #<M>)`, adding
+the row key only if there is one. The branch and PR number are the identity the orphan scan
+reconciles against; omitting the record because there is no issue number is what would break it.
 
 **The close record** — written at step 12:
 
@@ -1401,8 +1420,8 @@ regenerated and never back-dated — see Resume.>
 ### Lifecycle & commit policy
 - **Init:** orchestrator creates the dir + `queue.md` from `BACKLOG_SOURCE` (see Initialization).
 - **Per iteration:** update one `queue.md` row through its statuses; append the **open record** at
-  step 7 and the **close record** at step 12 (plus any gate-decision blocks between them — see
-  `progress.md` above); write/update `issue-<N>.plan.md`.
+  step 7 and the **close record** at step 12, each owed only by an iteration that reaches that step,
+  plus a block wherever a gate resolves (see `progress.md` above); write/update `issue-<N>.plan.md`.
 - **Commit policy — gitignore the ledger** (`LEDGER_ROOT/` is added to `.gitignore`). It is
   local working state: it survives `/clear`/compaction on disk, but is **never committed**.
   This is deliberate — committing it has no legal landing spot under a `main`-is-PR-only,
@@ -1841,11 +1860,10 @@ time" as the gate going soft.
 The next invocation's step-0 resume (step 3) reads `queue.md` + tail of `progress.md` and, finding
 any *interrupted* row (a **pipeline** status other than `queued`/`routed`), finishes it before
 selecting new work. **An interruption need not have left a row**, so that scan is not the whole of
-resume: step 0.3 also looks for loop-created external state — an open PR, or a branch ahead of the
-default that matches `BRANCH_FMT` with no PR covering it — and treats it as an interruption unless it
-can be positively attributed elsewhere (step 0.3 states the test and its default-deny close; do not
-re-derive it here). The missing row is reconstructed from live git/PR plus any **open record** in
-`progress.md` (Ledger format → `progress.md`), which step 7 writes for exactly this case.
+resume: step 0.3 also looks for an open PR that no row covers, and states both the test and its
+default-deny close — do not re-derive them here. The missing row is reconstructed from live git/PR
+plus any **open record** in `progress.md` (Ledger format → `progress.md`), which step 7 writes for
+exactly this case.
 
 **A row whose Status is not in the closed vocabulary at all STOPS the run for
 the human** — it is not an interrupted row and never enters the live reconcile below (Ledger
@@ -1854,8 +1872,9 @@ human merge-hold and a `parked` row is gated on an external event (Ledger format
 neither an interruption; leave them (a `hold` until the human clears it at step 11; a `parked` row
 until explicit un-park at step 0.1) and neither blocks other work. A run resting under a `RUN
 PARKED` sentinel is likewise **not** an interrupted row — step 0 short-circuits it on the cheap
-parked path and never enters this resume scan (safe: a valid PARKED state has no non-terminal
-pipeline row). The on-disk ledger row status is only a **coarse anchor** (which stage); the **live
+parked path and never enters this resume *row* scan (safe for rows: a valid PARKED state has no
+non-terminal pipeline row — it says nothing about state with no row, which is why the parked path
+still runs the orphan scan). The on-disk ledger row status is only a **coarse anchor** (which stage); the **live
 git/PR state is the source of truth** for the details (the ledger is uncommitted): for an in-flight
 row, check whether its branch exists, whether a PR is open (or already merged), and the PR's CI
 status, and resume at the matching pipeline stage — git wins on any conflict with a stale status.
