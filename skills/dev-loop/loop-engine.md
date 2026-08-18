@@ -54,9 +54,14 @@ invocation resumes correctly.
      normally).
 2. Read `queue.md` (note its `mode:` / `graduated-routes:` / `plan-gate:` header and any
    `hold`/`parked` rows) and the tail of `progress.md`.
-3. **Resume before selecting (see the Resume procedure below).** If any row sits in an *interrupted*
-   status — non-terminal and NOT `queued`/`routed`/`hold`/`parked` (i.e. `planning`/`plan-approved`/
-   `implementing`/`in-pr`/`in-review`/`in-acceptance`) — a prior iteration was cut off. Reconcile it against
+3. **Resume before selecting (see the Resume procedure below).** **Recognise each row's Status
+   first, then classify it** — the three Status sets are closed (Ledger format → queue.md), and a
+   Status in none of them is unrecognised: **STOP and ask the human** rather than deciding what it
+   probably meant. Classify a recognised Status thus: a **pipeline** status other than
+   `queued`/`routed` is *interrupted*; `hold`/`parked` rest (below); terminal is done with. Test
+   membership against the vocabulary rather than by excluding a list of statuses that rest — an
+   exclusion test silently absorbs anything it has never heard of into *interrupted*, which is the
+   guess this ordering exists to prevent. If any row is *interrupted*, a prior iteration was cut off. Reconcile it against
    LIVE git/PR state as the source of truth — branch exists? PR open? already merged? CI
    status? — plus the working tree (status is only a coarse anchor; git wins on conflict),
    then re-enter the pipeline at the matching stage and FINISH that issue BEFORE selecting a
@@ -881,6 +886,35 @@ clearing the hold at the merge gate; a `parked` row by explicit un-park, step 0.
 flips it back to `routed`). While any `hold` **or `parked`** row remains the run is NOT complete
 (Convergence distinguishes the resting `RUN PARKED` state from terminal `RUN COMPLETE`), but neither
 blocks selecting other queued work (steps 0–1).
+
+**The three sets above are CLOSED, and a Status outside them escalates.** Pipeline (8), resting (2)
+and terminal (3) are the whole Status vocabulary this engine writes. A row whose Status is none of
+them is **unrecognised**: do not classify it, do not resume it, do not select it — **STOP and ask
+the human**, naming the row and quoting the literal string you found. This is the canonical
+statement; step 0.3 and Resume point here rather than restating it.
+
+- **Read the `queue.md` Status column only.** Not Notes, and not `progress.md`'s `RUN …` sentinels.
+  `awaiting:`, `kept:` and `gate-error:` are **Notes** values, not statuses — a gate-errored row's
+  Status is plain `blocked` (Gate-outcome invariant), so a recognizer written as though
+  `gate-error:` were a Status token would look for something the engine never emits.
+- **Split on `:` and match the leading token.** `blocked: too-large` is the one compound Status
+  form. Without the split it reads as unrecognised and this rule mis-escalates a *correctly
+  written* split-pending row — a false stop, which is the one way this change could make things
+  worse rather than merely noisier.
+- **Escalate; do not resolve it to a default.** `plan-gate:` can read an unrecognised value as
+  `always` because its values are ordered and one of them is stricter. A Status has no such
+  ordering — there is no over-gating reading of "unknown stage" — so the fail-safe here is the
+  human, not a fallback.
+- **What this does and does not buy.** It makes every **future** status addition safe: a token this
+  engine has not heard of stops the run instead of being silently mapped to a stage. It cannot help
+  an engine that predates this rule (an older release resuming a ledger written by a newer one has
+  no such check), and it cannot see a *recognised* token whose meaning shifted underneath it — the
+  same status at a renumbered pipeline position reads as perfectly valid. That skew is what the
+  upgrade rule in `README.md` exists to prevent, and nothing here enforces it.
+- **Guaranteed on the resume path.** Step 0.3 runs before selection on every normal invocation, so
+  it forecloses the case ahead of step 1's resting-state ladder. The step-0.1 **parked cheap path**
+  is the exception: it re-derives selectability from `queue.md` without running the resume scan, so
+  a bogus Status hand-written into a parked run is not separately hardened.
 
 **Curated-subset invariant.** The queue built at init (see Initialization) is the authoritative
 work set; `BACKLOG_SOURCE` membership may drift afterward, and that drift is **surfaced to the
@@ -1731,8 +1765,10 @@ time" as the gate going soft.
 
 ## Resume after `/clear` or compaction
 The next invocation's step-0 resume (step 3) reads `queue.md` + tail of `progress.md` and, finding
-any *interrupted* row (non-terminal and NOT `queued`/`routed`/`hold`/`parked`), finishes it before
-selecting new work. A `hold` **or `parked`** row is **excluded** — a `hold` is a deliberate, durable
+any *interrupted* row (a **pipeline** status other than `queued`/`routed`), finishes it before
+selecting new work. **A row whose Status is not in the closed vocabulary at all is not an
+interrupted row and never enters the live reconcile below** — it stops the run for the human
+(Ledger format → queue.md, which is where that rule and its limits are stated). A `hold` **or `parked`** row is **excluded** — a `hold` is a deliberate, durable
 human merge-hold and a `parked` row is gated on an external event (Ledger format → queue.md),
 neither an interruption; leave them (a `hold` until the human clears it at step 11; a `parked` row
 until explicit un-park at step 0.1) and neither blocks other work. A run resting under a `RUN

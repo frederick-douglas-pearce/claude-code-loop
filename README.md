@@ -284,6 +284,31 @@ The plugin ships the engine and the guard hook; it does nothing until the
 consuming repo supplies the per-project config below. Run `/init-loop` to
 generate that config (or write it by hand).
 
+### Upgrading with a live ledger
+
+**Finish or park every in-flight row before you upgrade the plugin. Do not upgrade
+mid-iteration.** An iteration is in flight whenever a `queue.md` row sits at a
+pipeline status (`planning` through `in-acceptance`) — finish it, or park it and
+let the run come to rest, and only then upgrade.
+
+The reason is that the ledger is local, gitignored state that **outlives the engine
+that wrote it**, and a release may change what a row means:
+
+- **Upgrading mid-iteration** hands your in-flight row to a newer engine. If that
+  release renumbered the pipeline, the row's status still resolves — it just brackets
+  a different gate than it did when it was written, and nothing anywhere reports
+  that.
+- **Rolling back** hands a row to an older engine that may never have heard of its
+  status. v0.2.0 added `in-acceptance`, which v0.0.1 does not define.
+
+From v0.2.0 the engine **stops and asks you** when it meets a row status it does not
+recognise, rather than guessing a stage. Two honest limits on that: it protects
+against **future** status additions and cannot retroactively teach an older installed
+engine the same manners, and it only catches an *unrecognised* status — a status
+that still exists but now sits at a different point in the pipeline looks perfectly
+valid to it. The rule above is what covers that second case, and it is a rule, not
+an enforcement: nothing in the plugin can stop you upgrading mid-iteration.
+
 **Requirements: Python 3.9+**, and only for the optional append-only guard hook
 — the engine itself is pure prompt artifacts and needs nothing installed. The
 hook is launched with bare `python3`, uses the standard library only, and is
