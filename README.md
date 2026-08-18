@@ -284,53 +284,54 @@ The plugin ships the engine and the guard hook; it does nothing until the
 consuming repo supplies the per-project config below. Run `/init-loop` to
 generate that config (or write it by hand).
 
+**Requirements: Python 3.9+**, and only for the optional append-only guard hook
+— the engine itself is pure prompt artifacts and needs nothing installed. The
+hook is launched with bare `python3`, uses the standard library only, and is
+tested on 3.9 through 3.13 in CI.
+
 ### Upgrading with a live ledger
 
 **Finish the in-flight iteration before you upgrade the plugin. Do not upgrade
 mid-iteration.** A row is in flight when it sits at a pipeline status other than
 `queued`/`routed` — that is, `planning` through `in-acceptance`. The loop works one
-issue at a time, so there is at most one.
+issue at a time, so there is at most one. You are reading the `Status` column of
+`.claude/loop/<run-slug>/queue.md` (the most recently modified run directory, if
+there are several); a project that rebound `LEDGER_ROOT` will have it elsewhere.
 
-Rows that have not entered the pipeline (`queued`, `routed`) and rows resting at
-`hold` or `parked` are safe to leave: they carry no stage to resume into.
+Rows that never entered the pipeline (`queued`, `routed`) and terminal rows
+(`done`, `deferred`, `blocked`) need no thought. **`parked` is safe too** — releasing
+a park flips the row to `routed` and discards any stage.
 
-**Do not park an in-flight row to get there.** `parked` is assigned at triage, to
-work gated on an external event, and moving a mid-pipeline row into a resting status
-puts it *outside* the resume scan — the opposite of what you want across an upgrade.
-Finish the row, or leave it in flight and upgrade later.
+**`hold` is the one that looks safe and is not.** A hold is set at the *merge gate*,
+so the row has an open PR and a stored pipeline status that is **restored** when you
+release it. It rests outside the resume scan without being finished — exactly the
+state this rule is about. Treat a held row as in-flight: clear the hold and let the
+row finish before upgrading.
+
+**Do not park an in-flight row to get there,** either. `parked` is assigned at
+triage, to work gated on an external event, and moving a mid-pipeline row into a
+resting status puts it outside the resume scan. Finish the row, or leave it in flight
+and upgrade later.
 
 The reason any of this matters is that the ledger is local, gitignored state that
 **outlives the engine that wrote it**, and a release can change what a row means:
 
 - **Upgrading mid-iteration** hands your in-flight row to a newer engine. If that
   release renumbered the pipeline, the row's status still resolves — it just brackets
-  a different gate than it did when it was written, and nothing anywhere reports
-  that.
+  a different gate than it did when it was written, and nothing reports that.
 - **Rolling back** hands a row to an older engine that may never have heard of its
-  status. **This arrives with v0.2.0** — it adds `in-acceptance`, which the released
-  v0.0.1 does not define.
+  status. v0.2.0 adds `in-acceptance`, which the released v0.0.1 does not define.
 
 **This arrives with v0.2.0:** the engine stops and asks you when it meets a row
 status it does not recognise, rather than guessing a stage. The released v0.0.1 has
-no such check. Three limits, stated because each one is a case where it does not
-save you:
-
-- It protects against **future** status additions. It cannot retroactively teach an
-  older installed engine the same manners.
-- It only catches an *unrecognised* status. One that still exists but now sits at a
-  different point in the pipeline looks perfectly valid to it — that case is what the
-  rule above covers.
-- It runs on the **resume path**. A run resting at `RUN PARKED` re-derives its work
-  from `queue.md` without that scan, so a bogus status hand-written into a parked run
-  is not separately caught.
+no such check. Where it does *not* save you: it cannot teach an older installed
+engine the same manners; it only catches an *unrecognised* status, so one that still
+exists but now sits at a different point in the pipeline looks valid to it; and it
+runs on the resume path, so a run resting at `RUN PARKED` — which re-derives its work
+from `queue.md` without that scan — is not separately covered.
 
 The rule above is a rule, not an enforcement: nothing in the plugin can stop you
 upgrading mid-iteration.
-
-**Requirements: Python 3.9+**, and only for the optional append-only guard hook
-— the engine itself is pure prompt artifacts and needs nothing installed. The
-hook is launched with bare `python3`, uses the standard library only, and is
-tested on 3.9 through 3.13 in CI.
 
 ## Onboard a repo — `/init-loop`
 

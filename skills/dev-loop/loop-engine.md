@@ -59,8 +59,7 @@ invocation resumes correctly.
    and a Status in none of them is unrecognised: **STOP and ask the human** rather than deciding
    what it probably meant. Classify a recognised Status thus: a **pipeline** status other than
    `queued`/`routed` is *interrupted*; `hold`/`parked` rest (below); a terminal status takes no
-   resume action (it is not *finished with* — step 1 re-selects a `blocked` row whose dependency
-   has since cleared). Test
+   resume action. Test
    membership against the vocabulary rather than by excluding a list of statuses that rest — an
    exclusion test silently absorbs anything it has never heard of into *interrupted*, which is the
    guess this ordering exists to prevent. If any row is *interrupted*, a prior iteration was cut off. Reconcile it against
@@ -889,40 +888,33 @@ flips it back to `routed`). While any `hold` **or `parked`** row remains the run
 (Convergence distinguishes the resting `RUN PARKED` state from terminal `RUN COMPLETE`), but neither
 blocks selecting other queued work (steps 0–1).
 
-**The three sets above are CLOSED, and a Status outside them escalates.** Pipeline (8), resting (2)
-and terminal (3) are the whole Status vocabulary this engine writes. A row whose Status is none of
-them is **unrecognised**: do not classify it, do not resume it, do not select it — **STOP and ask
-the human**, naming the row and quoting the literal string you found. This is the canonical
-statement of the rule, and the **only place the vocabulary is enumerated** — step 0.3 and Resume
-restate the *directive* but never the list, so a status added to the pipeline is added here and
-nowhere else.
+**The three sets above are CLOSED, and a Status outside them escalates.** A row whose Status is
+none of them is **unrecognised**: do not classify it, do not resume it, do not select it — **STOP
+and ask the human**, naming the row and quoting the literal string you found. Step 0.3 and Resume
+apply this rule; the sets it closes over are the ones enumerated above.
 
 - **Read the `queue.md` Status column only.** Not Notes, and not `progress.md`'s `RUN …` sentinels.
   `awaiting:`, `kept:` and `gate-error:` are **Notes** values, not statuses — a gate-errored row's
   Status is plain `blocked` (Gate-outcome invariant), so a recognizer written as though
   `gate-error:` were a Status token would look for something the engine never emits.
-- **Split on `:` and match the leading token.** `blocked: too-large` is the one compound Status
-  form. Without the split it reads as unrecognised and this rule mis-escalates a *correctly
-  written* split-pending row — a false stop, which is the one way this change could make things
-  worse rather than merely noisier.
-- **Normalise before matching:** trim surrounding whitespace and compare case-insensitively, then
-  split. A hand-edited `Blocked` or a trailing space is a formatting slip, and stopping the whole
-  run over one is a false stop — the same cost as failing to split on `:`.
+- **Match the whole Status, and accept exactly one compound form: `blocked: too-large`.** Trim
+  surrounding whitespace and compare case-insensitively; otherwise match the literal string. **Do
+  NOT split on `:` and accept whatever precedes it.** `blocked: too-large` is how this engine has
+  extended a status once already, so `<known token>: <qualifier>` is precisely the shape a *future*
+  status will arrive in — and a rule that accepts the base token would read `blocked:
+  needs-config-repair` as plain `blocked`, terminal, and let step 1 re-select it. That is this
+  gate's own failure mode reproduced inside the recognizer, and it fails **open**. Anything that is
+  neither a bare status nor that one compound form is unrecognised, and unrecognised stops the run.
 - **Escalate; do not resolve it to a default.** `plan-gate:` can read an unrecognised value as
   `always` because its values are ordered and one of them is stricter. A Status has no such
   ordering — there is no over-gating reading of "unknown stage" — so the fail-safe here is the
   human, not a fallback.
-- **What this does and does not buy.** It makes a **future** status addition safe on the resume
-  path (see the residual in the next bullet): a token this
-  engine has not heard of stops the run instead of being silently mapped to a stage. It cannot help
-  an engine that predates this rule (an older release resuming a ledger written by a newer one has
-  no such check), and it cannot see a *recognised* token whose meaning shifted underneath it — the
-  same status at a renumbered pipeline position reads as perfectly valid. That skew is what the
-  upgrade rule in `README.md` exists to prevent, and nothing here enforces it.
-- **Guaranteed on the resume path.** Step 0.3 runs before selection on every normal invocation, so
-  it forecloses the case ahead of step 1's resting-state ladder. The step-0.1 **parked cheap path**
-  is the exception: it re-derives selectability from `queue.md` without running the resume scan, so
-  a bogus Status hand-written into a parked run is not separately hardened.
+- **What this buys, and where it stops.** A status this engine has not heard of stops the run
+  instead of being silently mapped to a stage. It cannot help an engine that predates the rule, it
+  cannot see a *recognised* token whose meaning shifted underneath it (the same status at a
+  renumbered pipeline position reads as valid), and it runs on the resume path — the step-0.1
+  **parked cheap path** re-derives selectability from `queue.md` without that scan. The upgrade rule
+  in `README.md` is what addresses the second of those, and nothing here enforces it.
 
 **Curated-subset invariant.** The queue built at init (see Initialization) is the authoritative
 work set; `BACKLOG_SOURCE` membership may drift afterward, and that drift is **surfaced to the
