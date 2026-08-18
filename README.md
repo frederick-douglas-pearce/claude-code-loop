@@ -294,19 +294,25 @@ tested on 3.9 through 3.13 in CI.
 **Finish the in-flight work before you upgrade the plugin. Do not upgrade
 mid-iteration.** You are reading `.claude/loop/<run-slug>/queue.md` — the most
 recently modified run directory, if there are several; a project that rebound
-`LEDGER_ROOT` will have it elsewhere. Two tests, and a row is in flight if **either**
-says so:
+`LEDGER_ROOT` will have it elsewhere.
 
-- **Its `Status` is a pipeline status other than `queued`/`routed`** — that is,
-  `planning` through `in-acceptance`.
-- **Its `PR` column names a pull request that is still open.** Check the state, not
-  the cell: the number is written when the PR opens and is never cleared, so most
-  rows in a mature ledger are `done` rows still naming a long-merged PR. `gh pr view
-  <n>` settles it. This test is the backstop, and it catches what the first one
-  misses: a row can rest *outside* the loop's resume scan while still holding an open
-  PR and an unfinished stage. A `hold` is the common case — set at the merge gate,
-  released by restoring the row's previous status — and a row blocked on a repeated
-  gate error is another. Neither reads as in-flight from its `Status` alone.
+**Treat every row as in flight unless its `Status` is one of these four:**
+
+- `queued` or `routed` — never entered the pipeline.
+- `done` or `deferred` — finished, or terminal by decision.
+
+Anything else is in flight until you show otherwise, **including a status you do not
+recognise**. Do not reason from the status name: a row can rest outside the loop's
+resume scan and still hold unfinished work. A `hold` is set at the *merge gate*, and
+releasing it restores the row's previous status. A row `blocked` on a repeated gate
+error can carry implemented work too — with or without an open PR, depending on which
+gate failed.
+
+To discharge a row, show there is nothing behind it: no branch, no open pull request
+(the `PR` cell keeps its number after a merge, so check the state with `gh pr view
+<n>`, not the cell), and no uncommitted changes in the tree. **If you cannot tell,
+it is in flight** — waiting costs you nothing, and this is the same default-deny
+posture the loop takes at its own gates.
 
 Finish those rows, or leave them and upgrade later. **Do not park one to get there:**
 `parked` is assigned at triage, to work gated on an external event, and moving a
