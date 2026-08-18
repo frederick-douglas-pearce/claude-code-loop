@@ -180,6 +180,33 @@ the dangerous reading requires *adding* a claim rather than deleting a word, whi
 property into structure where a guard can reach it. Failing that, polarity is review's to own, and
 saying so in the test's docstring is the honest record.
 
+**The positive prescription the trap above has been missing: a rule about which states are *safe*
+must be written default-deny — unknown ⇒ unsafe — never as an enumeration of the safe set.** The
+section above governs *guards*; this governs *product prose*, and it is what the enumerable-assertion
+trap looks like when the enumeration is user-facing rather than in a test. Established by #34, where
+one README rule — which ledger rows are safe to leave before a plugin upgrade — was rewritten
+**seven** times. Each of the first six enumerated a safe set or a set of tests and was falsified by a
+state it did not enumerate (`park`, then `hold`, then `blocked`, then a PR-column check that was
+really a non-empty-cell check, then a gate-errored row with work but no PR, then `planning` rows a
+discharge test cleared). The version that held inverted the posture — name the safe statuses, treat
+everything else including an unrecognised status as in flight, and close with *"if you cannot tell,
+it is in flight."* That is the posture the engine already uses at the merge gate, for an absent
+`plan-gate:`, and in #34's own unknown-status stop; the rule was the one thing in that change written
+fail-open. **What makes the inverted form safe is not that its list is finally complete — it is that
+a state nobody enumerated now resolves in the harmless direction.**
+
+Two corollaries, and the first is the one that cost the most to learn. **Once a rule is default-deny,
+its backstop *is* the argument — do not defend it with a completeness proof.** #34's seventh attempt
+justified a test three verifiers had failed to falsify with the claim that "the plan file is the
+first thing the pipeline writes for a row"; that claim was false five ways, and deleting it cost
+nothing, because the fail-safe never needed it. A completeness argument bolted onto a default-deny
+rule reintroduces exactly the enumerable assertion the inversion escaped, and it is the hardest
+sentence in the passage to make true. **Second: when you invert a rule's posture, carry the inversion
+through every sentence in one pass.** Five of #34's nine gate rounds were post-inversion polish, each
+finding a leftover coverage claim in a sentence *adjacent* to the one just fixed. That is an
+authoring discipline, not a missing gate — the round caps forced escalation every time and worked,
+and none of this belongs in `loop-engine.md`, which consumers execute.
+
 ## Architecture — the three-layer split
 
 The load-bearing design is a strict separation between **generic engine**, **per-project bindings**,
