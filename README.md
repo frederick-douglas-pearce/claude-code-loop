@@ -195,7 +195,8 @@ worktree copy, or a retained snapshot directory. If it finds them it repairs fro
 pre-mutation snapshots, **never from git**, touching only the files it can attribute; and if those
 snapshots are gone, it **stops and asks you** rather than improvising a repair.
 
-**As of v0.2.0 the loop also checks your open PRs on every resume**, not only its own ledger rows —
+**As of v0.2.0 the loop also checks your open PRs whenever it resumes to work an issue**, not only
+its own ledger rows —
 because that ledger is gitignored and can be absent or stale while the work it described is still
 open. **An open PR it can neither tie to one of its own ledger rows nor positively attribute to you
 or another tool stops the run and asks you.** It does not adopt such a PR and does not act on it —

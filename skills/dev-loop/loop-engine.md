@@ -88,8 +88,8 @@ invocation resumes correctly.
    **For every open PR this leaves classified as an interruption, STOP and report it, naming the PR;
    do not select new work until it is resolved.** Any open record in `progress.md` is evidence to
    report alongside it. **This scan detects and halts; it does not reconcile or reconstruct** — live
-   state can tell you a PR exists, but it cannot tell you which gates ran on it, and an orphan with no
-   row is the one case where nothing on disk can. Resolving it is the human's: they add the row,
+   state can tell you a PR exists, but it cannot tell you which gates ran on it. Resolving it is the
+   human's: they add the row,
    close or merge the PR, or tell you whose it is.
 
 ### 1. Select
@@ -545,10 +545,11 @@ not re-derive the fields here.
 **Write it now rather than at step 12, for the reason step 5 journals its `- Plan-gate:` line where
 that gate resolves.** A `/clear`, a compaction, or a crash between this step and step 12 otherwise
 leaves an **open PR with no ledger trace at all**. Step 0.3's orphan scan is the backstop for that
-case; this record is what lets it *reconcile* the row rather than merely detect a stranger. **Do not
+case; this record is what the scan reports alongside the PR, so whoever resolves it has the issue,
+the branch and the PR identity on disk rather than a bare stranger. **Do not
 read this as making `progress.md` self-sufficient** — the standing contract is `queue.md` +
 `progress.md` + **live git/PR state**, which wins on conflict (Resume). This record makes an
-iteration *reconstructable*, not the ledger *authoritative*.
+iteration *recoverable by the human*, not the ledger *authoritative*.
 
 Then wait for CI; fix until green.
 
