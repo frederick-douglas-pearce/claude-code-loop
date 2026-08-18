@@ -291,27 +291,24 @@ tested on 3.9 through 3.13 in CI.
 
 ### Upgrading with a live ledger
 
-**Finish the in-flight iteration before you upgrade the plugin. Do not upgrade
-mid-iteration.** A row is in flight when it sits at a pipeline status other than
-`queued`/`routed` — that is, `planning` through `in-acceptance`. The loop works one
-issue at a time, so there is at most one. You are reading the `Status` column of
-`.claude/loop/<run-slug>/queue.md` (the most recently modified run directory, if
-there are several); a project that rebound `LEDGER_ROOT` will have it elsewhere.
+**Finish the in-flight work before you upgrade the plugin. Do not upgrade
+mid-iteration.** You are reading `.claude/loop/<run-slug>/queue.md` — the most
+recently modified run directory, if there are several; a project that rebound
+`LEDGER_ROOT` will have it elsewhere. Two tests, and a row is in flight if **either**
+says so:
 
-Rows that never entered the pipeline (`queued`, `routed`) and terminal rows
-(`done`, `deferred`, `blocked`) need no thought. **`parked` is safe too** — releasing
-a park flips the row to `routed` and discards any stage.
+- **Its `Status` is a pipeline status other than `queued`/`routed`** — that is,
+  `planning` through `in-acceptance`.
+- **Its `PR` column names a pull request.** This is the backstop, and it is the one
+  to trust: a row can rest *outside* the loop's resume scan while still holding an
+  open PR and an unfinished stage. A `hold` is the common case — set at the merge
+  gate, released by restoring the row's previous status — and a row blocked on a
+  repeated gate error is another. Neither reads as in-flight from its `Status` alone.
 
-**`hold` is the one that looks safe and is not.** A hold is set at the *merge gate*,
-so the row has an open PR and a stored pipeline status that is **restored** when you
-release it. It rests outside the resume scan without being finished — exactly the
-state this rule is about. Treat a held row as in-flight: clear the hold and let the
-row finish before upgrading.
-
-**Do not park an in-flight row to get there,** either. `parked` is assigned at
-triage, to work gated on an external event, and moving a mid-pipeline row into a
-resting status puts it outside the resume scan. Finish the row, or leave it in flight
-and upgrade later.
+Finish those rows, or leave them and upgrade later. **Do not park one to get there:**
+`parked` is assigned at triage, to work gated on an external event, and moving a
+mid-pipeline row into a resting status puts it outside the resume scan — the opposite
+of what you want across an upgrade.
 
 The reason any of this matters is that the ledger is local, gitignored state that
 **outlives the engine that wrote it**, and a release can change what a row means:

@@ -902,8 +902,9 @@ apply this rule; the sets it closes over are the ones enumerated above.
   NOT split on `:` and accept whatever precedes it.** `blocked: too-large` is how this engine has
   extended a status once already, so `<known token>: <qualifier>` is precisely the shape a *future*
   status will arrive in — and a rule that accepts the base token would read `blocked:
-  needs-config-repair` as plain `blocked`, terminal, and let step 1 re-select it. That is this
-  gate's own failure mode reproduced inside the recognizer, and it fails **open**. Anything that is
+  needs-config-repair` as plain `blocked` — terminal, and eligible for step 1 to re-select once it
+  reads the dependency test as satisfied. That is this gate's own failure mode reproduced inside
+  the recognizer, and it fails **open**. Anything that is
   neither a bare status nor that one compound form is unrecognised, and unrecognised stops the run.
 - **Escalate; do not resolve it to a default.** `plan-gate:` can read an unrecognised value as
   `always` because its values are ordered and one of them is stricter. A Status has no such
