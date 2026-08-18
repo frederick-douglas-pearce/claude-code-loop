@@ -299,11 +299,14 @@ says so:
 
 - **Its `Status` is a pipeline status other than `queued`/`routed`** — that is,
   `planning` through `in-acceptance`.
-- **Its `PR` column names a pull request.** This is the backstop, and it is the one
-  to trust: a row can rest *outside* the loop's resume scan while still holding an
-  open PR and an unfinished stage. A `hold` is the common case — set at the merge
-  gate, released by restoring the row's previous status — and a row blocked on a
-  repeated gate error is another. Neither reads as in-flight from its `Status` alone.
+- **Its `PR` column names a pull request that is still open.** Check the state, not
+  the cell: the number is written when the PR opens and is never cleared, so most
+  rows in a mature ledger are `done` rows still naming a long-merged PR. `gh pr view
+  <n>` settles it. This test is the backstop, and it catches what the first one
+  misses: a row can rest *outside* the loop's resume scan while still holding an open
+  PR and an unfinished stage. A `hold` is the common case — set at the merge gate,
+  released by restoring the row's previous status — and a row blocked on a repeated
+  gate error is another. Neither reads as in-flight from its `Status` alone.
 
 Finish those rows, or leave them and upgrade later. **Do not park one to get there:**
 `parked` is assigned at triage, to work gated on an external event, and moving a
