@@ -451,22 +451,31 @@ Report, concisely:
 - **Unexpanded tokens:** run
 
   ```bash
-  for f in "$TARGET/.claude/loop.config.md" "$TARGET/.claude/loop.config.md.init-new"; do
-    [ -e "$f" ] && { echo "checked $f"; grep -n '@@' "$f"; }
-  done
+  CFG="${CLAUDE_PROJECT_DIR}/.claude/loop.config.md"
+  if [ -e "$CFG" ]; then
+    echo "checked $CFG"
+    grep -n '@@' "$CFG" && echo "LEAK: unexpanded @@ token above -- expand it (rule 1) before reporting done"
+  else
+    echo "ERROR: $CFG absent at Step 8 -- generation did not complete; do not report done"
+  fi
+  NEW="${CLAUDE_PROJECT_DIR}/.claude/loop.config.md.init-new"
+  [ -e "$NEW" ] && { echo "checked $NEW"; grep -n '@@' "$NEW" && echo "LEAK in $NEW -- expand it before reporting done"; }
   ```
 
   covering **both**, since Step 1(b) writes the refresh to the `.init-new` sibling and that file
-  carries the same pointer line. **Write the paths out** — `$CONFIG` is this document's notation, not
-  a shell variable, and a `grep` against an unset one prints nothing and exits non-zero, which is
-  indistinguishable from a clean file. The `checked` line is the proof it ran at all; a silent result
-  counts only if you saw one. Any hit means a `@@…@@` token was copied
-  through instead of expanded (rule 1) — fix it before reporting done. This is the one check that
-  catches it: such a token is **not** a `TODO(init-loop)`, so the grep below will not see it, and the
-  pointer line reads plausibly enough that a human reviewer may not either.
+  carries the same pointer line. These paths use `${CLAUDE_PROJECT_DIR}`, which the harness expands to
+  this repo's absolute path before you read this file (rule 2), so the grep runs against the real
+  generated file. **Earlier revisions wrote `$CONFIG` and `$TARGET` here; those are this document's
+  notation, they resolve to nothing at the shell, and the check silently never ran.** The `checked`
+  line is the proof it ran — **no `checked` line means it did not run, which is a failure, not a
+  pass.** Any hit means a `@@…@@` token was copied through instead of expanded (rule 1) — fix it
+  before reporting done. This is the one check that catches it: such a token is **not** a
+  `TODO(init-loop)`, so the grep below will not see it, and the pointer line reads plausibly enough
+  that a human reviewer may not either.
 - **Inferred parameters:** the values you filled and their provenance (mirror the Notes column).
 - **`TODO(init-loop)` blanks:** the list the human must resolve before the first run — `grep -n
-  'TODO(init-loop)' "$CONFIG"`.
+  'TODO(init-loop)' "${CLAUDE_PROJECT_DIR}/.claude/loop.config.md"` (same reason as above: a
+  prose-notation `$CONFIG` resolves to nothing).
 - **Append-guard:** if a sidecar was written, the file protected and the **matched entry IDs**
   (e.g. "matched D001…D060 — guard is live"; "0 matches — the regex protects nothing, fix
   `id_pattern`"). If none, say the guard is inert (no sidecar).
