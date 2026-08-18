@@ -308,11 +308,16 @@ releasing it restores the row's previous status. A row `blocked` on a repeated g
 error can carry implemented work too — with or without an open PR, depending on which
 gate failed.
 
-To discharge a row, show there is nothing behind it: no branch, no open pull request
-(the `PR` cell keeps its number after a merge, so check the state with `gh pr view
-<n>`, not the cell), and no uncommitted changes in the tree. **If you cannot tell,
-it is in flight** — waiting costs you nothing, and this is the same default-deny
-posture the loop takes at its own gates.
+Finishing such a row returns it to `done` — that is the ordinary path, and the one to
+prefer. A row you *cannot* finish (one blocked on a dependency that is not going to
+clear today) is discharged only by showing the loop has produced nothing for it, in
+the order the pipeline creates things: **no `issue-<N>.plan.md` in the ledger
+directory, no branch, no uncommitted changes, and no open pull request** (the `PR`
+cell keeps its number after a merge, so check the state with `gh pr view <n>`, not the
+cell). That list is not a guess about what to look for — the plan file is the *first*
+thing the pipeline writes for a row, so a row without one has nothing behind it.
+**If you cannot tell, it is in flight** — waiting costs you nothing, and this is the
+same default-deny posture the loop takes at its own gates.
 
 Finish those rows, or leave them and upgrade later. **Do not park one to get there:**
 `parked` is assigned at triage, to work gated on an external event, and moving a
