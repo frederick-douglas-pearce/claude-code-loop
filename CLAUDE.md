@@ -299,8 +299,16 @@ even though nothing will fail loudly:
   Initialization step 4, the `queue.md` skeleton fence, Ledger format's `- Human gate:` paragraph,
   and `SKILL.md`'s plan-gate bullet (that list names `SKILL.md`'s fail-safe list for the *other*
   invariant, not this one).
-  Do not read that list as the posture's site list. **#35 will reduce all of this to one canonical
-  passage; until it does, grep before editing — every restatement changes together.**
+  Do not read that list as the posture's site list. **#35 was to reduce all of this to one canonical
+  passage. It was attempted and DEFERRED at its plan gate on 2026-08-18, and the reason changes what
+  this instruction means: the restatements have already DRIFTED — they no longer agree with each
+  other.** The divergences are catalogued on #1 (F57, F58); do not re-derive or re-count them here.
+  **So grep before editing is still necessary and is no longer sufficient: read each site, because
+  the sites do not currently say the same thing.** Editing them "together" on the assumption that
+  they agree is how one of several variants gets propagated as though it were the invariant. #35
+  cannot be executed as chartered until F57/F58 are resolved — its AC1 (state it once) and AC3 (no
+  semantic change) are in direct conflict while the drift stands, since collapsing divergent sites
+  necessarily picks a winner. It carries `tech-debt` and no milestone.
 - **Notes on `parked`/`blocked` rows record the durable curation DECISION, never mutable live
   evidence** — the latter is contradicted by the next re-check and destabilizes resume.
 - **The tree-isolation / staging rule is a new multi-site invariant with no test guarding it** (#25).
@@ -527,8 +535,11 @@ lives in its comments, which are the only copy. They are scoped into **seven epi
 under the milestone.
 
 **The index outgrew its own title, so do not read either as a range.** The issue is still *titled*
-"F1–F21"; its comments now carry findings through **F42**, the overwhelming majority filed by this
-repo's dogfood runs rather than by the three original sources. The title is human-owned and stale —
+"F1–F21"; its comments now carry findings **well past that range** — the highest F-number lives on
+#1 and nowhere else, and this paragraph deliberately no longer names it (the figure stated here was
+stale by seventeen when it was finally checked, which is the trap arriving on schedule). The
+overwhelming majority are filed by this repo's dogfood runs rather than by the three original
+sources. The title is human-owned and stale —
 treat the comments as authoritative and don't infer the count from either the title or this
 paragraph. (This is the same enumerable-assertion trap documented twice above; the fix is to state
 where the number lives, not to restate the number.)
@@ -604,8 +615,13 @@ deferring, pick the bucket by *what the work waits on*, and never widen v0.3.0's
 the choice.
 
 **The v0.2.0 cut line, for the record:** ship #74 → #40 → #34 → #67 → #36, with #60 closing out as
-already-merged (PRs #79/#80) and #57's corrections absorbed into #36/AC3. Two ordering constraints
-are load-bearing and not arbitrary: **#74 must precede #36**, because #36/AC5 as written propagates a
+already-merged (PRs #79/#80) and #57's corrections absorbed into #36/AC3. **As of 2026-08-18 the
+first four have all merged and only #36 remains.** *This line reads as originally written and is
+again accurate, but it was not accurate throughout — #35 was pulled back in at the 2026-08-16 roster
+reconciliation ("eject four, keep #35", placed last before #36, with a second decision releasing its
+`blocked` row) and deferred back out at its plan gate on 2026-08-18. Recorded because a line that is
+accidentally correct hides a round trip that the ledger and #35's own comments carry in full.*
+Two ordering constraints are load-bearing and not arbitrary: **#74 must precede #36**, because #36/AC5 as written propagates a
 correction to a *phantom* defect (F7's invocability half is false) into consumer configs no later
 release can reach; and
 **#74 must precede #40**, or they collide on `commands/init-loop.md`, which #40 rewrites broadly.
