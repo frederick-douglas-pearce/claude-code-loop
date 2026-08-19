@@ -75,10 +75,13 @@ claude-code-loop/
 ## What the loop can do to your repo
 
 **This section describes v0.2.0.** An installed v0.0.1 gates less at nearly every
-point below — it has no `plan-gate:` field, no gate-currency expiry, no mutation
-pass, no orphan-PR scan, and runs the acceptance gate before review rather than
-last. If you are already running the loop, re-install before relying on any of
-this, and read "Upgrading with a live ledger" first.
+point below — among other things it has no `plan-gate:` field, no rule that a gate
+without its own verdict never counts as passed, no gate-currency expiry, no offline
+test tier, no mutation pass and no orphan-PR scan, and it runs the acceptance gate
+before review rather than last. **That list is not the set: assume nothing in this
+section is live on an installed 0.0.1 until you re-install.** If you are already
+running the loop, re-install before relying on any of this, and read "Upgrading with
+a live ledger" first.
 
 Worth reading before you install. This plugin drives a real development workflow on
 your behalf: it creates branches, commits, opens pull requests, runs your project's
@@ -187,9 +190,8 @@ be aware the loop then has one fewer way to notice a stray one. And
 **the loop is responsible for removing it**: your host only auto-cleans a copy the agent never wrote
 to, which is never the case that matters, so removal is an instruction the loop follows rather than a
 guarantee something enforces. An iteration that dies partway can leave one behind; `git worktree
-list` will show it — and **the loop sweeps for one itself whenever it resumes to work an
-issue**, before it touches the tree. (A run resting at `RUN PARKED` short-circuits ahead of that
-sweep — the same gap noted under "Upgrading with a live ledger".)
+list` will show it — and **the loop sweeps for one itself when it resumes**, before it touches the
+tree. That sweep is described below, with the one path it does not cover.
 
 **If the loop crashes partway through an iteration and then resumes, it does not quietly absorb
 whatever it finds in your tree.** Two mechanisms cover your working tree, they are scoped
@@ -198,7 +200,10 @@ differently, and it is worth being exact about which is which.
 **Whenever it resumes to work an issue, the loop looks for the marks of a mutation pass that did not
 finish** — a stray worktree copy, or a retained snapshot directory. If it finds them it repairs
 from its own pre-mutation snapshots, **never from git**, touching only the files it can attribute;
-and if those snapshots are gone, it **stops and asks you** rather than improvising a repair.
+and if those snapshots are gone, it **stops and asks you** rather than improvising a repair. It
+keys on those artifacts, not on the row's status, so a mislabelled row cannot carry a live mutation
+past it. One path is not covered: a run resting at `RUN PARKED` re-derives its work without
+entering the resume procedure, so it short-circuits ahead of this sweep.
 
 **The loop also checks your open PRs whenever it resumes to work an issue**, not only
 its own ledger rows —
@@ -209,17 +214,17 @@ it reports it and waits, so a PR of yours sitting open can pause the loop until 
 That is the deliberate direction: asking costs a question, and taking over your branch would change
 your work.
 
-**Separately, when it resumes a row that was in review or acceptance, a change to your code it cannot
-attribute is neither kept nor discarded — it stops and asks you.** That reverses the older behavior,
-which kept anything that "looked like it matched the plan" — a bad default once the loop's own
-acceptance gate started deliberately breaking code, because a mutation is built to look like a
-small, sane edit and "it looks plausible" is precisely the test it is designed to pass. This is the
-case most likely to involve your work, so the loop is not permitted to resolve it alone: not keeping
-something and destroying it are different actions, and only you choose the second. **Resuming an
-interrupted implementation is unchanged** — work in progress that belongs to the plan is kept,
-and being half-finished is never on its own a reason to discard it. **The practical protection is
-the ordinary one** — commit or stash work you care about before leaving an
-iteration mid-flight, since a committed change is attributable by definition.
+**The second mechanism: when it resumes a row that was in review or acceptance, a change to your
+code it cannot attribute is neither kept nor discarded — it stops and asks you.** That reverses the
+older behavior, which kept anything that "looked like it matched the plan" — a bad default once the
+loop's own acceptance gate started deliberately breaking code, because a mutation is built to look
+like a small, sane edit and "it looks plausible" is precisely the test it is designed to pass. This
+is the case most likely to involve your work, so the loop is not permitted to resolve it alone: not
+keeping something and destroying it are different actions, and only you choose the second.
+**Resuming an interrupted implementation is unchanged** — work in progress that belongs to the plan
+is kept, and being half-finished is never on its own a reason to discard it. **The practical
+protection is the ordinary one** — commit or stash work you care about before leaving an iteration
+mid-flight, since a committed change is attributable by definition.
 
 **If you bind a command for your offline test tier, the loop runs it and treats a failure as a bug.**
 Where `HERMETIC_TEST_CMD` names one, any `code`-route change that adds or modifies a test runs that
@@ -301,10 +306,10 @@ The plugin ships the engine, the onboarding command, the guard hook and the muta
 harness; it does nothing until the consuming repo supplies the per-project config below. Run
 `/init-loop` to generate that config (or write it by hand).
 
-**Requirements: Python 3.9+**, and only for the optional append-only guard hook
-— the engine itself is pure prompt artifacts and needs nothing installed. The
-hook is launched with bare `python3`, uses the standard library only, and is
-tested on 3.9 through 3.13 in CI.
+**Requirements: Python 3.9+**, for the append-only guard hook and for the mutation
+harness the acceptance gate runs — the engine's own instructions are prompt
+artifacts and need nothing installed. Both are launched with bare `python3`, use
+the standard library only, and are tested on 3.9 through 3.13 in CI.
 
 ### Upgrading with a live ledger
 
