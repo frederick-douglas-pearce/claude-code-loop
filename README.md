@@ -7,20 +7,27 @@ ran the v0.10.x / v0.11.0 releases). Install it once, drop a small per-project
 `loop.config.md` into a target repo, and run your backlog as a loop: one routed
 issue per invocation, with human gates on uncertainty and durable ledger state.
 
-> **Status — v0.0.1, working and in use, not yet stable.** All three pieces are in
-> place: the `dev-loop` skill (`SKILL.md` + `loop-engine.md`), the `/init-loop`
-> onboarding command, and the append-only guard hook. The engine has run beyond the
-> repo it was built in — first external adoption is
+> **Status — v0.2.0, working and in use, not yet stable.** Four pieces ship: the
+> `dev-loop` skill (`SKILL.md` + `loop-engine.md`), the `/init-loop` onboarding
+> command, the append-only guard hook, and the mutation harness the acceptance gate
+> runs (`tools/mutate_verify.py`). The engine has run beyond the repo it was built in
+> — three repos drive it today: the first external adoption
 > [us-presidential-vote-analysis](https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis),
-> alongside the ongoing AgentFluent dogfood.
+> the ongoing AgentFluent dogfood, and (since 2026-07-28) this repo, which now runs
+> the loop it develops and is the source of most of the findings below.
 >
 > Findings from those real runs are indexed in
-> [#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1) (F1–F21) and
-> scoped into
-> [v0.2.0](https://github.com/frederick-douglas-pearce/claude-code-loop/milestone/1) —
-> a hardening release that makes the acceptance gate adversarial, moves it last so it
-> certifies the commit that actually merges, and reverses the plan-gate default under
-> `calibration`. Expect rough edges in porting to a repo unlike the two above; that is
+> [#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1) — read
+> the comments there for the current set; the issue's title understates its range and
+> no count is restated here. **v0.2.0** was the hardening release that came out of
+> them: it makes the acceptance gate adversarial, moves it last so it certifies the
+> commit that actually merges, and defaults the plan gate to stopping on every issue
+> under `calibration` — alongside gate-currency expiry, an orphan-PR scan on resume,
+> an offline-test tier, and a stop on any ledger status the engine does not recognise.
+> The
+> [milestone](https://github.com/frederick-douglas-pearce/claude-code-loop/milestone/1)
+> does not close at the bump: the release story itself, and the findings index, stay
+> open. Expect rough edges in porting to a repo unlike the three above; that is
 > exactly what #1 collects.
 >
 > **Issues for this plugin live in
@@ -83,9 +90,7 @@ Wherever eligibility is unclear the rule is **default-deny**: fall back to the h
 **By default you approve every plan before any code is written.** The plan gate is a separate
 setting from the merge gate — a `plan-gate:` field in the run's ledger header — set to `always` for
 a new run under `calibration`, meaning the loop writes a plan, shows it to you, and stops, on
-**every** issue. **This arrives with v0.2.0** — the released v0.0.1 has no `plan-gate:` field and
-gates the plan only on uncertainty, so this paragraph describes the posture the next release ships
-with, stated before it lands rather than after. Set the field to `conditional` and the loop stops
+**every** issue. Set the field to `conditional` and the loop stops
 when it hits ambiguous acceptance criteria, risk, agent disagreement, a value story that doesn't
 hold, or genuine uncertainty. The two settings are deliberately independent: relaxing how much of
 the planning you review never loosens what gets merged without you, and a ledger that doesn't
@@ -111,8 +116,8 @@ falls back at all — the loop will not substitute a check of its own devising a
 escalates. (A gate the route legitimately skips is journalled as *skipped*, which is also not a
 pass.)
 
-**A gate's pass covers the exact commit it ran on — and expires when that changes.** **This arrives
-with v0.2.0**; the released v0.0.1 has no such rule. If anything changes the pull request after a
+**A gate's pass covers the exact commit it ran on — and expires when that changes.** If anything
+changes the pull request after a
 gate certified it — a fix the loop made at the acceptance gate, a fix for CI that went red later, a
 change you asked for at the merge gate, or bringing the branch up to date with your main branch —
 the loop treats the gates that change re-armed as **not** having passed the new code. It re-runs
@@ -124,16 +129,13 @@ merging.
 implements, then **immediately commits and opens the PR**, and only then runs code review, security,
 and the acceptance gate. So an open PR on your repo means "the loop has reached the review gates",
 never "the loop is finished with this and wants your merge." Nothing merges without the merge gate
-below, and CI is green before review starts. **This arrives with v0.2.0** — the released v0.0.1
-opens the PR after acceptance rather than before review, so this paragraph describes the posture the
-next release ships with, stated before it lands rather than after.
+below, and CI is green before review starts.
 
-Two consequences worth knowing. **The acceptance gate now runs last**, immediately before the merge
-gate, so the diff it certifies is the diff that merges — under v0.0.1 it ran before review, and
-every review round after it silently invalidated its verdict. And **no gate was removed** — the loop stops at the
-same set of gates it always did. What changed is which one is last, and therefore what your repo
-looks like when a stop happens: an acceptance-gate stop used to find no PR and no CI run, and now
-finds a PR already open with CI green.
+Two consequences worth knowing. **The acceptance gate runs last**, immediately before the merge
+gate, so the diff it certifies is the diff that merges. And **no gate was removed** — the loop stops
+at the same set of gates it always did; what the ordering changes is which one is last, and
+therefore what your repo looks like when a stop happens: an acceptance-gate stop finds a PR already
+open with CI green, rather than no PR and no CI run.
 
 **The acceptance gate asks whether your tests would notice a regression.** It runs after code review
 and security — the last gate before merge. It reports two kinds of
@@ -152,9 +154,8 @@ that means for your repo:
   invasive thing the plugin does, so it is worth being exact about. Where the change adds or
   modifies a test, a mutating agent takes a **throwaway copy of your tree**, makes a small edit that
   ought to break something, runs your test suite against it, and reports any test that stayed green.
-  Your working tree is not the tree that gets broken — unless you explicitly allow it, which is the next point. **This arrives with v0.2.0** — the released
-  v0.0.1 has no mutation pass at all, and the paragraph you are reading is the posture the next
-  release ships with, stated before it lands rather than after.
+  Your working tree is not the tree that gets broken — unless you explicitly allow it, which is the
+  next point.
 - **If the copy cannot run your suite, the loop stops and asks you.** A bare copy has none of your
   installed dependencies, so this is the common case rather than an exotic one. Mutating your *real*
   working tree is the fallback and is **never taken on the loop's own judgement**. If you decline,
@@ -169,9 +170,8 @@ that means for your repo:
   confidence this gate exists to refuse.
 
 **An agent that writes to your tree gets a copy of it, not yours — so the loop may create and remove
-git worktrees under your repository.** This is live now and is not limited to the mutation testing
-above: your working tree holds your uncommitted work, so any subagent that needs to write gets its
-own copy. Two things to expect. The copy is typically created **inside your repository** — where your
+git worktrees under your repository.** This is not limited to the mutation testing above: your
+working tree holds your uncommitted work, so any subagent that needs to write gets its own copy. Two things to expect. The copy is typically created **inside your repository** — where your
 host puts it is the host's choice, not this plugin's — and while it is there it shows up as an
 untracked directory in `git status`. It is not gitignored for you, and if you gitignore it yourself,
 be aware the loop then has one fewer way to notice a stray one. And
@@ -181,10 +181,8 @@ guarantee something enforces. An iteration that dies partway can leave one behin
 list` will show it — and **as of v0.2.0 the loop sweeps for one itself on every resume**, before it
 touches the tree.
 
-**If the loop crashes late in an iteration and then resumes, it will no longer silently keep
-uncommitted changes in your tree that it cannot account for.** **This arrives with v0.2.0** — the
-released v0.0.1 does none of it, so do not read the protection below as live on an installed
-v0.0.1. It reverses the older behavior,
+**If the loop crashes after review has begun and then resumes, it will no longer silently keep
+uncommitted changes in your tree that it cannot account for.** It reverses the older behavior,
 which kept anything that "looked like it matched the plan" — a bad default once the loop's own
 acceptance gate started deliberately breaking code, because a mutation is built to look like a small,
 sane edit and "it looks plausible" is precisely the test it is designed to pass. Two things happen,
@@ -339,15 +337,15 @@ The reason any of this matters is that the ledger is local, gitignored state tha
   release renumbered the pipeline, the row's status still resolves — it just brackets
   a different gate than it did when it was written, and nothing reports that.
 - **Rolling back** hands a row to an older engine that may never have heard of its
-  status. v0.2.0 adds `in-acceptance`, which the released v0.0.1 does not define.
+  status. v0.2.0 added `in-acceptance`, which v0.0.1 does not define.
 
-**This arrives with v0.2.0:** the engine stops and asks you when it meets a row
-status it does not recognise, rather than guessing a stage. The released v0.0.1 has
-no such check. Where it does *not* save you: it cannot teach an older installed
-engine the same manners; it only catches an *unrecognised* status, so one that still
-exists but now sits at a different point in the pipeline looks valid to it; and it
-runs on the resume path, so a run resting at `RUN PARKED` — which re-derives its work
-from `queue.md` without that scan — is not separately covered.
+**As of v0.2.0,** the engine stops and asks you when it meets a row status it does
+not recognise, rather than guessing a stage. v0.0.1 has no such check. Where it does
+*not* save you: it cannot teach an older installed engine the same manners; it only
+catches an *unrecognised* status, so one that still exists but now sits at a different
+point in the pipeline looks valid to it; and it runs on the resume path, so a run
+resting at `RUN PARKED` — which re-derives its work from `queue.md` without that scan
+— is not separately covered.
 
 The rule above is a rule, not an enforcement: nothing in the plugin can stop you
 upgrading mid-iteration.
@@ -413,10 +411,13 @@ only**, because the guard hook runs under bare `python3` in a consumer's
 environment and the tests have to run wherever it does. CI runs exactly that
 command on Python 3.9–3.13 for every pull request.
 
-Two modules, covering deliberately different things:
+Three modules, covering deliberately different things:
 
 - `test_guard_append_only.py` — behavior of the guard hook: drop detection, the
   suffix matcher, the config loader, and each direction of the fail posture.
+- `test_mutate_verify.py` — behavior of `tools/mutate_verify.py`, the mutation
+  harness the acceptance gate runs: what it does to a tree, and what it refuses
+  to do. It is the only executable evidence behind a gate that edits source code.
 - `test_repo_consistency.py` — mechanical checks on the shipped artifacts: that
   the example sidecar still loads through the real loader, that the
   `dev-loop@claude-code-loop` identifier still matches the manifests it is
@@ -425,10 +426,11 @@ Two modules, covering deliberately different things:
   across the six places it is restated.
 
 What the suite does **not** test is whether the prompt artifacts say the *right*
-thing. The engine is ~600 lines of instructions an agent executes at runtime, and
-its correctness properties — precision of wording, internal consistency,
-fail-safe posture — are validated by review and by running the loop on real
-backlogs. The second module guards couplings between files, not semantics.
+thing. The engine is a long document of instructions an agent executes at
+runtime, and its correctness properties — precision of wording, internal
+consistency, fail-safe posture — are validated by review and by running the loop
+on real backlogs. `test_repo_consistency.py` guards couplings between files, not
+semantics.
 
 ## License
 
