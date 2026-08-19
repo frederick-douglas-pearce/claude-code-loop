@@ -90,8 +90,8 @@ Wherever eligibility is unclear the rule is **default-deny**: fall back to the h
 **By default you approve every plan before any code is written.** The plan gate is a separate
 setting from the merge gate — a `plan-gate:` field in the run's ledger header — set to `always` for
 a new run under `calibration`, meaning the loop writes a plan, shows it to you, and stops, on
-**every** issue. Set the field to `conditional` and the loop stops
-when it hits ambiguous acceptance criteria, risk, agent disagreement, a value story that doesn't
+**every** issue. Set the field to `conditional` and the loop stops when it hits ambiguous
+acceptance criteria, risk, agent disagreement, a value story that doesn't
 hold, or genuine uncertainty. The two settings are deliberately independent: relaxing how much of
 the planning you review never loosens what gets merged without you, and a ledger that doesn't
 mention the field at all is read as `always`. Neither setting reaches the loop's other mid-pipeline
@@ -117,9 +117,9 @@ escalates. (A gate the route legitimately skips is journalled as *skipped*, whic
 pass.)
 
 **A gate's pass covers the exact commit it ran on — and expires when that changes.** If anything
-changes the pull request after a
-gate certified it — a fix the loop made at the acceptance gate, a fix for CI that went red later, a
-change you asked for at the merge gate, or bringing the branch up to date with your main branch —
+changes the pull request after a gate certified it — a fix the loop made at the acceptance gate, a
+fix for CI that went red later, a change you asked for at the merge gate, or bringing the branch up
+to date with your main branch —
 the loop treats the gates that change re-armed as **not** having passed the new code. It re-runs
 them or stops and asks you; it does not merge on the older result. This is the failure mode that
 looks most like success, because every gate genuinely did pass — just not on the code you would be
@@ -132,8 +132,8 @@ never "the loop is finished with this and wants your merge." Nothing merges with
 below, and CI is green before review starts.
 
 Two consequences worth knowing. **The acceptance gate runs last**, immediately before the merge
-gate, so the diff it certifies is the diff that merges. And **no gate was removed** — the loop stops
-at the same set of gates it always did; what the ordering changes is which one is last, and
+gate, so the diff it certifies is the diff that merges. And **no gate was removed** — what the
+ordering changes is which one is last, and
 therefore what your repo looks like when a stop happens: an acceptance-gate stop finds a PR already
 open with CI green, rather than no PR and no CI run.
 
@@ -171,7 +171,8 @@ that means for your repo:
 
 **An agent that writes to your tree gets a copy of it, not yours — so the loop may create and remove
 git worktrees under your repository.** This is not limited to the mutation testing above: your
-working tree holds your uncommitted work, so any subagent that needs to write gets its own copy. Two things to expect. The copy is typically created **inside your repository** — where your
+working tree holds your uncommitted work, so any subagent that needs to write gets its own
+copy. Two things to expect. The copy is typically created **inside your repository** — where your
 host puts it is the host's choice, not this plugin's — and while it is there it shows up as an
 untracked directory in `git status`. It is not gitignored for you, and if you gitignore it yourself,
 be aware the loop then has one fewer way to notice a stray one. And
@@ -181,12 +182,12 @@ guarantee something enforces. An iteration that dies partway can leave one behin
 list` will show it — and **as of v0.2.0 the loop sweeps for one itself on every resume**, before it
 touches the tree.
 
-**If the loop crashes after review has begun and then resumes, it will no longer silently keep
+**If the loop crashes partway through an iteration and then resumes, it no longer silently keeps
 uncommitted changes in your tree that it cannot account for.** It reverses the older behavior,
 which kept anything that "looked like it matched the plan" — a bad default once the loop's own
-acceptance gate started deliberately breaking code, because a mutation is built to look like a small,
-sane edit and "it looks plausible" is precisely the test it is designed to pass. Two things happen,
-and it is worth being exact about which is which.
+acceptance gate started deliberately breaking code, because a mutation is built to look like a
+small, sane edit and "it looks plausible" is precisely the test it is designed to pass. Two things
+happen, they are scoped differently, and it is worth being exact about which is which.
 
 **On every resume, the loop looks for the marks of a mutation pass that did not finish** — a stray
 worktree copy, or a retained snapshot directory. If it finds them it repairs from its own
