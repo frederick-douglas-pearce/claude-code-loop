@@ -14,9 +14,11 @@ issue per invocation, with human gates on uncertainty and durable ledger state.
 > — three repos drive it: the first external adoption
 > [us-presidential-vote-analysis](https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis),
 > the ongoing AgentFluent dogfood, and (since 2026-07-28) this repo, which runs the
-> loop it develops and is the source of most of the findings below. **All three are
-> still on 0.0.1 and re-install onto v0.2.0 as part of this release** — so the
-> hardening described below is newly cut, not yet field-proven.
+> loop it develops and is the source of most of the findings below. **All three
+> re-installed onto v0.2.0 on 2026-08-21.** Exactly **one** iteration has run on it
+> since — one issue, in AgentFluent. That was enough to confirm the plugin/config seam
+> holds against a ledger written by the previous version, and enough to surface more
+> than a dozen findings; it is not enough to call the hardening below field-proven.
 >
 > Findings from those real runs are indexed in
 > [#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1) — read

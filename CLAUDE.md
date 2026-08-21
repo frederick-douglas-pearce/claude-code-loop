@@ -432,16 +432,20 @@ that arrangement are easy to forget mid-run and change what the evidence means:
 
 **The loop executes the *installed* plugin, not the working tree.** The engine driving a run comes
 from `~/.claude/plugins/cache/claude-code-loop/dev-loop/<version>/`; edits to `skills/` and
-`commands/` here do not take effect until re-install (#36). This is a **safety property** — a run
-cannot mutate the engine driving it — but it also means the loop keeps exhibiting the defects we are
-fixing. Known ones to journal rather than silently work around: **#19/F15** (in the installed 0.0.1
+`commands/` here do not take effect until the next release's re-install. This is a **safety
+property** — a run cannot mutate the engine driving it — but it also means the loop keeps exhibiting
+the defects we are fixing until that re-install lands.
+
+**All three consumers moved 0.0.1 → 0.2.0 on 2026-08-21**, so the two instances below are now
+history. They are kept because the *shape* recurs at every release, and because reading a journal
+written before that date requires knowing which engine produced it: **#19/F15** (in the installed 0.0.1
 the AC-verifier is **step 7** and diffs `main...HEAD` *before* the step-8 commit, so an uncommitted
-branch certifies an empty diff — **fixed in-tree by #48, still live in the installed 0.0.1 until the
-#36 re-install**; note the step numbers in that sentence are 0.0.1's, and **#31 has since rotated the
+branch certifies an empty diff — **fixed in-tree by #48; the fix reached every consumer at the
+2026-08-21 re-install**; note the step numbers in that sentence are 0.0.1's, and **#31 has since rotated the
 in-tree pipeline** so that acceptance is step 10 and runs *after* the step-7 commit — when reading a
 run's journal, check which numbering the engine driving it used) and
 **#21/F14** (an unbound binding skips its gate silently instead of erroring — **fixed in-tree by
-the gate-outcome invariant, still live in the installed 0.0.1 until the #36 re-install**).
+the gate-outcome invariant; the fix reached every consumer at the 2026-08-21 re-install**).
 
 **The window between an in-tree fix and a consumer re-install is when new consumers get onboarded
 with the old bug.** The test is exact — a defect fixed in-tree **before** an onboarding yet still
@@ -451,12 +455,14 @@ both were filed on the 2026-07-28 onboarding day and fixed in-tree 2026-08-01 an
 it. This repo inherited them because they were unfixed everywhere, which illustrates the paragraph
 above, not this one.
 
-**The instance that does qualify is #10 itself, and it is still live.** Its commits landed in-tree
-2026-07-27 (`1d3ddbc`, `90de201`); this repo onboarded the next day (`c6dea09`, 2026-07-28). #10's
-engine changes remain **absent from the installed 0.0.1** — so every iteration run
-here has been driven by an engine whose hard-limit list stops before *"never edit
-`loop.config.md`"*. The orchestrator honors that rule from the in-tree copy, not from the engine
-actually executing. Fixed at the #36 re-install, like the rest.
+**The instance that does qualify is #10 itself, and it stayed live for three weeks.** Its commits
+landed in-tree 2026-07-27 (`1d3ddbc`, `90de201`); this repo onboarded the next day (`c6dea09`,
+2026-07-28). #10's engine changes were **absent from the installed 0.0.1** — so every iteration run
+here before 2026-08-21 was driven by an engine whose hard-limit list stops before *"never edit
+`loop.config.md`"*. The orchestrator honored that rule from the in-tree copy, not from the engine
+actually executing. Closed by the 2026-08-21 re-install, like the rest. **The window is the durable
+lesson, not the instance** — it reopens at every release, and this one lasted from #10's merge to a
+re-install three weeks later.
 
 **What F7 illustrated here is withdrawn.** The history is accurate — the 0.0.1 skeleton did bind
 `CODE_REVIEW` to `/code-review`, and #10 did unbind it — but the reading was not: `/code-review`
@@ -466,10 +472,13 @@ the false premise; the rest of #10 stands** — finders receive the issue's acce
 risk surface, and the orchestrator is forbidden to edit its own `loop.config.md`, which is still
 load-bearing. `.claude/loop.config.md` still deviates from the 0.0.1 skeleton, and that deviation is
 a **design choice** — the finder fan-out, kept on its own merits — rather than a workaround for a
-constraint that was never there. **The config itself has not yet been corrected**: it still records
-the withdrawn rationale at `:49` and in its §5 F7 notes. That edit is human-owned (#74/AC4) — the
-engine forbids the orchestrator from editing `loop.config.md` — so do not read this paragraph as
-describing the config's current text.
+constraint that was never there. **The config has since been corrected** (2026-08-16): it now
+carries the withdrawal explicitly — *"F7's invocability claim — WITHDRAWN 2026-08-16 (#74). Not a
+defect."* — and its `CODE_REVIEW` row closes with the same note. **#74/AC4 appears discharged.** This
+paragraph tracked that edit as pending for five days after it landed, which is the ordinary way a
+cross-file claim goes stale: the correction was human-owned (the engine forbids the orchestrator from
+editing `loop.config.md`), so nothing here moved with it. Verify against the file, not this
+sentence.
 
 **Why this consumer is worth the overhead:** its deliverable is *markdown an agent executes*, which
 neither AgentFluent nor the vote repo produces. That breaks the router's assumption that markdown
