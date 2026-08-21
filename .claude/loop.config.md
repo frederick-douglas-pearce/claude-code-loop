@@ -13,24 +13,28 @@ See `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/loop-engine.md` for the operating pro
 
 > 🐕 **This repo is a dogfood consumer of the plugin it develops.** Two consequences that are easy
 > to forget mid-run:
-> 1. **The loop runs the *installed* engine** (`~/.claude/plugins/cache/claude-code-loop/dev-loop/0.0.1/`),
->    **not this working tree.** Edits to `skills/` and `commands/` here do not take effect until the
->    plugin is re-installed (#36). This is a safety property — the engine driving a run cannot be
->    mutated by that run — but it means the loop will keep exhibiting v0.0.1 bugs while we fix them.
-> 2. **Known v0.0.1 defects that will affect every iteration here.** Journal each occurrence rather
->    than silently working around it — this repo's runs are the evidence base for v0.2.0:
+> 1. **The loop runs the *installed* engine** (`~/.claude/plugins/cache/claude-code-loop/dev-loop/<version>/`
+>    — **v0.2.0 since 2026-08-21**), **not this working tree.** Edits to `skills/` and `commands/`
+>    here do not take effect until the plugin is re-installed. This is a safety property — the engine
+>    driving a run cannot be mutated by that run — but it means the loop keeps exhibiting the bugs we
+>    are fixing until the next re-install lands.
+> 2. **v0.0.1 defects that affected every iteration here before 2026-08-21.** All closed at the
+>    re-install. Kept because they are how to read a journal written before that date:
 >    - **#19 (F15)** — the AC-verifier is specified on `git diff main...HEAD` at step 7, *before* the
 >      step-8 commit. On an uncommitted branch that diff is **empty** and the gate certifies nothing.
 >      **Fixed in-tree by #48**, not by the #31 reorder this note used to credit: the spec now
 >      resolves `BASE=$(git merge-base main HEAD)`, diffs merge-base → **working tree** (covering all
 >      three commit states), reads untracked files separately, and treats an empty input as a
->      **finding** rather than a pass. **Still live in the installed 0.0.1 until the plugin is
->      re-installed (#36)** — so the workaround still applies to runs driven by the installed engine:
->      commit before invoking the AC-verifier, and require the verifier to state the diff it actually
->      received. Better, run the #48 procedure directly, as this repo's own #19 iteration did — that
->      is what produced the evidence that the old spec certifies 0 files pre-commit.
->    - **#21 (F14)** — an unbound or `TODO(init-loop)` binding does not error; it silently skips the
->      gate. Every `TODO` below is therefore a **live inert gate**, not a harmless blank.
+>      **finding** rather than a pass. **Closed at the 2026-08-21 re-install.** The workaround it
+>      required — commit before invoking the AC-verifier, and make the verifier state the diff it
+>      actually received — no longer applies. Note the step numbers in this bullet are **0.0.1's**;
+>      under v0.2.0 acceptance is the last gate and runs *after* the commit.
+>    - **#21 (F14)** — an unbound or `TODO(init-loop)` binding did not error; it silently skipped
+>      the gate, making every `TODO` below a **live inert gate** rather than a harmless blank.
+>      **Closed at the 2026-08-21 re-install:** v0.2.0's Gate-outcome invariant falls back to the
+>      engine's inline composition where one is defined, records a `- gate-fallback:` line, and
+>      surfaces the misbinding. A `TODO` is now **loud** rather than silent — it is still not a
+>      binding.
 >    - **F7's invocability claim — WITHDRAWN 2026-08-16 (#74). Not a defect.** The 0.0.1 skeleton
 >      does bind `CODE_REVIEW` to `/code-review`, and #10 did unbind it — but `/code-review` is
 >      **model-invocable**. So the gate that binding produces is not inert. **Only #10's *rebinding*
@@ -54,10 +58,10 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `BACKLOG_SOURCE` | GitHub milestone **`v0.2.0`** | `gh issue list --milestone v0.2.0 --state open`. 29 open (7 epic trackers + 21 stories + #1). `v0.3.0` holds two deferrals (#37, #38) — out of this run. |
 | `SCOPE_AGENT` | the **`pm`** subagent | user-global; scope/priority/requirements. Confirmed present in this session's agent roster. |
 | `DESIGN_AGENT` | the **`architect`** subagent | user-global; reviews plans pre-implementation. Confirmed present. |
-| `CODE_REVIEW` | parallel finder subagents over `git diff main...HEAD` **+ the issue's acceptance criteria**, angles chosen per the diff's risk surface (engine step 8), then a pass confirming each finding | **the orchestrator runs this itself — a design choice, not a constraint.** `/code-review <effort>` (`low`→`max`) **is** model-invocable and could be bound here; only `ultra` is user-triggered, and that form degrades silently to a local review rather than refusing (F7's invocability claim withdrawn, #74). **One ground carries the decision:** this repo is **#38's corpus generator**, and per-lens `- Budget:` data is the instrument #38 needs to decide `REVIEW_TIERS` — the skill reports a flat finding list with no angle attribution (verified by extracting the live skill's report path from the CLI binary: a single findings call carrying file/line/summary/failure-scenario per finding, and no lens field), so binding it here starves that experiment. Structural, and independent of which angles the skill runs. **A second ground was considered and is recorded as NOT carrying the decision** — that the skill's remit excludes the engine's standing authoring check (every finder flags prose claiming a test/guard/invariant that does not resolve). The skill runs a **conventions angle at higher effort that reads this repo's `CLAUDE.md` and flags violations of the rules it states**, which is closer to that check than "its remit is X only" implied. A residual gap is plausible — the standing check covers claims that must *resolve*, not only rules `CLAUDE.md` *states* — but it has **never been measured (n=0)**. Do not cite it as decisive. **The counter-case, recorded because it is strong:** **n for "fan-out beats the skill" is also zero.** The corpus supports *diversity beats single-angle*, never this mechanism over one agent at high effort. Cost differs by roughly an order of magnitude at this gate (≈15–25 subagent runs on a hard issue vs. one invocation). **Revisit after #71** — an *open* question, not a ruling — which would make a skill binding journal its inability to carry the standing check instead of dropping it silently. |
+| `CODE_REVIEW` | parallel finder subagents over `git diff main...HEAD` **+ the issue's acceptance criteria**, angles chosen per the diff's risk surface (the code-review gate), then a pass confirming each finding | **the orchestrator runs this itself — a design choice, not a constraint.** `/code-review <effort>` (`low`→`max`) **is** model-invocable and could be bound here; only `ultra` is user-triggered, and that form degrades silently to a local review rather than refusing (F7's invocability claim withdrawn, #74). **One ground carries the decision:** this repo is **#38's corpus generator**, and per-lens `- Budget:` data is the instrument #38 needs to decide `REVIEW_TIERS` — the skill reports a flat finding list with no angle attribution (verified by extracting the live skill's report path from the CLI binary: a single findings call carrying file/line/summary/failure-scenario per finding, and no lens field), so binding it here starves that experiment. Structural, and independent of which angles the skill runs. **A second ground was considered and is recorded as NOT carrying the decision** — that the skill's remit excludes the engine's standing authoring check (every finder flags prose claiming a test/guard/invariant that does not resolve). The skill runs a **conventions angle at higher effort that reads this repo's `CLAUDE.md` and flags violations of the rules it states**, which is closer to that check than "its remit is X only" implied. A residual gap is plausible — the standing check covers claims that must *resolve*, not only rules `CLAUDE.md` *states* — but it has **never been measured (n=0)**. Do not cite it as decisive. **The counter-case, recorded because it is strong:** **n for "fan-out beats the skill" is also zero.** The corpus supports *diversity beats single-angle*, never this mechanism over one agent at high effort. Cost differs by roughly an order of magnitude at this gate (≈15–25 subagent runs on a hard issue vs. one invocation). **Revisit after #71** — an *open* question, not a ruling — which would make a skill binding journal its inability to carry the standing check instead of dropping it silently. |
 | `SECURITY_REVIEW` | the **`/security-review`** skill (local, model-invocable), scoped per §4 | no labeled workflow exists in this repo — `.github/workflows/` contains only `test.yml`. Local path only. |
 | `VERIFY` | `—` (no runnable app) | the deliverable is prompt artifacts + one hook; there is nothing to launch. Runtime proof for the hook comes from `TEST_CMD`. |
-| `PRIORITY_LABELS` | **no `priority:*` labels exist.** Selection order is the explicit `**Delivery order:** PR <n>` line in each issue body, then `Depends on:`, tiebreak issue-number ascending | ⚠ **vocabulary gap** — the engine's step 1 assumes a *label* ordering. This repo encodes priority as prose in the body. Candidate finding: `PRIORITY_LABELS` needs a body-derived form (see §5). |
+| `PRIORITY_LABELS` | **no `priority:*` labels exist.** Selection order is the explicit `**Delivery order:** PR <n>` line in each issue body, then `Depends on:`, tiebreak issue-number ascending | ⚠ **vocabulary gap** — the engine's selection step assumes a *label* ordering. This repo encodes priority as prose in the body. Candidate finding: `PRIORITY_LABELS` needs a body-derived form (see §5). |
 | `ARCHITECT_TRIGGERS` | see §2 | **project-specific — edit when porting** |
 | `SOURCE_LAYOUT` | see §3 | router uses this; **edit when porting**. ⚠ This repo is the hard case — see §3. |
 | `TEST_CMD` | `python3 -m unittest discover -s tests` | from `CLAUDE.md` → Commands and `.github/workflows/test.yml`. **Stdlib only — never add pytest or any dependency.** |
@@ -148,7 +152,7 @@ wrong. Skip for pure `README.md`/`LICENSE` edits.
 ## 4. Security routing
 
 The host is GitHub. There is **no labeled security workflow** in this repo (`.github/workflows/`
-contains only `test.yml`), so the labeled path from the engine's step 9 does not exist here and the
+contains only `test.yml`), so the labeled path from the engine's security gate does not exist here and the
 local path is the whole story.
 
 > ### ⛔ Precondition — `origin/HEAD` must be set, or this gate dies before it runs
@@ -263,7 +267,7 @@ and the running list of **dogfood findings this repo surfaces that the other two
 
 - **Candidate finding — `PRIORITY_LABELS` assumes labels.** This backlog encodes selection order as
   a `**Delivery order:** PR <n>` line in the issue *body*, with `Depends on:` / `Blocks:` lines
-  beside it. There are no `priority:*` labels. The engine's step 1 ("pick by `PRIORITY_LABELS`
+  beside it. There are no `priority:*` labels. The engine's selection step ("pick by `PRIORITY_LABELS`
   order") has no binding that expresses this. Generic fix: allow `PRIORITY_LABELS` to name a
   body-derived ordering key, not only a label set.
 
@@ -322,7 +326,7 @@ and the running list of **dogfood findings this repo surfaces that the other two
   stub-defer marker names (§3 above: epic trackers, and #1) or a body that declares itself not
   implementation-ready — **none of which is about *who* may do the work**. #73 is ready; it is
   merely ready **for a different actor**. Routed `code` as its signals dictate, it walks into
-  engine step 6 and the orchestrator edits three configs, breaking Tool surface. The only thing that
+  the engine's implement step and the orchestrator edits three configs, breaking Tool surface. The only thing that
   stopped it here was the orchestrator reading the issue body closely enough to notice — which is
   exactly the "instruction to be more careful" the engine rejects everywhere else. **Same shape as
   F14: a rule stated in prose that no mechanism enforces** (the *direction* is opposite — F14 is a
