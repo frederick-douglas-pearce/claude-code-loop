@@ -167,25 +167,36 @@ written as a parameter's **value**; naming the marker in prose, as this sentence
 and needs no change.
 
 > **Maintainers of this file** (not part of an onboarding run): **never cite a pipeline step by
-> number anywhere in this file — cite the gate by name.** Write "the code-review gate", "the engine's
-> implement step"; never "engine step N" with a digit in place of `N`. This holds in the skeleton
-> *and* in the surrounding prose, and `test_the_shipped_skeleton_contains_no_engine_step_number` in
-> `tests/test_repo_consistency.py` enforces it at zero, so a number reintroduced anywhere here turns
-> the suite red.
+> number — name it instead.** Write "the code-review gate", "the engine's implement step"; never
+> "engine step N" with a digit in place of `N`. This holds in the skeleton *and* in the surrounding
+> prose.
 >
-> **The reason is an asymmetry, not tidiness.** The `~~~markdown` skeleton is copied verbatim into
-> each onboarded repo's `.claude/loop.config.md` — a file **no release, no CI check, no `/init-loop`
-> re-run and no plugin re-install ever reaches**. A step number written here is therefore correct only
-> until the next renumber, after which it is stranded in every config generated in the meantime, with
-> nothing able to correct it. A gate *name* survives a renumber. (The rule covers the prose too
-> because a rule with an exception is one a later edit migrates into: the prose does not ship, but a
-> number sitting in it is a number the next editor copies into the skeleton.)
+> **The reason is an asymmetry, not tidiness.** The `~~~markdown` skeleton below is copied into each
+> onboarded repo's `.claude/loop.config.md` — placeholders substituted, the prose carried across as
+> written — and that file is reached by **no release, no CI check, no `/init-loop` re-run and no
+> plugin re-install**. A step number written here is therefore correct only until the next renumber,
+> after which it is stranded in every config generated in the meantime, with nothing able to correct
+> it. A name survives a renumber. (The rule covers the prose too because a rule with an exception is
+> one a later edit migrates into: the prose does not ship, but a number sitting in it is a number the
+> next editor copies inward.)
 >
-> This is why the file-wide count is pinned at zero rather than floored: **zero is the whole
-> assertion.** Its liveness is guarded separately — `test_the_extractors_actually_find_steps` checks
-> the matcher against a synthetic fixture, so "no numbers found" cannot silently mean "the matcher
-> stopped working". If you genuinely need to point at a step, name the gate and let the reader
-> resolve it in `loop-engine.md`.
+> **What is mechanically enforced is narrower than the rule, and you need to know the gap.**
+> `test_init_loop_md_contains_no_engine_step_number` pins this file at **zero** occurrences of
+> the ***`engine`-anchored* form** — `engine step N`, `the engine's step N`, `engine step-N`,
+> `engine steps N/M`, and the line-wrapped variants (write `N`, never a digit, in an example like
+> these: the pin counts what it matches, and a digit here would redden the suite). Those forms turn
+> it red. **A bare `step 8`
+> does not**, and cannot: this file carries dozens of its own onboarding `Step N` references and
+> every number they use is also a real engine step, so a matcher without the anchor would flag all of
+> them. **So `(step 8)` — the obvious short form to reach for when trimming the anchored
+> one — ships silently.
+> That one is on you and on review, not on the suite.** Do not read a green run as clearance.
+>
+> The pin is at zero rather than at a count, so nothing can drift up unnoticed. Its liveness is
+> guarded separately: `test_the_extractors_actually_find_steps` checks the matcher against synthetic
+> fixtures covering each branch, so "no numbers found" cannot quietly mean "the matcher stopped
+> working". If you need to point at a step, name it and let the reader resolve it in
+> `loop-engine.md`.
 >
 > Second, **never write an environment-variable reference into the skeleton** — not the plugin-root
 > one, not the project-dir one — because the harness expands them before the generating agent reads
