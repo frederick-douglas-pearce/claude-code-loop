@@ -11,16 +11,10 @@ four couplings that a reader cannot see and a reviewer reliably forgets:
    manifests it is composed from;
 3. every ``CAPS`` parameter the engine reads is offered by the ``/init-loop``
    skeleton, so a newly-onboarded repo is never missing a binding;
-4. the pipeline's step order, restated five times across three files, still
-   agrees with itself. (It was six across four until #113 removed the sixth --
-   ``commands/init-loop.md``'s ``engine step N`` citations (the ``CODE_REVIEW``
-   row's came from #10, the ``HERMETIC_TEST_CMD`` row's from #39; #45 added the
-   guard over them, not the rows).
-   They now name gates instead of numbering them, because that file's skeleton
-   ships into repos no release can reach. Two other sites in this file carry the
-   number too -- ``PipelineStepOrderTests``' docstring and the vacuity guard's
-   comment -- so a change to it is a three-site edit; an earlier draft of this
-   line claimed to be the only one, which was false when written.)
+4. the pipeline's step order, still restated in several artifacts, agrees with
+   itself. (#113 removed one of them -- ``commands/init-loop.md``'s
+   ``engine step N`` citations, which now name gates instead of numbering them,
+   because that file's skeleton ships into repos no release can reach.)
 
 Each failure here is silent rot in the shipped product, not a style nit.
 
@@ -243,7 +237,8 @@ class CapsVocabularyTests(unittest.TestCase):
 
 
 class PipelineStepOrderTests(unittest.TestCase):
-    """Five restatements of the pipeline's step order, checked against each other.
+    """The pipeline's step order, restated in several artifacts and checked
+    against itself.
 
     The order lives in ``loop-engine.md``'s ``### N. <name>`` headings, is
     restated with numbers in ``SKILL.md``'s arrow chain, and is spelled out
@@ -403,9 +398,8 @@ class PipelineStepOrderTests(unittest.TestCase):
     # where the answer must be zero. The anchor is what does the
     # discrimination; note it does so WITHOUT an allow-list, which is the point
     # (cf. _STOPWORDS, ALLOWED_NON_BINDINGS). No tally of either set is given:
-    # the figures this comment used to carry ("18 ... 16 of them") were correct
-    # when #45 wrote them and were silently doubled by #40's rewrite of that
-    # file, unnoticed until #113 measured it.
+    # a figure here strands on the next rewrite of that file, which is what
+    # happened to the pair this comment used to carry.
     #
     # Everything after the anchor mirrors _STEP_REFERENCE's NUMBER handling
     # exactly -- same separator class (so `engine step-9` matches), same `.N`
@@ -425,12 +419,10 @@ class PipelineStepOrderTests(unittest.TestCase):
     # possessive (including agentfluent's only one), so it is what a future
     # editor of this file is likely to write.
     #
-    # The newline branch has no live instance here, and since #113 neither does
-    # any other branch: this file is pinned at ZERO references, so nothing in it
-    # exercises this pattern at all. Every branch is therefore verified by the
-    # synthetic fixtures in test_the_init_loop_matcher_is_alive and by nothing
-    # else -- said plainly so the next reader does not mistake an unexercised
-    # branch for a covered one. Deleting a fixture silently unguards its branch.
+    # Since #113 no branch has a live instance: the file is pinned at ZERO, so
+    # nothing in it exercises this pattern. test_the_init_loop_matcher_is_alive
+    # is therefore the only proof the matcher is not wholly dead; a narrowing
+    # that drops one branch is not caught anywhere and rests on review.
     _INIT_LOOP_STEP_REFERENCE = re.compile(
         r"\b[Ee]ngine(?:'s|’s)?(?:[ \t]+|[ \t]*\n[ \t]*)[Ss]teps?"
         r"(?:[ -]|[ \t]*\n[ \t]*)(\d+(?:\.\d+)?(?:[/–—-]\d+(?:\.\d+)?)*)"
@@ -452,41 +444,24 @@ class PipelineStepOrderTests(unittest.TestCase):
     # `engine step N`, with a letter -- a digit inflates the pin, which is a
     # mistake #113 made in its own replacement note and caught by running this.
     #
-    # It counts across the WHOLE file, which is what lets the skeleton-position
+    # It counts across the WHOLE file, which is what let the skeleton-position
     # check go: skeleton is a subset of file, so file == 0 already proves
-    # skeleton == 0. That removed the `~~~markdown` span matcher with it
-    # (formerly `_INIT_LOOP_SKELETON`, deleted by #113 -- it has no definition
-    # here any more, and this is the only mention) -- the instrument CLAUDE.md
-    # calls fragile, defeated four times on #39's PR. #76 is affected and the
-    # earlier claim here that it was "neither fixed nor advanced" was wrong:
-    # #76/AC3 says verbatim that `_INIT_LOOP_SKELETON` "moves to the same
-    # instrument" and is "load-bearing for the position pin", and both are now
-    # gone -- so AC3 names something that no longer exists and needs amending
-    # before anyone works #76. #113's own body predicted this ("shrinks #76's
-    # scope"). What #76 still owns is untouched: CapsVocabularyTests reads the
-    # whole file, which is a different mechanism from this one.
+    # skeleton == 0. That removed the `~~~markdown` span matcher with it -- the
+    # instrument CLAUDE.md calls fragile, defeated four times on #39's PR.
     #
-    # A pin, not a floor, and at zero the distinction bites harder than before:
-    # nothing can drift UP unnoticed. But zero cannot detect a dead matcher --
-    # a broken regex and a clean file both report 0 -- so matcher liveness is
-    # asserted separately, against synthetic fixtures, in
-    # test_the_extractors_actually_find_steps. Deleting that check would make
-    # this one vacuous.
+    # A pin, not a floor: at zero nothing can drift up unnoticed. Zero cannot
+    # detect a dead matcher, though -- a broken regex and a clean file both
+    # report 0 -- so liveness is asserted separately in
+    # test_the_init_loop_matcher_is_alive, and deleting that makes this vacuous.
     #
-    # The `engine` anchor remains load-bearing: without it the matcher would
-    # find this file's OWN onboarding `Step N` headings -- dozens of them, every
-    # number also a real engine heading -- and report a large number instead of
-    # zero. (No tally here on purpose. The figure this comment used to carry,
-    # "16 ... all 18", was correct when #45 wrote it and was silently doubled by
-    # #40's rewrite of init-loop.md, unnoticed until #113 measured it. State the
-    # mechanism, not a count that the next rewrite strands -- which is why no
-    # figure is repeated here.)
+    # The `engine` anchor is load-bearing: without it the matcher would find
+    # this file's OWN onboarding `Step N` headings, every number also a real
+    # engine heading, and report a large number instead of zero. No tally of
+    # either set is stated -- a figure here strands on the next rewrite, which
+    # is exactly what happened to the one this comment used to carry.
     #
-    # If this is EVER raised above zero, restore a resolvability check with it.
-    # test_every_init_loop_engine_step_reference_resolves_to_a_real_heading was
-    # deleted by #113 as permanently vacuous, and that is true only while the
-    # expected count is 0. A non-zero pin means references exist again, and
-    # nothing here would then notice one pointing at a step no heading defines.
+    # If this is EVER raised above zero, restore a resolvability check with it:
+    # the one #113 deleted was permanently vacuous only while the count is 0.
     _EXPECTED_INIT_LOOP_STEP_REFERENCES = 0
     # Well below the 182 numbers currently present (179 reference sites,
     # some listing several), so ordinary prose edits never trip it, and well
@@ -715,65 +690,61 @@ class PipelineStepOrderTests(unittest.TestCase):
             "engine writes -- in which case this check is passing vacuously.",
         )
         # _skill_frontmatter_labels asserts its own shape; calling it here keeps
-        # the vacuity guard honest about all five restatements.
+        # the vacuity guard honest about every restatement it covers.
         self._skill_frontmatter_labels()
 
 
     def test_the_init_loop_matcher_is_alive(self) -> None:
-        """``_INIT_LOOP_STEP_REFERENCE`` still matches what it exists to find.
+        """``_INIT_LOOP_STEP_REFERENCE`` still matches, and still needs its anchor.
 
         **Its own test, not a clause in the omnibus vacuity check above.** That
         check opens with four ``assertGreaterEqual``s, any of which
         short-circuits the rest; the guard this replaces was split out for
-        exactly that reason, and folding this in would have re-made the mistake.
+        exactly that reason.
 
-        **Why a synthetic fixture rather than the live file.** The old guard
-        floored ``commands/init-loop.md`` at >=1 real reference. #113 removed
-        them all -- that file must now contain ZERO -- so a live-file floor is
+        **Why a fixture rather than the live file.** The old guard floored
+        ``commands/init-loop.md`` at >=1 real reference. #113 removed them all --
+        that file must now contain ZERO -- so a live-file floor is
         unsatisfiable, and the pin it protected became a pin at 0. That is the
         trap: a dead matcher and a clean file both report 0, so without this
         ``test_init_loop_md_contains_no_engine_step_number`` could never fail.
+        Nothing else exercises the pattern, which makes the positive assertion
+        below the load-bearing one.
 
-        **Every branch gets a fixture, because a pin at zero exercises none of
-        them.** Round 1 of code review found the first version of this test
-        pinned only the flat ``engine step N`` form: deleting the possessive
-        branch left the suite green, and ``(the engine's step 8)`` could then be
-        written into the shipped skeleton undetected. That is the likeliest
-        reintroduction of all, since this repo's own prose now models
-        "the engine's implement step" -- so a branch-by-branch table it is.
+        **What this does NOT do, stated because two review rounds have now
+        turned on it.** It does not verify the matcher's individual alternation
+        branches. A narrowing that drops one -- a capitalised ``Step``, a
+        newline in the other position, the possessive, an alternate dash --
+        passes this test, and is **review's to own**, exactly as the bare
+        ``step N`` gap in ``commands/init-loop.md``'s maintainer note is. An
+        earlier version of this test carried a fixture per branch and claimed to
+        cover them all; a fresh checker defeated that claim twice, because
+        detecting a narrowing means naming the form narrowed away, and that list
+        has no end. One canonical form is the honest boundary. Reaching the
+        dangerous state still takes two edits -- narrow the regex, *then* write
+        the variant into a file whose note forbids writing it at all.
+
+        It calls the real compiled pattern, so it cannot pass by restating its
+        own expected answer.
         """
-        for label, text, expected in [
-            ("flat", "see engine step 8 for details", ["8"]),
-            ("possessive", "see the engine's step 8", ["8"]),
-            ("possessive (curly)", "see the engine\u2019s step 8", ["8"]),
-            ("capitalised", "Engine step 8 covers it", ["8"]),
-            ("hyphenated", "see engine step-8", ["8"]),
-            ("run form", "see engine steps 9/10", ["9/10"]),
-            ("sub-item", "see engine step 0.1", ["0.1"]),
-            ("line-wrapped", "see engine\n    step 8", ["8"]),
-        ]:
-            with self.subTest(branch=label):
-                self.assertEqual(
-                    self._INIT_LOOP_STEP_REFERENCE.findall(text),
-                    expected,
-                    f"_INIT_LOOP_STEP_REFERENCE no longer matches the {label} form "
-                    f"({text!r}). commands/init-loop.md is pinned at ZERO references, "
-                    "so a matcher that stopped seeing this form reports the expected "
-                    "count and the suite stays green while that form ships freely into "
-                    "every config /init-loop generates.",
-                )
-
+        self.assertEqual(
+            self._INIT_LOOP_STEP_REFERENCE.findall("see engine step 8 for details"),
+            ["8"],
+            "_INIT_LOOP_STEP_REFERENCE no longer matches `engine step 8`, the "
+            "canonical form it exists to find. commands/init-loop.md is pinned at "
+            "ZERO references, so a dead matcher reports the expected count and "
+            "test_init_loop_md_contains_no_engine_step_number stays green while "
+            "guarding nothing.",
+        )
         self.assertEqual(
             self._INIT_LOOP_STEP_REFERENCE.findall("see Step 8 of this guide"),
             [],
             "_INIT_LOOP_STEP_REFERENCE matched a bare `Step 8` with no `engine` "
-            "anchor. That anchor is what keeps commands/init-loop.md's OWN "
-            "onboarding step headings out of scope -- there are dozens, and every "
-            "number they carry is also a real engine heading, so an unanchored "
-            "matcher would report them all instead of zero. Note the converse, "
-            "which is a real and accepted gap rather than a bug: a bare `step 8` "
-            "written as an ENGINE reference is invisible to this matcher too, and "
-            "rests on review. init-loop.md's maintainer note says so.",
+            "anchor. That anchor keeps commands/init-loop.md's OWN onboarding step "
+            "headings out of scope -- there are dozens, every number also a real "
+            "engine heading. (The live pin catches this one too, and louder: an "
+            "unanchored matcher finds all of them and turns it red. This states "
+            "the intent.)",
         )
 
     def test_engine_headings_are_numbered_contiguously_from_zero(self) -> None:
@@ -964,7 +935,7 @@ class PipelineStepOrderTests(unittest.TestCase):
 
         **This test is only as live as its matcher, and at zero it cannot tell
         you so.** A broken ``_INIT_LOOP_STEP_REFERENCE`` reports 0 exactly as a
-        clean file does. ``test_the_extractors_actually_find_steps`` is what
+        clean file does. ``test_the_init_loop_matcher_is_alive`` is what
         keeps this honest -- it checks the matcher against synthetic fixtures in
         both directions. Delete that and this assertion becomes vacuous.
 

@@ -181,22 +181,16 @@ and needs no change.
 > next editor copies inward.)
 >
 > **What is mechanically enforced is narrower than the rule, and you need to know the gap.**
-> `test_init_loop_md_contains_no_engine_step_number` pins this file at **zero** occurrences of
-> the ***`engine`-anchored* form** — `engine step N`, `the engine's step N`, `engine step-N`,
-> `engine steps N/M`, and the line-wrapped variants (write `N`, never a digit, in an example like
-> these: the pin counts what it matches, and a digit here would redden the suite). Those forms turn
-> it red. **A bare `step 8`
-> does not**, and cannot: this file carries dozens of its own onboarding `Step N` references and
-> every number they use is also a real engine step, so a matcher without the anchor would flag all of
-> them. **So `(step 8)` — the obvious short form to reach for when trimming the anchored
-> one — ships silently.
-> That one is on you and on review, not on the suite.** Do not read a green run as clearance.
+> The suite pins this file at **zero** occurrences of the form anchored on the literal word
+> `engine`. Those turn it red. **A bare `step 8` does not**, and cannot: this file carries dozens of
+> its own onboarding `Step N` references and every number they use is also a real engine step, so a
+> matcher without that anchor would flag all of them. **So `(step 8)` — the obvious short form to
+> reach for when trimming the anchored one — ships silently. That one is on you and on review, not
+> on the suite.** Do not read a green run as clearance.
 >
-> The pin is at zero rather than at a count, so nothing can drift up unnoticed. Its liveness is
-> guarded separately: `test_the_extractors_actually_find_steps` checks the matcher against synthetic
-> fixtures covering each branch, so "no numbers found" cannot quietly mean "the matcher stopped
-> working". If you need to point at a step, name it and let the reader resolve it in
-> `loop-engine.md`.
+> The pin is at zero rather than at a count, so nothing can drift up unnoticed, and its liveness is
+> guarded separately in the suite. If you need to point at a step, name it and let the reader
+> resolve it in `loop-engine.md`.
 >
 > Second, **never write an environment-variable reference into the skeleton** — not the plugin-root
 > one, not the project-dir one — because the harness expands them before the generating agent reads
