@@ -166,18 +166,37 @@ that renders as garbage is a blank that never gets filled. This rule is about a 
 written as a parameter's **value**; naming the marker in prose, as this sentence does, is not a value
 and needs no change.
 
-> **Maintainers of this file** (not part of an onboarding run): write any pipeline cross-reference
-> in the skeleton as **`engine step N`**, including the literal word "engine" — the `CODE_REVIEW`
-> row uses it today. A bare `step N` is indistinguishable from this file's own numbered onboarding
-> headings, which resolve to real engine step numbers too, so nothing would catch a stale one. Add
-> references freely in that form, bumping `_EXPECTED_INIT_LOOP_STEP_REFERENCES` in
-> `tests/test_repo_consistency.py` in the same change; write `N` rather than a digit in any
-> illustrative example, which the same count would otherwise pick up. A reference you add **inside**
-> the skeleton bumps `_EXPECTED_SKELETON_STEP_REFERENCES` as well; one in surrounding prose bumps
-> only the total. **At least one reference must
-> stay inside the `~~~markdown` skeleton** — that block is the only part of this file copied into a
-> consuming repo, so a reference that drifts out into surrounding prose stops guarding anything that
-> ships, and a check enforces it.
+> **Maintainers of this file** (not part of an onboarding run): **never cite a pipeline step by
+> number — name it instead.** Write "the code-review gate", "the engine's implement step"; never
+> "engine step N" with a digit in place of `N`. This holds in the skeleton *and* in the surrounding
+> prose.
+>
+> **The reason is an asymmetry, not tidiness.** The `~~~markdown` skeleton below is copied into each
+> onboarded repo's `.claude/loop.config.md` — placeholders substituted, the prose carried across as
+> written — and that file is reached by **no release, no CI check, no `/init-loop` re-run and no
+> plugin re-install**. A step number written here is therefore correct only until the next renumber,
+> after which it is stranded in every config generated in the meantime, with nothing able to correct
+> it. A name survives a renumber. (The rule covers the prose too because a rule with an exception is
+> one a later edit migrates into: the prose does not ship, but a number sitting in it is a number the
+> next editor copies inward.)
+>
+> **What is mechanically enforced is narrower than the rule, and you need to know the gap.**
+> `test_init_loop_md_contains_no_engine_step_number` pins this file at **zero** occurrences of
+> the ***`engine`-anchored* form** — `engine step N`, `the engine's step N`, `engine step-N`,
+> `engine steps N/M`, and the line-wrapped variants (write `N`, never a digit, in an example like
+> these: the pin counts what it matches, and a digit here would redden the suite). Those forms turn
+> it red. **A bare `step 8`
+> does not**, and cannot: this file carries dozens of its own onboarding `Step N` references and
+> every number they use is also a real engine step, so a matcher without the anchor would flag all of
+> them. **So `(step 8)` — the obvious short form to reach for when trimming the anchored
+> one — ships silently.
+> That one is on you and on review, not on the suite.** Do not read a green run as clearance.
+>
+> The pin is at zero rather than at a count, so nothing can drift up unnoticed. Its liveness is
+> guarded separately: `test_the_extractors_actually_find_steps` checks the matcher against synthetic
+> fixtures covering each branch, so "no numbers found" cannot quietly mean "the matcher stopped
+> working". If you need to point at a step, name it and let the reader resolve it in
+> `loop-engine.md`.
 >
 > Second, **never write an environment-variable reference into the skeleton** — not the plugin-root
 > one, not the project-dir one — because the harness expands them before the generating agent reads
@@ -226,7 +245,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `BACKLOG_SOURCE` | <inferred / TODO(init-loop)> | GitHub milestone/label, or a local `TODO.md` |
 | `SCOPE_AGENT` | <TODO(init-loop): user-global subagent, or remove if none> | answers scope/priority/requirements questions |
 | `DESIGN_AGENT` | <TODO(init-loop): user-global subagent, or remove if none> | reviews plans pre-implementation |
-| `CODE_REVIEW` | parallel finder subagents over `git diff main...HEAD` **+ the issue's acceptance criteria**, angles chosen per the diff's risk surface (engine step 8), then a pass confirming each finding | the orchestrator runs this itself — the finder fan-out is the engine's inline default and the binding this repo keeps. A porting project may bind a different review procedure here, but only one the orchestrator can actually invoke: a skill marked `disable-model-invocation` is user-triggered only, so keep such skills as a human escalation, never a binding. A gate bound to something it cannot invoke is never journalled passed — the orchestrator falls back to the inline fan-out, records a `- gate-fallback:` line, and surfaces the misbinding to you (engine Gate-outcome invariant) |
+| `CODE_REVIEW` | parallel finder subagents over `git diff main...HEAD` **+ the issue's acceptance criteria**, angles chosen per the diff's risk surface (the code-review gate), then a pass confirming each finding | the orchestrator runs this itself — the finder fan-out is the engine's inline default and the binding this repo keeps. A porting project may bind a different review procedure here, but only one the orchestrator can actually invoke: a skill marked `disable-model-invocation` is user-triggered only, so keep such skills as a human escalation, never a binding. A gate bound to something it cannot invoke is never journalled passed — the orchestrator falls back to the inline fan-out, records a `- gate-fallback:` line, and surfaces the misbinding to you (engine Gate-outcome invariant) |
 | `SECURITY_REVIEW` | <TODO(init-loop): local `/security-review` and/or a labeled workflow> | see §4 |
 | `VERIFY` | `/verify` (built-in) | runtime behavior check when an AC needs proof-by-running |
 | `PRIORITY_LABELS` | <inferred / TODO(init-loop)> | drives selection order; e.g. `priority:high > medium > low`, tiebreak issue number asc |
@@ -235,7 +254,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `TEST_CMD` | <inferred / TODO(init-loop)> | |
 | `LINT_CMD` | <inferred / — + reason if none> | a bare `—` with no reason is a blank, not a "not applicable" |
 | `TYPE_CMD` | <inferred / — + reason if none, e.g. `— (no separate type step)`> | a bare `—` with no reason is a blank, not a "not applicable" |
-| `HERMETIC_TEST_CMD` | <the declared offline tier wrapped in a socket-level block / `—` + "no offline/hermetic tier declared"> | runs at engine step 6 on a `code`-route change that adds or modifies a test. **If this says `—`, confirm it** — the generator writes `—` whenever it found no declared offline tier, and it only read the files the onboarding run listed; if anything in this repo claims some tests run offline, the `—` is wrong and the gate is off. **Never delete this row:** an absent row reads as unknown and stops the run — write `—` plus a reason instead. **The block must be socket-level — a proxy still resolves DNS.** Verify once: for a wrapper-style block run `<the block> python3 -c "import socket; socket.create_connection(('1.1.1.1',443),3)"` and require it to fail (and to connect without the block); for an in-process blocker, add a throwaway test doing that connect and confirm it fails inside the tier and passes outside it. A bare `—` with no reason, or a `TODO`, escalates — neither is read as "no tier" |
+| `HERMETIC_TEST_CMD` | <the declared offline tier wrapped in a socket-level block / `—` + "no offline/hermetic tier declared"> | runs at the engine's implement step on a `code`-route change that adds or modifies a test. **If this says `—`, confirm it** — the generator writes `—` whenever it found no declared offline tier, and it only read the files the onboarding run listed; if anything in this repo claims some tests run offline, the `—` is wrong and the gate is off. **Never delete this row:** an absent row reads as unknown and stops the run — write `—` plus a reason instead. **The block must be socket-level — a proxy still resolves DNS.** Verify once: for a wrapper-style block run `<the block> python3 -c "import socket; socket.create_connection(('1.1.1.1',443),3)"` and require it to fail (and to connect without the block); for an in-process blocker, add a throwaway test doing that connect and confirm it fails inside the tier and passes outside it. A bare `—` with no reason, or a `TODO`, escalates — neither is read as "no tier" |
 | `CI_STATUS_CMD` | <inferred / TODO(init-loop)> | |
 | `BRANCH_FMT` | <inferred / TODO(init-loop)> | |
 | `COMMIT_CONV` | <inferred / TODO(init-loop)> | |
