@@ -270,8 +270,8 @@ class PipelineStepOrderTests(unittest.TestCase):
     the next renumber, after which they were stranded in every config generated
     in the meantime, uncorrectable by any release. They now cite gates by NAME,
     and ``test_init_loop_md_contains_no_engine_step_number`` pins the
-    file at zero engine-anchored step numbers so none returns. (Its own 34 are
-    untouched -- they are this file's onboarding steps, not the engine's.) The asymmetry that motivated the
+    file at zero engine-anchored step numbers so none returns. (Its own numbering
+    is untouched -- those are that file's onboarding steps, not the engine's.) The asymmetry that motivated the
     guard is unchanged and still governs: what lands in the skeleton is
     unreachable, so it carries a higher bar than the same wording in the
     engine.
