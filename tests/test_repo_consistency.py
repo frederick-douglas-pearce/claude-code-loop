@@ -424,9 +424,18 @@ class PipelineStepOrderTests(unittest.TestCase):
     # nothing in it exercises this pattern. test_the_init_loop_matcher_is_alive
     # is therefore the only proof the matcher is not wholly dead; a narrowing
     # that drops one branch is not caught anywhere and rests on review.
+    # The wrap branch tolerates markdown's blockquote continuation marker. It
+    # did not until #113's own mutation pass found the hole: init-loop.md is
+    # hard-wrapped AND heavily blockquoted -- the shipped skeleton alone opens
+    # with nine `> ` continuation lines -- so `engine's` / `> step 8` split
+    # across two of them sailed past the matcher while sitting in the exact
+    # region that is copied into every onboarded repo. The wrap branch existed
+    # precisely because this file wraps; it just did not know what this file
+    # wraps WITH. Not an allow-list of phrasings (cf. ALLOWED_NON_BINDINGS) --
+    # it teaches one existing branch the prefix the format requires.
     _INIT_LOOP_STEP_REFERENCE = re.compile(
-        r"\b[Ee]ngine(?:'s|’s)?(?:[ \t]+|[ \t]*\n[ \t]*)[Ss]teps?"
-        r"(?:[ -]|[ \t]*\n[ \t]*)(\d+(?:\.\d+)?(?:[/–—-]\d+(?:\.\d+)?)*)"
+        r"\b[Ee]ngine(?:'s|’s)?(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*)[Ss]teps?"
+        r"(?:[ -]|[ \t]*\n[ \t]*(?:>[ \t]*)*)(\d+(?:\.\d+)?(?:[/–—-]\d+(?:\.\d+)?)*)"
     )
     # ZERO, and zero is the whole assertion: init-loop.md must cite gates by
     # NAME, never by step number. #113 took it 2 -> 0 by rewriting the two
