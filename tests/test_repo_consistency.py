@@ -439,10 +439,13 @@ class PipelineStepOrderTests(unittest.TestCase):
     # and widening it against a pin of ZERO can only turn the suite red.
     #
     # The trade, disclosed: `engine` ending a line and `Step <digit>` opening
-    # the next now match across it. Where the two are merely adjacent prose
-    # rather than a citation that is a false positive, reachable by rewrapping
-    # this file -- and it fails RED, the safe direction, though the message
-    # will prescribe naming the gate when the real fix is the rewrap.
+    # the next match across it, and since this change across a `>` prefix too.
+    # Only the prefixed form is new -- the bare-newline one predates it, so
+    # reverting this branch does not close the disclosure. Where the two are
+    # merely adjacent prose rather than a citation that is a false positive,
+    # reachable by rewrapping this file -- and it fails RED, the safe
+    # direction, though the message will prescribe naming the gate when the
+    # real fix is the rewrap.
     # Separating "engine ends a clause" from "engine anchors a citation" is
     # semantics, not a coupling, so it is left as is.
     _INIT_LOOP_STEP_REFERENCE = re.compile(
