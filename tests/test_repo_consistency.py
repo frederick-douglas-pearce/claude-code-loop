@@ -270,7 +270,8 @@ class PipelineStepOrderTests(unittest.TestCase):
     the next renumber, after which they were stranded in every config generated
     in the meantime, uncorrectable by any release. They now cite gates by NAME,
     and ``test_init_loop_md_contains_no_engine_step_number`` pins the
-    file at zero step numbers so none returns. The asymmetry that motivated the
+    file at zero engine-anchored step numbers so none returns. (Its own 34 are
+    untouched -- they are this file's onboarding steps, not the engine's.) The asymmetry that motivated the
     guard is unchanged and still governs: what lands in the skeleton is
     unreachable, so it carries a higher bar than the same wording in the
     engine.
@@ -693,14 +694,13 @@ class PipelineStepOrderTests(unittest.TestCase):
         # the vacuity guard honest about every restatement it covers.
         self._skill_frontmatter_labels()
 
-
     def test_the_init_loop_matcher_is_alive(self) -> None:
         """``_INIT_LOOP_STEP_REFERENCE`` still matches, and still needs its anchor.
 
         **Its own test, not a clause in the omnibus vacuity check above.** That
         check opens with four ``assertGreaterEqual``s, any of which
-        short-circuits the rest; the guard this replaces was split out for
-        exactly that reason.
+        short-circuits the rest -- and the guard this replaces was a clause
+        inside it, so it could be skipped without ever running.
 
         **Why a fixture rather than the live file.** The old guard floored
         ``commands/init-loop.md`` at >=1 real reference. #113 removed them all --
