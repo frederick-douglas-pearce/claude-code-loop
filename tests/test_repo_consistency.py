@@ -269,12 +269,12 @@ class PipelineStepOrderTests(unittest.TestCase):
     newly-onboarded repo's ``loop.config.md``. That made them correct only until
     the next renumber, after which they were stranded in every config generated
     in the meantime, uncorrectable by any release. They now cite gates by NAME,
-    and ``test_init_loop_md_contains_no_engine_step_number`` pins the
-    file at zero engine-anchored step numbers so none returns. (Its own numbering
-    is untouched -- those are that file's onboarding steps, not the engine's.) The asymmetry that motivated the
-    guard is unchanged and still governs: what lands in the skeleton is
-    unreachable, so it carries a higher bar than the same wording in the
-    engine.
+    and ``test_init_loop_md_contains_no_engine_step_number`` pins the file at
+    zero engine-anchored step numbers so none returns. (Its own numbering is
+    untouched -- those are that file's onboarding steps, not the engine's.) The
+    asymmetry that motivated the guard is unchanged and still governs: what
+    lands in the skeleton is unreachable, so it carries a higher bar than the
+    same wording in the engine.
 
     The original three are not string-identical and cannot be made so: the engine has
     13 numbered headings, SKILL.md restates all 13 with numbers, and the
@@ -426,13 +426,25 @@ class PipelineStepOrderTests(unittest.TestCase):
     # that drops one branch is not caught anywhere and rests on review.
     # The wrap branch tolerates markdown's blockquote continuation marker. It
     # did not until #113's own mutation pass found the hole: init-loop.md is
-    # hard-wrapped AND heavily blockquoted -- the shipped skeleton alone opens
-    # with nine `> ` continuation lines -- so `engine's` / `> step 8` split
-    # across two of them sailed past the matcher while sitting in the exact
-    # region that is copied into every onboarded repo. The wrap branch existed
-    # precisely because this file wraps; it just did not know what this file
-    # wraps WITH. Not an allow-list of phrasings (cf. ALLOWED_NON_BINDINGS) --
-    # it teaches one existing branch the prefix the format requires.
+    # hard-wrapped AND blockquoted -- the shipped skeleton's opening
+    # admonitions are `>`-prefixed and wrapped -- so `engine's` / `> step 8`
+    # split across two such lines sailed past the matcher while sitting in the
+    # exact region copied into every onboarded repo. (Deliberately no count of
+    # those lines, per the no-tally rule above: it strands on the next rewrap,
+    # and "continuation" has two defensible readings that disagree.) The branch
+    # was added speculatively, with no live instance; what it did not
+    # anticipate was the prefix this file's own format puts before a continued
+    # line. Not an allow-list of phrasings (cf. ALLOWED_NON_BINDINGS) --
+    # markdown has one blockquote marker, so this is a closed structural set,
+    # and widening it against a pin of ZERO can only turn the suite red.
+    #
+    # The trade, disclosed: `engine` ending a line and `Step <digit>` opening
+    # the next now match across it. Where the two are merely adjacent prose
+    # rather than a citation that is a false positive, reachable by rewrapping
+    # this file -- and it fails RED, the safe direction, though the message
+    # will prescribe naming the gate when the real fix is the rewrap.
+    # Separating "engine ends a clause" from "engine anchors a citation" is
+    # semantics, not a coupling, so it is left as is.
     _INIT_LOOP_STEP_REFERENCE = re.compile(
         r"\b[Ee]ngine(?:'s|’s)?(?:[ \t]+|[ \t]*\n[ \t]*(?:>[ \t]*)*)[Ss]teps?"
         r"(?:[ -]|[ \t]*\n[ \t]*(?:>[ \t]*)*)(\d+(?:\.\d+)?(?:[/–—-]\d+(?:\.\d+)?)*)"
@@ -717,21 +729,39 @@ class PipelineStepOrderTests(unittest.TestCase):
         unsatisfiable, and the pin it protected became a pin at 0. That is the
         trap: a dead matcher and a clean file both report 0, so without this
         ``test_init_loop_md_contains_no_engine_step_number`` could never fail.
-        Nothing else exercises the pattern, which makes the positive assertion
-        below the load-bearing one.
+        Nothing else exercises the pattern, which makes the positive
+        assertions below the load-bearing ones.
 
         **What this does NOT do, stated because two review rounds have now
         turned on it.** It does not verify the matcher's individual alternation
-        branches. A narrowing that drops one -- a capitalised ``Step``, a
-        newline in the other position, the possessive, an alternate dash --
-        passes this test, and is **review's to own**, exactly as the bare
-        ``step N`` gap in ``commands/init-loop.md``'s maintainer note is. An
+        branches. A narrowing that drops one may or may not pass this test, and
+        which ones do is **review's to own**, exactly as the bare ``step N``
+        gap in ``commands/init-loop.md``'s maintainer note is. **No list of the
+        uncovered narrowings is given here, deliberately.** The two fixtures
+        pin the forms they literally contain, and which branches that reaches
+        is an artifact of the two strings -- change a string and the set moves
+        silently. A list would be stale on the next such edit, and this one was
+        already: it named the possessive and the second newline position as
+        uncovered, and round 5's mutations found the current fixtures catch
+        both. Read the fixture strings, not a summary of them. An
         earlier version of this test carried a fixture per branch and claimed to
         cover them all; a fresh checker defeated that claim twice, because
         detecting a narrowing means naming the form narrowed away, and that list
-        has no end. One canonical form is the honest boundary. Reaching the
-        dangerous state still takes two edits -- narrow the regex, *then* write
-        the variant into a file whose note forbids writing it at all.
+        has no end.
+
+        **Where the boundary now sits, and why it moved once.** Two positive
+        fixtures: the canonical same-line form, and one blockquote-continued
+        form. The second is here because markdown's blockquote marker is a
+        property of the FORMAT this guard scans, not a phrasing choice -- a
+        closed set of one, where the phrasing set is open. It is also the only
+        branch added in response to a located, demonstrated hole rather than to
+        speculation, and #113's own mutation pass showed the suite stayed green
+        with that branch reverted. That is the line: a fixture for a structural
+        property of the format, never one per phrasing variant. **Do not grow
+        this past it** -- a third fixture is the earlier version returning.
+        Reaching the dangerous state still takes two edits -- narrow the regex,
+        *then* write the variant into a file whose note forbids writing it at
+        all.
 
         It calls the real compiled pattern, so it cannot pass by restating its
         own expected answer.
@@ -754,6 +784,19 @@ class PipelineStepOrderTests(unittest.TestCase):
             "engine heading. (The live pin catches this one too, and louder: an "
             "unanchored matcher finds all of them and turns it red. This states "
             "the intent.)",
+        )
+        self.assertEqual(
+            self._INIT_LOOP_STEP_REFERENCE.findall("> the engine's\n> step\n> 8 gate"),
+            ["8"],
+            "_INIT_LOOP_STEP_REFERENCE stopped tolerating markdown's blockquote "
+            "continuation marker across a wrap. commands/init-loop.md is "
+            "hard-wrapped AND blockquoted, so that is the shape a stranded "
+            "citation takes there -- and the pin at ZERO cannot see it: revert "
+            "the branch and the whole suite stays green while a citation ships "
+            "into every onboarded repo. Wrapped at BOTH positions on purpose: "
+            "the marker is tolerated in two places in the pattern, and this is "
+            "the one string that exercises both, so neither can rot alone. It "
+            "is a worst case, not a claim that citations wrap twice.",
         )
 
     def test_engine_headings_are_numbered_contiguously_from_zero(self) -> None:
