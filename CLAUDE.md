@@ -193,13 +193,6 @@ you add or rename a `CAPS` parameter in `loop-engine.md`, the `/init-loop` skele
 table) and its inference map must be updated in the same change, or newly-onboarded repos will be
 missing the binding the engine now reads.
 
-**The skeleton's copy is unreachable, and that sets a higher bar for what may go into it.** A
-consumer's generated `loop.config.md` is touched by **no later release** — so wording that lands in
-the skeleton is *stranded* there, where the engine's own copy is reachable and gets corrected at the
-next bump. Hence the standing rule: **the evidence bar for anything landing in the skeleton is
-higher than for the same wording landing in the engine.** `commands/init-loop.md`'s maintainer note
-states the step-number case of it where it bites, above the skeleton it governs.
-
 **`CapsVocabularyTests` enforces the half of that a test can reach**: it fails if the engine (or
 `SKILL.md`) names a `CAPS` parameter the skeleton does not offer. It cannot check that the
 *inference map* gained a row, or that the Notes column makes sense — so a red run means you forgot
@@ -546,9 +539,10 @@ that only a *prospective* instance can discharge.
 **The reason #30 deferred is worth carrying, because it generalizes past #30.** Cheapness did not
 save it. Its AC3 would have written the new wording into the `/init-loop` **skeleton**, which copies
 into consumer `loop.config.md` files that **no later release touches** — so unvalidated wording there
-is *stranded*, not corrected by the next bump. That is the skeleton-evidence-bar rule stated in the
-three-layer split above, met in the wild: what makes #30's AC3 expensive is not the wording's cost
-but where it would have landed.
+is *stranded*, not corrected by the next bump. That asymmetry is a general rule: **the evidence bar
+for anything landing in the skeleton is higher than for the same wording landing in the engine**,
+because the engine's copy is reachable and the skeleton's copy is not. `commands/init-loop.md`'s
+maintainer note states the step-number case of it where it bites, above the skeleton it governs.
 
 **A deferral needs a capture mechanism or it is just a delay.** "If it matters it will recur" is only
 true if something records recurrences. Nothing did for F9 — the second instance surfaced solely
