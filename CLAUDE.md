@@ -61,19 +61,19 @@ Three modules, and the split between them matters:
   up by appears, normalized, in each of four *located regions* of the engine (see the invariants
   section below for why that string, and only that string, is checkable — and why per-region rather
   than a global count);
-  and `PipelineStepOrderTests` — the pipeline's **step *ordering*** agrees across the **six**
-  restatements of it (in four files): `loop-engine.md`'s `### N.` headings, `SKILL.md`'s numbered chain,
-  `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
+  and `PipelineStepOrderTests` — the pipeline's **step *ordering*** agrees across the **five**
+  restatements of it, in **three** files: `loop-engine.md`'s `### N.` headings, `SKILL.md`'s numbered
+  chain, `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
   `description`** (`plan→architect→implement→review→merge` — the string the model reads when
-  deciding to invoke the skill, so a behavior surface, not prose), the engine's in-prose
-  `step N` cross-references — **179 sites, 182 numbers** — and `commands/init-loop.md`'s
-  `engine step N` (below). *"Four files" is newly true, not newly written:* the previous five
-  restatements live in **three** files (`loop-engine.md` ×2, `SKILL.md` ×2, `plugin.json`), so the
-  standing "five restatements in four files" was off by one on the file count; `init-loop.md` is what
-  makes four correct. That grep
-  (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) reports
-  only 175: the remainder are line-wrapped, which is exactly how they went unguarded until review
-  caught it. It checks numbering and label correspondence **only** — never whether a
+  deciding to invoke the skill, so a behavior surface, not prose), and the engine's in-prose
+  `step N` cross-references. (`loop-engine.md` ×2, `SKILL.md` ×2, `plugin.json` — which is why five
+  restatements live in three files.) The naive grep
+  (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) does
+  **not** find them all: the rest are line-wrapped, which is exactly how they went unguarded until
+  review caught it. **No site count is stated here, deliberately** — the two this sentence used to
+  carry both went stale where they stood, and the suite pins a loose floor rather than a
+  measurement, so there is no live figure to name. It checks numbering and label correspondence
+  **only** — never whether a
   step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
   `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
   frontmatter chain are both pinned loosely, by ordered subsequence: they may keep omitting internal
@@ -104,50 +104,6 @@ Three modules, and the split between them matters:
   match (`steps 3 and 7`, `steps 3, 7`, `step #7`) are invisible too; none is used today, and each
   is excluded deliberately — treating `,`/`and` as separators makes ordinary prose ("step 12 — 40
   lines max") parse as a step range and fail.
-
-  **The sixth restatement — guarded since #45, and the only one that will ship into repos this plugin
-  cannot reach.** `commands/init-loop.md` carries two — the `CODE_REVIEW` row's `(engine step 8)`
-  (`step 9` until #31 rotated the pipeline) and,
-  since #39, the `HERMETIC_TEST_CMD` row's `engine step 6` — both in skeleton rows that `/init-loop`
-  copies into each newly-onboarded repo's `loop.config.md`. Drift in the other
-  five ships a wrong number *in the plugin*, and the next release corrects it; drift here strands one
-  in a config no release touches. It can't reuse the engine's matcher: that file carries 16 other
-  `Step N` references that are its *own* onboarding steps — and every number they carry is a real
-  engine heading too, so an unanchored matcher would find all 18 sites, resolve every one, and pass
-  while guarding nothing. `_INIT_LOOP_STEP_REFERENCE` anchors on the literal "engine step"; the
-  possessive is accepted because `the engine's step N` is what the live consumer configs write for 4
-  of their 6 engine-anchored references, so it is what a future editor of the skeleton is likely to
-  write. Everything
-  after the anchor mirrors the engine's matcher exactly — including the hyphen (`step-9`) and `.N`
-  sub-item forms, whose omission would be **invisible to the pin**, since an unmatched site never
-  moves the count. The **reference-site count is pinned** (`_EXPECTED_INIT_LOOP_STEP_REFERENCES`,
-  currently 2) precisely because a floor cannot catch the anchor-drop — 18 sites clears any floor —
-  and a **second count pins how many of them sit inside the `~~~markdown` skeleton**
-  (`_EXPECTED_SKELETON_STEP_REFERENCES`, also 2), since only the skeleton ships and a total alone
-  cannot tell prose from product. That was `any(... inside ...)` until #39: sufficient while exactly
-  one reference existed, but at the second it would have stayed green while either one migrated out
-  to prose. `all()` would have been the wrong correction — this file's own maintainer note invites
-  prose references — so the inside *count* is what is pinned, which catches migration in either
-  direction and still allows a prose reference to be added deliberately. **The span itself is a
-  fragile instrument** — a trailing space or a non-breaking space on the closing fence widens it,
-  defeated four times on #39's PR before the attempt was abandoned. `CapsVocabularyTests`
-  deliberately does **not** use it (it reads the whole file, and is loose in the way #76 describes);
-  hardening the span is #76's job and the answer there is not a fifth regex.
-
-  **Not yet copied anywhere — and that is the point.** The `CODE_REVIEW` row entered the skeleton
-  in-tree with #10 (citing `engine step 9`, rotated to `step 8` by #31 — so the number has already
-  changed once, and will change again at the next renumber, all before a consumer ever sees it,
-  which is precisely the propagation window this paragraph is about); the *installed* 0.0.1 that onboarded all three consumers still binds
-  `CODE_REVIEW` to `/code-review` and contains no `engine step` at all. So the guard lands **before**
-  propagation begins, at the #36 re-install — the useful time for it. Do not read the field as
-  already carrying it: this repo's own `.claude/loop.config.md` has it only in its `CODE_REVIEW` row,
-  as the deliberate hand-written deviation documented in that file's F7 note (no line number here on
-  purpose — the one this sentence used to cite was stranded by #74's own edit to the block above it),
-  and the vote repo's `:49` likewise
-  hand-writes one in a section the skeleton does not contain. Across the three live configs there
-  are 10 step references, 6 of them engine-anchored, and none arrived from the generator. No check
-  reaches any consumer config — they are outside the shipped plugin. #45 guards the *generator*, the only end of that pipe this repo owns; #40 and #36
-  are where the field configs get addressed.
 
 **Prompt *semantics* remain validated by review + dogfooding, and that is deliberate** — the
 consistency module tests couplings, never whether an instruction is *right*. Do not try to grow it
@@ -327,7 +283,8 @@ even though nothing will fail loudly:
   of this bullet carried one and both were wrong (it said "eight" while listing nine; the correction
   to "nine" was then re-derived by two independent reviewers as eleven and as twelve, depending on
   whether adjacent sub-paragraphs count once or separately). That is the same enumerable assertion
-  this file documents itself retracting two sections above for "five restatements in four files",
+  the consistency-module section above declines to make for the engine's step-reference sites, where
+  the counts that used to stand went stale where they sat and were replaced by the mechanism,
   and a number nobody can re-derive the same way twice is worse than no number. **Maintain the list;
   do not summarize it.**
   - `loop-engine.md` step 4 — the freeze-invoke-apply ordering, the pre-image, write-once,
@@ -580,10 +537,10 @@ that only a *prospective* instance can discharge.
 **The reason #30 deferred is worth carrying, because it generalizes past #30.** Cheapness did not
 save it. Its AC3 would have written the new wording into the `/init-loop` **skeleton**, which copies
 into consumer `loop.config.md` files that **no later release touches** — so unvalidated wording there
-is *stranded*, not corrected by the next bump. That is the same asymmetry the sixth-restatement
-section documents above, and it is a general rule: **the evidence bar for anything landing in the
-skeleton is higher than for the same wording landing in the engine**, because the engine's copy is
-reachable and the skeleton's copy is not.
+is *stranded*, not corrected by the next bump. That asymmetry is a general rule: **the evidence bar
+for anything landing in the skeleton is higher than for the same wording landing in the engine**,
+because the engine's copy is reachable and the skeleton's copy is not. `commands/init-loop.md`
+states it where it bites, in the maintainer note directly above the skeleton it governs.
 
 **A deferral needs a capture mechanism or it is just a delay.** "If it matters it will recur" is only
 true if something records recurrences. Nothing did for F9 — the second instance surfaced solely
