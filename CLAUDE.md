@@ -70,10 +70,12 @@ Three modules, and the split between them matters:
   restatements live in three files.) The naive grep
   (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) does
   **not** find them all: the rest are line-wrapped, which is exactly how they went unguarded until
-  review caught it. **No site count is stated here, deliberately** — the two this sentence used to
-  carry both went stale where they stood, and the suite pins a loose floor rather than a
-  measurement, so there is no live figure to name. It checks numbering and label correspondence
-  **only** — never whether a
+  review caught it. **No site count is stated here, deliberately** — the figures this sentence used
+  to carry went stale where they stood. The assertion is a deliberately loose floor
+  (`_MIN_STEP_REFERENCES`), not a measurement, so there is no *maintained* count anywhere to cite:
+  the figures in `tests/test_repo_consistency.py`'s docstrings are unmaintained prose and were
+  already stale when this sentence was written. `PipelineStepOrderTests` checks numbering and label
+  correspondence **only** — never whether a
   step is the *right* thing to do at that point, and never the pipeline's *status* vocabulary (the
   `queued → routed → …` chain lives in the ledger format, not in headings). `plugin.json` and the
   frontmatter chain are both pinned loosely, by ordered subsequence: they may keep omitting internal
@@ -190,6 +192,13 @@ A fourth file participates: `commands/init-loop.md` embeds a **skeleton of `loop
 you add or rename a `CAPS` parameter in `loop-engine.md`, the `/init-loop` skeleton (§1 binding
 table) and its inference map must be updated in the same change, or newly-onboarded repos will be
 missing the binding the engine now reads.
+
+**The skeleton's copy is unreachable, and that sets a higher bar for what may go into it.** A
+consumer's generated `loop.config.md` is touched by **no later release** — so wording that lands in
+the skeleton is *stranded* there, where the engine's own copy is reachable and gets corrected at the
+next bump. Hence the standing rule: **the evidence bar for anything landing in the skeleton is
+higher than for the same wording landing in the engine.** `commands/init-loop.md`'s maintainer note
+states the step-number case of it where it bites, above the skeleton it governs.
 
 **`CapsVocabularyTests` enforces the half of that a test can reach**: it fails if the engine (or
 `SKILL.md`) names a `CAPS` parameter the skeleton does not offer. It cannot check that the
@@ -308,9 +317,9 @@ even though nothing will fail loudly:
   fence, and the Resume paragraph. That coupling is a *string*, not a meaning, so the check is
   neither fragile nor vacuous: if step 4 writes a heading step 5 no longer looks for, the mechanism
   is dead while every word of the prose still reads correctly. **It asserts that the heading *appears*, normalized, in each region — not byte-identity, and not
-  equality** — whitespace is collapsed (one occurrence is line-wrapped, the hazard that hid two
-  step references from the naive grep above) and the em dash is folded; say no more than that about
-  it. **Per-region, not a global count, and that is the whole value:** the first draft asserted
+  equality** — whitespace is collapsed (one occurrence is line-wrapped, the same hazard that hides
+  wrapped references from the naive grep above; no count here either, for the reason given there)
+  and the em dash is folded; say no more than that about it. **Per-region, not a global count, and that is the whole value:** the first draft asserted
   `count(...) == 4` over the file and a fresh reviewer walked two mutations straight through it —
   paraphrase Resume's occurrence while adding a spare mention elsewhere, or delete the block from
   the plan template and mention it in the *progress.md* fence instead. Both leave the mechanism dead
@@ -537,10 +546,9 @@ that only a *prospective* instance can discharge.
 **The reason #30 deferred is worth carrying, because it generalizes past #30.** Cheapness did not
 save it. Its AC3 would have written the new wording into the `/init-loop` **skeleton**, which copies
 into consumer `loop.config.md` files that **no later release touches** — so unvalidated wording there
-is *stranded*, not corrected by the next bump. That asymmetry is a general rule: **the evidence bar
-for anything landing in the skeleton is higher than for the same wording landing in the engine**,
-because the engine's copy is reachable and the skeleton's copy is not. `commands/init-loop.md`
-states it where it bites, in the maintainer note directly above the skeleton it governs.
+is *stranded*, not corrected by the next bump. That is the skeleton-evidence-bar rule stated in the
+three-layer split above, met in the wild: what makes #30's AC3 expensive is not the wording's cost
+but where it would have landed.
 
 **A deferral needs a capture mechanism or it is just a delay.** "If it matters it will recur" is only
 true if something records recurrences. Nothing did for F9 — the second instance surfaced solely
