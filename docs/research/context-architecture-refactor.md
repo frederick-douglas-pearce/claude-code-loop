@@ -1,6 +1,6 @@
 # Context architecture — the case for making the parent a controller
 
-**Status:** design note. Not a plan, not a decision, nothing gated. Core drafted and measured 2026-08-25.
+**Status:** design note. Not a plan, not a decision, nothing gated. Core drafted and measured, then architect-reviewed, 2026-08-25.
 **Opened:** 2026-08-25
 **Question:** the engine occupies ~46k tokens of every parent context for the whole session. Is that
 a necessary cost of the workflow, or an artifact of how the workflow is packaged?
@@ -95,16 +95,33 @@ default-deny merge posture. **The workflow is the asset. The packaging is the de
 ## The two defects
 
 1. **The parent is a worker as well as an orchestrator.** It implements, and it applies review fixes.
-   This is the larger defect: it drives the 71% share, it is the origin of the fix-induced defect
-   class, and it forces the engine to carry implementation detail the parent would not otherwise
-   need.
+   It is the origin of the fix-induced defect class (Finding 2, seven instances across four
+   ledgers).
+
+   **Correction, 2026-08-25 (architect review).** This bullet originally read "it drives the 71%
+   share", which **conflates doing work with reading files**. Finding 6 says the parent's 71% is
+   dominated by *file reads*, and that `Agent` returns are **0.9–3.7%** of what enters the parent.
+   Delegation removes the *implementer's reading* from parent context, which is real — but
+   controller-ification is **not established as a context lever**. It is well-evidenced as a
+   **convergence and quality** lever, on Finding 2, and that is how it should be argued.
 2. **The operating procedure is one monolith, loaded in full, at every invocation.** Including for
    the **39 of 345 journal entries that stop at the plan gate** having executed perhaps a quarter of
    it.
 
-**These interact, and the direction matters:** fixing (1) shrinks (2), because a controller does not
-need step 6's staging rules, the Tool surface's isolation mechanics, or most of step 7. Fixing (2)
-first means sharding an engine that still describes work the parent should not be doing.
+**Correction, 2026-08-25 (architect review): this paragraph was wrong, and self-contradictory.** It
+argued controller-first on the grounds that "a controller does not need step 6's staging rules, the
+Tool surface's isolation mechanics" — but drafting the core moved Tool surface *into* core precisely
+**because delegation makes staging more central**, since every phase then delegates to a writing
+agent. Both cannot be true.
+
+Under a controller model the parent's staging burden **rises**: it still owns commits and merge
+(`PERMISSION_POSTURE`), and must now run collect-then-remove against a writing subagent's isolated
+copy on *every* issue rather than only on delegated-fix issues — so the gitlink hazard and the
+"skipping collect destroys work" duty move from rare to main-path. The better safety argument is the
+opposite one: that machinery already exists and is hardened, so this exercises tested machinery more
+heavily rather than requiring new invariants.
+
+**Revised sequencing: shard first, then controller-ify** — see below.
 
 ---
 
@@ -159,17 +176,67 @@ closed.** That is the whole risk, stated once, plainly.
 
 ---
 
-## Sequencing
+## Sequencing — revised after architect review
 
-1. **Make the parent a controller.** Delegate implementation; delegate fixes by *resuming the
-   implementer*, not by the parent editing. Keep the Fresh-re-check invariant exactly as it is — it
-   already says the right thing, and this change makes it cheaper to honor rather than harder.
-2. **Then shard.** With implementation delegated, `implementing` and much of `accepting` leave the
-   parent's context regardless of file layout, so the sharding is smaller and better understood.
-3. **Measure both.** `context_profile.py` makes each step falsifiable on a real session. No stage
-   lands without a before/after pair.
+The original order (controller first) was argued from a claim that turned out to be backwards; see
+the correction above. Revised:
+
+0. **Ship the two near-free wins independently, first.** The `SKILL.md` read-discipline sentence and
+   the F105 dedup (PR #124) depend on none of this and de-risk the measurement baseline.
+1. **Shard the big, genuinely-late buckets only.** `accepting` (~8.1k, needed at step 10, clean
+   fail-safe: cannot run ⇒ cannot merge ⇒ human) and a `reference` **appendix** (Initialization,
+   templates, the `progress.md` worked example, ~6–7k, needed at init/journal). That lands
+   always-loaded near **~30k — a ~35% cut at a fraction of the risk** of the full seven-unit split.
+2. **Measure with `context_profile.py`.** Before/after on a real session, as a hard gate on landing.
+3. **Only then defer the small early units**, and only if the parent still overshoots 200k *and* the
+   fail-safe halves have proven sound in practice. Deferring a 1.4k unit trades 1.4k of
+   always-loaded for a read round-trip that **78.6% re-read rates** say may recur — a worse trade,
+   and the most fail-safe surface per token saved.
+4. **Controller-ification as a separate change**, sold on convergence (Finding 2), not on context.
 
 ---
+
+## Architect review outcome (2026-08-25)
+
+**Verdict: proceed-with-changes on the sharding; reconsider the sequencing.** The central finding
+reframes what makes this safe:
+
+> **The fail-safe halves are not what makes this safe.** The retained **Gates table**, the
+> **Gate-outcome invariant** (no verdict ⇒ not passed) and the **load protocol** (an unconfirmed
+> load is not loaded ⇒ escalate) are. A gate-by-gate walk found **no gate that silently fails to run
+> and produces a false pass**; residual risk under a silent partial load is a *weaker improvised
+> procedure*, not a *skipped gate*.
+
+Three blockers, all structural rather than directional:
+
+- **B1 — the Gate-outcome invariant's due-ness source points at deferred content.** It says due-ness
+  "is decided where it always was (the gate's own step and the Routing table)", and steps 3–12 are
+  now deferred. The enforcement mechanism resolves its central property against text `core` does not
+  contain. `core` must become the authoritative, self-contained source of every gate's due-ness, and
+  every `(step N)` cross-reference in `core` that resolves a *safety* decision must resolve inside
+  `core`.
+- **B2 — `reference` is mis-drawn, and `core` is not self-sufficient without it.** Step 0.2/0.3
+  classifies rows against the **closed status vocabulary**, and step 2 runs the **Router** — both
+  assigned to `reference`. So `core` depends on it on every resume and every route. The status
+  vocabulary is *the language the fail-safe invariants are written in*. **Cross-cutting invariant
+  vocabulary does not defer**: pull status vocabulary, `queue.md` header semantics, Router and
+  Resume into `core`; defer only Initialization, templates and the worked example.
+- **B3 — the phase index is a new unguarded multi-site restatement**, which is precisely the shape
+  this project keeps getting burned by. It needs a mechanical **identity** guard shipped with it —
+  every gate in the Gates table has exactly one phase-index entry; every unit and `reference/*.md`
+  the index names resolves to a file that exists. **Not** a truth check: whether a fail-safe half
+  *agrees with* its step is the enumerable-assertion trap and stays review-owned.
+
+**And an opportunity worth designing for rather than leaving to chance.** If the discipline becomes
+*"`core` states each invariant once, in the Gates table plus the phase index; units state only how to
+run it and never re-assert the posture"*, the phase index can become the canonical "what is owed"
+home that **#35** has been looking for — **reducing** restatement sites rather than adding another.
+Left implicit, B3's drift risk is realized instead.
+
+Two smaller structural items: `core` must carry a compact **0–12 pipeline table of contents** (steps
+4, 5, 7, 9 and 12 are currently never enumerated in `core`), and `implementing` **splits across
+actors** under a controller model — step 6 becomes the implementer's brief, step 7 stays with the
+parent.
 
 ## Open questions
 
