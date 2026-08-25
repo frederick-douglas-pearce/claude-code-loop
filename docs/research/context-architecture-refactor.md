@@ -247,6 +247,25 @@ Two smaller structural items: `core` must carry a compact **0–12 pipeline tabl
 actors** under a controller model — step 6 becomes the implementer's brief, step 7 stays with the
 parent.
 
+## Where the full target design is stored
+
+The seven-unit target is **not** what ships, and the work behind it is preserved rather than
+restated — a fourth document repeating it would be the multi-site drift hazard this project
+documents at length. Each component has exactly one home:
+
+| component of the target | lives in |
+|---|---|
+| the drafted core itself, with a header saying it is the target | `draft-core.md` |
+| unit boundaries, sizes, rationale, the `superpowers` comparison | this file, "Target structure" above |
+| what must move back into core before it could ship (B2), with `loop-engine.md` line ranges | `core-self-sufficiency-audit.md` |
+| the due-ness reword (B1), replacement wording verbatim | `core-self-sufficiency-audit.md` |
+| the identity guard (B3), specified as a test | `core-self-sufficiency-audit.md` |
+| the 27-reference self-sufficiency checklist | `core-self-sufficiency-audit.md` |
+| baseline numbers and the predictions to judge it against | `baseline-2026-08-25.md` |
+
+**To resume the full target later:** read `draft-core.md`'s header, apply B2's four moves and B1's
+reword from the audit, then re-run the checklist against the result.
+
 ## Open questions
 
 1. ~~**Does `core` at 10.4k hold the fail-safe half of six deferred units?**~~ **Answered by

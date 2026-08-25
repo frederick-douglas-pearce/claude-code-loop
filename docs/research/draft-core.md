@@ -1,3 +1,28 @@
+<!--
+  ============================================================================
+  THIS IS THE SEVEN-UNIT TARGET ARCHITECTURE — NOT THE INCREMENT BEING SHIPPED.
+
+  Durable record of the full design, kept so the work is not lost. Assembled
+  2026-08-25 from loop-engine.md sections plus a hand-written phase index.
+  Measures 13,360 tokens; with SKILL.md, ~15,180 always-loaded (67% below the
+  45,937 baseline).
+
+  It defers Router, Resume, the status vocabulary and queue.md header
+  semantics to a `reference` unit. The audit
+  (core-self-sufficiency-audit.md) found that this is what B2 flags: those
+  four are cross-cutting invariant vocabulary and must move back into core
+  before this target could ship. B1's reword and the B3 guard also apply.
+
+  THE INCREMENT ACTUALLY BEING SHIPPED defers only `accepting` plus a
+  reference appendix, targeting ~30k always-loaded. It keeps all four of
+  those sections in core by construction, so B2's moves do not apply to it.
+
+  Do not implement from this file. See context-architecture-refactor.md
+  ("Sequencing") for what ships, and core-self-sufficiency-audit.md for the
+  repairs this file would need first.
+  ============================================================================
+-->
+
 # Loop engine — generic operating procedure & semantics
 
 This is the **project-agnostic engine** for the supervised dev loop: control flow, gate /
