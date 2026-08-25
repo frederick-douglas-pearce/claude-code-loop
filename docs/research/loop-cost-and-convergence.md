@@ -1,7 +1,7 @@
 # Loop cost & convergence — research notes
 
 **Status:** open investigation. Not a plan, not a ruling. Nothing here has been through a gate.
-**Opened:** 2026-08-24 · **Last updated:** 2026-08-25 (four ledgers + six profiled sessions)
+**Opened:** 2026-08-24 · **Last updated:** 2026-08-25 (four ledgers + six profiled sessions + read profile)
 **Question:** why does a loop iteration cost what it does, and what would make it cheaper without
 making it worse?
 
@@ -251,9 +251,10 @@ And within `Bash`, across five sessions (1.98M chars):
 | **lint/type** | **62** | **1.2%** | **375** |
 
 **Reading files is the whole story.** `cat`/`head`/`sed` + `Read` + `grep` dominates every session.
-The single largest repeated read is the orchestrator loading **`loop-engine.md` itself** — 31,126
-chars, ~8k tokens, once per invocation. That one is unavoidable and arguably well spent; the rest is
-not.
+The single largest repeated read is the orchestrator loading **`loop-engine.md` itself**. This
+document first recorded that as "31,126 chars, ~8k tokens, once per invocation … unavoidable and
+arguably well spent." **That was wrong in both halves** — the 31,126-char result was a *truncated*
+18% of the file, and the true figure is ~4× larger. See **Finding 8**.
 
 **Two of this document's own levers are refuted by this table, and one is reframed:**
 
@@ -282,14 +283,72 @@ the same conclusion **Lever E** (scope budget at the plan gate) reaches from a d
 Nothing in the original lever list addresses file reading, because nobody had measured it. Concrete
 candidates, in the order the data supports:
 
-1. **The parent re-reads the same large files.** `loop-engine.md` at ~8k tokens is loaded per
-   invocation by design; the ledger, the plan and the diff are re-read across resumes. Whether any
-   of it is *re*-read within one session is the first thing to check.
+1. **The parent re-reads the same large files.** Now measured, and the answer is emphatic:
+   **78.6% of all file-read volume sits in files read more than once**, and `loop-engine.md` alone
+   is **50%** of everything read. Only **2.1%** is a byte-identical re-read, so the pattern is
+   paging and recovery, not naive duplication — see **Finding 8**.
 2. **`sed -n` slices average ~6k chars.** Several exceed 30k. Bounded-window reads with an explicit
    cap would cut the tail without changing behavior.
 3. **Delegate reading, not just work.** The one thing the data says is cheap is a subagent return
    (~1–4%). An agent that reads five files and returns a 500-token answer is close to free in parent
    context. This inverts the usual advice and is the strongest single finding here.
+
+
+### Finding 8 — loading the engine costs ~58k tokens a session: half of all file reading
+
+*(2026-08-25; corrects Finding 6's engine figure, which was measured off a truncated read)*
+
+`loop-engine.md` is **177,529 bytes / 2,271 lines ≈ 44,400 tokens.** `cat`-ing it does not put it in
+context: the harness caps Bash output at ~31k chars — **18% of the file** — and spills the remaining
+177KB to `<session>/tool-results/<id>.txt`, recording `persistedOutputSize` in the result envelope.
+**All six sessions spilled it.** The orchestrator then recovers the rest one of two ways, and both
+were observed:
+
+- a **five-part `Read` sweep** (`offset` 0/500/1000/1500/2000, 183k chars) — 3 sessions;
+- **paging the spill file back** in 6–8 `sed`/`cat` slices (165–184k chars) — 3 sessions.
+
+Either path lands the whole engine, so **the first, truncated `cat` is pure waste** — and where a
+`sed -n '1,400p'` was tried in between, that is wasted too.
+
+| session | engine reads | engine chars | ~tokens | all file reads | engine share |
+|---|---:|---:|---:|---:|---:|
+| c51f20e1 | 13 | 270,061 | 67,515 | 762,155 | 35% |
+| c60c8a44 | 8 | 213,131 | 53,282 | 363,288 | **59%** |
+| 592ab44d | 7 | 245,540 | 61,385 | 355,172 | **69%** |
+| d9933e33 | 9 | 214,773 | 53,693 | 351,152 | **61%** |
+| d5ba0ddc | 7 | 245,639 | 61,409 | 524,301 | 47% |
+| f374d191 | 8 | 211,110 | 52,777 | 434,520 | 49% |
+| **total** | | **1,400,254** | **350,063** | 2,790,588 | **50%** |
+
+**The engine is 50% of every byte the parent reads, and ~58k tokens per session** against a 200k
+target — **29% of the budget, spent before the loop does any work.** Of that, ~44k is irreducible
+(the file's own size) and **~14k is the truncated-`cat` dance.**
+
+Three consequences, in increasing order of importance:
+
+1. **~14k tokens a session is recoverable for one sentence.** `SKILL.md` tells the orchestrator to
+   read the engine; it does not say *how*. Saying "use `Read`; the file exceeds the Bash output cap"
+   deletes the wasted `cat` and any `sed` follow-up. (`Read` itself is efficient — ~80 chars per
+   line against the file's own 78 bytes per line, ~3% overhead.)
+2. **The 44k floor is a product problem, not a prompting one.** No instruction makes a 2,271-line
+   monolith smaller. The only lever is structural: let an invocation load the part of the pipeline
+   it is actually at, rather than all twelve steps plus the ledger format, router, AC-verifier,
+   Resume and gate table. That is a real design change with real risks — `SKILL.md`'s fail-safe
+   posture exists *because* partial loads are dangerous (below) — and it is not proposed here, only
+   measured.
+3. **The truncation is a correctness hazard and it is fail-open.** A session that `cat`s the engine
+   and does not notice gets **lines 1–400 of 2,271** — steps 0–5 and nothing else. No implement, no
+   commit/PR, no review, no security, no acceptance, no merge, no journal; no ledger format, router,
+   AC-verifier, Resume, or gate table. All six sessions here happened to recover, but **nothing in
+   the engine or `SKILL.md` requires it** — the truncation is advertised only as a
+   `persistedOutputSize` field the model may or may not act on. By this project's own default-deny
+   rule, *an engine read that cannot be shown to be complete should be treated as incomplete.*
+   That is the same posture the merge gate and the `plan-gate:` field already take, and it is the
+   one place the loop's own bootstrap does not take it.
+
+**This is the strongest single finding in this document**, and it is the one most likely to be
+worth an issue: item 1 is nearly free, item 3 is a fail-safe gap in the bootstrap, and item 2 sizes
+the ceiling on everything else here.
 
 ---
 
