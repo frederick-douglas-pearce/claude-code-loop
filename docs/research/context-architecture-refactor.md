@@ -1,6 +1,6 @@
 # Context architecture — the case for making the parent a controller
 
-**Status:** design note. Not a plan, not a decision, nothing gated.
+**Status:** design note. Not a plan, not a decision, nothing gated. Core drafted and measured 2026-08-25.
 **Opened:** 2026-08-25
 **Question:** the engine occupies ~46k tokens of every parent context for the whole session. Is that
 a necessary cost of the workflow, or an artifact of how the workflow is packaged?
@@ -114,19 +114,21 @@ Seven units. Sizes are measured from today's sections, not estimated.
 
 | unit | ~tokens | share | contains |
 |---|---:|---:|---|
-| **core** (always loaded) | **10,400** | 23.7% | preamble, the pipeline overview, step 0 load/resume, 1 select, 2 route, Escalation rubric, Guardrails, Routing table, **Gates/convergence/resting states** |
+| **core** (always loaded) | **13,360** | 30.4% | preamble, pipeline overview, step 0 load/resume, 1 select, 2 route, Escalation rubric, Guardrails, **Tool surface**, Routing table, **Gates/convergence/resting**, + a hand-written phase index |
 | `planning` | 3,900 | 8.9% | steps 3 plan · 4 architect · 5 human gate |
-| `implementing` | 5,900 | 13.3% | steps 6 implement · 7 commit/PR · Tool surface |
+| `implementing` | 3,570 | 8.1% | steps 6 implement · 7 commit/PR |
 | `reviewing` | 1,400 | 3.2% | steps 8 code review · 9 security |
 | `accepting` | 8,100 | 18.5% | step 10 · the AC-verifier procedure |
 | `landing` | 1,500 | 3.3% | steps 11 merge · 12 journal |
 | `reference` | 12,800 | 29.1% | ledger format, `queue.md`/`progress.md`/plan templates, Router, Initialization, Resume |
 
-**Always-loaded becomes `core` + `SKILL.md` ≈ 12,250 tokens — 73% below today's ~46,200.**
+**Always-loaded becomes `core` + `SKILL.md` ≈ 15,180 tokens — 67% below today's ~46,200.**
+*(Drafted and measured, not budgeted — `docs/research/draft-core.md`. The first estimate said 10,400
+and 73%; assembling it moved Tool surface into core and added a phase index, costing ~2,900 tokens.)*
 
 Two things that structure buys beyond the headline:
 
-- **A plan-gate stop loads `core` + `planning` ≈ 14,300 tokens** instead of 46,200. That is 11.3% of
+- **A plan-gate stop loads `core` + `planning` ≈ 17,300 tokens** instead of 46,200. That is 11.3% of
   journal entries (a floor — 56% of headers do not classify).
 - **`implementing` (13.3%) stops being parent context at all** once implementation is delegated. It
   becomes the implementer subagent's brief. Same for much of `accepting`.
@@ -171,9 +173,14 @@ closed.** That is the whole risk, stated once, plainly.
 
 ## Open questions
 
-1. **Does `core` at 10.4k actually hold the fail-safe half of six deferred units,** or does carrying
-   every gate's due-ness push it back toward 20k? This is the number that decides the whole design
-   and it has not been drafted, only budgeted.
+1. ~~**Does `core` at 10.4k hold the fail-safe half of six deferred units?**~~ **Answered by
+   drafting** (`draft-core.md`): it holds at **13,360 tokens**, not 20k, and always-loaded lands at
+   **~15,180 / 67% below today**. Two corrections the draft forced, both of which a budget would
+   have missed: **Tool surface must be core, not `implementing`** — its tree-isolation and
+   staging limits bind at steps 4, 8 and 10, and under a controller model they become *more*
+   central, since every phase delegates to a writing agent; and the phase index costs ~970 tokens,
+   which is cheap for what it does. **What remains unvalidated is whether the fail-safe halves are
+   correct**, not whether they fit.
 2. **Can a phase unit be re-read after compaction** without re-reading `core`? [F106](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1#issuecomment-5408090939)
    says the engine can be evicted mid-iteration; sharding changes what recovery costs, possibly for
    the better — smaller units are cheaper to reload.
