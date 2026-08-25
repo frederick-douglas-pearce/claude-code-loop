@@ -1,7 +1,7 @@
 # Loop cost & convergence — research notes
 
 **Status:** open investigation. Not a plan, not a ruling. Nothing here has been through a gate.
-**Opened:** 2026-08-24 · **Last updated:** 2026-08-25 (four ledgers)
+**Opened:** 2026-08-24 · **Last updated:** 2026-08-25 (four ledgers + six profiled sessions)
 **Question:** why does a loop iteration cost what it does, and what would make it cheaper without
 making it worse?
 
@@ -201,7 +201,95 @@ is no record of parent context anywhere in any of the three ledgers, so the targ
 unfalsifiable and no lever below can be evaluated against it. `tokens` is already a **reserved,
 named slot**, so the seam exists.
 
-**This is the prerequisite, not a lever.** Everything below is a guess until it lands.
+**This is the prerequisite, not a lever.** Everything below was a guess until it landed — and it has now landed for the parent thread, from the session transcripts rather than the ledger. See **Finding 6**, which refutes two of the levers this file proposed. The ledger slot is still `deferred` and still worth filling, so the loop records its own cost without an external parse.
+
+---
+
+### Finding 6 — measured at last: the parent carries 313–534k, and it is file reads, not agents
+
+*(added 2026-08-25; supersedes the guesswork in Findings 1–5's framing of where the money goes)*
+
+`context_profile.py` reads the parent thread's own token accounting out of the session transcripts
+(`~/.claude/projects/<slug>/*.jsonl`), so *Finding 5's* "nothing measures this" is now false. Six
+vote-repo loop sessions, all confirmed genuine iterations (engine reads + ledger writes + 6–15
+subagent traces each):
+
+| session | parent turns | context at end | **peak context** | parent processed | subagents | subagent processed |
+|---|---:|---:|---:|---:|---:|---:|
+| c51f20e1 | 357 | 236k | **463k** | 86.6M | 15 | 42.9M |
+| c60c8a44 | 109 | 313k | **313k** | 23.7M | 7 | 12.3M |
+| 592ab44d | 136 | 366k | **366k** | 33.9M | 6 | 10.4M |
+| d9933e33 | 161 | 92k | **409k** | 37.6M | 9 | 17.7M |
+| d5ba0ddc | 224 | 88k | **534k** | 75.1M | 9 | 23.9M |
+| f374d191 | 152 | 70k | **379k** | 34.4M | 7 | 13.7M |
+
+**Every session peaks at 313–534k against a 100–200k target — 1.6× to 2.7× over.** Read *peak*, not
+*context at end*: the three sessions ending at 70–92k got there by compacting, which is a cost, not
+a success.
+
+**The parent thread is 71% of all tokens processed**; subagents are 29%. Delegation is not where the
+money goes.
+
+**What actually enters the parent**, by source (share of attributed growth, across the six):
+
+| source | share |
+|---|---|
+| `Bash` | 36–82% |
+| `Read` | 1–37% |
+| **`Agent` (subagent returns)** | **0.9–3.7%** |
+| everything else | <1% each |
+
+And within `Bash`, across five sessions (1.98M chars):
+
+| class | calls | share | avg chars |
+|---|---:|---:|---:|
+| `cat`/`head`/`sed` | 187 | **56.3%** | 5,975 |
+| `grep` | 130 | 11.0% | 1,679 |
+| `ls`/`find` | 32 | 6.0% | 3,745 |
+| **test runs** | **175** | **5.6%** | **639** |
+| `git diff` | 10 | 2.7% | 5,320 |
+| **lint/type** | **62** | **1.2%** | **375** |
+
+**Reading files is the whole story.** `cat`/`head`/`sed` + `Read` + `grep` dominates every session.
+The single largest repeated read is the orchestrator loading **`loop-engine.md` itself** — 31,126
+chars, ~8k tokens, once per invocation. That one is unavoidable and arguably well spent; the rest is
+not.
+
+**Two of this document's own levers are refuted by this table, and one is reframed:**
+
+- **Lever B (constrain finder returns) — largely refuted.** `Agent` returns are **0.9–3.7%** of what
+  enters the parent. Eliminating them entirely would not move the number. The fan-out still costs,
+  but on the **subagent** side (29% of total), never in parent context. The lever was aimed at the
+  wrong quantity.
+- **Lever H (format/lint hooks) — refuted *as a context lever*.** lint/type output is **1.2%** of
+  Bash volume at **375 chars per call**, and test output is 5.6% at 639. The fix-until-green loop is
+  not what fills the parent. The hook may still be worth building for wall-clock, round-trips and
+  determinism — but it must not be sold as a context saving.
+- **The cost model is multiplicative: `cost ≈ context × turns`.** Every turn re-reads the
+  accumulated prefix at cache-read rates, which is why 357 turns at ~242k average context bills 86.6M.
+  So **a gate round late in an iteration costs far more than the same round early**, because it
+  processes the whole accumulated prefix each turn. This is the quantified link between symptom 1
+  and symptom 2 that *Finding 2* could only hypothesize: rounds are expensive **because** context is
+  large, and context is large **by the time rounds happen**.
+
+**The prescription that follows is "fail earlier", not "fewer gates".** A defect caught at step 5
+costs a fraction of the same defect caught at step 10 round 3 — not because the gate is cheaper, but
+because the prefix it re-reads is smaller. That is an argument for *moving* rigor earlier, which is
+the same conclusion **Lever E** (scope budget at the plan gate) reaches from a different direction.
+
+### Finding 7 — the new dominant lever is read discipline, and it did not appear anywhere above
+
+Nothing in the original lever list addresses file reading, because nobody had measured it. Concrete
+candidates, in the order the data supports:
+
+1. **The parent re-reads the same large files.** `loop-engine.md` at ~8k tokens is loaded per
+   invocation by design; the ledger, the plan and the diff are re-read across resumes. Whether any
+   of it is *re*-read within one session is the first thing to check.
+2. **`sed -n` slices average ~6k chars.** Several exceed 30k. Bounded-window reads with an explicit
+   cap would cut the tail without changing behavior.
+3. **Delegate reading, not just work.** The one thing the data says is cheap is a subagent return
+   (~1–4%). An agent that reads five files and returns a 500-token answer is close to free in parent
+   context. This inverts the usual advice and is the strongest single finding here.
 
 ---
 
