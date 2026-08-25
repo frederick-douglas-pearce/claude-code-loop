@@ -7,31 +7,37 @@ ran the v0.10.x / v0.11.0 releases). Install it once, drop a small per-project
 `loop.config.md` into a target repo, and run your backlog as a loop: one routed
 issue per invocation, with human gates on uncertainty and durable ledger state.
 
-> **Status — v0.2.0, just released; not yet stable.** Four pieces ship: the
+> **Status — v0.2.1, just released; not yet stable.** Four pieces ship: the
 > `dev-loop` skill (`SKILL.md` + `loop-engine.md`), the `/init-loop` onboarding
 > command, the append-only guard hook, and the mutation harness the acceptance gate
-> runs (`tools/mutate_verify.py`). The engine has run beyond the repo it was built in
-> — three repos drive it: the first external adoption
+> runs (`tools/mutate_verify.py`). **Four repos drive it**: the first external adoption
 > [us-presidential-vote-analysis](https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis),
-> the ongoing AgentFluent dogfood, and (since 2026-07-28) this repo, which runs the
-> loop it develops and is the source of most of the findings below. **All three
-> re-installed onto v0.2.0 on 2026-08-21.** Exactly **one** iteration has run on it
-> since — one issue, in AgentFluent. That was enough to confirm the plugin/config seam
-> holds against a ledger written by the previous version, and enough to surface more
-> than a dozen findings; it is not enough to call the hardening below field-proven.
+> the ongoing AgentFluent dogfood,
+> [claude-code-sessions](https://github.com/frederick-douglas-pearce/claude-code-sessions),
+> and (since 2026-07-28) this repo, which runs the loop it develops and is the source of
+> most of the findings below. All four re-installed onto v0.2.0 on 2026-08-21, and
+> **14 issues have run on it since** — across all four repos. That is enough to say the
+> plugin/config seam holds and that the hardening works under load; it is not enough to
+> call it stable, and those runs surfaced the defect this release fixes.
 >
-> Findings from those real runs are indexed in
+> **v0.2.1 is a single-fix patch.** `loop-engine.md` is larger than the harness's shell
+> output cap, so `cat`-ing it returned a silently truncated fragment — the first fifth,
+> ending inside the pipeline with no gate table, ledger format, router, AC-verifier or
+> Resume — while spilling the rest to a file. Profiling six real loop sessions found
+> **all six truncated, all six recovered, and none required to**. `SKILL.md` now says
+> how to read the engine, and adds a fail-safe: an engine you cannot confirm you read in
+> full is one you have not loaded — re-read, or stop. See
+> [F105](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1#issuecomment-5408084091).
+>
+> Findings from real runs are indexed in
 > [#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1) — read
 > the comments there for the current set; its title names only the earliest ones.
-> **v0.2.0** is the hardening release that came out of them: it makes the acceptance
+> **v0.2.0** was the hardening release that came out of them: it makes the acceptance
 > gate adversarial, moves it last so it certifies the commit that actually merges, and
 > defaults the plan gate to stopping on every issue under `calibration` — alongside
 > gate-currency expiry, an orphan-PR scan on resume, an offline-test tier, and a stop
-> on any ledger status the engine does not recognise. The
-> [milestone](https://github.com/frederick-douglas-pearce/claude-code-loop/milestone/1)
-> does not close at the bump — several items stay open past it, and the milestone
-> itself is the list. Expect rough edges in porting to a repo unlike the three above;
-> that is exactly what #1 collects.
+> on any ledger status the engine does not recognise. Expect rough edges in porting to
+> a repo unlike the four above; that is exactly what #1 collects.
 >
 > **Issues for this plugin live in
 > [this repo's tracker](https://github.com/frederick-douglas-pearce/claude-code-loop/issues).**
