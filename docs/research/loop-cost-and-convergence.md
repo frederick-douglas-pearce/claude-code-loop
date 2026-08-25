@@ -1,7 +1,7 @@
 # Loop cost & convergence — research notes
 
 **Status:** open investigation. Not a plan, not a ruling. Nothing here has been through a gate.
-**Opened:** 2026-08-24 · **Last updated:** 2026-08-25 (four ledgers + six profiled sessions + read profile)
+**Opened:** 2026-08-24 · **Last updated:** 2026-08-25 (four ledgers + six profiled sessions + read/engine profile)
 **Question:** why does a loop iteration cost what it does, and what would make it cheaper without
 making it worse?
 
@@ -349,6 +349,79 @@ Three consequences, in increasing order of importance:
 **This is the strongest single finding in this document**, and it is the one most likely to be
 worth an issue: item 1 is nearly free, item 3 is a fail-safe gap in the bootstrap, and item 2 sizes
 the ceiling on everything else here.
+
+
+### Finding 9 — where the engine's 178KB actually is, and why "define once, reuse" recovers ~1%
+
+*(2026-08-25, in response to the compression question)*
+
+**The twelve pipeline steps are only ~32% of the file.** The bulk is reference material:
+
+| section | lines | share |
+|---|---:|---:|
+| AC-verifier | 372 | **16.3%** |
+| Gates, convergence & resting states | 276 | **13.4%** |
+| `progress.md` worked example | 264 | **12.0%** |
+| 6. Implement | 163 | 7.3% |
+| `queue.md` format | 160 | 7.0% |
+| Resume | 125 | 5.8% |
+| Tool surface | 111 | 5.2% |
+| 5. Human gate | 111 | 5.0% |
+| *(all other steps 0–4, 7–12)* | | *~19%* |
+
+**Literal repetition is not the lever.** Shingling the file on 12-word windows: **64** repeated
+windows, **1.0%** of the file inside a repeat beyond first occurrence. A macro or include mechanism
+would recover about one percent. The multi-site invariants `CLAUDE.md` warns about are real, but
+they are restated **in different words at each site** — which is exactly why they *drift*, and
+exactly why no mechanical dedup reaches them.
+
+**And the semantic version of that idea is already chartered and already blocked.** Collapsing the
+restatements to one canonical passage is **#35**, deferred at its plan gate 2026-08-18 because the
+sites *have* diverged (F57/F58 on #1): its AC1 (state it once) and AC3 (no semantic change) are in
+direct conflict while the drift stands, since collapsing divergent sites silently picks a winner.
+**Do not re-derive this as a compression idea** — it is a correctness problem wearing a compression
+costume.
+
+**Maintainer rationale is a real but modest term.** Sentences carrying a rationale or history marker
+("deliberate", "do not tidy", "for the record", "#N shipped", "used to say") are **7.1% / ~3.1k
+tokens per invocation.** Treat that as a **floor**: marker detection cannot see rationale woven into
+an instruction's own clause, and much of this file's is. Splitting runtime instruction from
+maintainer commentary is worth doing on its own merits — the engine is the one artifact where every
+maintainer-facing sentence is billed to every consumer, forever — but on this measurement it is not
+the headline.
+
+**The lever the data actually supports is load-on-demand sectioning: ~42% is deferrable.**
+
+| deferrable section | share | needed when |
+|---|---:|---|
+| AC-verifier | 16.3% | step 10 only (Part 2 is further route-scoped) |
+| `progress.md` worked example | 12.0% | step 12 / init |
+| `queue.md` format | 7.0% | init only |
+| Resume | 5.8% | only when step 0 finds a mid-pipeline row |
+| Initialization | 1.1% | new run only |
+
+And a large share of invocations never reach most of it: **39 of 345 journal entries across the four
+ledgers stopped at the plan gate** — step 5 — having loaded 100% of the engine to execute perhaps a
+quarter of it. That 11.3% is a **floor**; header-based classification leaves 56% unclassified.
+
+**The shape this suggests** is the plugin's own three-layer split applied one level down: a core
+`loop-engine.md` carrying the pipeline, the gate table, the routing table, the Tool surface and the
+fail-safe invariants; and `procedures/*.md` — AC-verifier, ledger format, Resume, Initialization —
+that the core **names at the point of use** with an explicit "read this now before proceeding".
+
+**The constraint that makes or breaks it, stated before anyone builds it:** `SKILL.md`'s entire
+design assumes a partial load **over-escalates**. So the core must keep the *fail-safe half* of
+every deferred section even when the procedure moves out — the core says "the acceptance gate is due
+on every issue with acceptance criteria and either class blocks"; the procedure says how to run it.
+Get that wrong and this trades ~42% of the tokens for the exact failure mode **Finding 8** just
+documented: a coherent-reading engine that silently ends before a gate.
+
+**Why this is a product issue, not a personal cost issue.** At ~44k tokens the engine consumes 29%
+of a 200k budget before the loop does any work, on every invocation, in every consuming repo. That
+is a floor a consumer cannot opt out of and cannot tune, and it scales with nothing they control.
+
+**Whatever is attempted, it is now falsifiable.** `context_profile.py` measures the before and the
+after on a real session. No engine-size change should land without that pair of numbers.
 
 ---
 
