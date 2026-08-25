@@ -118,8 +118,53 @@ Asserts — all identity or existence, arbitrary-string couplings where any chan
    it is never red on an intermediate commit.)
 3. **Step resolvability.** Every step number in the *read it at* column is a real pipeline step —
    resolvability only, reusing the existing heading-resolution logic.
-4. **Vacuity guard.** The extractor finds ≥5 units and `planning` is among them, so a broken regex
-   fails here rather than passing on an empty set.
+4. **Vacuity guard.** *(Re-derived for the increment, 2026-08-25 — the original said "≥5 units and
+   `planning` among them", which was seven-unit-shaped and would be red on day one.)*
+   **Drop the numeric floor.** Assert instead that `{"accepting", "reference"}` is a **subset** of
+   the units the **table** extractor found.
+
+   *Why no floor:* the floor's value in the house pattern is **headroom** — it sits far below the
+   true count so it catches a partial regex break without tripping on growth. At set size 2 there is
+   no headroom, so `>= N` collapses into "non-empty", which the named member already implies. And a
+   named member is strictly stronger than any count: a count proves *some* row matched, a named
+   member proves *that* row parsed. This is the two-member form of `CapsVocabularyTests`'
+   `assertIn("BACKLOG_SOURCE", found)`.
+
+   *Why subset and not equality:* exact set membership would duplicate assertion 1's coverage
+   (which already catches an omitted unit, from the two files, loudly) while introducing an
+   enumeration whose cheap fix on a red run is "append the new name" — the
+   `ALLOWED_NON_BINDINGS`/`_STOPWORDS` failure mode. **Subset escapes it by polarity**: additions to
+   the true set can only *satisfy* the assertion, never falsify it, exactly as the materiality
+   list's "if unsure, material" does.
+
+   *Growth path:* **no edit needed** as `planning`/`implementing`/`reviewing`/`landing` arrive — the
+   subset stays true. It goes red only if `accepting` or `reference` is renamed or removed, which is
+   a real product change that *should* fail. **Do not reintroduce a floor when the set grows**, and
+   keep the named set short; a growing named set is the enumeration creeping back.
+
+   *Point it at the table extractor only.* If the fail-safe-list extractor breaks while the table
+   one works, assertion 1 fails loudly and non-vacuously; if both break, this catches the table
+   side. One-sided is sufficient, mirroring `CapsVocabularyTests`.
+
+**Two further corrections for the increment** *(2026-08-25)*, because the spec above was written
+against the seven-unit target:
+
+- **Assertion 1 presupposes `reference` has a fail-safe half — and without one it is RED ON DAY
+  ONE.** In the target every unit is a deferred *phase* with a genuine fail-safe. In the increment
+  `reference` is an **appendix** (Initialization, templates, worked example), not a gate. Write no
+  "what holds without `reference` loaded" line and the fail-safe list is `{accepting}` while the
+  table is `{accepting, reference}` — set equality fails immediately. **The fix is to write the
+  `reference` fail-safe line** (its contents are needed only at init and journal; core
+  over-escalates without them), which also matches the refactor's own discipline that every deferred
+  unit states what holds without it. **Do not** patch this by teaching the guard to tell a phase
+  from an appendix — that hands the guard semantics it must not own.
+- **Assertion 3 presupposes every *read it at* cell names a numbered step.** `accepting` is read at
+  step 10; the `reference` appendix is read at lifecycle **events** (Initialization, journal) that
+  are not `### N.` headings. **Scope the resolvability check to rows that actually cite a numbered
+  step** rather than requiring one everywhere.
+- Assertion 2 is sound as written. One caveat: the increment must **not** name `reference/resume.md`
+  or `reference/router.md` — those stay in core by construction — and assertion 2 correctly catches
+  the index if it wrongly does.
 
 Must **not** assert: that a fail-safe half's text correctly states its unit's posture (truth over
 prose — the enumerable-assertion trap, defeated by one reword); that a gate is assigned to the
