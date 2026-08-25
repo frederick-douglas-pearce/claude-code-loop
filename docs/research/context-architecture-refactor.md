@@ -233,6 +233,15 @@ run it and never re-assert the posture"*, the phase index can become the canonic
 home that **#35** has been looking for — **reducing** restatement sites rather than adding another.
 Left implicit, B3's drift risk is realized instead.
 
+**Audited 2026-08-25** — `core-self-sufficiency-audit.md` walks all 27 safety-resolving references
+in the drafted core: **6 genuine failures, all on B1/B2, none elsewhere.** The Tool surface, currency
+clause, convergence classifier, merge posture and every gate's due-ness in the Gate table already
+resolve in core. **And the increment is a different core than the one audited:** deferring only
+`accepting` plus a reference appendix keeps the status vocabulary, header semantics, Router and
+Resume in core *by construction*, so **B2's moves are unnecessary for the increment — only B1's
+reword and the B3 guard are load-bearing on day one.** `accepting` strands no decision: due-ness in
+the Gate table, fail-safe *cannot run ⇒ cannot merge ⇒ human* in the phase index.
+
 Two smaller structural items: `core` must carry a compact **0–12 pipeline table of contents** (steps
 4, 5, 7, 9 and 12 are currently never enumerated in `core`), and `implementing` **splits across
 actors** under a controller model — step 6 becomes the implementer's brief, step 7 stays with the
