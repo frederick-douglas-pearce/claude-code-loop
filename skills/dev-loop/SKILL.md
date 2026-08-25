@@ -24,10 +24,10 @@ invariants below without them:
    gate/convergence/park-hold/budget semantics.
 
    **Read it with `Read`, never with `cat`/`sed`/`head`.** The engine is far larger than the Bash
-   output cap, so a shell read returns a **silently truncated fragment** — roughly the first fifth,
-   which ends inside the pipeline and contains no gate table, ledger format, router, AC-verifier or
-   Resume — and spills the remainder to a file you then have to page back anyway. `Read` reports
-   `totalLines`; page with `offset` until you have read **through the last line**.
+   output cap, so a shell read returns a **silently truncated fragment** that ends inside the
+   pipeline — before every gate, and before the ledger format, router, AC-verifier and Resume — and
+   spills the rest to a file you then have to page back anyway. `Read` reports `totalLines`; page
+   with `offset` until you have read **through the last line**.
 
 Read config for **bindings**, engine for **logic**. Execute the engine's pipeline exactly, for
 exactly one issue, then STOP.
@@ -38,11 +38,12 @@ These are restated here so a partial load **over-escalates** (safe) rather than 
 engine is authoritative; on any conflict, follow the engine — but never do less than this:
 
 - **An engine you cannot confirm you read in full is an engine you have not loaded.** Default-deny:
-  the truncation above is advertised only as a size field in a tool result, so "it looked like the
-  whole file" is not evidence. You have the engine when your reads reach the **last** line the file
-  reports; short of that, re-read the remainder. If you still cannot confirm a complete read, **STOP
-  and tell the human** — do not run the pipeline on a fragment. A fragment is the dangerous shape:
-  it reads as a complete, coherent procedure that silently ends before every gate.
+  a silent truncation is advertised only as a size field in a tool result, so "it looked like the
+  whole file" is not evidence. You have the engine only when your reads reach the **last line the
+  file reports** (`Read`'s `totalLines`); short of that, re-read the remainder. If you cannot
+  confirm a complete read, **STOP and tell the human** — do not run the pipeline on a fragment. A
+  fragment is the dangerous shape: it reads as a complete, coherent procedure that silently ends
+  before every gate.
 - **One issue per invocation, then STOP and journal.** Never batch. The driver re-invokes with
   fresh context for the next issue.
 - **Resume before selecting.** If a ledger row is mid-pipeline (interrupted), finish it against
