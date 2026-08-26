@@ -425,6 +425,74 @@ after on a real session. No engine-size change should land without that pair of 
 
 ---
 
+### Finding 10 — ingestion is not cost: the engine is paid for ~11× over, and turns dominate the bill
+
+*(added 2026-08-26, in response to "what is the total cost of reading the engine across a whole run")*
+
+Findings 6–9 all measure **ingestion**: what entered the parent, counted once, at the moment it
+landed. That is the right *lever-tracking* number — it moves if and only if the file or the read
+pattern changes — but it is **not a cost proxy**, and the gap is large. A token that arrives at turn
+12 of a 109-turn session is re-submitted on the 97 turns that follow.
+
+Measured with `engine_cost.py` on the three frozen 0.2.0 sessions:
+
+| session | turns | engine **ingested** | engine **resident-turn** | carry | engine **billable-equiv** | **% of session bill** |
+|---|---:|---:|---:|---:|---:|---:|
+| `b40adacf` | 109 | 61,006 | 5,874,545 | 96× | 626,699 | **21.2%** |
+| `fd687f48` | 231 | 61,210 | 8,125,670 | 133× | 812,567 | **13.6%** |
+| `a587e8e4` | 422 | 44,019 | 4,816,764 | 109× | 481,676 | **5.1%** |
+
+Three things follow, and the third is the one that changes what we should be optimising.
+
+**1. Ingestion was being measured with the wrong constant.** Every engine figure in this document
+and in `baseline-2026-08-25.md` used `chars / 4`. The transcripts carry the true count —
+`ctx[i] − ctx[i−1] − out[i−1]` is exactly what turn *i*'s tool results added — and on turns whose
+only result was engine text it says **3.25–3.82 chars/token**, not 4. So the published engine-load
+figures **understate by 4–19%**. The direction is consistent, so before/after comparisons still hold;
+the absolute numbers were low. `engine_cost.py` now measures rather than estimates.
+
+**2. Cache is a uniform ~8× discount, not a lever.** 97.6–98.9% of all input tokens in these
+sessions are `cache_read` at 0.1×; fresh input is ~0.0% and cache writes are 1.1–2.4%. Because the
+discount applies to essentially the whole prefix, **an item's share of context is very close to its
+share of cost** — the positional model (engine charged at cache-read rate after its arrival turn)
+lands within ~15% of the naive share model. Cache changes the size of the bill by ~8×; it does not
+change which lever matters. Modelling it further is not worth the effort.
+
+**3. Turn count, not context size, drives the variance between runs.** Billable-equivalent per turn
+is nearly constant across three very different sessions:
+
+| session | turns | avg context/turn | bill/turn |
+|---|---:|---:|---:|
+| `b40adacf` | 109 | 214,854 | 27,151 |
+| `fd687f48` | 231 | 229,111 | 25,800 |
+| `a587e8e4` | 422 | 176,227 | 22,448 |
+
+**Cost ≈ turns × ~25k.** Average context is capped by compaction and sits in a narrow band, so a
+4× spread in turns produces a ~3× spread in bill while context/turn barely moves. That puts
+**Finding 2 (fix-induced defects → extra rounds) back as the dominant cost lever**, ahead of engine
+size — a 422-turn run costs 3.2× a 109-turn run regardless of how big the engine is.
+
+**What this means for sharding.** The engine is ~13% of a run's bill (median of three), so cutting
+always-loaded from ~46k to ~30k buys roughly **4–7% of a run**, not the ~35% the ingestion metric
+implies. Still worth doing — but two corrections to how we sell and measure it:
+
+- **The "when" is worth as much as the "how much".** Carry is ~96× on a 109-turn session, i.e. the
+  engine loads about 12% of the way in and is held for the rest. A section deferred to the step that
+  needs it — step 10 of 12 — carries for ~20% of the run instead of ~90%, so **deferring a 5k
+  section is worth about as much as deleting a 4k one**. The seven-unit design already does this;
+  what was missing is that it should be *scored* this way.
+- **P2 (ingested tokens) is the wrong success metric for the sharding epic.** It cannot see the
+  deferral half at all: a run that loads all seven units late scores identically to one that loads
+  them all at turn 5. Add **P2c — engine resident-turn tokens** — as the epic's primary metric and
+  keep P2 as the secondary. `engine_cost.py` reports both.
+
+**Caveats, stated because they bound the numbers above.** Read *counts* are filter-dependent — the
+scripted filter (a read verb plus the path) finds 17/20/60 where the earlier ad-hoc filter found
+18/18/53, a ±13% disagreement — so **count reads as an approximation and token volume as the
+measurement**. Residency needs an eviction model; `NONE`/`PROP`/`FULL` bracket it, and `PROP` is
+quoted above. On `b40adacf` all three agree exactly (no compaction). On `fd687f48` and `a587e8e4`
+`NONE` is 1.7–2.4× `PROP`, which is the honest error bar on any single session.
+
 ## Candidate levers
 
 Ranked by (expected saving × confidence), with the reasoning that places them. None is a decision.
