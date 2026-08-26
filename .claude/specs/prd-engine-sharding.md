@@ -294,7 +294,15 @@ requires.
 
 ---
 
-## 7. Milestone — OPEN DECISION
+## 7. Milestone — RATIFIED: `v0.2.3`
+
+**Decision, 2026-08-25: `v0.2.3`, a new dedicated single-epic milestone.** The options below are
+kept as the record of what was weighed; the decision is made and D006 logs it. `v0.3.0` was
+considered and declined at the stated cost — it is the corpus-gated deferral category and holds 24
+open issues, so using it for effort-gated work would have meant dissolving that criterion or
+relocating them.
+
+### What was weighed
 
 The v0.2.1 read in the original draft is stale: #106, #108, #109, #111, #112, #114, #115 were
 reassigned to **v0.2.2**, which now has **11 open issues** — so v0.2.2 is the busy patch train and is
@@ -312,7 +320,7 @@ release **alone**, in a milestone that carries nothing else.
 | **`v0.3.0`** | The user's instinct. | v0.3.0 is the **corpus-gated deferral category** and currently holds **24 open issues**. Using it for effort-gated work means **either** dissolving the one criterion that makes it a category rather than a junk drawer (CLAUDE.md is explicit) **or** relocating those 24 to a renamed category milestone. Real cost, stated plainly. |
 | **Named milestone** (e.g. `engine-sharding`) | A milestone with no version string until release. | Sidesteps the semver-name collision entirely; the version string is chosen at release time. |
 
-**Recommendation: `v0.2.3`** — a new, dedicated, single-epic milestone. It is semver-correct (this is
+**Ratified: `v0.2.3`** — a new, dedicated, single-epic milestone. It is semver-correct (this is
 a patch: internal reorganization with no consumer-facing surface), preserves the measurement
 isolation the whole epic depends on, and avoids disturbing the 24 issues sitting in the v0.3.0
 category. If you prefer to decouple the name from semver, the **named-milestone** option is the clean

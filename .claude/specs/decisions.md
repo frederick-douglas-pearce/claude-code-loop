@@ -99,3 +99,28 @@ and it re-derived three of the four assertions rather than just the fourth.
 **Supersedes** D003's "values pending". Full reasoning: `docs/research/core-self-sufficiency-audit.md`
 → "B3 — the guard, specified".
 
+---
+
+## D006 — 2026-08-25 — Milestone ratified: `v0.2.3`
+
+**Context.** D002 left the milestone open with three options. The instinct in the room was `v0.3.0`.
+
+**Decision.** **`v0.2.3`**, a new dedicated single-epic milestone carrying this epic and nothing
+else.
+
+**Why not `v0.3.0`.** It is the **corpus-gated deferral category** — work lands there when it waits
+on *corpus*, not effort — and it currently holds 24 open issues. This work is effort-gated: the
+corpus already exists. Using `v0.3.0` would have meant either dissolving the one criterion that makes
+it a category rather than a junk drawer, or relocating 24 issues to a renamed category. Neither cost
+was worth paying for a version string.
+
+**Why `v0.2.3` is semver-correct.** The change introduces no new or renamed `CAPS` parameter, no
+config migration, and no behavior or vocabulary change — the pipeline's step numbering and outcomes
+are unchanged. It reorganizes where the engine's own text lives. That is a patch.
+
+**Why dedicated.** The epic's entire value is a falsifiable before/after, and two changes in one
+release make both uninterpretable (`docs/research/baseline-2026-08-25.md`). `v0.2.2` is the 11-issue
+patch train and cannot provide that isolation.
+
+**Supersedes** D002's "open".
+
