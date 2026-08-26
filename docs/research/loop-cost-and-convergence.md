@@ -634,6 +634,73 @@ that keeps working is not a better pattern — it is **checking a sample of matc
 sanity-checking the output distribution against what the system can physically do** (one issue per
 invocation; ingestion ≥ one engine copy). Do both before believing any transcript-derived number.
 
+### Finding 12 — the parent issues 1.00 tool calls per turn, and never batches
+
+*(added 2026-08-26. Reproduce with `calls_per_turn.py`.)*
+
+Cost is `turns × context` (Finding 10), and **a turn issuing five parallel tool calls bills the same
+as one issuing a single call.** So batching is the only lever that reduces turns without touching a
+gate, a verdict, or any pipeline semantics. Across 1,713 parent turns in nine sessions:
+
+> **1.00 tool calls per turn.** One session (`9b188aba`) has **zero** turns issuing two or more.
+
+| session | turns | calls/turn | 0-call | 1-call | 2+ | mergeable | of which paging |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `b40adacf` | 109 | 1.07 | 10 | 82 | 17 | 17 (16%) | 12 |
+| `fd687f48` | 231 | 1.01 | 20 | 191 | 20 | 28 (12%) | 15 |
+| `a587e8e4` | 422 | 0.95 | 51 | 340 | 31 | 85 (20%) | 38 |
+| `d9933e33` | 161 | 1.04 | 16 | 124 | 21 | 17 (11%) | 12 |
+| `d5ba0ddc` | 224 | 0.97 | 15 | 201 | 8 | 41 (18%) | 19 |
+| `9b188aba` | 158 | 0.93 | 11 | 147 | **0** | 33 (21%) | 15 |
+| `592ab44d` | 136 | 1.11 | 8 | 106 | 22 | 19 (14%) | 8 |
+| `7bcec8a4` | 92 | 0.92 | 9 | 81 | 2 | 32 (35%) | 13 |
+| `d53db569` | ~180 | 1.02 | 17 | 142 | 21 | 36 (20%) | 14 |
+
+**Two figures, and the gap between them is the honest uncertainty.**
+
+- **Ceiling — 13.5% of the input bill (~716k/session).** Every maximal run of ≥2 consecutive turns
+  each issuing one read-only call. This is an *upper bound, not a forecast*: consecutive reads are
+  often genuinely dependent — read a file, then grep for what it named — and nothing in the
+  transcript distinguishes a dependent read from an independent one.
+- **Floor — 6.1% of the input bill (~326k/session), high confidence.** The subset where consecutive
+  reads target **the same file**. That is *paging*: the agent walking one known file in slices, so
+  the slices cannot depend on each other and merging them cannot reorder anything.
+
+**Price merged-away turns at their own bill, never at the corpus average.** Paging runs sit early in
+a session, where context is still small; the average-priced estimate overstates by **1.6×**. Both
+figures above are priced per-turn.
+
+**The floor's largest single instance is the engine loading itself.** `d5ba0ddc` opens with six
+consecutive turns each reading one slice of `loop-engine.md`. Once the first `Read` returns
+`totalLines`, every remaining page is a known, independent request — they could be one turn. **This
+is a one-sentence addition to the read protocol v0.2.1 already ships**, and it lands on the single
+most repeated pattern in the corpus.
+
+**Ranking against the other levers, all in the same units:**
+
+| lever | value | confidence | risk |
+|---|---|---|---|
+| avoid one gate round | ~850k (Finding 11) | correlational + Finding 2's mechanism | changes gate behaviour |
+| **batch paging reads** | **~326k/session** | **high — same-file only** | **near zero** |
+| batch all mergeable reads | ~716k/session | upper bound only | reordering if wrongly merged |
+| sharding (#128) | ~4–5% of a run | modelled, not measured | bounded |
+
+**Batching's high-confidence floor is comparable to sharding's whole projected saving, at a fraction
+of the work and essentially no semantic risk.** It does not compete with sharding — they act on
+different terms of `turns × context`, and both can ship.
+
+**A sixth detection bug, found by hand-checking rather than by reasoning.** The first run of this
+analysis reported 23% mergeable. Inspecting the actual runs showed two of them contained
+`python3 - <<'PY' … p.write_text(s)` heredocs — **mutations whose command line shows no redirect at
+all**, so a shell-shape test classified them read-only and merged across a write. Corrected to 18%.
+That is six silent false results in this analysis, every one in a plausible direction, and the only
+defence that has ever caught one is looking at the matches.
+
+**What batching does not do:** it does not reduce context. Total tokens ingested are unchanged; what
+disappears is the re-submission of the accumulated prefix on the turns removed. So it acts purely on
+the `turns` term, and its saving is bounded by how much context had already accumulated when the
+merged turns ran — which is exactly why per-turn pricing matters.
+
 ## Candidate levers
 
 Ranked by (expected saving × confidence), with the reasoning that places them. None is a decision.
