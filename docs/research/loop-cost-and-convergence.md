@@ -425,107 +425,145 @@ after on a real session. No engine-size change should land without that pair of 
 
 ---
 
-### Finding 10 — ingestion is not cost: the engine is paid for ~133× over, and turns dominate the bill
+### Finding 10 — ingestion is not cost: the engine is carried for ~91% of a run
 
-*(added 2026-08-26; tables rewritten same day after a detection bug was found — see "What was wrong
-with the first pass" below. Every number here is a frozen snapshot, not a maintained figure.)*
+*(added 2026-08-26. **Rewritten twice the same day**, each time because the measuring instrument was
+wrong — see "Three detection bugs" below. Every number is a frozen snapshot, not a maintained
+figure. Reproduce with `engine_cost.py`; its detection is pinned by `test_engine_cost.py`.)*
 
-Findings 6–9 all measure **ingestion**: what entered the parent, counted once, when it landed. That
-is the right *lever-tracking* number — it moves if and only if the file or the read pattern changes —
-but it is **not a cost proxy**. A token that arrives at turn 12 of a 109-turn session is
+Findings 6–9 measure **ingestion**: engine tokens counted once, when they land. That tracks the
+lever, but it is not a cost proxy — a token arriving at turn 12 of a 109-turn session is
 re-submitted on the 97 turns that follow.
 
-Measured with `engine_cost.py` across **eight** completed 0.2.0 sessions in **two** repos:
+| repo | session | turns | cmp | ingested | carry | **carry/turn** | **% of bill** | bill/turn | |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| loop | `b40adacf` | 109 | 0 | 54,221 | 98× | 0.90 | 18.3% | 33,035 | |
+| loop | `fd687f48` | 231 | 1 | 52,808 | 134× | 0.58 | 10.7% | 31,905 | |
+| loop | `a587e8e4` | 422 | 3 | 21,589 | 146× | 0.35 | 3.3% | 27,715 | **excluded** |
+| vote | `d9933e33` | 161 | 1 | 62,014 | 77× | 0.48 | 10.8% | 36,041 | |
+| vote | `d5ba0ddc` | 224 | 1 | 75,183 | 206× | 0.92 | 18.4% | 41,715 | |
+| vote | `9b188aba` | 158 | 0 | 69,077 | 145× | 0.92 | 20.8% | 35,774 | |
+| vote | `592ab44d` | 136 | 0 | 65,868 | 132× | 0.97 | 22.2% | 34,583 | |
+| vote | `7bcec8a4` | 92 | 0 | 69,077 | 84× | 0.91 | 27.7% | 25,969 | |
+| | **median (admissible, n=7)** | | | **65,868** | | **0.91** | **18.4%** | | |
 
-| repo | session | turns | reads | ingested | resident-turn | carry | engine bill | **% of bill** | bill/turn |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| loop | `b40adacf` | 109 | 12 | 58,494 | 5.74M | 98× | 610,717 | **20.6%** | 27,151 |
-| loop | `fd687f48` | 231 | 11 | 60,183 | 8.09M | 134× | 808,638 | **13.6%** | 25,800 |
-| loop | `a587e8e4` | 422 | 18 | 24,733 | 3.35M | 135× | 334,636 | **3.5%** | 22,448 |
-| vote | `d9933e33` | 161 | **1** | **6,088** | 0.49M | 81× | 49,313 | **1.0%** | 30,210 |
-| vote | `d5ba0ddc` | 224 | 7 | 75,183 | 15.53M | 206× | 1,552,514 | **19.1%** | 36,327 |
-| vote | `9b188aba` | 158 | 6 | 69,077 | 10.01M | 145× | 1,051,865 | **21.6%** | 30,830 |
-| vote | `592ab44d` | 136 | 6 | 65,868 | 8.69M | 132× | 914,112 | **22.4%** | 30,070 |
-| vote | `7bcec8a4` | 92 | 6 | 70,135 | 5.88M | 84× | 587,767 | **29.2%** | 21,895 |
-| | **median** | | | **63,026** | | **133×** | | **19.9%** | **28,610** |
+**The engine is ~18% of a run's bill and is carried for ~91% of every run it enters.**
 
-**The engine is ~20% of a run's bill and is paid for ~133× over.** Carry is the ratio of
-resident-turn tokens to ingested tokens: it is how many turns the engine sits in the input after it
-lands.
+**Use `carry/turn`, never raw `carry`.** Raw carry scales with session length, so a median of it
+across runs spanning 92–422 turns describes the sample, not the system. `carry/turn` —
+resident-turn ÷ (ingested × turns) — is the turn-invariant form: the mean fraction of the run each
+engine token is carried for. It is the number that generalises.
 
-**1. `d9933e33` is the F105 truncation, caught in the act.** One `cat`, 6,088 tokens ingested
-against a ~60k-token file, no recovery — that run executed the whole pipeline on roughly a tenth of
-the engine. It is the cheapest session in the table *because* it was broken, which is the clearest
-possible argument for the v0.2.1 read fix and a standing warning that **low engine load is not by
-itself good news**. Any future P2 improvement has to be checked against read *completeness*, or the
-metric rewards the failure it was built to detect.
+**Admissibility is a precondition, not a filter.** A session enters the sample only if its measured
+ingestion clears **one copy of the engine** (~50.7k tokens). Below that floor the engine either
+never fully loaded or the detector missed reads — and in both cases the session is **not a cheap
+run, it is an unmeasured run**. `a587e8e4` is excluded on this rule. Stating it as default-deny
+matters: the earlier draft of this finding read a below-floor session as a *result* and built a
+narrative on it (see below). Unknown ⇒ inadmissible, never quietly averaged in.
 
-**2. Ingestion was measured with the wrong constant.** `chars / 4` was an estimate; the transcripts
-carry the truth, since `ctx[i] − ctx[i−1] − out[i−1]` is what turn *i*'s tool results added. On
-turns whose only result was engine text that implies **3.25–3.82 chars/token**. `engine_cost.py`
-now measures rather than estimates.
+**1. Turn count, not context size, drives the variance.** Across the eight sessions turns span
+**4.6×** while billable-equivalent *per turn* stays in a narrow band (mean 33,342, sd 4,972,
+**CV 15%**).
 
-**3. Cache is a uniform ~8× discount, not a lever.** 97.6–98.9% of input tokens are `cache_read` at
-0.1×; fresh input is ~0% and cache writes 1.1–2.4%. Because the discount covers essentially the
-whole prefix, **share of context ≈ share of cost** — the positional model (engine charged at
-cache-read rate after its arrival turn) lands within ~15% of the naive share model. Cache changes
-the size of the bill by ~8×; it does not change which lever matters.
+> **cost ≈ turns × ~33k**
 
-**4. Turn count, not context size, drives the variance between runs.** Across these eight sessions
-turns span **4.6×** and total bill spans **4.7×**, while billable-equivalent *per turn* stays in a
-narrow band (mean 28,091, sd 4,783, **CV 17%**).
+The CV is a consistency check, not the argument. **The argument is structural: average context per
+turn is bounded above by the compaction ceiling and below by the session's starting footprint, so it
+lives in a narrow band by construction, while turn count has no ceiling at all.** That is why this
+does not rest on n=8. *Falsifier: a session that never approaches the ceiling and whose bill/turn
+still falls outside the band.* This puts **Finding 2 — extra rounds are mostly *fix-induced*
+defects — back as the dominant cost lever**, ahead of engine size.
 
-> **cost ≈ turns × ~28k**
+**2. Cache is a uniform ~8× discount, not a lever.** 97.6–98.9% of input tokens are `cache_read` at
+0.1×. Because the discount covers essentially the whole prefix, **share of context ≈ share of
+cost**. That single fact carries the conclusion; the "two models agree within 15%" corroboration
+this document previously offered has been **deleted as circular** — with `cache_read ≈ 0.98 × ctx`,
+the positional model reduces to `0.1 × resident_turns`, so the two functions cannot disagree.
+**P8 and P2c are one measurement reported twice** (`P8 ≈ P2c/processed`, scaled), and #128 must not
+carry both as independent acceptance criteria.
 
-Average context is capped by compaction and cannot run away, so the per-turn figure is nearly a
-constant of the system. That puts **Finding 2 — extra rounds are mostly *fix-induced* defects — back
-as the dominant cost lever**, ahead of engine size.
+**3. Output tokens are ~13–19% of the bill and are now included.** They bill ~5× input against a
+~8×-discounted input side. They are attributed to the *model*, not to the engine — the engine takes
+a share of the input side only. Note the direction: **including them cuts against this document's
+own preferred conclusion**, since output is purely turn-proportional and wholly immune to sharding,
+so excluding it was under-rating the convergence lever relative to sharding.
 
-**What this means for sharding.** Cutting always-loaded from ~46k to ~30k takes roughly a third off
-a line item worth ~20% of the run: **~6–7% of a run's bill**, not the ~35% the ingestion metric
-implies. Worth doing, with two corrections to how it is measured and sold:
+**4. Compaction is currently the only thing that reduces engine residency, and it is the worst
+possible mechanism** — the parent then re-reads the engine at cache-*write* rates (1.25×), 12.5×
+the cache-read rate it was being carried at. Every zero-compaction session sits at **0.90–0.97**
+carry/turn; the compacted ones range **0.35–0.92**. So compaction is *necessary but not sufficient*
+to reduce carry — `d5ba0ddc` compacted once and still carried 0.92. **This is a directional
+relationship on n=8, not the clean split it first appeared to be**, and it should not be quoted as
+one. It does suggest sharding's second-order benefit — fewer compactions — may exceed its
+first-order one, which is worth a metric (P9, compaction count) before the epic closes.
 
-- **The "when" is worth as much as the "how much".** A section deferred to the step that needs it
-  carries for a fraction of the run instead of nearly all of it, so **deferring a section is worth
-  roughly as much as deleting one of similar size**. The seven-unit design already does this; what
-  was missing is that it should be *scored* this way.
-- **P2 (ingested tokens) is the wrong success metric for the sharding epic.** It is blind to the
-  deferral half: a run that loads all seven units at turn 5 scores identically to one that defers
-  six of them. **P2c — engine resident-turn tokens — is primary from here**, with P2 secondary and
-  read-completeness checked alongside it (see point 1).
+**What this means for sharding.**
 
-#### What was wrong with the first pass, and what it says about the method
+- **Expect ~4–5% of a run, not ~7%.** The 46k→30k figure is **P1, the file on disk**, and applying
+  it proportionally to residency repeats the exact ingestion/cost conflation this finding exists to
+  correct. Sharding is *deferral*, not deletion: in a full iteration the deferred units still load,
+  and only the arrival centroid moves. ~7% is the ceiling, reached only where deferred units are
+  never loaded at all (plan-gate stops, and the reference appendix).
+- **"When" is worth a substantial fraction of "how much" — and the fraction is unmeasured.**
+  Deferring a unit to step 10 of 12 is worth deletion × (turns after step 10 ÷ 0.91). **That
+  denominator is a step→turn mapping nobody has measured**, and it is not linear: steps 8–10 are
+  where the review rounds live, which is where Finding 2 says the turns go. The plausible range is
+  **44–78%** of deletion's value. Measure it from the transcripts before quoting a figure.
+- **P2c's acceptance criterion must be turn-invariant.** Raw resident-turn tokens scale with turn
+  count — the most confounded quantity in this corpus — so a post-sharding run on a hard issue would
+  show P2c *up*. Use **`resident_turns / processed`** (engine share of average context), which is
+  dimensionless and direct. Keep raw P2c as a reported quantity only.
+- **The named falsifier for P2c is re-load after compaction**, not just truncation: a deferred unit
+  re-loaded post-compaction bills at 1.25× rather than 0.1×.
 
-The first version of this finding reported 96×/133×/109× on three sessions and put the engine at
-~13% of the bill. Both were produced by a **detection bug that this document's own baseline shared**:
-the filter matched any Bash command mentioning `loop-engine.md`, so `cat > progress.md <<'EOF' …`
-heredoc **writes** whose bodies discuss the engine were counted as engine **reads**. In one vote
-session that scored **nine** reads where exactly **one** was real.
+#### Three detection bugs, and the pattern they form
 
-Two fixes, both in `classify()`:
+This finding was published twice with wrong numbers before this version. All three bugs were in
+detection — a pure function of `(tool name, tool input)` — and **all three were silent**:
 
-- **Heredoc bodies are stripped before matching.** The engine path appearing inside a `<<'EOF'` body
-  is a write, or a plan file quoting engine prose — never a read.
-- **Plugin-cache reads (`load`) are separated from working-tree reads (`tree`).** Reading
-  `~/.claude/plugins/cache/.../loop-engine.md` is the loop booting its engine; reading
-  `skills/dev-loop/loop-engine.md` is an agent *editing the engine as a work product*. Only the
-  first is a loop cost. This distinction exists **only in this repo**, and it mattered: `a587e8e4`
-  carried 20 tree reads against 18 loads, and excluding them cut its measured ingestion by ~44%.
+1. **Heredoc bodies counted as reads.** `cat > progress.md <<'EOF' …` whose body discusses the
+   engine scored as an engine load. One vote session showed 9 reads where 1 was real. *This
+   over-counted, producing a high engine share — which supported sharding.*
+2. **Working-tree reads counted as loads.** Reading `skills/dev-loop/loop-engine.md` is an agent
+   *editing the engine as a work product*; only `/plugins/` paths are loop costs. `a587e8e4` carried
+   20 tree reads against 18 loads.
+3. **Spill-file recovery reads were invisible.** A `cat` of the engine exceeds the inline limit, so
+   the harness parks it at `<session>/tool-results/<id>.txt` and hands the model a 2KB preview; the
+   recovery reads then target **the spill path**, which contains no `loop-engine.md` substring.
+   `d9933e33` measured **6,088** tokens against a true **62,014**. *This under-counted — and the
+   result was immediately written up here as "the F105 truncation caught in the act", a claim that
+   was **false** and has been withdrawn in full, along with its "low engine load is not by itself
+   good news" generalisation.*
 
-**Consequence worth carrying: the vote repo is the cleaner measurement site.** It never edits the
-engine, so it has no `load`/`tree` confound at all. Prefer it for before/after work, and treat this
-repo's engine figures as the ones needing the split applied.
+Bug 3 also corrupted sizing: on a spilled record `toolUseResult.stdout` holds the full output while
+the model received only the preview — 29,752 chars against 2,246, a **13× overstatement**. Sizing
+now comes from the tool_result *block* content, which is what actually entered the window.
+`context_profile.py` has the same inversion and has not been corrected.
 
-**The method lesson is the one this project keeps relearning.** A command-substring filter over
-agent transcripts is the transcript equivalent of a grep-based prose guard: it pins a *string*, not
-the *thing*, and it fails silently in the direction that looks like data. The fix that worked was
-not a longer pattern — it was **auditing every match by hand against one session** and finding that
-a third of them were writes. Do that before trusting any new transcript filter.
+**The pattern is the finding.** Bug 1 moved the number *up* and was accepted because it supported
+the case for sharding. Bug 3 moved it *down* and was accepted because it looked like a known defect
+being caught. **Both were believed because they pointed where the reader was already looking** —
+which is Finding 2's fix-induced-defect mechanism reproducing inside the measurement apparatus, one
+round later.
 
-**Remaining caveats.** Residency needs an eviction model; `NONE`/`PROP`/`FULL` bracket it and `PROP`
-is quoted above (on `b40adacf` all three agree — no compaction; elsewhere `NONE` runs 1.7–2.4×
-`PROP`). Output tokens are excluded from the cost model though they bill higher per token. All eight
-sessions are 0.2.0; there is **no v0.2.1 measurement yet**.
+Two durable defences, both now in place:
+
+- **A distributional sanity rule beats a narrative.** Admissible sessions cluster at 52.8k–75.2k
+  ingested — 1.0–1.5× the engine's own token count, the truncated-`cat`-plus-sweep dance. 6,088 is
+  not a member of that distribution. *Any session measuring below one copy of the engine is a
+  detector failure until proven otherwise.* That is checkable; "caught in the act" is not.
+- **The instrument has fixture tests** (`test_engine_cost.py`, 20 cases), each pinning a real
+  transcript shape, with the three bugs above named in the cases that catch them. Deliberately under
+  `docs/research/` and **not** `tests/`, so it stays out of the shipped suite — the scope brake puts
+  a guard on analysis infrastructure in `tech-debt`, never in a release.
+
+**Remaining caveats.** `chars/context-token` (3.25–3.82) is a **pipeline constant** for this read
+pattern, not the tokenizer's ratio; a real `count_tokens` call would settle it exactly and remove
+the estimate every other figure rests on. Residency needs an eviction model; `NONE`/`PROP`/`FULL`
+bracket it and `PROP` is quoted (`NONE` is "nothing evicted except what the context ceiling forces",
+not "nothing evicted"). The subagent *bill* is still unpriced, which matters because two proposed
+levers move work into subagents. All eight sessions are 0.2.0; **there is no v0.2.1 measurement
+yet.**
 
 ## Candidate levers
 
@@ -536,7 +574,14 @@ Even a coarse self-report fills the reserved `tokens` slot and makes symptom 2 m
 Finding-1 hypothesis testable, and every lever below evaluable. Cheapest thing on the page and it
 gates the value of the rest.
 
-### B. Constrain what finders return — *high saving, high confidence, small edit*
+### B. Constrain what finders return — *REFUTED; header corrected 2026-08-26*
+
+> This header read *"high saving, high confidence, small edit"* until 2026-08-26, while
+> Finding 6 above already recorded the lever as largely refuted (`Agent` returns are
+> 0.9–3.7% of what enters the parent; under 1% of a run on the bill model). Two
+> restatements of one claim, drifted, in the same file — the pathology `CLAUDE.md`
+> documents at length, occurring in the research notebook itself. Fixed in place rather
+> than guarded.
 Step 8 says nothing about return shape. Finders should return a bounded structured list —
 `file:line`, one-sentence claim, failure scenario, severity, hard cap ~5 — with **no narrative and
 no restating the diff**. The parent needs verdicts, not reasoning. `loop.config.md` prices this gate
