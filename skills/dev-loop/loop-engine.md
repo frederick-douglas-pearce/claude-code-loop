@@ -2010,12 +2010,15 @@ Gate table:
 | Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI + security + acceptance green | `MERGE_METHOD` |
 
 **Gate-outcome invariant (evidence-bound pass).** Applies to every gate in the table above that
-returns a verdict, **on the rows that gate is due on** — due-ness is decided where it always was (the
-gate's own step and the Routing table) and this invariant does not touch it. A gate the route or its
-trigger condition never made due was never owed a verdict, so journal it as not run (`skipped` /
-`n/a`) with the reason; not-due is not a pass either. An explicit `—` **plus a reason** in the config
-is a deliberate "not applicable", journalled `n/a: <that reason>` — **not** an absent binding; it is
-the only way a config marks a gate not-due, and it is deliberately visible.
+returns a verdict, **on the rows that gate is due on** — due-ness is decided by the gate's **When**
+entry in the Gate table above and by the Routing table's per-route column, **both in this file**,
+and this invariant does not touch it. (The one gate whose due-ness is knowable only from its
+binding is `HERMETIC_TEST_CMD`; its carve-out below states that unknown reads as due.) A gate the
+route or its trigger condition never made due was never owed a verdict, so journal it as not run
+(`skipped` / `n/a`) with the reason; not-due is not a pass either. An explicit `—` **plus a
+reason** in the config is a deliberate "not applicable", journalled `n/a: <that reason>` — **not**
+an absent binding; it is the only way a config marks a gate not-due, and it is deliberately
+visible.
 
 **The Build commands row is in the table, so this invariant reaches step 6 by rule, not by
 analogy.** `LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD` are bindings that return a verdict —
