@@ -565,6 +565,75 @@ not "nothing evicted"). The subagent *bill* is still unpriced, which matters bec
 levers move work into subagents. All eight sessions are 0.2.0; **there is no v0.2.1 measurement
 yet.**
 
+### Finding 11 — the join: one extra gate round costs about what loading the engine costs
+
+*(added 2026-08-26. This is the test the cost ranking rested on: if gate rounds did not predict
+turns, Finding 10's ranking of convergence above sharding was wrong. Reproduce with
+`rounds_vs_turns.py`.)*
+
+`- Budget:` lines are written by the parent into `progress.md`, so the session that produced one
+also contains it. Joining those to parent turn counts, across eight sessions in two repos:
+
+| session | turns | issues | rounds | subagent-runs | turns/issue | **rounds/issue** | bill/issue |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `fd687f48` | 231 | 2 | 4 | 6 | 116 | 2.0 | 3,685,064 |
+| `7bcec8a4` | 92 | 1 | 3 | 4 | 92 | 3.0 | 2,389,110 |
+| `592ab44d` | 136 | 1 | 4 | 6 | 136 | 4.0 | 4,703,345 |
+| `b40adacf` | 109 | 1 | 5 | 8 | 109 | 5.0 | 3,600,805 |
+| `d9933e33` | 161 | 1 | 5 | 9 | 161 | 5.0 | 5,802,670 |
+| `9b188aba` | 158 | 1 | 7 | 6 | 158 | 7.0 | 5,652,370 |
+| `d53db569` | 178 | 1 | 7 | 7 | 178 | 7.0 | 6,318,506 |
+| `d5ba0ddc` | 224 | 1 | 7 | 6 | 224 | 7.0 | 9,344,236 |
+
+    rounds/issue -> turns/issue     r = +0.79      turns/issue ≈  59 + 17 x rounds
+    rounds/issue -> bill/issue      r = +0.77       bill/issue ≈ 938k + 850k x rounds
+    subagent-runs -> turns          r = +0.10
+
+**One extra gate round costs ~17 turns ≈ 850k billable-equivalent tokens.** For scale, the engine's
+*entire* contribution to a typical run is ~1.0M (Finding 10). So:
+
+> **Avoiding one gate round is worth roughly as much as not loading the engine at all — and about
+> 3–4× what the whole sharding epic is projected to save.**
+
+**Subagent count does not predict turns (r = +0.10).** That is a useful negative: the cost is not in
+*how many* agents run, it is in *how many times the pipeline goes round*. It argues against
+"fewer/cheaper subagents" as a cost lever and against reading the `subagent-runs` figure in the
+ledger as a cost proxy — it is a fan-out measure, not a budget one.
+
+**The intercept is the floor and it is not small.** ~59 turns per issue before any gate round —
+roughly 2M billable-equivalent. A perfectly converging issue still costs that, and no convergence
+work touches it. That floor is where sharding and read discipline apply.
+
+**Correlation is not causation here, and the confound is obvious: a harder issue plausibly causes
+both more rounds and more turns.** This join cannot separate them and does not try. What makes the
+causal reading credible is **Finding 2's separate, mechanism-level evidence that most extra rounds
+are *fix-induced*** — defects created by the previous round's fix rather than inherent to the issue
+— across 7 instances in 4 ledgers. The join establishes that rounds are *expensive*; Finding 2
+establishes that many of them are *avoidable*. Neither claim carries the other, and quoting the
+`+0.79` alone would overstate it.
+
+**Caveats.** n=8 sessions / 9 issues. The session↔issue mapping is many-to-many, so per-issue
+figures are within-session averages. `a587e8e4` is excluded and the exclusion was checked by hand:
+its twelve `- Budget:` matches are all *prose about* budget lines in plan files, not ledger entries,
+so it journaled none in that session.
+
+**Two detection bugs were found and fixed while building this**, both the same shape as Finding 10's
+three, which is now a pattern worth naming rather than a coincidence:
+
+1. **Direction.** Counting every `- Budget:` occurrence in a transcript counts lines the parent
+   *read back out of* `progress.md` as work done in that session. It gave one 158-turn session
+   **11 issues at 14 turns each**, against an engine whose rule is one issue per invocation. Only
+   `tool_use` **inputs** count.
+2. **Line wrapping.** Budget lines wrap, so `gate-rounds=` routinely sits on a continuation line. A
+   single-line regex captured the prefix, found no rounds, and dropped the row — losing three of
+   nine sessions silently. This is the same wrapped-text hazard `CLAUDE.md` documents for the
+   engine's step references.
+
+**Every one of these five bugs was a silent false result in a plausible direction.** The defence
+that keeps working is not a better pattern — it is **checking a sample of matches by hand, and
+sanity-checking the output distribution against what the system can physically do** (one issue per
+invocation; ingestion ≥ one engine copy). Do both before believing any transcript-derived number.
+
 ## Candidate levers
 
 Ranked by (expected saving × confidence), with the reasoning that places them. None is a decision.
