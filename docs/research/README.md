@@ -81,7 +81,7 @@ plausible direction**, and pattern-matching caught none of them:
    substring. Scored a full load as ~10% of one, and that was written up as a real finding before it
    was caught.
 4. **Payload inversion** — `toolUseResult.stdout` holds the full output on a spilled record; the
-   model only received the preview. 13× overstatement. **`context_profile.py` still has this bug.**
+   model only received the preview. 13× overstatement. **`context_profile.py` was retired (D010) carrying it.**
 5. **Direction** — counting `- Budget:` lines the parent *read back* from `progress.md` as work done
    in that session (one 158-turn session showed 11 issues at 14 turns each).
 6. **Line wrapping** — budget lines wrap, so `gate-rounds=` sits on a continuation line; a

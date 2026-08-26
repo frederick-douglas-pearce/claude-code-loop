@@ -209,7 +209,8 @@ named slot**, so the seam exists.
 
 *(added 2026-08-25; supersedes the guesswork in Findings 1–5's framing of where the money goes)*
 
-`context_profile.py` reads the parent thread's own token accounting out of the session transcripts
+`context_profile.py` (**retired 2026-08-26, D010** — kept only to reproduce this finding) reads the
+parent thread's own token accounting out of the session transcripts
 (`~/.claude/projects/<slug>/*.jsonl`), so *Finding 5's* "nothing measures this" is now false. Six
 vote-repo loop sessions, all confirmed genuine iterations (engine reads + ledger writes + 6–15
 subagent traces each):
@@ -420,7 +421,7 @@ documented: a coherent-reading engine that silently ends before a gate.
 of a 200k budget before the loop does any work, on every invocation, in every consuming repo. That
 is a floor a consumer cannot opt out of and cannot tune, and it scales with nothing they control.
 
-**Whatever is attempted, it is now falsifiable.** `context_profile.py` measures the before and the
+**Whatever is attempted, it is now falsifiable.** `engine_cost.py` measures the before and the
 after on a real session. No engine-size change should land without that pair of numbers.
 
 ---
@@ -552,7 +553,8 @@ detection — a pure function of `(tool name, tool input)` — and **all three w
 Bug 3 also corrupted sizing: on a spilled record `toolUseResult.stdout` holds the full output while
 the model received only the preview — 29,752 chars against 2,246, a **13× overstatement**. Sizing
 now comes from the tool_result *block* content, which is what actually entered the window.
-`context_profile.py` has the same inversion and has not been corrected.
+`context_profile.py` had the same inversion and was **retired rather than corrected** (D010); P4 and
+its "~50% of every byte the parent reads" figure are withdrawn with it.
 
 **The pattern is the finding.** Bug 1 moved the number *up* and was accepted because it supported
 the case for sharding. Bug 3 moved it *down* and was accepted because it looked like a known defect
