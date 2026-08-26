@@ -124,3 +124,80 @@ patch train and cannot provide that isolation.
 
 **Supersedes** D002's "open".
 
+
+---
+
+## D007 — 2026-08-26 — There is no "measurement site" to choose
+
+**Context.** #126 designates the vote repo as the site for the v0.2.1 before/after. Vote's
+`epic-hybrid` run is exhausted, so it accrues no sessions; the v0.2.1 window closes at the v0.2.2
+re-install. This was framed as a choice: initialize a vote run, or re-designate `claude-code-loop`.
+
+**Decision.** **Neither. The framing was wrong.** The standing rule is already *report per repo,
+never take a median across repos* — so there is nothing to designate. **Measure whatever admissible
+sessions exist in each repo, report them separately, and never pool.** Both `claude-code-loop` and
+`us_presidential_vote_analysis` run v0.2.1 as of 2026-08-26.
+
+**Consequence, accepted deliberately.** If neither repo reaches n≥5 admissible sessions before the
+v0.2.2 re-install, **the v0.2.1 reading ships labelled underpowered, and v0.2.2 is not held for it.**
+v0.2.1's prediction is narrow (remove the truncated-`cat` recovery multiplier) and is the least
+valuable of the three levers; delaying a release to power it would cost more than the reading is
+worth.
+
+**What is load-bearing instead:** the freeze against **v0.2.2**, because #135 moves the sharding
+epic's own primary metric (P2c) on its own — batching deletes early, low-context turns, which are
+exactly where the engine's share of context is highest. See D008.
+
+## D008 — 2026-08-26 — The sharding baseline freezes against v0.2.2, not v0.2.1
+
+**Decision.** #128's before-baseline is the freeze taken against **the release installed immediately
+before the sharding cut — v0.2.2** — never v0.2.1 and never the pre-#124 figures.
+
+**Why.** #124 (v0.2.1) removed the truncation-recovery multiplier and #135 (v0.2.2) removes paging
+turns. **#135 lowers `resident/processed` by itself**, so a pre-v0.2.2 before-window credits sharding
+with #135's saving. Same double-count hazard already caught for #124/P2, one release later.
+
+## D009 — 2026-08-26 — P2c is the acceptance metric, expressed turn-invariantly; P4 and P8 leave the gate
+
+**Decision.** #128 accepts on **P1** (`wc -c`, settled at merge) and **P2c as
+`resident_turns / processed`** only. P2, P3, **P9 (compaction count)** and per-unit arrival centroid
+are reported, never gating. **P8 is deleted** (it and P2c are one measurement reported twice).
+**P4 is deleted** (its only instrument was retired — see D010).
+
+**Why turn-invariant.** Raw resident-turn tokens scale with turn count, the most confounded quantity
+in this corpus, so a post-sharding run on a hard issue reads *up*.
+
+**Baselines, per repo, computed not transcribed:** `claude-code-loop` **18.0%** (n=2 admissible),
+`us_presidential_vote_analysis` **22.8%** (n=6). The previously recorded 20.8%/n=7 was wrong twice —
+a single session's share-of-bill cell, and pooled across repos.
+
+## D010 — 2026-08-26 — `context_profile.py` is retired, not fixed
+
+**Decision.** Moved to `docs/research/deprecated/`. Not deleted: Findings 6–9 were measured with it
+and must stay reproducible.
+
+**Why.** It prefers `toolUseResult` over the tool_result block the model actually received, so on a
+spilled record it sizes the full output rather than the 2KB preview — up to 13× over, and engine
+reads are exactly what spills. It is the third instrument measuring what `engine_cost.py` measures
+better. **P4 (engine share of file-read volume) and the "~50% of every byte the parent reads" figure
+rest on it and are withdrawn** rather than re-derived.
+
+## D011 — 2026-08-26 — Expected value of the three levers, after correction
+
+**Decision.** Record these so no downstream scoping re-inflates them.
+
+| lever | value | basis |
+|---|---|---|
+| avoid one gate round | ~561–850k, input+output, per issue | r=+0.79 + Finding 2's mechanism |
+| batch same-file paging (#135) | **~176k/session** recoverable (358k theoretical) | run-length corrected |
+| shard the engine (#128) | ~4–5% of a run | modelled, not measured |
+
+**Two retractions folded in.** *"Subagent count does not predict turns"* is **withdrawn** — it rested
+on the ledger's self-reported `subagent-runs`, which is 2.5× low in the leverage session; ground
+truth gives r=+0.62 to +0.74, better than gate rounds on totals. And #135's value is **half** what was
+first filed: a batching protocol keeps the first read as its own turn, so a k-run saves k−2, and 47
+of 74 runs in the corpus are k=2.
+
+**Standing stop rule for #128:** budget it at normal round caps and treat an overrun as a *park*
+signal. One extra gate round costs ~561–850k; the epic buys ~225k per run. **Each round overrun
+costs 2–4 runs of the saving it is buying.**

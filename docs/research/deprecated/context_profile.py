@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
-"""Profile PARENT-THREAD context growth across a Claude Code session transcript.
+"""RETIRED 2026-08-26 (decision D010) -- DO NOT USE FOR NEW MEASUREMENTS.
+
+Kept only so Findings 6-9 stay reproducible. Superseded by `engine_cost.py`.
+
+**Known bug, never fixed:** `payload = rec.get("toolUseResult", b.get("content"))`
+below prefers `toolUseResult` over the tool_result block the model actually
+received. On a SPILLED record `toolUseResult.stdout` holds the full output while
+the model only ever got a ~2KB preview -- up to 13x over-count. Engine reads are
+exactly what spills, so every engine figure this script produced is suspect.
+
+Consequently **P4 (engine share of file-read volume) and the "~50% of every byte
+the parent reads" claim are WITHDRAWN**, not re-derived.
+
+Profile PARENT-THREAD context growth across a Claude Code session transcript.
 
 Usage:
     python3 docs/research/context_profile.py <session.jsonl> [<session.jsonl> ...]

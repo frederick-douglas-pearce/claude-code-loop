@@ -26,7 +26,7 @@ All stdlib-only, all read Claude Code session transcripts from `~/.claude/projec
 | `engine_cost.py` | What does carrying `loop-engine.md` cost across a whole run? (P2, P2c, P8/P9) | `test_engine_cost.py` (20 cases) |
 | `rounds_vs_turns.py` | Do gate rounds predict parent turns and bill? (Finding 11) | `test_rounds_vs_turns.py` (12) |
 | `calls_per_turn.py` | How many tool calls per turn, and how many turns could have been merged? (Finding 12) | `test_calls_per_turn.py` (14) |
-| `context_profile.py` | What entered the parent context, via which tool? (Findings 6–8) | none; **has a known payload bug**, see below |
+| ~~`context_profile.py`~~ | **RETIRED 2026-08-26** → `deprecated/`. Kept only to reproduce Findings 6–9; its payload bug over-counts spilled reads by up to 13×, so **P4 and the "~50% of every byte" figure are withdrawn**. | — |
 | `budget_stats.py` | Ledger `- Budget:` aggregates by engine era. | none |
 
 ```bash
