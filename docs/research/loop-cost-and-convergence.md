@@ -603,16 +603,46 @@ also contains it. Joining those to parent turn counts, across eight sessions in 
     rounds/issue -> bill/issue      r = +0.77       bill/issue ≈ 938k + 850k x rounds
     subagent-runs -> turns          r = +0.10
 
-**One extra gate round costs ~17 turns ≈ 850k billable-equivalent tokens.** For scale, the engine's
-*entire* contribution to a typical run is ~1.0M (Finding 10). So:
+**One extra gate round costs ~17 turns.** Converting that to tokens gives **two different answers,
+and both are quoted here because splicing them was an error.** Finding 10's model (`cost ≈ turns ×
+~33k`) puts 17 turns at **~561k**. The direct `bill/issue` regression slope is **~850k**, implying
+~50k/turn — above the observed 26–42k band, because bill/turn itself *rises* with rounds. The two
+are not interchangeable and the document previously stated the larger one as if it were the model's
+output.
 
-> **Avoiding one gate round is worth roughly as much as not loading the engine at all — and about
-> 3–4× what the whole sharding epic is projected to save.**
+> **Avoiding one gate round is worth ~561–850k, against the engine's entire ~0.9–1.1M contribution
+> to a run (Finding 10).** So one round costs roughly half to all of what loading the engine costs,
+> and 2–4× what the sharding epic is projected to save.
 
-**Subagent count does not predict turns (r = +0.10).** That is a useful negative: the cost is not in
-*how many* agents run, it is in *how many times the pipeline goes round*. It argues against
-"fewer/cheaper subagents" as a cost lever and against reading the `subagent-runs` figure in the
-ledger as a cost proxy — it is a fan-out measure, not a budget one.
+Note also that the `rounds → bill` regression is **not independent corroboration** of `rounds →
+turns`: Finding 10 establishes `bill ≈ 33k × turns`, so the second regression is largely the first
+re-expressed. Two numbers, one result.
+
+**~~Subagent count does not predict turns (r = +0.10)~~ — WITHDRAWN 2026-08-26.** The claim was
+built on `subagent-runs` as written in the `- Budget:` line, which is a **self-report**, and it is
+wrong where it matters most: `fd687f48` journals **6** against **15** actual subagent launches and
+15 transcripts under `<session>/subagents/`. Recomputed against ground truth:
+
+| x → parent turns (totals, n=8) | r |
+|---|---:|
+| `subagent-runs`, as journaled | +0.10 |
+| launch records (`Agent` tool calls) | **+0.62** |
+| subagent transcript files | **+0.74** |
+| `gate-rounds`, as journaled | +0.46 |
+
+On totals, ground-truth subagent count predicts parent turns **better than gate rounds do**. Per
+issue, rounds still lead (+0.79 against +0.59). **The "useful negative" is retracted**, and with it
+the inference that delegation is not a cost lever — which was never supportable anyway, because
+`turns` and `billable_total` here count the **parent thread only**. No session in this corpus has a
+single `isSidechain` record; subagent work lives in separate transcripts that neither script opens.
+A measurement that prices subagents at zero cannot show that subagents are cheap. Finding 10 already
+said the subagent bill is unpriced; this finding contradicted it in the same document.
+
+**Two consequences worth carrying.** First, **the ledger's `subagent-runs` is not a measurement** —
+treat it as an intent record and count transcripts instead. Second, and more serious: **the same
+self-report supplies `gate-rounds`, the independent variable of this whole finding.** It is
+demonstrably 2.5× low for one field in the session anchoring the low end of the fit. Nothing here
+validates the rounds figures, and no separate ground truth for them has been found.
 
 **The intercept is the floor and it is not small.** ~59 turns per issue before any gate round —
 roughly 2M billable-equivalent. A perfectly converging issue still costs that, and no convergence
@@ -648,7 +678,7 @@ that keeps working is not a better pattern — it is **checking a sample of matc
 sanity-checking the output distribution against what the system can physically do** (one issue per
 invocation; ingestion ≥ one engine copy). Do both before believing any transcript-derived number.
 
-### Finding 12 — the parent issues 1.00 tool calls per turn, and never batches
+### Finding 12 — the parent issues 1.00 tool calls per turn, and rarely batches
 
 *(added 2026-08-26. Reproduce with `calls_per_turn.py`.)*
 
@@ -657,6 +687,11 @@ as one issuing a single call.** So batching is the only lever that reduces turns
 gate, a verdict, or any pipeline semantics. Across 1,713 parent turns in nine sessions:
 
 > **1.00 tool calls per turn.** One session (`9b188aba`) has **zero** turns issuing two or more.
+
+**"Never batches" would be wrong and an earlier draft said it.** Eight of nine sessions do batch
+sometimes; 142 turns (8.3%) issue two or more calls, and 157 (9.2%) issue none at all, which is what
+drags the mean to exactly 1.00. Among turns that call a tool the mean is **1.09**. The accurate
+sentence is *rarely batches, and one session never does* — it costs nothing and is true.
 
 | session | turns | calls/turn | 0-call | 1-call | 2+ | mergeable | of which paging |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -670,19 +705,30 @@ gate, a verdict, or any pipeline semantics. Across 1,713 parent turns in nine se
 | `7bcec8a4` | 92 | 0.92 | 9 | 81 | 2 | 32 (35%) | 13 |
 | `d53db569` | ~180 | 1.02 | 17 | 142 | 21 | 36 (20%) | 14 |
 
-**Two figures, and the gap between them is the honest uncertainty.**
+**Three figures, and the spread between them is the honest uncertainty.**
 
-- **Ceiling — 13.5% of the input bill (~716k/session).** Every maximal run of ≥2 consecutive turns
-  each issuing one read-only call. This is an *upper bound, not a forecast*: consecutive reads are
-  often genuinely dependent — read a file, then grep for what it named — and nothing in the
-  transcript distinguishes a dependent read from an independent one.
-- **Floor — 6.1% of the input bill (~326k/session), high confidence.** The subset where consecutive
-  reads target **the same file**. That is *paging*: the agent walking one known file in slices, so
-  the slices cannot depend on each other and merging them cannot reorder anything.
+- **Ceiling — 14.7% of the input bill (~783k/session).** Every maximal run of ≥2 consecutive turns
+  each issuing one read-only call. **Not a true upper bound**: it contains at least two real
+  mutations the shell-shape test misses (`git stash`, `gh api -f`), and is deflated by `2>/dev/null`
+  false positives. An estimate with error in both directions.
+- **Theoretical floor — 6.7% (~358k/session).** The subset where consecutive reads target the same
+  file: *paging*, whose slices cannot depend on each other.
+- **Recoverable floor — ~176k/session, and this is the number to plan against.** The run-length
+  histogram is what makes the difference visible:
 
-**Price merged-away turns at their own bill, never at the corpus average.** Paging runs sit early in
-a session, where context is still small; the average-priced estimate overstates by **1.6×**. Both
-figures above are priced per-turn.
+      k=2 ×47   k=3 ×13   k=4 ×4   k=5 ×1   k=6 ×6   k=8 ×1   k=10 ×1   k=12 ×1
+
+  A batching protocol must keep the **first** read as its own turn — it is what reports the file's
+  extent — so a k-run saves `k−2`, and **a k=2 run saves nothing at all.** 47 of 74 runs are k=2.
+  Recoverable is **49% of theoretical**. Quoting the theoretical figure as the lever's value would
+  have overstated it by 2×, and #135's before/after would have looked like a miss while the change
+  worked perfectly.
+
+**Price merged-away turns at their own bill, never at the corpus average** — the average-priced
+estimate overstates by **1.4×**, because paging runs sit early where context is still small. And
+**the surviving turn is the first one, not the priciest**: the merge happens where the run started,
+so the saving is every turn *after* the first. An earlier version dropped the largest bill instead
+of the smallest, which understated the result.
 
 **The floor's largest single instance is the engine loading itself.** `d5ba0ddc` opens with six
 consecutive turns each reading one slice of `loop-engine.md`. Once the first `Read` returns
@@ -695,7 +741,7 @@ most repeated pattern in the corpus.
 | lever | value | confidence | risk |
 |---|---|---|---|
 | avoid one gate round | ~850k (Finding 11) | correlational + Finding 2's mechanism | changes gate behaviour |
-| **batch paging reads** | **~326k/session** | **high — same-file only** | **near zero** |
+| **batch paging reads** | **~176k/session** recoverable (358k theoretical) | same-file only; see caveats | **near zero** |
 | batch all mergeable reads | ~716k/session | upper bound only | reordering if wrongly merged |
 | sharding (#128) | ~4–5% of a run | modelled, not measured | bounded |
 
@@ -710,8 +756,20 @@ all**, so a shell-shape test classified them read-only and merged across a write
 That is six silent false results in this analysis, every one in a plausible direction, and the only
 defence that has ever caught one is looking at the matches.
 
-**What batching does not do:** it does not reduce context. Total tokens ingested are unchanged; what
-disappears is the re-submission of the accumulated prefix on the turns removed. So it acts purely on
+**What batching does not do:** it does not reduce context — total tokens ingested are unchanged, and
+what disappears is the re-submission of the accumulated prefix on the turns removed. **Unless the
+extent is genuinely known**: batching requires committing to a range up front, so where the agent
+must guess, it over-reads and ingestion goes *up*. That is the mechanism by which this lever can
+backfire, and it is why the batching rule has to be written default-deny — if you cannot confirm the
+file's extent, it is not known, and you page it one turn at a time.
+
+**Known measurement defects, not yet corrected.** `_target()` keys on the *basename* found by a
+regex over the command, so `grep -n "plugin.json" tests/x.py` keys as `plugin.json`, a `--include=*.md`
+glob keys as `.md`, and the plugin-cache and working-tree copies of `loop-engine.md` share one key —
+detection bug #2 reintroduced in a second script. `a587e8e4` uses **zero** `Read` calls, so its 38
+paging turns (26% of the total) rest entirely on that heuristic. Spill-recovery chains also count as
+paging though they are strictly dependent. These inflate the floor; the pricing fix above deflated
+it. **The recoverable figure should be read as a rough order, not a measurement.** So it acts purely on
 the `turns` term, and its saving is bounded by how much context had already accumulated when the
 merged turns ran — which is exactly why per-turn pricing matters.
 

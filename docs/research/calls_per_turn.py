@@ -130,7 +130,7 @@ def analyse(path):
         else:
             if run >= 2:
                 mergeable += run - 1
-                merge_bill += sum(sorted(buf)[:-1])   # keep the priciest; drop the rest
+                merge_bill += sum(sorted(buf)[1:])   # survivor is the FIRST turn (cheapest)
             run, buf = 0, []
 
     # High-confidence subset: consecutive solo reads whose target FILE is the same.
@@ -138,6 +138,13 @@ def analyse(path):
     # slices are unambiguously independent of each other, so batching them cannot
     # reorder anything. The rest of `mergeable` includes reads that may genuinely
     # depend on what the previous read returned, which nothing here can detect.
+    # `paging` is the THEORETICAL collapse (k turns -> 1). `recoverable` is what a
+    # discovery-read-first protocol can actually reach: #135/AC1 keeps the first
+    # read as its own turn (it is what reports the extent), so a k-run saves k-2,
+    # and a k=2 run saves NOTHING. The run-length histogram is what makes the
+    # difference legible -- without it, a corpus of 2-runs and a corpus of 6-runs
+    # report the same `paging` and have completely different real savings.
+    runlens = []
     paging, prun, prev, page_bill, pbuf = 0, 0, None, 0.0, []
     for i, t in enumerate(ts):
         tgt = _target(t) if solo_read[i] else None
@@ -147,18 +154,21 @@ def analyse(path):
         else:
             if prun >= 2:
                 paging += prun - 1
-                page_bill += sum(sorted(pbuf)[:-1])
+                runlens.append(prun)
+                page_bill += sum(sorted(pbuf)[1:])
             prun = 1 if tgt else 0
             pbuf = [t["bill"]] if tgt else []
         prev = tgt
     if prun >= 2:
         paging += prun - 1
-        page_bill += sum(sorted(pbuf)[:-1])
+        runlens.append(prun)
+        page_bill += sum(sorted(pbuf)[1:])
     return {
         "path": path, "turns": len(ts), "calls": total_calls,
         "cpt": total_calls / len(ts), "hist": hist,
         "solo_read": sum(solo_read), "mergeable": mergeable, "paging": paging,
         "merge_bill": merge_bill, "page_bill": page_bill,
+        "runlens": runlens, "recoverable": sum(max(0, k - 2) for k in runlens),
         "total_bill": sum(t["bill"] for t in ts),
     }
 
@@ -190,6 +200,8 @@ def main(argv):
     print(f"\n  corpus: {T:,} turns, {C:,} calls, {C/T:.2f} calls/turn")
     print(f"  upper-bound mergeable: {M:,} turns ({M/T:.0%} of all turns)")
     P = sum(r["paging"] for r in rows)
+    REC = sum(r["recoverable"] for r in rows)
+    allruns = [k for r in rows for k in r["runlens"]]
     MB = sum(r["merge_bill"] for r in rows)
     PB = sum(r["page_bill"] for r in rows)
     TB = sum(r["total_bill"] for r in rows)
@@ -202,6 +214,13 @@ def main(argv):
           f"   ({PB/n:>9,.0f}/session)")
     print(f"    naive avg-priced ceiling {M*33000:>12,.0f} tok  <- overstates by "
           f"{M*33000/MB:.1f}x")
+    from collections import Counter
+    h = Counter(allruns)
+    print(f"\n  paging run lengths: " + ", ".join(f"k={k}x{h[k]}" for k in sorted(h)))
+    print(f"  theoretical collapse (k-1): {P:,} turns")
+    print(f"  RECOVERABLE under a discovery-read-first protocol (k-2): {REC:,} turns"
+          f"  = {REC/P:.0%} of theoretical" if P else "")
+    print(f"    -> realistic floor {PB*REC/P:,.0f} tok total, {PB*REC/P/n:,.0f}/session" if P else "")
     return 0
 
 

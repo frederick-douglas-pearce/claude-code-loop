@@ -111,8 +111,13 @@ is the first post-fix reading. `claude-code-sessions` remains on 0.2.0 deliberat
 
 The three levers this work ranks, in the same units:
 
-| lever | value | confidence |
-|---|---|---|
-| avoid one gate round | ~850k billable-equiv each | correlational (r=+0.79) + Finding 2's mechanism |
-| batch same-file paging reads | ~326k / session | high — same-file only, near-zero risk |
-| shard the engine (#128) | ~4–5% of a run | modelled, not measured |
+| lever | value | basis | confidence |
+|---|---|---|---|
+| avoid one gate round | ~561–850k **input+output, per issue** | r=+0.79 + Finding 2's mechanism | correlational |
+| batch same-file paging reads | ~176k **input-only, per session** (358k theoretical) | run-length corrected | rough order |
+| shard the engine (#128) | ~4–5% of a run | modelled, not measured | low |
+
+**These are not in the same units and an earlier version of this table said they were.** The gate-round
+figure is input+output per *issue*; the batching figure is input-only per *session*. On a common
+basis the gate-round lever is ≈714k input-equivalent. The ranking survives the correction; the
+"same units" claim did not.

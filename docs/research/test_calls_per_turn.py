@@ -120,15 +120,37 @@ class TurnTests(unittest.TestCase):
         self.assertEqual(r["mergeable"], 0)
         self.assertAlmostEqual(r["cpt"], 1.5)
 
-    def test_merged_away_turns_are_priced_at_their_OWN_bill_keeping_the_priciest(self):
-        """Paging runs sit early where context is small; pricing them at the corpus
-        average overstated the saving by 1.6x."""
+    def test_the_surviving_turn_is_the_FIRST_one_not_the_priciest(self):
+        """Two separate propositions, and an earlier test conflated them.
+
+        (a) merged-away turns are priced at their own bill, not the corpus average;
+        (b) the survivor is the turn the run STARTED at -- the merge happens there --
+        so the saving is every turn AFTER the first. The old code dropped the
+        largest bill instead of the smallest, i.e. it kept the priciest turn as the
+        survivor, which understates the saving. Context is ascending within a run,
+        so the two models diverge sharply: here 3,000 vs 32,000."""
         recs = [turn("m0", [("t0", "Read", {"file_path": "/e.md"})], ctx=10000),
                 turn("m1", [("t1", "Read", {"file_path": "/e.md"})], ctx=20000),
                 turn("m2", [("t2", "Read", {"file_path": "/e.md"})], ctx=300000)]
         r = self.analyse(recs)
-        # three turns collapse to one; the two cheapest are the ones removed
-        self.assertAlmostEqual(r["page_bill"], (10000 + 20000) * C.W_CACHE_READ)
+        self.assertAlmostEqual(r["page_bill"], (20000 + 300000) * C.W_CACHE_READ)
+
+    def test_run_length_is_recorded_and_k2_runs_recover_nothing(self):
+        """A k=2 run contributes 1 to the theoretical collapse and 0 to what a
+        discovery-read-first protocol can reach. 47 of 74 runs in the corpus are
+        k=2, so conflating the two overstates the lever by ~2x."""
+        recs = [turn("m0", [("t0", "Read", {"file_path": "/e.md"})]),
+                turn("m1", [("t1", "Read", {"file_path": "/e.md"})])]
+        r = self.analyse(recs)
+        self.assertEqual(r["runlens"], [2])
+        self.assertEqual(r["paging"], 1)
+        self.assertEqual(r["recoverable"], 0)
+
+    def test_a_k6_run_recovers_four_turns(self):
+        recs = [turn(f"m{i}", [(f"t{i}", "Read", {"file_path": "/e.md"})])
+                for i in range(6)]
+        r = self.analyse(recs)
+        self.assertEqual((r["runlens"], r["paging"], r["recoverable"]), ([6], 5, 4))
 
     def test_empty_transcript_returns_none(self):
         self.assertIsNone(self.analyse([]))
