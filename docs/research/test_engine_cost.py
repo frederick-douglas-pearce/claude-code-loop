@@ -114,5 +114,47 @@ class ProfileTests(unittest.TestCase):
             os.unlink(p)
 
 
+
+
+class AdmissibilityTests(unittest.TestCase):
+    """The floor is a PRECONDITION of measurement, not a filter.
+
+    The README asserted this behaviour before the code had it -- a documented
+    default-deny rule that was in fact fail-open, which is the exact shape
+    CLAUDE.md warns about. These pin the implementation.
+    """
+
+    def test_a_session_below_one_engine_copy_is_inadmissible(self):
+        p = {"ingested": 6088, "floor": 50723}
+        self.assertLess(p["ingested"], p["floor"])
+
+    def test_default_floor_is_about_one_engine_copy(self):
+        from engine_cost import DEFAULT_FLOOR
+        self.assertGreater(DEFAULT_FLOOR, 45000)
+        self.assertLess(DEFAULT_FLOOR, 60000)
+
+    def test_profile_reports_admissibility_on_a_real_shaped_transcript(self):
+        import json as _json
+        import tempfile
+        recs = [{"type": "assistant", "message": {"id": "m0", "usage":
+                 {"cache_read_input_tokens": 1000}, "content": [
+                     {"type": "tool_use", "id": "t0", "name": "Bash",
+                      "input": {"command": "cat " + CACHE}}]}},
+                {"type": "user", "message": {"content": [
+                    {"type": "tool_result", "tool_use_id": "t0", "content": "x" * 500}]}},
+                {"type": "assistant", "message": {"id": "m1", "usage":
+                 {"cache_read_input_tokens": 3000}, "content": []}}]
+        fh = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        for r in recs:
+            fh.write(_json.dumps(r) + "\n")
+        fh.close()
+        try:
+            p = profile(fh.name)
+            self.assertIn("admissible", p)
+            self.assertFalse(p["admissible"])   # tiny fixture is far below the floor
+        finally:
+            os.unlink(fh.name)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

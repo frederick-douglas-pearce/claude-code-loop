@@ -435,19 +435,33 @@ Findings 6–9 measure **ingestion**: engine tokens counted once, when they land
 lever, but it is not a cost proxy — a token arriving at turn 12 of a 109-turn session is
 re-submitted on the 97 turns that follow.
 
-| repo | session | turns | cmp | ingested | carry | **carry/turn** | **% of bill** | bill/turn | |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| loop | `b40adacf` | 109 | 0 | 54,221 | 98× | 0.90 | 18.3% | 33,035 | |
-| loop | `fd687f48` | 231 | 1 | 52,808 | 134× | 0.58 | 10.7% | 31,905 | |
-| loop | `a587e8e4` | 422 | 3 | 21,589 | 146× | 0.35 | 3.3% | 27,715 | **excluded** |
-| vote | `d9933e33` | 161 | 1 | 62,014 | 77× | 0.48 | 10.8% | 36,041 | |
-| vote | `d5ba0ddc` | 224 | 1 | 75,183 | 206× | 0.92 | 18.4% | 41,715 | |
-| vote | `9b188aba` | 158 | 0 | 69,077 | 145× | 0.92 | 20.8% | 35,774 | |
-| vote | `592ab44d` | 136 | 0 | 65,868 | 132× | 0.97 | 22.2% | 34,583 | |
-| vote | `7bcec8a4` | 92 | 0 | 69,077 | 84× | 0.91 | 27.7% | 25,969 | |
-| | **median (admissible, n=7)** | | | **65,868** | | **0.91** | **18.4%** | | |
+| repo | session | turns | cmp | ingested | carry | carry/turn | **P2c** | % bill | bill/turn | |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| loop | `b40adacf` | 109 | 0 | 54,221 | 98× | 0.90 | **22.6%** | 18.3% | 33,035 | |
+| loop | `fd687f48` | 231 | 1 | 52,808 | 134× | 0.58 | **13.4%** | 10.7% | 31,905 | |
+| loop | `a587e8e4` | 422 | 3 | 21,589 | 146× | 0.35 | 4.2% | 3.3% | 27,715 | **excluded** |
+| vote | `d9933e33` | 161 | 1 | 62,014 | 77× | 0.48 | **12.8%** | 10.8% | 36,041 | |
+| vote | `d5ba0ddc` | 224 | 1 | 75,183 | 206× | 0.92 | **20.7%** | 18.4% | 41,715 | |
+| vote | `9b188aba` | 158 | 0 | 69,077 | 145× | 0.92 | **24.8%** | 20.8% | 35,774 | |
+| vote | `592ab44d` | 136 | 0 | 65,868 | 132× | 0.97 | **25.7%** | 22.2% | 34,583 | |
+| vote | `7bcec8a4` | 92 | 0 | 69,077 | 84× | 0.91 | **33.4%** | 27.7% | 25,969 | |
+| vote | `d53db569` | 183 | 0 | 64,315 | 132× | 0.72 | **17.4%** | 15.0% | 35,884 | |
+| | **loop median** (n=2) | | | 53,514 | | **0.74** | **18.0%** | 14.5% | | |
+| | **vote median** (n=6) | | | 67,472 | | **0.91** | **22.8%** | 19.6% | | |
 
-**The engine is ~18% of a run's bill and is carried for ~91% of every run it enters.**
+**Medians are PER REPO, deliberately.** An earlier draft of this table quoted a single pooled
+median across both repos while `baseline-2026-08-25.md` simultaneously instructed *"report per repo,
+never take a median across repos"* — two of these documents contradicting each other on the same
+page of the same analysis. The repos differ in deliverable type, `CODE_REVIEW` binding and turn
+structure; pooling them describes neither.
+
+**P2c is `resident_turns / processed`** — the engine's share of average context, turn-invariant, and
+**the metric the sharding epic accepts on**. It is now printed by `engine_cost.py` directly. It was
+previously hand-derived from two other printed figures, and the value that reached
+`baseline-2026-08-25.md` that way (20.8%) was neither repo's median but a single session's
+*share-of-bill* cell — the predictable result of a primary metric with no read-out.
+
+**The engine is 14–20% of a run's bill (per repo) and is carried for 74–91% of every run it enters.**
 
 **Use `carry/turn`, never raw `carry`.** Raw carry scales with session length, so a median of it
 across runs spanning 92–422 turns describes the sample, not the system. `carry/turn` —

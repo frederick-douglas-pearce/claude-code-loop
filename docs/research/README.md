@@ -93,8 +93,13 @@ Two defences, both cheap, and they are the only things that have worked:
   found 3. None was found by reasoning about the pattern.
 - **Sanity-check the output distribution against what the system can physically do.** One issue per
   invocation; engine ingestion ≥ one copy of the engine. `engine_cost.py` enforces the latter as an
-  **admissibility precondition** — a session below the floor is *unmeasured*, not cheap, and is
-  excluded loudly.
+  **admissibility precondition** (`DEFAULT_FLOOR`, override with `--floor`) — a session below it is
+  *unmeasured*, not cheap, and is refused loudly rather than averaged in.
+
+  *This sentence asserted that behaviour for a day before the code had it: the rule was documented
+  as default-deny while the tool was in fact fail-open. Caught in review, not by reading. It is
+  implemented and tested now — but the lesson is that a doc claiming a fail-safe is not evidence of
+  one, which is the same thing `CLAUDE.md` says about prose guards.*
 
 ---
 

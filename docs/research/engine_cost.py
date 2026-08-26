@@ -47,6 +47,15 @@ import sys
 
 CTX = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
 
+# ADMISSIBILITY FLOOR. A session counts only if measured ingestion clears one copy
+# of what should have loaded. Below it, the engine either never fully loaded or the
+# detector missed reads -- and in BOTH cases the session is *unmeasured*, not cheap.
+# Default-deny: unknown ⇒ inadmissible, excluded loudly, never quietly averaged in.
+# Without this, a broken run reads as the cheapest run in the corpus, which is
+# exactly how a truncated load got written up as a finding once already.
+# 177,529 bytes at ~3.5 chars/token is the 0.2.0 engine; override with --floor.
+DEFAULT_FLOOR = 177529 / 3.5
+
 # Relative to one fresh input token.
 W_FRESH, W_CACHE_WRITE, W_CACHE_READ, W_OUTPUT = 1.0, 1.25, 0.1, 5.0
 
@@ -141,7 +150,7 @@ def blocks(rec):
     return c if isinstance(c, list) else []
 
 
-def profile(path, target="loop-engine.md", kinds=("load",)):
+def profile(path, target="loop-engine.md", kinds=("load",), floor=DEFAULT_FLOOR):
     turns, order, tools = {}, [], {}
     pending, arrivals = [], {}
     spills, kind_counts = {}, {}
@@ -237,6 +246,7 @@ def profile(path, target="loop-engine.md", kinds=("load",)):
 
     return {
         "path": path, "turns": len(order), "compactions": compactions,
+        "floor": floor, "admissible": ingested >= floor,
         "reads": reads, "by_tool": by_tool, "kind_counts": kind_counts,
         "ingested": ingested, "calib": calib, "spills": len(spills),
         "peak_ctx": max(ctx), "processed": sum(ctx),
@@ -259,6 +269,12 @@ def render(p):
         print("  !! no engine tokens detected -- check the filter before believing this")
         return
     print(f"  INGESTED (P2)           {ing:>12,.0f}")
+    if not p["admissible"]:
+        print(f"  !! INADMISSIBLE -- {ing:,.0f} tokens is below the floor of "
+              f"{p['floor']:,.0f} (one engine copy).")
+        print("  !! This is an UNMEASURED run, not a cheap one: either the engine did not "
+              "fully load")
+        print("  !! or the detector missed reads. EXCLUDE it -- do not average it in.")
     if p["calib"]:
         ex = sum(a for a, _ in p["calib"]); ch = sum(b for _, b in p["calib"])
         print(f"  chars/context-token     {ch/ex:>12.2f}   (n={len(p['calib'])}; pipeline "
@@ -269,16 +285,29 @@ def render(p):
         rt, bl, ps = p["models"][m]
         print(f"  {m:<7}{rt:>15,.0f}{rt/ing:>7.0f}x{rt/(ing*n):>12.2f}"
               f"{bl:>12,.0f}{bl/p['billable_total']:>11.1%}{ps:>12.1%}")
+    rt = p["models"]["PROP"][0]
+    # P2c, turn-invariant. THE primary acceptance metric for the sharding epic --
+    # it had no read-out here at all and was being hand-derived from two other
+    # printed figures, which is how a wrong value reached the baseline document.
+    print(f"  P2c  resident/processed {rt/proc:>12.1%}   <- turn-invariant; "
+          f"the metric to accept on")
 
 
 def main(argv):
     args = [a for a in argv[1:] if not a.startswith("-")]
     kinds = ("load", "tree") if "--all-reads" in argv else ("load",)
+    floor = DEFAULT_FLOOR
+    if "--floor" in argv:
+        try:
+            floor = float(argv[argv.index("--floor") + 1])
+            args = [a for a in args if a != str(floor) and a != str(int(floor))]
+        except (IndexError, ValueError):
+            pass
     if not args:
         print(__doc__)
         return 1
     for path in args:
-        p = profile(path, kinds=kinds)
+        p = profile(path, kinds=kinds, floor=floor)
         if p is None:
             print(f"\n=== {os.path.basename(path)}: no parent turns")
         else:
