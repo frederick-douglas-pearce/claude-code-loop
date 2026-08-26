@@ -53,24 +53,52 @@ def blocks(rec):
     return c if isinstance(c, list) else []
 
 
-def is_engine(name, inp, target):
-    """Does this tool call pull text out of the engine file?"""
+def strip_heredocs(cmd):
+    """Drop heredoc BODIES before matching.
+
+    The single biggest false-positive source: `cat > progress.md <<'EOF' ... EOF`
+    whose *body* happens to discuss the engine is a WRITE, not a read, and the
+    body is also where a plan file quotes engine prose. Matching the raw command
+    counted six such writes as reads in one session, and the ad-hoc filter behind
+    the original baseline made the same mistake -- it scored a session with ONE
+    real engine read as nine.
+    """
+    i = cmd.find("<<")
+    return cmd if i < 0 else cmd[:i]
+
+
+_READ_VERB = ("cat ", "sed ", "head ", "tail ", "awk ", "grep ", "less ", "more ")
+
+
+def classify(name, inp, target="loop-engine.md"):
+    """-> 'load' (plugin cache), 'tree' (working copy), or None.
+
+    The two are different phenomena and must not be summed. A `load` is the loop
+    booting its own engine -- the thing sharding is meant to shrink. A `tree` read
+    is an agent editing the engine as a work product, which happens only in the
+    repo that DEVELOPS the engine and is not a loop cost at all. Conflating them
+    inflates this repo's figures and leaves the vote repo's untouched, which is
+    why vote is the cleaner measurement site.
+    """
     if not isinstance(inp, dict):
-        return False
+        return None
     if name == "Read":
-        return target in str(inp.get("file_path", ""))
-    if name == "Bash":
-        cmd = str(inp.get("command", ""))
-        # a bash call that merely *mentions* the path (wc, ls, git) is not a read
-        if target not in cmd:
-            return False
-        return any(v in cmd for v in ("cat ", "sed ", "head ", "tail ", "awk ", "grep "))
-    if name in ("Grep", "Glob"):
-        return target in str(inp.get("path", "")) or target in str(inp.get("glob", ""))
-    return False
+        path = str(inp.get("file_path", ""))
+    elif name in ("Grep", "Glob"):
+        path = str(inp.get("path", "")) + " " + str(inp.get("glob", ""))
+    elif name == "Bash":
+        cmd = strip_heredocs(str(inp.get("command", "")))
+        if target not in cmd or not any(v in cmd for v in _READ_VERB):
+            return None
+        path = cmd
+    else:
+        return None
+    if target not in path:
+        return None
+    return "load" if "/dev-loop/" in path and "/plugins/" in path else "tree"
 
 
-def profile(path, target="loop-engine.md"):
+def profile(path, target="loop-engine.md", kinds=("load",)):
     turns, order = {}, []
     tools = {}                 # tool_use_id -> (name, input)
     pending = []               # results seen since last assistant turn
@@ -100,12 +128,13 @@ def profile(path, target="loop-engine.md"):
             for b in blocks(rec):
                 if isinstance(b, dict) and b.get("type") == "tool_result":
                     name, inp = tools.get(b.get("tool_use_id"), ("?", None))
+                    kind = classify(name, inp, target)
                     payload = rec.get("toolUseResult", b.get("content"))
                     try:
                         size = len(json.dumps(payload, default=str))
                     except (TypeError, ValueError):
                         size = len(str(payload))
-                    pending.append((name, size, is_engine(name, inp, target)))
+                    pending.append((name, size, kind in kinds, kind))
 
     if not order:
         return None
@@ -128,19 +157,22 @@ def profile(path, target="loop-engine.md"):
     # text alongside other results, that delta is split by serialised length --
     # exact in aggregate, approximate per call, which is the right way round.
     reads, ingested_chars, calib = 0, 0, []
-    by_tool = {}
+    by_tool, kind_counts = {}, {}
     per_turn_engine_tok = {}       # index -> engine tokens that landed at that turn
     for i, mid in enumerate(order):
         calls = arrivals.get(mid, [])
-        eng = [(n, sz) for n, sz, e in calls if e]
+        eng = [(n, sz) for n, sz, e, k in calls if e]
         for n, sz in eng:
             reads += 1
             ingested_chars += sz
             by_tool[n] = by_tool.get(n, 0) + sz
+        for n, sz, e, k in calls:
+            if k:
+                kind_counts[k] = kind_counts.get(k, 0) + 1
         if not eng or i == 0:
             continue
         added = max(0, ctx[i] - ctx[i - 1] - out[i - 1])
-        total = sum(sz for _, sz, _ in calls)
+        total = sum(sz for _, sz, _, _ in calls)
         eng_chars = sum(sz for _, sz in eng)
         if total:
             per_turn_engine_tok[i] = added * eng_chars / total
@@ -182,7 +214,7 @@ def profile(path, target="loop-engine.md"):
 
     return {
         "path": path, "turns": len(order),
-        "reads": reads, "by_tool": by_tool,
+        "reads": reads, "by_tool": by_tool, "kind_counts": kind_counts,
         "ingested_tok": ingested_tok, "ingested_est": ingested_est, "calib": calib,
         "peak_ctx": max(ctx), "final_ctx": ctx[-1],
         "processed": sum(ctx), "billable_total": sum(bill),
@@ -198,7 +230,8 @@ def render(p):
     print(f"  cache leverage          {p['processed'] / p['billable_total']:>12.1f}x")
     print(f"  --- engine ---")
     tl = ", ".join(f"{k}:{v:,}ch" for k, v in sorted(p["by_tool"].items()))
-    print(f"  reads                   {p['reads']:>12}   ({tl})")
+    kc = ", ".join(f"{k}:{v}" for k, v in sorted(p["kind_counts"].items()))
+    print(f"  reads                   {p['reads']:>12}   ({tl})  [all matches: {kc}]")
     print(f"  INGESTED, measured      {p['ingested_tok']:>12,.0f}   <- from context deltas")
     print(f"  INGESTED, chars/4 est   {p['ingested_est']:>12,.0f}   "
           f"({p['ingested_est']/p['ingested_tok']-1:+.0%} vs measured)")
