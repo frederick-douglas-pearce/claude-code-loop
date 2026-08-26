@@ -209,7 +209,8 @@ named slot**, so the seam exists.
 
 *(added 2026-08-25; supersedes the guesswork in Findings 1–5's framing of where the money goes)*
 
-`context_profile.py` reads the parent thread's own token accounting out of the session transcripts
+`context_profile.py` (**retired 2026-08-26, D010** — kept only to reproduce this finding) reads the
+parent thread's own token accounting out of the session transcripts
 (`~/.claude/projects/<slug>/*.jsonl`), so *Finding 5's* "nothing measures this" is now false. Six
 vote-repo loop sessions, all confirmed genuine iterations (engine reads + ledger writes + 6–15
 subagent traces each):
@@ -420,10 +421,359 @@ documented: a coherent-reading engine that silently ends before a gate.
 of a 200k budget before the loop does any work, on every invocation, in every consuming repo. That
 is a floor a consumer cannot opt out of and cannot tune, and it scales with nothing they control.
 
-**Whatever is attempted, it is now falsifiable.** `context_profile.py` measures the before and the
+**Whatever is attempted, it is now falsifiable.** `engine_cost.py` measures the before and the
 after on a real session. No engine-size change should land without that pair of numbers.
 
 ---
+
+### Finding 10 — ingestion is not cost: the engine is carried for ~91% of a run
+
+*(added 2026-08-26. **Rewritten twice the same day**, each time because the measuring instrument was
+wrong — see "Three detection bugs" below. Every number is a frozen snapshot, not a maintained
+figure. Reproduce with `engine_cost.py`; its detection is pinned by `test_engine_cost.py`.)*
+
+Findings 6–9 measure **ingestion**: engine tokens counted once, when they land. That tracks the
+lever, but it is not a cost proxy — a token arriving at turn 12 of a 109-turn session is
+re-submitted on the 97 turns that follow.
+
+| repo | session | turns | cmp | ingested | carry | carry/turn | **P2c** | % bill | bill/turn | |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| loop | `b40adacf` | 109 | 0 | 54,221 | 98× | 0.90 | **22.6%** | 18.3% | 33,035 | |
+| loop | `fd687f48` | 231 | 1 | 52,808 | 134× | 0.58 | **13.4%** | 10.7% | 31,905 | |
+| loop | `a587e8e4` | 422 | 3 | 21,589 | 146× | 0.35 | 4.2% | 3.3% | 27,715 | **excluded** |
+| vote | `d9933e33` | 161 | 1 | 62,014 | 77× | 0.48 | **12.8%** | 10.8% | 36,041 | |
+| vote | `d5ba0ddc` | 224 | 1 | 75,183 | 206× | 0.92 | **20.7%** | 18.4% | 41,715 | |
+| vote | `9b188aba` | 158 | 0 | 69,077 | 145× | 0.92 | **24.8%** | 20.8% | 35,774 | |
+| vote | `592ab44d` | 136 | 0 | 65,868 | 132× | 0.97 | **25.7%** | 22.2% | 34,583 | |
+| vote | `7bcec8a4` | 92 | 0 | 69,077 | 84× | 0.91 | **33.4%** | 27.7% | 25,969 | |
+| vote | `d53db569` | 183 | 0 | 64,315 | 132× | 0.72 | **17.4%** | 15.0% | 35,884 | |
+| | **loop median** (n=2) | | | 53,514 | | **0.74** | **18.0%** | 14.5% | | |
+| | **vote median** (n=6) | | | 67,472 | | **0.91** | **22.8%** | 19.6% | | |
+
+**Medians are PER REPO, deliberately.** An earlier draft of this table quoted a single pooled
+median across both repos while `baseline-2026-08-25.md` simultaneously instructed *"report per repo,
+never take a median across repos"* — two of these documents contradicting each other on the same
+page of the same analysis. The repos differ in deliverable type, `CODE_REVIEW` binding and turn
+structure; pooling them describes neither.
+
+**P2c is `resident_turns / processed`** — the engine's share of average context, turn-invariant, and
+**the metric the sharding epic accepts on**. It is now printed by `engine_cost.py` directly. It was
+previously hand-derived from two other printed figures, and the value that reached
+`baseline-2026-08-25.md` that way (20.8%) was neither repo's median but a single session's
+*share-of-bill* cell — the predictable result of a primary metric with no read-out.
+
+**The engine is 14–20% of a run's bill (per repo) and is carried for 74–91% of every run it enters.**
+
+**Use `carry/turn`, never raw `carry`.** Raw carry scales with session length, so a median of it
+across runs spanning 92–422 turns describes the sample, not the system. `carry/turn` —
+resident-turn ÷ (ingested × turns) — is the turn-invariant form: the mean fraction of the run each
+engine token is carried for. It is the number that generalises.
+
+**Admissibility is a precondition, not a filter.** A session enters the sample only if its measured
+ingestion clears **one copy of the engine** (~50.7k tokens). Below that floor the engine either
+never fully loaded or the detector missed reads — and in both cases the session is **not a cheap
+run, it is an unmeasured run**. `a587e8e4` is excluded on this rule. Stating it as default-deny
+matters: the earlier draft of this finding read a below-floor session as a *result* and built a
+narrative on it (see below). Unknown ⇒ inadmissible, never quietly averaged in.
+
+**1. Turn count, not context size, drives the variance.** Across the eight sessions turns span
+**4.6×** while billable-equivalent *per turn* stays in a narrow band (mean 33,342, sd 4,972,
+**CV 15%**).
+
+> **cost ≈ turns × ~33k**
+
+The CV is a consistency check, not the argument. **The argument is structural: average context per
+turn is bounded above by the compaction ceiling and below by the session's starting footprint, so it
+lives in a narrow band by construction, while turn count has no ceiling at all.** That is why this
+does not rest on n=8. *Falsifier: a session that never approaches the ceiling and whose bill/turn
+still falls outside the band.* This puts **Finding 2 — extra rounds are mostly *fix-induced*
+defects — back as the dominant cost lever**, ahead of engine size.
+
+**2. Cache is a uniform ~8× discount, not a lever.** 97.6–98.9% of input tokens are `cache_read` at
+0.1×. Because the discount covers essentially the whole prefix, **share of context ≈ share of
+cost**. That single fact carries the conclusion; the "two models agree within 15%" corroboration
+this document previously offered has been **deleted as circular** — with `cache_read ≈ 0.98 × ctx`,
+the positional model reduces to `0.1 × resident_turns`, so the two functions cannot disagree.
+**P8 and P2c are one measurement reported twice** (`P8 ≈ P2c/processed`, scaled), and #128 must not
+carry both as independent acceptance criteria.
+
+**3. Output tokens are ~13–19% of the bill and are now included.** They bill ~5× input against a
+~8×-discounted input side. They are attributed to the *model*, not to the engine — the engine takes
+a share of the input side only. Note the direction: **including them cuts against this document's
+own preferred conclusion**, since output is purely turn-proportional and wholly immune to sharding,
+so excluding it was under-rating the convergence lever relative to sharding.
+
+**4. Compaction is currently the only thing that reduces engine residency, and it is the worst
+possible mechanism** — the parent then re-reads the engine at cache-*write* rates (1.25×), 12.5×
+the cache-read rate it was being carried at. Every zero-compaction session sits at **0.90–0.97**
+carry/turn; the compacted ones range **0.35–0.92**. So compaction is *necessary but not sufficient*
+to reduce carry — `d5ba0ddc` compacted once and still carried 0.92. **This is a directional
+relationship on n=8, not the clean split it first appeared to be**, and it should not be quoted as
+one. It does suggest sharding's second-order benefit — fewer compactions — may exceed its
+first-order one, which is worth a metric (P9, compaction count) before the epic closes.
+
+**What this means for sharding.**
+
+- **Expect ~4–5% of a run, not ~7%.** The 46k→30k figure is **P1, the file on disk**, and applying
+  it proportionally to residency repeats the exact ingestion/cost conflation this finding exists to
+  correct. Sharding is *deferral*, not deletion: in a full iteration the deferred units still load,
+  and only the arrival centroid moves. ~7% is the ceiling, reached only where deferred units are
+  never loaded at all (plan-gate stops, and the reference appendix).
+- **"When" is worth a substantial fraction of "how much" — and the fraction is unmeasured.**
+  Deferring a unit to step 10 of 12 is worth deletion × (turns after step 10 ÷ 0.91). **That
+  denominator is a step→turn mapping nobody has measured**, and it is not linear: steps 8–10 are
+  where the review rounds live, which is where Finding 2 says the turns go. The plausible range is
+  **44–78%** of deletion's value. Measure it from the transcripts before quoting a figure.
+- **P2c's acceptance criterion must be turn-invariant.** Raw resident-turn tokens scale with turn
+  count — the most confounded quantity in this corpus — so a post-sharding run on a hard issue would
+  show P2c *up*. Use **`resident_turns / processed`** (engine share of average context), which is
+  dimensionless and direct. Keep raw P2c as a reported quantity only.
+- **The named falsifier for P2c is re-load after compaction**, not just truncation: a deferred unit
+  re-loaded post-compaction bills at 1.25× rather than 0.1×.
+
+#### Three detection bugs, and the pattern they form
+
+This finding was published twice with wrong numbers before this version. All three bugs were in
+detection — a pure function of `(tool name, tool input)` — and **all three were silent**:
+
+1. **Heredoc bodies counted as reads.** `cat > progress.md <<'EOF' …` whose body discusses the
+   engine scored as an engine load. One vote session showed 9 reads where 1 was real. *This
+   over-counted, producing a high engine share — which supported sharding.*
+2. **Working-tree reads counted as loads.** Reading `skills/dev-loop/loop-engine.md` is an agent
+   *editing the engine as a work product*; only `/plugins/` paths are loop costs. `a587e8e4` carried
+   20 tree reads against 18 loads.
+3. **Spill-file recovery reads were invisible.** A `cat` of the engine exceeds the inline limit, so
+   the harness parks it at `<session>/tool-results/<id>.txt` and hands the model a 2KB preview; the
+   recovery reads then target **the spill path**, which contains no `loop-engine.md` substring.
+   `d9933e33` measured **6,088** tokens against a true **62,014**. *This under-counted — and the
+   result was immediately written up here as "the F105 truncation caught in the act", a claim that
+   was **false** and has been withdrawn in full, along with its "low engine load is not by itself
+   good news" generalisation.*
+
+Bug 3 also corrupted sizing: on a spilled record `toolUseResult.stdout` holds the full output while
+the model received only the preview — 29,752 chars against 2,246, a **13× overstatement**. Sizing
+now comes from the tool_result *block* content, which is what actually entered the window.
+`context_profile.py` had the same inversion and was **retired rather than corrected** (D010); P4 and
+its "~50% of every byte the parent reads" figure are withdrawn with it.
+
+**The pattern is the finding.** Bug 1 moved the number *up* and was accepted because it supported
+the case for sharding. Bug 3 moved it *down* and was accepted because it looked like a known defect
+being caught. **Both were believed because they pointed where the reader was already looking** —
+which is Finding 2's fix-induced-defect mechanism reproducing inside the measurement apparatus, one
+round later.
+
+Two durable defences, both now in place:
+
+- **A distributional sanity rule beats a narrative.** Admissible sessions cluster at 52.8k–75.2k
+  ingested — 1.0–1.5× the engine's own token count, the truncated-`cat`-plus-sweep dance. 6,088 is
+  not a member of that distribution. *Any session measuring below one copy of the engine is a
+  detector failure until proven otherwise.* That is checkable; "caught in the act" is not.
+- **The instrument has fixture tests** (`test_engine_cost.py`, 20 cases), each pinning a real
+  transcript shape, with the three bugs above named in the cases that catch them. Deliberately under
+  `docs/research/` and **not** `tests/`, so it stays out of the shipped suite — the scope brake puts
+  a guard on analysis infrastructure in `tech-debt`, never in a release.
+
+**Remaining caveats.** `chars/context-token` (3.25–3.82) is a **pipeline constant** for this read
+pattern, not the tokenizer's ratio; a real `count_tokens` call would settle it exactly and remove
+the estimate every other figure rests on. Residency needs an eviction model; `NONE`/`PROP`/`FULL`
+bracket it and `PROP` is quoted (`NONE` is "nothing evicted except what the context ceiling forces",
+not "nothing evicted"). The subagent *bill* is still unpriced, which matters because two proposed
+levers move work into subagents. All eight sessions are 0.2.0; **there is no v0.2.1 measurement
+yet.**
+
+### Finding 11 — the join: one extra gate round costs about what loading the engine costs
+
+*(added 2026-08-26. This is the test the cost ranking rested on: if gate rounds did not predict
+turns, Finding 10's ranking of convergence above sharding was wrong. Reproduce with
+`rounds_vs_turns.py`.)*
+
+`- Budget:` lines are written by the parent into `progress.md`, so the session that produced one
+also contains it. Joining those to parent turn counts, across eight sessions in two repos:
+
+| session | turns | issues | rounds | subagent-runs | turns/issue | **rounds/issue** | bill/issue |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `fd687f48` | 231 | 2 | 4 | 6 | 116 | 2.0 | 3,685,064 |
+| `7bcec8a4` | 92 | 1 | 3 | 4 | 92 | 3.0 | 2,389,110 |
+| `592ab44d` | 136 | 1 | 4 | 6 | 136 | 4.0 | 4,703,345 |
+| `b40adacf` | 109 | 1 | 5 | 8 | 109 | 5.0 | 3,600,805 |
+| `d9933e33` | 161 | 1 | 5 | 9 | 161 | 5.0 | 5,802,670 |
+| `9b188aba` | 158 | 1 | 7 | 6 | 158 | 7.0 | 5,652,370 |
+| `d53db569` | 178 | 1 | 7 | 7 | 178 | 7.0 | 6,318,506 |
+| `d5ba0ddc` | 224 | 1 | 7 | 6 | 224 | 7.0 | 9,344,236 |
+
+    rounds/issue -> turns/issue     r = +0.79      turns/issue ≈  59 + 17 x rounds
+    rounds/issue -> bill/issue      r = +0.77       bill/issue ≈ 938k + 850k x rounds
+    subagent-runs -> turns          r = +0.10
+
+**One extra gate round costs ~17 turns.** Converting that to tokens gives **two different answers,
+and both are quoted here because splicing them was an error.** Finding 10's model (`cost ≈ turns ×
+~33k`) puts 17 turns at **~561k**. The direct `bill/issue` regression slope is **~850k**, implying
+~50k/turn — above the observed 26–42k band, because bill/turn itself *rises* with rounds. The two
+are not interchangeable and the document previously stated the larger one as if it were the model's
+output.
+
+> **Avoiding one gate round is worth ~561–850k, against the engine's entire ~0.9–1.1M contribution
+> to a run (Finding 10).** So one round costs roughly half to all of what loading the engine costs,
+> and 2–4× what the sharding epic is projected to save.
+
+Note also that the `rounds → bill` regression is **not independent corroboration** of `rounds →
+turns`: Finding 10 establishes `bill ≈ 33k × turns`, so the second regression is largely the first
+re-expressed. Two numbers, one result.
+
+**~~Subagent count does not predict turns (r = +0.10)~~ — WITHDRAWN 2026-08-26.** The claim was
+built on `subagent-runs` as written in the `- Budget:` line, which is a **self-report**, and it is
+wrong where it matters most: `fd687f48` journals **6** against **15** actual subagent launches and
+15 transcripts under `<session>/subagents/`. Recomputed against ground truth:
+
+| x → parent turns (totals, n=8) | r |
+|---|---:|
+| `subagent-runs`, as journaled | +0.10 |
+| launch records (`Agent` tool calls) | **+0.62** |
+| subagent transcript files | **+0.74** |
+| `gate-rounds`, as journaled | +0.46 |
+
+On totals, ground-truth subagent count predicts parent turns **better than gate rounds do**. Per
+issue, rounds still lead (+0.79 against +0.59). **The "useful negative" is retracted**, and with it
+the inference that delegation is not a cost lever — which was never supportable anyway, because
+`turns` and `billable_total` here count the **parent thread only**. No session in this corpus has a
+single `isSidechain` record; subagent work lives in separate transcripts that neither script opens.
+A measurement that prices subagents at zero cannot show that subagents are cheap. Finding 10 already
+said the subagent bill is unpriced; this finding contradicted it in the same document.
+
+**Two consequences worth carrying.** First, **the ledger's `subagent-runs` is not a measurement** —
+treat it as an intent record and count transcripts instead. Second, and more serious: **the same
+self-report supplies `gate-rounds`, the independent variable of this whole finding.** It is
+demonstrably 2.5× low for one field in the session anchoring the low end of the fit. Nothing here
+validates the rounds figures, and no separate ground truth for them has been found.
+
+**The intercept is the floor and it is not small.** ~59 turns per issue before any gate round —
+roughly 2M billable-equivalent. A perfectly converging issue still costs that, and no convergence
+work touches it. That floor is where sharding and read discipline apply.
+
+**Correlation is not causation here, and the confound is obvious: a harder issue plausibly causes
+both more rounds and more turns.** This join cannot separate them and does not try. What makes the
+causal reading credible is **Finding 2's separate, mechanism-level evidence that most extra rounds
+are *fix-induced*** — defects created by the previous round's fix rather than inherent to the issue
+— across 7 instances in 4 ledgers. The join establishes that rounds are *expensive*; Finding 2
+establishes that many of them are *avoidable*. Neither claim carries the other, and quoting the
+`+0.79` alone would overstate it.
+
+**Caveats.** n=8 sessions / 9 issues. The session↔issue mapping is many-to-many, so per-issue
+figures are within-session averages. `a587e8e4` is excluded and the exclusion was checked by hand:
+its twelve `- Budget:` matches are all *prose about* budget lines in plan files, not ledger entries,
+so it journaled none in that session.
+
+**Two detection bugs were found and fixed while building this**, both the same shape as Finding 10's
+three, which is now a pattern worth naming rather than a coincidence:
+
+1. **Direction.** Counting every `- Budget:` occurrence in a transcript counts lines the parent
+   *read back out of* `progress.md` as work done in that session. It gave one 158-turn session
+   **11 issues at 14 turns each**, against an engine whose rule is one issue per invocation. Only
+   `tool_use` **inputs** count.
+2. **Line wrapping.** Budget lines wrap, so `gate-rounds=` routinely sits on a continuation line. A
+   single-line regex captured the prefix, found no rounds, and dropped the row — losing three of
+   nine sessions silently. This is the same wrapped-text hazard `CLAUDE.md` documents for the
+   engine's step references.
+
+**Every one of these five bugs was a silent false result in a plausible direction.** The defence
+that keeps working is not a better pattern — it is **checking a sample of matches by hand, and
+sanity-checking the output distribution against what the system can physically do** (one issue per
+invocation; ingestion ≥ one engine copy). Do both before believing any transcript-derived number.
+
+### Finding 12 — the parent issues 1.00 tool calls per turn, and rarely batches
+
+*(added 2026-08-26. Reproduce with `calls_per_turn.py`.)*
+
+Cost is `turns × context` (Finding 10), and **a turn issuing five parallel tool calls bills the same
+as one issuing a single call.** So batching is the only lever that reduces turns without touching a
+gate, a verdict, or any pipeline semantics. Across 1,713 parent turns in nine sessions:
+
+> **1.00 tool calls per turn.** One session (`9b188aba`) has **zero** turns issuing two or more.
+
+**"Never batches" would be wrong and an earlier draft said it.** Eight of nine sessions do batch
+sometimes; 142 turns (8.3%) issue two or more calls, and 157 (9.2%) issue none at all, which is what
+drags the mean to exactly 1.00. Among turns that call a tool the mean is **1.09**. The accurate
+sentence is *rarely batches, and one session never does* — it costs nothing and is true.
+
+| session | turns | calls/turn | 0-call | 1-call | 2+ | mergeable | of which paging |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `b40adacf` | 109 | 1.07 | 10 | 82 | 17 | 17 (16%) | 12 |
+| `fd687f48` | 231 | 1.01 | 20 | 191 | 20 | 28 (12%) | 15 |
+| `a587e8e4` | 422 | 0.95 | 51 | 340 | 31 | 85 (20%) | 38 |
+| `d9933e33` | 161 | 1.04 | 16 | 124 | 21 | 17 (11%) | 12 |
+| `d5ba0ddc` | 224 | 0.97 | 15 | 201 | 8 | 41 (18%) | 19 |
+| `9b188aba` | 158 | 0.93 | 11 | 147 | **0** | 33 (21%) | 15 |
+| `592ab44d` | 136 | 1.11 | 8 | 106 | 22 | 19 (14%) | 8 |
+| `7bcec8a4` | 92 | 0.92 | 9 | 81 | 2 | 32 (35%) | 13 |
+| `d53db569` | ~180 | 1.02 | 17 | 142 | 21 | 36 (20%) | 14 |
+
+**Three figures, and the spread between them is the honest uncertainty.**
+
+- **Ceiling — 14.7% of the input bill (~783k/session).** Every maximal run of ≥2 consecutive turns
+  each issuing one read-only call. **Not a true upper bound**: it contains at least two real
+  mutations the shell-shape test misses (`git stash`, `gh api -f`), and is deflated by `2>/dev/null`
+  false positives. An estimate with error in both directions.
+- **Theoretical floor — 6.7% (~358k/session).** The subset where consecutive reads target the same
+  file: *paging*, whose slices cannot depend on each other.
+- **Recoverable floor — ~176k/session, and this is the number to plan against.** The run-length
+  histogram is what makes the difference visible:
+
+      k=2 ×47   k=3 ×13   k=4 ×4   k=5 ×1   k=6 ×6   k=8 ×1   k=10 ×1   k=12 ×1
+
+  A batching protocol must keep the **first** read as its own turn — it is what reports the file's
+  extent — so a k-run saves `k−2`, and **a k=2 run saves nothing at all.** 47 of 74 runs are k=2.
+  Recoverable is **49% of theoretical**. Quoting the theoretical figure as the lever's value would
+  have overstated it by 2×, and #135's before/after would have looked like a miss while the change
+  worked perfectly.
+
+**Price merged-away turns at their own bill, never at the corpus average** — the average-priced
+estimate overstates by **1.4×**, because paging runs sit early where context is still small. And
+**the surviving turn is the first one, not the priciest**: the merge happens where the run started,
+so the saving is every turn *after* the first. An earlier version dropped the largest bill instead
+of the smallest, which understated the result.
+
+**The floor's largest single instance is the engine loading itself.** `d5ba0ddc` opens with six
+consecutive turns each reading one slice of `loop-engine.md`. Once the first `Read` returns
+`totalLines`, every remaining page is a known, independent request — they could be one turn. **This
+is a one-sentence addition to the read protocol v0.2.1 already ships**, and it lands on the single
+most repeated pattern in the corpus.
+
+**Ranking against the other levers, all in the same units:**
+
+| lever | value | confidence | risk |
+|---|---|---|---|
+| avoid one gate round | ~850k (Finding 11) | correlational + Finding 2's mechanism | changes gate behaviour |
+| **batch paging reads** | **~176k/session** recoverable (358k theoretical) | same-file only; see caveats | **near zero** |
+| batch all mergeable reads | ~716k/session | upper bound only | reordering if wrongly merged |
+| sharding (#128) | ~4–5% of a run | modelled, not measured | bounded |
+
+**Batching's high-confidence floor is comparable to sharding's whole projected saving, at a fraction
+of the work and essentially no semantic risk.** It does not compete with sharding — they act on
+different terms of `turns × context`, and both can ship.
+
+**A sixth detection bug, found by hand-checking rather than by reasoning.** The first run of this
+analysis reported 23% mergeable. Inspecting the actual runs showed two of them contained
+`python3 - <<'PY' … p.write_text(s)` heredocs — **mutations whose command line shows no redirect at
+all**, so a shell-shape test classified them read-only and merged across a write. Corrected to 18%.
+That is six silent false results in this analysis, every one in a plausible direction, and the only
+defence that has ever caught one is looking at the matches.
+
+**What batching does not do:** it does not reduce context — total tokens ingested are unchanged, and
+what disappears is the re-submission of the accumulated prefix on the turns removed. **Unless the
+extent is genuinely known**: batching requires committing to a range up front, so where the agent
+must guess, it over-reads and ingestion goes *up*. That is the mechanism by which this lever can
+backfire, and it is why the batching rule has to be written default-deny — if you cannot confirm the
+file's extent, it is not known, and you page it one turn at a time.
+
+**Known measurement defects, not yet corrected.** `_target()` keys on the *basename* found by a
+regex over the command, so `grep -n "plugin.json" tests/x.py` keys as `plugin.json`, a `--include=*.md`
+glob keys as `.md`, and the plugin-cache and working-tree copies of `loop-engine.md` share one key —
+detection bug #2 reintroduced in a second script. `a587e8e4` uses **zero** `Read` calls, so its 38
+paging turns (26% of the total) rest entirely on that heuristic. Spill-recovery chains also count as
+paging though they are strictly dependent. These inflate the floor; the pricing fix above deflated
+it. **The recoverable figure should be read as a rough order, not a measurement.** So it acts purely on
+the `turns` term, and its saving is bounded by how much context had already accumulated when the
+merged turns ran — which is exactly why per-turn pricing matters.
 
 ## Candidate levers
 
@@ -434,7 +784,14 @@ Even a coarse self-report fills the reserved `tokens` slot and makes symptom 2 m
 Finding-1 hypothesis testable, and every lever below evaluable. Cheapest thing on the page and it
 gates the value of the rest.
 
-### B. Constrain what finders return — *high saving, high confidence, small edit*
+### B. Constrain what finders return — *REFUTED; header corrected 2026-08-26*
+
+> This header read *"high saving, high confidence, small edit"* until 2026-08-26, while
+> Finding 6 above already recorded the lever as largely refuted (`Agent` returns are
+> 0.9–3.7% of what enters the parent; under 1% of a run on the bill model). Two
+> restatements of one claim, drifted, in the same file — the pathology `CLAUDE.md`
+> documents at length, occurring in the research notebook itself. Fixed in place rather
+> than guarded.
 Step 8 says nothing about return shape. Finders should return a bounded structured list —
 `file:line`, one-sentence claim, failure scenario, severity, hard cap ~5 — with **no narrative and
 no restating the diff**. The parent needs verdicts, not reasoning. `loop.config.md` prices this gate

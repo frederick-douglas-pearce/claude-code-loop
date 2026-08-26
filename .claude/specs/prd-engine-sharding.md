@@ -1,5 +1,25 @@
 # PRD — Engine sharding: defer `accepting` + a `reference` appendix
 
+> **⚠ SUPERSEDED IN PART — 2026-08-26.** Measurement since this PRD was written has moved its
+> numbers and its gate. **`docs/research/loop-cost-and-convergence.md` (Findings 10–12),
+> `docs/research/baseline-2026-08-25.md`, and `.claude/specs/decisions.md` (D007–D011) are
+> authoritative where they disagree with anything below.** In short:
+>
+> - **The ~35% figure is a FOOTPRINT cut, not a saving.** Expected effect on a run's bill is
+>   **~4–5%** — sharding is *deferral*, not deletion, so in a full iteration the deferred units still
+>   load and only the arrival centroid moves. ~7% is a ceiling.
+> - **The gate changed.** Accept on **P1** and **P2c as `resident_turns / processed`** only.
+>   **P8 is deleted** (circular with P2c) and **P4 is deleted** (its instrument was retired carrying a
+>   payload bug — D010). **P9** (compaction count) is observed, never predicted.
+> - **The before-baseline freezes against v0.2.2, not v0.2.1** (D008): #135 lowers `resident/processed`
+>   on its own by deleting early low-context turns.
+> - **The 53,693 P2 figure is retracted** — it came from a filter that counted heredoc writes as
+>   engine reads. Per-repo P2c baselines: `claude-code-loop` 18.0%, `us_presidential_vote_analysis`
+>   22.8%.
+> - **Sharding is the third of three levers**, not the first: one avoided gate round ≈ 561–850k,
+>   batching same-file paging ≈ 176k/session (#135), sharding ≈ 4–5% of a run.
+
+
 **Status:** scoped, pending human ratification. Not filed on GitHub.
 **Author:** PM agent · **Date:** 2026-08-25
 **Epic (draft):** `epic:engine-sharding` — Shard the loop engine: defer `accepting` + a `reference`

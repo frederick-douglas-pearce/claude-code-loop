@@ -187,7 +187,8 @@ the correction above. Revised:
    fail-safe: cannot run ⇒ cannot merge ⇒ human) and a `reference` **appendix** (Initialization,
    templates, the `progress.md` worked example, ~6–7k, needed at init/journal). That lands
    always-loaded near **~30k — a ~35% cut at a fraction of the risk** of the full seven-unit split.
-2. **Measure with `context_profile.py`.** Before/after on a real session, as a hard gate on landing.
+2. **Measure with `engine_cost.py`.** Before/after on a real session, as a hard gate on landing.
+   *(This said `context_profile.py` until 2026-08-26; that instrument is retired — D010.)*
 3. **Only then defer the small early units**, and only if the parent still overshoots 200k *and* the
    fail-safe halves have proven sound in practice. Deferring a 1.4k unit trades 1.4k of
    always-loaded for a read round-trip that **78.6% re-read rates** say may recur — a worse trade,
