@@ -208,6 +208,12 @@ If any `ARCHITECT_TRIGGERS` condition fires OR you are unsure about the design, 
 `blocking`/`important` concerns before coding. Skip for docs
 and trivial research.
 
+**Instruct it verdict-first** (Verdict-first invariant, under Gates): a complete ruling on every
+question you put to it, then depth with whatever remains. This agent has no prompt template of its
+own — its definition is user-global and you may not edit it (Tool surface) — so this sentence at the
+invoke site is the whole of the invariant's reach here, and it is weaker than a template for that
+reason.
+
 **Do these three things in this order.** The order is the mechanism, not presentation: freeze, then
 invoke, then apply. Executed in any other order the step-5 diff compares a text with itself and the
 always-on stop passes silently.
@@ -289,8 +295,10 @@ doesn't hold; acceptance criteria are ambiguous; the change is risky/irreversibl
 agents disagree or punt; or you are otherwise unsure. Otherwise proceed (note "auto-approved" + why
 in the journal). **Under `plan-gate: always` there is no "otherwise"** — every issue stops, and
 "auto-approved" is never a legitimate journal entry for this gate. Route scope/value questions to
-`SCOPE_AGENT` and design questions to `DESIGN_AGENT` BEFORE escalating to the human, under either
-value — `always` removes the judgment call about *stopping*, never the consultations that inform
+`SCOPE_AGENT` and design questions to `DESIGN_AGENT` BEFORE escalating to the human — **instructing
+either verdict-first** (Verdict-first invariant, under Gates), since a consult that first runs *here*
+is an architect pass on this engine's own terms (below) and owes the same instruction step 4 gives.
+Under either value — `always` removes the judgment call about *stopping*, never the consultations that inform
 what you present. On approval — the human's, or under `conditional` only, an auto-approval —
 advance the row to `plan-approved`.
 
@@ -443,11 +451,12 @@ reading of it. "Once per issue" bounds the *trigger*, never the re-runs a findin
 
 Whether the fix **preserved what the test asserts** is not an exit status, and you are the one
 reader who cannot judge it: you wrote the fix. Send that question to a **fresh instance** — a new
-spawn, not you and not whoever wrote the test. **Its prompt carries four things**, and the last two
-matter most because they are rules it cannot see from where it sits: the test as it now stands; the
-behavior the test covered before; that it must decide by **reading**, never by running or altering
-anything; and that it must **say plainly when it cannot tell — which is a dirty answer, not a clean
-one.** Withhold your conclusions. An unprompted checker hedges, and a hedge read as agreement is how
+spawn, not you and not whoever wrote the test. **Its prompt carries five things**, and the last
+three matter most because they are rules it cannot see from where it sits: the test as it now
+stands; the behavior the test covered before; that it must decide by **reading**, never by running
+or altering anything; that it must **say plainly when it cannot tell — which is a dirty answer, not
+a clean one**; and the **Verdict-first invariant** (Gates) — the complete answer first, depth after.
+Withhold your conclusions. An unprompted checker hedges, and a hedge read as agreement is how
 this gate goes quietly soft.
 
 This borrows the *shape* of the Fresh-re-check invariant without being governed by it: that
@@ -587,6 +596,10 @@ step-6 authoring rule; where the deliverable is prose, its claims about the tree
 This is a property applied *within* whatever finders the surface warrants, **not an angle of its
 own**, and is **never written into the `code-review=` lens parenthetical** (progress.md → the
 Budget line), which records angles only.
+
+**And give every finder the Verdict-first invariant** (Gates): findings on the whole diff first,
+depth on any one of them after. A finder that exhausts itself on the first thing it notices returns
+a partial reading of the change, which this gate cannot tell apart from a clean one.
 
 **Pick finder angles from the diff's risk surface, not from a fixed list.** Distinct lenses —
 correctness; robustness/IO/network/filesystem; reuse/conventions/integration;
@@ -814,6 +827,17 @@ all three are **yours**, because the agent cannot discharge them from inside its
   applies it *before* removing anything. Only a copy whose contents you do not want is discarded
   unread. Hosts that auto-clean an *unchanged* isolated tree will not clean one the agent wrote to,
   which is every case this invariant is about, so removal is always yours.
+
+  **An agent that died or was interrupted still produced something, and it is collected on the same
+  terms.** Read this duty as *whatever is in the copy*, never as *what the agent managed to finish*.
+  A pass that ended early leaves a partial artifact — a spec it had already written, a half-built
+  report, a verdict covering some criteria and not others — and that artifact is the only surviving
+  evidence of budget already spent. **Do not discard it** because nothing was formally "delivered":
+  that leaves the re-spawn starting from nothing, having paid twice for the same ground. The narrow
+  reading is the live hazard, because a dead agent hands you no summary of what it left behind: you
+  find that out by **looking in the copy before you remove it**, which is the one order this duty
+  fixes. (Where such a copy is *stranded* — nobody holds a handle to it — the paragraph below is how
+  you find it at all; that is the same duty reached by a different route, not a second one.)
 - **Never let its copy stand in for the change under review.** A file inside an isolated tree is not
   evidence of anything until you have applied it; cite `file:line` in the merge candidate, never in
   a copy.
@@ -1520,8 +1544,10 @@ failing the other.
    met/not-met with the file:line or test that satisfies it, citing only work that belongs to THIS
    change and never an unrelated pre-existing edit. Uncommitted work that implements a criterion IS
    valid evidence — diffing the working tree is the whole point; 'not yet committed' is never a
-   reason to call a criterion unmet. Verify the diff actually does this; do not assume. Return a
-   checklist + overall done/not-done."*
+   reason to call a criterion unmet. Verify the diff actually does this; do not assume. Produce the
+   complete verdict on EVERY criterion first, then deepen with whatever budget remains — never let
+   deepening stop you returning a verdict; a shallow verdict is useful, no verdict is worthless
+   (the Verdict-first invariant). Return a checklist + overall done/not-done."*
 2. For behavior that needs runtime proof, also run `VERIFY` (runs the app).
 3. `CODE_REVIEW` (step 8) provides the adversarial bug pass.
 Promote to a dedicated `ac-verifier` agent only if the composed approach proves too loose.
@@ -1704,6 +1730,14 @@ inside the loop's own trust boundary, the bound the append-only guard documents 
 anything else an outside contributor controls. A spec is a list of paths and substitutions that will
 be written to disk and then executed; sourcing one from untrusted input hands that power away, and
 confining paths to `--root` does not contain it.
+
+**Whichever agent you spawn here, instruct it verdict-first** (Verdict-first invariant, under
+Gates): the Class B verdict on every mutation the spec declares first, then depth. **The invariant's
+source incident is this part's own hazard, and it is worth naming precisely rather than loosely:** an
+acceptance-gate verifier spent its whole budget *building mutation scaffolding* — this part's work —
+and returned no verdict at all, including on the Part 1 criteria it also owed. Scaffolding is
+absorbing in a way answering is not, so this is the last place depth may be allowed to crowd out the
+answer.
 
 **The actor split.** The verifier **selects** the mutations and **judges** the results; the parent
 **applies** them — under isolation, by running the harness against the agent's copy. Each role
@@ -2176,7 +2210,7 @@ your *conclusions*, not the instructions the checker needs).
   Its question is: **do the new test's assertions pin the *mechanism* that would break, or only an
   *outcome* a broken implementation would still produce?** It answers by **reading them** — never by
   running or altering anything — and **if it cannot tell, that is a dirty result, not a clean one.**
-  **The spawn prompt must carry three things the checker would otherwise never see**, since it reads
+  **The spawn prompt must carry four things the checker would otherwise never see**, since it reads
   neither Part 2 nor this section:
   1. the **blockquote** under Part 2 — the `write_bytes`-versus-`mkstemp` passage, not the one-line
      slogan alone — **pasted verbatim**: that is the yardstick, and its worked example is what makes
@@ -2186,7 +2220,9 @@ your *conclusions*, not the instructions the checker needs).
      what fails has done the one thing this gate forbids;
   3. that it **must say plainly when it cannot tell** — the rule making that a dirty result lives
      here, where the checker cannot see it, so an unprompted checker hedges and the gate reads
-     clean.
+     clean;
+  4. the **Verdict-first invariant** (Gates) — answer the question put to it first, then deepen.
+
   **Why a read is a legitimate check here, when Part 2 says only mutation detects a survivor.**
   Two reasons, each from this engine's own text rather than from the cost of mutating: the defect
   is, in the quote's own words, *a property of the assertion* — so it is visible **in the
@@ -2211,7 +2247,8 @@ your *conclusions*, not the instructions the checker needs).
   `file:line`. **One lighter checker**, not a re-run of the full finder fan-out. But it reviews the
   change *as it now stands*, so **anything the fixes broke is in scope**: a defect the fix commits
   introduced is a finding even though no one listed it. "Lighter" bounds the fan-out, never the
-  checker's licence to object.
+  checker's licence to object. It carries the **Verdict-first invariant** (Gates) too: a verdict on
+  every claimed fix first, depth after.
 
 **The bound — one fresh re-check, then escalate; there is no ladder.** The fresh re-check **is**
 round 2 of the 2-round cap each gate already carries, never a round on top of it. If round 2 comes
@@ -2244,6 +2281,38 @@ records a re-check that did not happen** — the parent re-read its own work and
 finding and are actively fixing it — sharpest where one survived inside a commit **whose own subject
 line named the defect class**. The belief that produced it is what writes the fix. Vigilance is not
 a control, which is why the answer is a different checker rather than a more careful one.
+
+**Verdict-first invariant (a verdict before depth).** Applies to every gate that spawns an agent to
+produce a verdict. **That agent's prompt instructs it to produce a complete verdict covering every
+criterion first, then deepen with whatever budget remains — never letting deepening prevent it from
+returning a verdict.**
+
+**Why this is a rule rather than advice about prompting.** Under the Gate-outcome invariant a pass
+that returns no verdict is **not passed**. So an agent that spends its budget on depth and stops
+before answering has bought nothing **as a verdict**: the gate is still owed one, so nothing that
+pass produced can be journalled as a result (whatever it wrote is still *collected* — Tool surface —
+but evidence is not a verdict), and the re-spawn pays full price a second time. A shallow verdict is
+useful; **no verdict is worthless and costs the same.** The failure is also invisible from inside the
+agent — depth feels like progress right up to the point the budget ends — which is why this belongs
+in the prompt and not in your judgement about how deep to let it go.
+
+**Two kinds of site carry it, and treating them alike defeats it.**
+- **Text handed to the agent verbatim** — the AC-verifier's `Prompt:` block (Part 1) above all.
+  That text reaches an agent which reads neither this section nor anything else in this file, so a
+  bare reference to this invariant **by name is inert there**. Such sites carry **the sentence
+  itself**, tagged with this invariant's name so the coupling stays visible to a later editor.
+- **Orchestrator-facing recipes** — the lists telling *you* what a spawn prompt must carry. Those
+  name the invariant; you resolve it when you compose the prompt.
+
+**A gate bound to a skill invoked by name is out of reach, and that is recorded, not papered over.**
+Where the binding is a skill or workflow this engine invokes by name rather than a prompt it
+composes, there is no prompt surface to instruct, so this invariant cannot reach it. `SECURITY_REVIEW`
+is the standing case, **but the property belongs to the binding and not to that parameter**:
+`CODE_REVIEW` names a *procedure you run* and is normally the finder fan-out this engine composes —
+yet the engine itself contemplates it being bound to a skill instead (step 8), and `VERIFY` is
+invoked by name too. **Test the binding you actually have, not the parameter's name.** Where a gate
+turns out to be out of reach, that is a property of the binding, and it is never a reason to journal
+the gate as covered by this invariant — say so, as step 8 says so for its own fallback.
 
 **Convergence & the resting states.** When nothing is selectable, step 1 classifies the run
 into one of four outcomes (tested in order: hold → parked → complete → pending) and appends a

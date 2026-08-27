@@ -1358,6 +1358,264 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
                 )
 
 
+class VerdictFirstInvariantTests(unittest.TestCase):
+    """#119's Verdict-first invariant reaches its gates by NAME, at located sites.
+
+    The invariant is defined once, under Gates, and every gate that spawns an agent
+    to produce a verdict is supposed to pass it on. Two kinds of site carry it and
+    they fail differently, which is why both are checked:
+
+    * **Orchestrator-facing recipes** name the invariant; the orchestrator resolves
+      the name when it composes the prompt. If a site loses the reference the
+      orchestrator stops passing it on -- silently, because the surrounding prose
+      still reads correctly and the gate still returns *something*.
+    * **Text handed to the agent verbatim** -- the AC-verifier's Part 1 ``Prompt:``
+      block -- is different in kind: that text reaches an agent which reads neither
+      the Gates section nor anything else in the engine, so a bare NAME there is
+      inert. That site has to carry the operative clause itself, which is what
+      ``test_the_verbatim_prompt_carries_the_clause_not_only_the_name`` pins.
+
+    The second case is the failure the design was changed to avoid: satisfy the
+    invariant by writing "per the Verdict-first invariant" into the ``Prompt:`` block
+    and the instruction never reaches the verifier at all -- the gate keeps running,
+    the prose keeps reading correctly, and the one agent the invariant was written
+    for is the one agent that never hears it.
+
+    **What this asserts is a string coupling, never a meaning** -- the ceiling
+    ``CLAUDE.md`` sets for a prose guard. It cannot tell whether the sentence is
+    *right*, whether an orchestrator actually pastes it, or whether the reference
+    sits in the recipe rather than merely somewhere in the same region.
+
+    **Two limits worth stating, because an earlier draft of this docstring got the
+    first one wrong.** (1) A *synchronized* reword of both clause copies does NOT
+    pass -- ``_OPERATIVE`` is a literal, so it fails until the constant is edited
+    too. That is deliberate (the reword should be reviewed), but it is a maintenance
+    cost, not a free pass. (2) ``_REFERENCE_REGIONS`` is hand-maintained and has no
+    coupling to the engine's actual gate set, so a gate added later is uncovered
+    until someone adds it here. The method name says "located reference site" rather
+    than "every gate" for exactly that reason.
+
+    **Anchored per region, never counted globally** -- the lesson
+    ``PlanGateFrozenBlockTests`` records. A total passes when one site drops the name
+    and another gains a spare mention, and a total cannot say *which* site went dark.
+
+    Regions are scoped to the run of paragraphs carrying the reference rather than to
+    the whole pipeline step, which narrows how far the name can drift and still
+    satisfy the check. **It does not close that gap and this docstring must not say
+    it does.** An earlier draft claimed relocating the reference into an unrelated
+    aside in the same step was "caught rather than tolerated"; the acceptance gate's
+    mutation pass falsified it -- deleting the instruction and leaving a plausible
+    in-place exemption that still names the invariant passes green at every one of
+    the recipe sites. ``assertIn(name, region)`` cannot distinguish "the recipe
+    instructs X" from "the recipe says X does not apply here", and no amount of
+    tightening changes that.
+
+    No region's START anchor may contain the invariant's name, or that region's
+    subtest would be unfalsifiable; ``test_no_region_is_satisfied_by_its_own_anchor``
+    enforces that over ``_REFERENCE_REGIONS`` **and** the verbatim region, which is
+    every region ``_regions()`` returns.
+
+    **What review owns, because this test provably cannot.** Per ``CLAUDE.md``'s
+    ruling on prose guards, polarity is not reachable here and trying to reach it is
+    the displacement loop, not a gap someone forgot:
+
+    * whether a site's instruction *says* verdict-first or its opposite;
+    * whether a site exempts itself while still naming the invariant;
+    * whether the canonical definition still asserts the rule, or has demoted the
+      pinned clause to a historical aside.
+
+    All three were demonstrated as surviving mutations at this change's own
+    acceptance gate and are recorded here rather than chased with a broader literal.
+    """
+
+    _NAME = "Verdict-first invariant"
+
+    # The clause the verbatim site must carry in full, pinned in both the canonical
+    # definition and the verbatim copy so deleting it from either end fails.
+    #
+    # It includes the ordering token ("first, then"), which raised the bar and did
+    # NOT close it -- do not read the token as a polarity guard. The acceptance
+    # gate's mutation pass demonstrated the boundary with a paired probe:
+    #   "start with the riskiest criterion AND THEN deepen ..."  -> killed
+    #   "start with the riskiest criterion FIRST, THEN deepen ..." -> SURVIVED
+    # Same inversion, one word apart. The pin covers everything after "first,"; what
+    # must be complete first is the whole content of the invariant, and it sits
+    # before the pin. Extending this literal to swallow that variant would enumerate
+    # the phrasings an author happened to think of, which is the ALLOWED_NON_BINDINGS
+    # shape CLAUDE.md forbids. Polarity is review's; see the class docstring.
+    _OPERATIVE = "first, then deepen with whatever budget remains"
+
+    # (start, end) anchors. Each span must be the paragraph carrying the reference.
+    _REFERENCE_REGIONS = {
+        "step 4 (architect invoke site)": (
+            "### 4. Architect gate",
+            "**Do these three things in this order.**",
+        ),
+        "step 5 (the DESIGN_AGENT consult)": (
+            '"auto-approved" is never a legitimate journal entry for this gate.',
+            "**One stop condition is ALWAYS-ON.**",
+        ),
+        "step 6 (hermetic fresh read)": (
+            "Whether the fix **preserved what the test asserts**",
+            "**A test added later re-arms the trigger.**",
+        ),
+        "step 8 (the finder fan-out)": (
+            "**Give every finder the issue's acceptance criteria alongside the diff.**",
+            "**Pick finder angles from the diff's risk surface",
+        ),
+        "the Class B limit-case checker": (
+            "- **Acceptance gate, Class B \u2014 the limit case needs its own recipe.**",
+            "- **Code review (step 8) \u2014 the change as it now stands",
+        ),
+        "step 8's fresh re-check recipe": (
+            "- **Code review (step 8) \u2014 the change as it now stands",
+            "**The bound \u2014 one fresh re-check",
+        ),
+        "AC-verifier Part 2 (the mutating agent)": (
+            "**Who writes the spec \u2014 and what it may never be built from.**",
+            "**The applied-check",
+        ),
+    }
+
+    _VERBATIM = (
+        '   Prompt: *"Run the commands above yourself against base',
+        "2. For behavior that needs runtime proof, also run",
+    )
+    _CANONICAL = (
+        "**Verdict-first invariant (a verdict before depth).**",
+        "**Convergence & the resting states.**",
+    )
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
+
+    def _engine(self) -> str:
+        return _ENGINE.read_text(encoding="utf-8")
+
+    def _span(self, text: str, start: str, end: str, label: str) -> str:
+        # A duplicated START anchor is the one drift that fails OPEN: `find` takes
+        # the first occurrence, so the span can silently widen to swallow neighbouring
+        # regions and then satisfy the containment check on someone else's text.
+        # Assert the property the anchor actually relies on rather than bounding the
+        # resulting width, which cannot distinguish a legitimately long region from a
+        # runaway one.
+        self.assertEqual(
+            text.count(start), 1,
+            f"the start anchor for the {label} region occurs {text.count(start)} "
+            f"times in loop-engine.md ({start!r}); it must occur exactly once. More "
+            "than one lets the span silently widen past this region and find the "
+            "name in a neighbour's text.",
+        )
+        i = text.find(start)
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it."
+        )
+        return text[i:j]
+
+    def _regions(self):
+        text = self._engine()
+        out = {
+            label: self._span(text, a, b, label)
+            for label, (a, b) in self._REFERENCE_REGIONS.items()
+        }
+        out["the AC-verifier Part 1 verbatim prompt"] = self._span(
+            text, *self._VERBATIM, "the AC-verifier Part 1 verbatim prompt"
+        )
+        return out
+
+    def _canonical(self, text: str) -> str:
+        return self._span(text, *self._CANONICAL, "the canonical definition")
+
+    def test_no_region_is_satisfied_by_its_own_anchor(self) -> None:
+        # A start anchor containing _NAME makes that region's subtest unfalsifiable:
+        # the span always begins with the string being asserted. An earlier draft
+        # shipped exactly that for the canonical definition.
+        pairs = dict(self._REFERENCE_REGIONS)
+        pairs["the AC-verifier Part 1 verbatim prompt"] = self._VERBATIM
+        for label, (start, end) in pairs.items():
+            with self.subTest(region=label):
+                for which, anchor in (("start", start), ("end", end)):
+                    self.assertNotIn(
+                        self._NAME, anchor,
+                        f"the {which} anchor for {label} contains {self._NAME!r}, so "
+                        "that region's containment check can never fail. Re-anchor it "
+                        "on text that does not name the invariant.",
+                    )
+
+    def test_the_span_anchors_actually_resolve(self) -> None:
+        # Liveness: a span that silently collapsed would satisfy nothing and fail
+        # loudly, but the anchors themselves could rot into a region that is not the
+        # paragraph intended. Bound the low end; the high end is covered by the
+        # unique-start-anchor assertion in _span, which is the real drift vector.
+        for label, body in self._regions().items():
+            with self.subTest(region=label):
+                self.assertGreater(
+                    len(body), 80,
+                    f"the {label} region resolved to {len(body)} characters, which is "
+                    "too short to be that region -- the anchors have drifted.",
+                )
+
+    def test_each_located_reference_site_names_the_invariant(self) -> None:
+        name = self._normalize(self._NAME)
+        missing = sorted(
+            label
+            for label, body in self._regions().items()
+            if name not in self._normalize(body)
+        )
+        self.assertEqual(
+            missing,
+            [],
+            f"these region(s) of loop-engine.md no longer name the {self._NAME}: "
+            f"{missing}.\n\n"
+            "A MISMATCH IS SILENT. Each region is the recipe telling the orchestrator "
+            "what to put in a prompt it composes; a region that drops the reference "
+            "stops passing the instruction on, and the agent it spawns runs without "
+            "it. Nothing downstream can tell that apart from an agent that had the "
+            "instruction and chose depth anyway.\n\n"
+            "Each region is checked SEPARATELY on purpose: a global count of the name "
+            "passes when one site loses it and another gains a spare mention. If you "
+            "renamed the invariant deliberately, rename it in EVERY region and update "
+            "_NAME. Never delete a region from _REFERENCE_REGIONS to make this pass -- "
+            "that is the check agreeing to cover less.",
+        )
+
+    def test_the_verbatim_prompt_carries_the_clause_not_only_the_name(self) -> None:
+        # The name alone is INERT here, which is why this site is distinguished from
+        # the orchestrator-facing recipes above.
+        text = self._engine()
+        clause = self._normalize(self._OPERATIVE)
+        for label, body in (
+            ("the canonical definition (Gates)", self._canonical(text)),
+            (
+                "the AC-verifier Part 1 verbatim prompt",
+                self._span(text, *self._VERBATIM, "the verbatim prompt"),
+            ),
+        ):
+            with self.subTest(region=label):
+                self.assertIn(
+                    clause,
+                    self._normalize(body),
+                    f"{label} no longer carries the operative clause "
+                    f"{self._OPERATIVE!r}.\n\n"
+                    "The AC-verifier's Part 1 prompt is handed to a subagent VERBATIM. "
+                    "That agent reads neither the Gates section nor anything else in "
+                    "this engine, so a bare reference to the invariant by name does "
+                    "not reach it: the instruction silently does not exist for the "
+                    "one agent it was written for, while every word of the engine "
+                    "still reads correctly.\n\n"
+                    "The clause deliberately includes the ordering token ('first, "
+                    "then deepen'). A fragment starting at 'then deepen' would be "
+                    "satisfied by an instruction that INVERTED the rule into "
+                    "depth-first while keeping the invariant's words.\n\n"
+                    "Both copies are checked against this constant, so deleting the "
+                    "clause from either end fails. A deliberate reword must change "
+                    "both copies AND _OPERATIVE.",
+                )
+
+
 class ResumeHandoffPointerTests(unittest.TestCase):
     """#32's Resume hands its recovery procedure off to Part 2 by NAME.
 
