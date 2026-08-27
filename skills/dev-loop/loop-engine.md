@@ -208,6 +208,12 @@ If any `ARCHITECT_TRIGGERS` condition fires OR you are unsure about the design, 
 `blocking`/`important` concerns before coding. Skip for docs
 and trivial research.
 
+**Instruct it verdict-first** (Verdict-first invariant, under Gates): a complete ruling on every
+question you put to it, then depth with whatever remains. This agent has no prompt template of its
+own — its definition is user-global and you may not edit it (Tool surface) — so this sentence at the
+invoke site is the whole of the invariant's reach here, and it is weaker than a template for that
+reason.
+
 **Do these three things in this order.** The order is the mechanism, not presentation: freeze, then
 invoke, then apply. Executed in any other order the step-5 diff compares a text with itself and the
 always-on stop passes silently.
@@ -448,7 +454,8 @@ matter most because they are rules it cannot see from where it sits: the test as
 behavior the test covered before; that it must decide by **reading**, never by running or altering
 anything; and that it must **say plainly when it cannot tell — which is a dirty answer, not a clean
 one.** Withhold your conclusions. An unprompted checker hedges, and a hedge read as agreement is how
-this gate goes quietly soft.
+this gate goes quietly soft. **The prompt also carries the Verdict-first invariant** (Gates): the
+complete answer first, depth after.
 
 This borrows the *shape* of the Fresh-re-check invariant without being governed by it: that
 invariant covers the two gates carrying a round cap (step 8 and step 10), and this gate carries none —
@@ -588,6 +595,10 @@ This is a property applied *within* whatever finders the surface warrants, **not
 own**, and is **never written into the `code-review=` lens parenthetical** (progress.md → the
 Budget line), which records angles only.
 
+**And give every finder the Verdict-first invariant** (Gates): findings on the whole diff first,
+depth on any one of them after. A finder that exhausts itself on the first thing it notices returns
+a partial reading of the change, which this gate cannot tell apart from a clean one.
+
 **Pick finder angles from the diff's risk surface, not from a fixed list.** Distinct lenses —
 correctness; robustness/IO/network/filesystem; reuse/conventions/integration;
 production-readiness — overlap far less than repeated passes of the same one, and single-angle
@@ -719,7 +730,8 @@ The `- Budget:` line is:
 `wall-clock=<elapsed, includes gate-wait — not a cap input>` · `tokens=deferred` (computed
 post-hoc from the loop's own JSONL by an out-of-band analyzer, not inside the skill; the named
 slot keeps the line forward-stable) — **plus any of the optional slots below**. Those four are
-**required**; write the whole thing as **one physical line, never wrapped** (every reader of this
+**required**; where any gate ran a round, so is `round-findings=` (below), which aggregates this
+iteration's `- Gate-round:` lines so the issue's cost and yield are answerable from this one line; write the whole thing as **one physical line, never wrapped** (every reader of this
 line is line-based, so a wrap strands whichever slots fall past the break).
 
 **Say why, not just how much.** Counts alone cannot tell a justified high-stakes iteration from
@@ -814,6 +826,17 @@ all three are **yours**, because the agent cannot discharge them from inside its
   applies it *before* removing anything. Only a copy whose contents you do not want is discarded
   unread. Hosts that auto-clean an *unchanged* isolated tree will not clean one the agent wrote to,
   which is every case this invariant is about, so removal is always yours.
+
+  **An agent that died or was interrupted still produced something, and it is collected on the same
+  terms.** Read this duty as *whatever is in the copy*, never as *what the agent managed to finish*.
+  A pass that ended early leaves a partial artifact — a spec it had already written, a half-built
+  report, a verdict covering some criteria and not others — and that artifact is the only surviving
+  evidence of budget already spent. Discard it because nothing was formally "delivered" and the
+  re-spawn starts from nothing, having paid twice for the same ground. The narrow reading is the
+  live hazard, because a dead agent hands you no summary of what it left behind: you find that out
+  by **looking in the copy before you remove it**, which is the one order this duty fixes. (Where
+  such a copy is *stranded* — nobody holds a handle to it — the paragraph below is how you find it
+  at all; that is the same duty reached by a different route, not a second one.)
 - **Never let its copy stand in for the change under review.** A file inside an isolated tree is not
   evidence of anything until you have applied it; cite `file:line` in the merge candidate, never in
   a copy.
@@ -1086,6 +1109,13 @@ two.** Step 5's `- Plan-gate:` line is written *at step 5*, which is **before** 
 between the two. So a single iteration commonly spans several appends; that is the intended shape,
 not drift.
 
+**`- Gate-round:` lines follow that rule too, and the close-record example below is a reading
+convenience, not their location.** Each is appended to its own gate's block as that round resolves;
+the example gathers them only so one fragment can show the whole shape. Writing them at step 12
+instead would mean reconstructing counts from memory for rounds that resolved before the last
+`/clear` — which is the failure the write-where-it-resolves rule exists to prevent, and the
+`- Budget:` line's `round-findings=` aggregate depends on those lines already being on disk.
+
 **Why the open record is a separate record and not a heading on the close record:** the two are
 written at different times *by different invocations of this skill*, and the whole point of the first
 is that it survives the loss of the second. A template that only shows the close record demands
@@ -1123,9 +1153,11 @@ by; omitting the record because there is no issue number is what would break it.
 - Hermetic: n/a: research route.
 - PR: #<pr> (chore scope). CI: green.
 - Code-review: 0 findings. Security: n/a (no deps added).
+- Gate-round: code-review round 1 — blocking=0 important=0 nit=0 · cost: deferred
+- Gate-round: ac-verify round 1 — blocking=0 important=0 nit=0 · cost: deferred
 - Restore: n/a: no mutation applied.
 - AC-verify: Class A 3/3 acceptance criteria met. Class B: mutation pass not due (research route).
-- Budget: subagent-runs=3 · gate-rounds=architect=0,code-review=1(correctness,robustness),ac-verify=1 · ac-findings=0 · mutation-survivors=n/a: research route · wall-clock=18m · tokens=deferred
+- Budget: subagent-runs=3 · gate-rounds=architect=0,code-review=1(correctness,robustness),ac-verify=1 · round-findings=code-review=0/0/0,ac-verify=0/0/0 · ac-findings=0 · mutation-survivors=n/a: research route · wall-clock=18m · tokens=deferred
 - Merged: squash #<pr>. Issue #<N> closed.
 - Next: #<M> now unblocked.
 ```
@@ -1246,7 +1278,40 @@ now settled in code instead of by instruction. Pinning this line's presence or s
 consistency check became possible with that producer; whether to do it is **#62's** call, not a
 claim this section makes on its behalf.
 
-The `- Budget:` line is the per-iteration cost record: a `·`-separated list of `name=value` **slots**.
+The **`- Gate-round:`** line records what a single gate round cost and found. One line **per round**,
+appended to that gate's decision block as the round resolves — not reconstructed at step 12, for the
+reason `- Plan-gate:` is written where its gate resolves: a `/clear` in between leaves a resuming
+orchestrator owing a number it has no evidence for, and the cheapest compliant line invents one.
+
+```
+- Gate-round: <gate> round <n> — blocking=<b> important=<i> nit=<t> · cost: <deferred|unknown>
+```
+
+**The severity vocabulary is closed at three** — `blocking`, `important`, `nit` — the first two being
+the words step 4 already uses for the concerns an architect pass returns. A finding that fits none of
+them is `important`; **do not add a fourth**, because a severity an agent can reach for is how the
+counts stop being comparable across rounds, and comparability is the entire purpose of the record.
+Counts are of findings the round **returned**, never of findings you accepted: a declined finding was
+still found, and a round that returned five and had four declined cost exactly what a round that
+returned five and had four adopted cost.
+
+**`cost:` takes exactly two readings and is NEVER omitted.**
+- **`cost: deferred`** — the round's spend is recoverable from the loop's own JSONL by the
+  out-of-band analyzer (`tokens=deferred`, below). This is the ordinary case, and it is written out
+  rather than left implicit.
+- **`cost: unknown`** — the round's spend is **not** recoverable: its subagent transcripts were
+  compacted away, the session was lost, or the round ran somewhere this loop cannot read back.
+
+**The two are not interchangeable, and collapsing them is the defect this line exists to prevent.**
+`deferred` says a producer exists and will fill it; `unknown` says none does. An omitted `cost:` is
+neither — it is a line that declines to say, and a human skimming a ledger for spend reads a missing
+cost as a cheap round. That is the same fail-open shape the `- Restore:` and `- Hermetic:` lines are
+enumerated against: **a slot whose only legal rendering asserts a benign value is a template that
+pressures you to assert one.**
+
+The `- Budget:` line is the per-iteration cost record — **and, per issue, the cost summary the ledger
+answers "what did this issue cost" from, without a transcript.** It is a `·`-separated list of
+`name=value` **slots**.
 
 It carries three different kinds of thing, and mixing them up is the standing confusion — **a count
 of how many times something ran** (`gate-rounds`), **a count of what was found** (the result-class
@@ -1335,11 +1400,28 @@ Fields:
   to measure this gate's efficacy read exactly that distinction off this slot.
 - **`wall-clock`** — elapsed time including human gate-wait; recorded for the dogfood corpus, **not
   a cap input** (an iteration that waited overnight for approval is not "expensive").
+- **`round-findings`** — the per-gate aggregate of this iteration's `- Gate-round:` lines, nested
+  exactly as `gate-rounds` is: `round-findings=code-review=0/3/2,ac-verify=1/0/0`, each triple being
+  **`blocking/important/nit`**. It answers a question `gate-rounds` cannot — *what did those rounds
+  find?* — and the pair together is what makes "was that round worth it" a number instead of a
+  recollection. Required whenever any gate ran a round. **It is an aggregate, never a substitute for
+  the per-round lines**: two rounds finding 1 blocking each and one round finding 2 sum identically,
+  and only the `- Gate-round:` lines tell them apart.
 - **`tokens=deferred`** — a reserved, named slot. Per-iteration token/cost is computed **post-hoc
   from the loop's own JSONL by an out-of-band analyzer** (the loop JSONL is a first-class corpus),
   not inside the skill (the orchestrator can't cleanly slice its live session mid-turn). A future
   SDK driver backfills it via usage callbacks — keeping the slot named now makes that a backfill,
-  not a format change.
+  not a format change. **Never write a token count the skill measured itself**: this slot's whole
+  point is that the orchestrator cannot measure its own spend, and a self-report here would be the
+  defect `subagent-runs` already demonstrates, where the ledger's own count has been found well
+  under the truth.
+
+  **`tokens=unknown` is the second legal value, and it is not a synonym for `deferred`.** Write it
+  when **any** `- Gate-round:` line in this iteration reads `cost: unknown` — because an aggregate
+  over an unknown is unknown. **Do not sum the recoverable rounds and present the result as the
+  iteration's cost**, which understates it by exactly the part nobody can see and does so in the
+  reassuring direction. The unrecoverable rounds stay individually visible on their own lines; this
+  slot only refuses to pretend the total is known.
 
 **Notes on any slot.** A short free-text parenthetical may follow **any** slot's value —
 `subagent-runs=4 (Explore map + architect + 2 finders)`,
@@ -1371,6 +1453,31 @@ same spine on each. Every slot beyond those four is
 slots without invalidating existing lines. One constraint on reading them: **an absent slot does not
 mean zero.** A missing `ac-findings` says nothing about how many findings there were; only
 `ac-findings=0` does — which is why a slot with no producing procedure is omitted rather than zeroed.
+
+**Four ways a slot can decline to carry a number, and they are NOT interchangeable.** They have
+accumulated one at a time and are reconciled here once, because two of them now meet on the same
+cell — `deferred` and `unknown` both sit on cost:
+
+| Reading | Means | Written as |
+|---|---|---|
+| **not due** | the slot's procedure exists and this row never triggered it | `n/a: <reason>` — visible, and carrying the reason |
+| **deferred** | a producer exists and **will** fill it later — today, the out-of-band analyzer | `deferred` |
+| **unknown** | **no** producer exists or the evidence is gone; nobody will ever fill it | `unknown` |
+| **omitted** | nothing produced the slot at all — chiefly a line written before the slot existed | absent |
+
+**For the cost slots, `unknown` is written explicitly and never left to omission.** Omission already
+*means* unknown by the rule above, so this is not a correction of the format — it is a
+**strengthening**, and the hazard it answers is a human one: someone skimming a ledger for spend
+reads a missing cost as a cheap round, not as an unmeasured one. Making the unknown visible costs one
+word and removes the only reading that flatters the run. The compacted rounds this repo has already
+lost are exactly this case.
+
+**Do not resolve `deferred` and `unknown` to each other in either direction.** Writing `deferred`
+where no transcript survives promises a backfill that will never arrive, and a later reader treats a
+permanent hole as a pending one. Writing `unknown` where the analyzer *can* still read the session
+throws away a number that costs nothing to recover. When you cannot tell which you have, it is
+`unknown` — the default-deny direction, since a hole wrongly marked permanent is found by looking,
+while one wrongly marked pending is waited on forever.
 Where a slot's procedure exists but was **not due** on this row, that is its own reading — write
 `n/a: <reason>` rather than omitting (`mutation-survivors` above is the worked instance; the
 spelling follows the Gate-outcome invariant's not-run vocabulary). So three states stay
@@ -1520,8 +1627,10 @@ failing the other.
    met/not-met with the file:line or test that satisfies it, citing only work that belongs to THIS
    change and never an unrelated pre-existing edit. Uncommitted work that implements a criterion IS
    valid evidence — diffing the working tree is the whole point; 'not yet committed' is never a
-   reason to call a criterion unmet. Verify the diff actually does this; do not assume. Return a
-   checklist + overall done/not-done."*
+   reason to call a criterion unmet. Verify the diff actually does this; do not assume. Produce the
+   complete verdict on EVERY criterion first, then deepen with whatever budget remains — never let
+   deepening stop you returning a verdict; a shallow verdict is useful, no verdict is worthless
+   (the Verdict-first invariant). Return a checklist + overall done/not-done."*
 2. For behavior that needs runtime proof, also run `VERIFY` (runs the app).
 3. `CODE_REVIEW` (step 8) provides the adversarial bug pass.
 Promote to a dedicated `ac-verifier` agent only if the composed approach proves too loose.
@@ -2187,6 +2296,9 @@ your *conclusions*, not the instructions the checker needs).
   3. that it **must say plainly when it cannot tell** — the rule making that a dirty result lives
      here, where the checker cannot see it, so an unprompted checker hedges and the gate reads
      clean.
+
+  It carries the **Verdict-first invariant** (Gates) as well: answer the question put to it first,
+  then deepen.
   **Why a read is a legitimate check here, when Part 2 says only mutation detects a survivor.**
   Two reasons, each from this engine's own text rather than from the cost of mutating: the defect
   is, in the quote's own words, *a property of the assertion* — so it is visible **in the
@@ -2211,7 +2323,8 @@ your *conclusions*, not the instructions the checker needs).
   `file:line`. **One lighter checker**, not a re-run of the full finder fan-out. But it reviews the
   change *as it now stands*, so **anything the fixes broke is in scope**: a defect the fix commits
   introduced is a finding even though no one listed it. "Lighter" bounds the fan-out, never the
-  checker's licence to object.
+  checker's licence to object. It carries the **Verdict-first invariant** (Gates) too: a verdict on
+  every claimed fix first, depth after.
 
 **The bound — one fresh re-check, then escalate; there is no ladder.** The fresh re-check **is**
 round 2 of the 2-round cap each gate already carries, never a round on top of it. If round 2 comes
@@ -2244,6 +2357,33 @@ records a re-check that did not happen** — the parent re-read its own work and
 finding and are actively fixing it — sharpest where one survived inside a commit **whose own subject
 line named the defect class**. The belief that produced it is what writes the fix. Vigilance is not
 a control, which is why the answer is a different checker rather than a more careful one.
+
+**Verdict-first invariant (a verdict before depth).** Applies to every gate that spawns an agent to
+produce a verdict. **That agent's prompt instructs it to produce a complete verdict covering every
+criterion first, then deepen with whatever budget remains — never letting deepening prevent it from
+returning a verdict.**
+
+**Why this is a rule rather than advice about prompting.** Under the Gate-outcome invariant a pass
+that returns no verdict is **not passed**. So an agent that spends its budget on depth and stops
+before answering has bought nothing: the gate is still owed a verdict, the whole pass is discarded,
+and the re-spawn pays full price a second time. A shallow verdict is useful; **no verdict is
+worthless and costs the same.** The failure is also invisible from inside the agent — depth feels
+like progress right up to the point the budget ends — which is why this belongs in the prompt and
+not in your judgement about how deep to let it go.
+
+**Two kinds of site carry it, and treating them alike defeats it.**
+- **Text handed to the agent verbatim** — the AC-verifier's `Prompt:` block (Part 1) above all.
+  That text reaches an agent which reads neither this section nor anything else in this file, so a
+  bare reference to this invariant **by name is inert there**. Such sites carry **the sentence
+  itself**, tagged with this invariant's name so the coupling stays visible to a later editor.
+- **Orchestrator-facing recipes** — the lists telling *you* what a spawn prompt must carry. Those
+  name the invariant; you resolve it when you compose the prompt.
+
+**A gate bound to a skill invoked by name is out of reach, and that is recorded, not papered over.**
+Where the binding is a skill or workflow this engine invokes by name rather than a prompt it
+composes — `SECURITY_REVIEW` is the standing case — there is no prompt surface to instruct, so this
+invariant cannot reach it. That is a property of the binding, and it is never a reason to journal
+the gate as covered by this invariant.
 
 **Convergence & the resting states.** When nothing is selectable, step 1 classifies the run
 into one of four outcomes (tested in order: hold → parked → complete → pending) and appends a

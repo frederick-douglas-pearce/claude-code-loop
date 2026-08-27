@@ -1358,6 +1358,194 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
                 )
 
 
+class VerdictFirstInvariantTests(unittest.TestCase):
+    """#119's Verdict-first invariant reaches its gates by NAME, at located sites.
+
+    The invariant is defined once, under Gates, and every gate that spawns an agent
+    to produce a verdict is supposed to pass it on. Two kinds of site carry it and
+    they fail differently, which is why both are checked:
+
+    * **Orchestrator-facing recipes** (step 4's architect invoke, step 6's hermetic
+      fresh read, step 8's finders, step 8's fresh re-check, the Class B limit-case
+      checker) name the invariant; the orchestrator resolves the name when it
+      composes the prompt. If a site loses the reference the orchestrator simply
+      stops passing it on -- silently, because the surrounding prose still reads
+      correctly and the gate still returns *something*.
+    * **Text handed to the agent verbatim** (the AC-verifier's Part 1 ``Prompt:``
+      block) is different in kind: that text reaches an agent which reads neither the
+      Gates section nor anything else in the engine, so a bare NAME there is inert.
+      That site has to carry the operative clause itself, which is what
+      ``test_the_verbatim_prompt_carries_the_clause_not_only_the_name`` pins.
+
+    The second case is the one worth stating plainly, because it is the failure the
+    design was changed to avoid: satisfy this invariant by writing "per the
+    Verdict-first invariant" into the ``Prompt:`` block and the instruction never
+    reaches the verifier at all -- the gate keeps running, the prose keeps reading
+    correctly, and the one agent the invariant was written for is the one agent that
+    never hears it.
+
+    **What this asserts is a string coupling, never a meaning** -- the ceiling
+    ``CLAUDE.md`` sets for a prose guard. It cannot tell whether the sentence is
+    *right*, whether an orchestrator actually pastes it, or whether a reworded clause
+    still means what it meant. A synchronized reword of both copies passes, and
+    should: that is not a defect.
+
+    **Anchored per region, never counted globally** -- the lesson
+    ``PlanGateFrozenBlockTests`` records. A total passes when one site drops the name
+    and another gains a spare mention, and a total cannot say *which* site went dark,
+    which is the only thing worth knowing here.
+    """
+
+    _NAME = "Verdict-first invariant"
+
+    # The clause the verbatim site must carry in full, pinned against the canonical
+    # definition so deleting it from EITHER copy fails. Deliberately a fragment, not
+    # the whole sentence: it has to survive ordinary re-punctuation without becoming
+    # so short that unrelated prose satisfies it.
+    _OPERATIVE = "then deepen with whatever budget remains"
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
+
+    def _engine(self) -> str:
+        return _ENGINE.read_text(encoding="utf-8")
+
+    def _span(self, text: str, start: str, end: str, label: str) -> str:
+        i = text.find(start)
+        self.assertNotEqual(
+            i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it."
+        )
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it."
+        )
+        return text[i:j]
+
+    def _canonical(self, text: str) -> str:
+        return self._span(
+            text,
+            "**Verdict-first invariant (a verdict before depth).**",
+            "**Convergence & the resting states.**",
+            "the canonical definition",
+        )
+
+    def _verbatim_prompt(self, text: str) -> str:
+        # The AC-verifier's Part 1 prompt specifically -- the one block whose text is
+        # handed to a subagent unedited.
+        return self._span(
+            text,
+            '   Prompt: *"Run the commands above yourself against base',
+            "2. For behavior that needs runtime proof, also run",
+            "the AC-verifier Part 1 verbatim prompt",
+        )
+
+    def _regions(self):
+        text = self._engine()
+        return {
+            "the canonical definition (Gates)": self._canonical(text),
+            "the AC-verifier Part 1 verbatim prompt": self._verbatim_prompt(text),
+            "step 4 (architect invoke site)": self._span(
+                text, "### 4. Architect gate", "### 5. Human gate", "step 4"
+            ),
+            "step 6 (hermetic fresh read)": self._span(
+                text,
+                "Whether the fix **preserved what the test asserts**",
+                "**A test added later re-arms the trigger.**",
+                "step 6 hermetic fresh read",
+            ),
+            "step 8 (the finder fan-out)": self._span(
+                text, "### 8. Code review", "### 9. Security review", "step 8"
+            ),
+            "the Class B limit-case checker": self._span(
+                text,
+                "- **Acceptance gate, Class B — the limit case needs its own recipe.**",
+                "- **Code review (step 8) — the change as it now stands",
+                "Class B limit-case checker",
+            ),
+            "step 8's fresh re-check recipe": self._span(
+                text,
+                "- **Code review (step 8) — the change as it now stands",
+                "**The bound — one fresh re-check",
+                "step 8 fresh re-check recipe",
+            ),
+        }
+
+    def test_the_span_anchors_actually_resolve(self) -> None:
+        # Liveness. Every assertion below is a containment check over a span; a span
+        # that silently came back empty would satisfy nothing and fail loudly, but a
+        # span that came back as the WHOLE FILE would satisfy everything and pass.
+        # Neither is a region, so bound them.
+        engine = self._engine()
+        for label, body in self._regions().items():
+            with self.subTest(region=label):
+                self.assertGreater(
+                    len(body), 80,
+                    f"the {label} region resolved to {len(body)} characters, which is "
+                    "too short to be that region -- the anchors have drifted.",
+                )
+                self.assertLess(
+                    len(body), len(engine) // 2,
+                    f"the {label} region resolved to {len(body)} characters, over half "
+                    "the engine. An over-wide span makes every check below vacuous: "
+                    "it would find the name somewhere else in the file and pass.",
+                )
+
+    def test_every_gate_that_spawns_a_verdict_agent_names_the_invariant(self) -> None:
+        name = self._normalize(self._NAME)
+        missing = sorted(
+            label
+            for label, body in self._regions().items()
+            if name not in self._normalize(body)
+        )
+        self.assertEqual(
+            missing,
+            [],
+            f"these region(s) of loop-engine.md no longer name the {self._NAME}: "
+            f"{missing}.\n\n"
+            "A MISMATCH IS SILENT. Each of these regions tells the orchestrator what "
+            "to put in a prompt it composes; a region that drops the reference simply "
+            "stops passing the instruction on, and the agent it spawns runs without "
+            "it. Nothing downstream can tell that apart from an agent that had it and "
+            "chose depth anyway -- the gate still returns something, or returns "
+            "nothing and reads as an ordinary failure.\n\n"
+            "Each region is checked SEPARATELY on purpose: a global count of the name "
+            "passes when one site loses it and another gains a spare mention. If you "
+            "renamed the invariant deliberately, rename it in EVERY region and update "
+            "_NAME. Never delete a region from _regions() to make this pass -- that "
+            "is the check agreeing to cover less.",
+        )
+
+    def test_the_verbatim_prompt_carries_the_clause_not_only_the_name(self) -> None:
+        # The name alone is INERT here, which is the whole reason this site is
+        # distinguished from the orchestrator-facing recipes above.
+        text = self._engine()
+        clause = self._normalize(self._OPERATIVE)
+        for label, body in (
+            ("the canonical definition (Gates)", self._canonical(text)),
+            ("the AC-verifier Part 1 verbatim prompt", self._verbatim_prompt(text)),
+        ):
+            with self.subTest(region=label):
+                self.assertIn(
+                    clause,
+                    self._normalize(body),
+                    f"{label} no longer carries the operative clause "
+                    f"{self._OPERATIVE!r}.\n\n"
+                    "The AC-verifier's Part 1 prompt is handed to a subagent VERBATIM. "
+                    "That agent reads neither the Gates section nor anything else in "
+                    "this engine, so a bare reference to the invariant by name does "
+                    "not reach it: the instruction silently does not exist for the "
+                    "one agent it was written for, while every word of the engine "
+                    "still reads correctly.\n\n"
+                    "The two copies are pinned against EACH OTHER, so deleting the "
+                    "clause from either end fails. A synchronized reword of both is "
+                    "fine and should update _OPERATIVE. Rewording only one is the "
+                    "drift this catches.",
+                )
+
+
 class ResumeHandoffPointerTests(unittest.TestCase):
     """#32's Resume hands its recovery procedure off to Part 2 by NAME.
 
