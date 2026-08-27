@@ -1703,8 +1703,10 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
     * **the Ledger format's ``- Code-review:`` paragraph** -- the human-readable
       record of what each round covered, which is what the currency argument is
       checked against at the merge gate. It is deliberately NOT parsed by any step:
-      an earlier draft made it a state store, and every finding that cost this
-      change its second and third review rounds descended from that.
+      an earlier draft made it a state store, and most of the findings that cost
+      this change its third review round descended from that. (No tally here --
+      an earlier draft of this very sentence claimed "every finding" across two
+      rounds and was falsified by this branch's own commit log.)
 
     **The failure this catches is a silent disagreement, not a missing sentence.**
     Revert one site to ``main...HEAD`` while the others still say
@@ -1741,8 +1743,9 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
       rounds that may predate a ``/clear``. It is a proposition, not a coupling, so
       nothing here reaches it; a reword defeats any literal that could;
     * whether a site names the range while exempting itself from using it;
-    * whether the escalation conditions still escalate, or have been inverted;
-    * whether the threshold is a sane number.
+    * whether the fallback conditions still fall back, or have been inverted;
+    * whether the known-vs-unknown boundary on a project's sensitive-path
+      declaration is drawn where the prose says it is.
 
     **Anchored per region, never counted globally** -- the lesson
     ``PlanGateFrozenBlockTests`` records. A global count of the notation passes when
@@ -1769,12 +1772,14 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
     # (start, end) anchors. Each span must be the passage that FIXES the range, not
     # merely a paragraph that mentions rounds.
     _REGIONS = {
-        # Narrowed to the BULLET RUN, not the whole scoping passage. The wider span
-        # also contained `git diff --numstat "<reviewed>..HEAD"` inside the fallback
-        # code fence, so the normative bullet could be reverted to `main...HEAD` while
-        # the illustrative line kept the containment check green -- the within-region
-        # form of the spare-mention defeat PlanGateFrozenBlockTests records. Do not
-        # widen this back to the section: an example is not a specification.
+        # Narrowed to the BULLET RUN, not the whole scoping passage, so the span
+        # holds the sentence that FIXES the range and nothing that merely mentions
+        # it. Widening it back sweeps in the currency paragraph's own
+        # `<reviewed>..HEAD`, and the normative bullet could then be reverted to
+        # `main...HEAD` with the containment check still green -- the within-region
+        # form of the spare-mention defeat PlanGateFrozenBlockTests records. (The
+        # original offender was a `git diff --numstat` example since deleted; the
+        # hazard outlived it, which is the point.) Do not widen this back.
         "step 8's scoping rule": (
             "- **Round 1 is unscoped.**",
             "**The anchor is owed by every round after the first",

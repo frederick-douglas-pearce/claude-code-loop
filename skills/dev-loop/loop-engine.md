@@ -667,7 +667,7 @@ escalate instead is the Gate-outcome invariant's currency clause to decide — r
 not paraphrase it from here**; it turns on whether a round is actually left, which this step cannot
 see. What *this* step fixes is narrower: wherever a round after the first does run, it needs an
 anchor, and one computing its delta from the wrong anchor, or from none, **under-reviews in
-silence** — the failure the currency clause exists to prevent. **Where no anchor is recoverable or
+silence** — the failure the currency clause exists to prevent. **Where no anchor is available or
 trustworthy, the round is FULL.** Default-deny: the anchor buys a saving, and an unavailable saving
 is never a reason to review less.
 
@@ -688,8 +688,8 @@ not "escalate": this branch runs the round *unscoped*; it does not hand off to t
    refuses ("never read an empty diff as 'nothing to object to'"). **Confirm first that the fixes
    were committed** — this step requires that before the round is spawned, and an uncommitted fix is
    the likelier cause. Once they are, an empty delta means nothing was fixed, and the round runs
-   **full** rather than certifying an absence. (Like the other two, this branch runs the round
-   unscoped; it does not hand off.)
+   **full** rather than certifying an absence. (Like the condition above, this branch runs the
+   round unscoped; it does not hand off.)
 
 **Any unknown makes the round FULL. This list is sufficient, not exhaustive, and it is deliberately
 not a list of the safe states:** the project's sensitive-path declaration is missing, `TODO`-valued
@@ -2386,8 +2386,8 @@ your *conclusions*, not the instructions the checker needs).
   instruction to give it, not diligence to hope for.** Tell it to **read the definition of any
   symbol the delta references but does not itself contain.** A fix whose correctness turns on
   earlier-read code unchanged since `<reviewed>` is the other thing the delta genuinely does not
-  show; step 8's fallback conditions do not catch it, because such a fix is typically small and
-  touches no sensitive path.
+  show; step 8's fallback conditions do not catch it, because such a fix touches no sensitive
+  path.
 
 **The bound — one fresh re-check, then escalate; there is no ladder.** The fresh re-check **is**
 round 2 of the 2-round cap each gate already carries, never a round on top of it. If round 2 comes
