@@ -2386,8 +2386,8 @@ your *conclusions*, not the instructions the checker needs).
   instruction to give it, not diligence to hope for.** Tell it to **read the definition of any
   symbol the delta references but does not itself contain.** A fix whose correctness turns on
   earlier-read code unchanged since `<reviewed>` is the other thing the delta genuinely does not
-  show; step 8's fallback conditions do not catch it, because such a fix touches no sensitive
-  path.
+  show; step 8's fallback conditions need not catch it — such a fix need not touch a sensitive
+  path, and nothing else in that list keys on it.
 
 **The bound — one fresh re-check, then escalate; there is no ladder.** The fresh re-check **is**
 round 2 of the 2-round cap each gate already carries, never a round on top of it. If round 2 comes
