@@ -610,7 +610,12 @@ production-readiness — overlap far less than repeated passes of the same one, 
 review misses most of what a diff carries. Scale the count with the surface: one light pass on
 `docs`, more when the diff touches a production or public-API path.
 
-Implement viable findings; decline others with a one-line rationale; then **commit the fixes** and
+Implement viable findings; decline others with a one-line rationale — **and record each decline,
+with that rationale, in the gate-decision block where this round resolves** (Ledger format →
+progress.md), exactly as an architect decline is recorded in the plan text. A later round is
+*required* to receive the declines (Gates), and a decline is the one outcome that leaves **no trace
+in the diff** for that round to recover it from: unrecorded, it is invisible to every subsequent
+fresh instance. Then **commit the fixes** and
 **verify recs were applied — by a fresh checker, never by yourself.** If you *delegated* any fix,
 that agent wrote to its own copy: collect the diff, apply it, and **remove the copy before you
 commit** (Execution policy, Tool surface) — directing a fix is authorship, and it is also the one
@@ -682,8 +687,11 @@ not "escalate": this branch runs the round *unscoped*; it does not hand off to t
    delta that no round had yet seen.
 3. **The delta is empty.** A round handed nothing to read reports nothing and comes back clean —
    a pass manufactured out of an absent input, which is the shape the AC-verifier's Part 1 already
-   refuses ("never read an empty diff as 'nothing to object to'"). Either the fixes were never
-   committed or nothing was fixed; both are for a human to see, not for a round to certify around.
+   refuses ("never read an empty diff as 'nothing to object to'"). **Confirm first that the fixes
+   were committed** — this step requires that before the round is spawned, and an uncommitted fix is
+   the likelier cause. Once they are, an empty delta means nothing was fixed, and the round runs
+   **full** rather than certifying an absence. (Like the other two, this branch runs the round
+   unscoped; it does not hand off.)
 
 **Any unknown makes the round FULL. This list is sufficient, not exhaustive, and it is deliberately
 not a list of the safe states:** you cannot tell which files are product; the project declares no
@@ -1331,11 +1339,16 @@ iteration therefore appends the element in the gate-decision block where that ro
 line. Each element takes one of three spellings — enumerated for the same reason `- Hermetic:` and
 `- Restore:` enumerate theirs, that a shape whose only legal rendering asserts a scoped round is a
 template that pressures you to record one:
+**Elements are separated by `;`, and within an element the range is split from the result on the
+FIRST ` — `** — the same first-delimiter rule the `- Budget:` line uses to split a slot from its
+value, and it exists here for the same reason: a result may itself contain a dash, and this line is
+no longer only prose a human reads. Step 8 parses it to recover the anchor.
+
 - **`round <n> (main...<sha>) — <result>`** — an **unscoped** round: round 1 always, and any later
-  round that fell back to full. Where it is a *fallback*, name the reason in the result — `round 2
-  (main...9f3c1ab) — fell back to full: no sensitive-path declaration — 2 findings` — or the line
-  cannot distinguish a scoped round from one that declined to scope, which is the saving silently
-  not happening.
+  round that fell back to full. Where it is a *fallback*, name the reason first in the result —
+  `round 1 (main...9f3c1ab) — 0 findings; round 2 (main...a18061d) — fell back to full, no
+  sensitive-path declaration: 2 findings` — or the line cannot distinguish a scoped round from one
+  that declined to scope, which is the saving silently not happening.
 - **`round <n> (<sha>..<head>) — <result>`** — a **scoped** round, reading only what the previous
   round did not.
 - **`round <n> — no verdict`** — the round produced none; a `- gate-fallback:` or `- gate-error:`
