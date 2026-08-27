@@ -652,11 +652,14 @@ suppressed.
 - **A later round reads `<reviewed>..HEAD`**, plus the previous round's findings **and the ones it
   declined**, and one narrowed question. Its full input recipe is under Gates (Fresh-re-check
   invariant → the code-review bullet); do not restate it here.
-- **The anchor is this row's, and it is validated before use.** Read it from the `- Code-review:`
-  element recorded for **this issue's own** iteration — never by grepping the journal for the most
-  recent one, which is a real SHA that resolves and belongs to another branch. Then confirm it
-  describes this history: `git merge-base --is-ancestor <reviewed> HEAD` must succeed, or a rebase,
-  amend or force-push has moved the ground under it and the round is FULL.
+- **The anchor is the one you hold, and it is validated before use.** It is the head you recorded
+  when you spawned the previous round, in this invocation. **Do not reconstruct it by reading the
+  journal back** — the ledger records it for a later *reader*, not for a parser, and a journal
+  scanned for "the most recent SHA" yields one that resolves and belongs to another branch. Where
+  you do not hold one — a resumed iteration, most often — the round is FULL; that is the whole
+  fallback, and it costs a round's saving rather than a round's coverage. Where you do hold one,
+  confirm it still describes this history: `git merge-base --is-ancestor <reviewed> HEAD` must
+  succeed, or a rebase, amend or force-push has moved the ground under it and the round is FULL.
 
 **The anchor is owed by every round after the first, not only this step's own round 2.** This gate
 can be re-armed from *outside* this step. **Which re-arms are owned by step 8's budget and which
@@ -670,22 +673,17 @@ is never a reason to review less.
 
 **Fall back to a full round — mechanically, default-deny — when any of these fires.** ("Fall back",
 not "escalate": this branch runs the round *unscoped*; it does not hand off to the human.)
-1. **The delta is not worth scoping**: its change to **product** files is at least half that of the
-   whole change as it now stands. Below that, scoping is most of the saving; at or above it there is
-   little left to save. This is a **worth-scoping** test and makes **no claim about risk**. Read both
-   figures rather than estimating them — changed lines are added-plus-deleted, over product files
-   only. Note what the second command is and is not: it is the whole change *as it now stands*, not
-   what round 1 read (round 1 read `main...<reviewed>`, which no longer bounds the branch).
-   ```bash
-   git diff --numstat "<reviewed>..HEAD"   # the delta this round would read
-   git diff --numstat main...HEAD          # the whole change as it now stands
-   ```
-   Where the second figure is zero there is nothing to take half of, and the round is FULL.
-2. **A fix touched a path the project's security routing declares sensitive** (`loop.config.md`,
-   step 9). This is the **risk** test, and it is the only one of the two that is about risk. **Never
-   read a small delta as a low-risk one** — the defect that motivated this rule lived in a 21-line
-   delta that no round had yet seen.
-3. **The delta is empty.** A round handed nothing to read reports nothing and comes back clean —
+1. **A fix touched a path the project's security routing declares sensitive** (`loop.config.md`,
+   step 9). This is the **risk** test. **Never read a small delta as a low-risk one** — the defect
+   that motivated this rule lived in a 21-line delta that no round had yet seen; size and risk are
+   unrelated, which is why no size test appears in this list.
+   **Distinguish a declaration that does not match from a declaration that is not there.** A
+   present, path-shaped declaration that simply does not cover this diff is a **known** answer — no
+   sensitive path was touched, and the round may scope. Only a **missing, `TODO`-valued or
+   non-path-shaped** declaration is unknown, and unknown is a full round. Reading a non-match as
+   unknown would send every round to full in any project whose sensitive surface is narrow, which is
+   most of them.
+2. **The delta is empty.** A round handed nothing to read reports nothing and comes back clean —
    a pass manufactured out of an absent input, which is the shape the AC-verifier's Part 1 already
    refuses ("never read an empty diff as 'nothing to object to'"). **Confirm first that the fixes
    were committed** — this step requires that before the round is spawned, and an uncommitted fix is
@@ -694,24 +692,11 @@ not "escalate": this branch runs the round *unscoped*; it does not hand off to t
    unscoped; it does not hand off.)
 
 **Any unknown makes the round FULL. This list is sufficient, not exhaustive, and it is deliberately
-not a list of the safe states:** you cannot tell which files are product; the project declares no
-sensitive paths, or its declaration is `TODO`-valued or not path-shaped; the anchor is missing,
-untrusted, or not an ancestor of `HEAD`; a range will not resolve. **An absent declaration is
-unknown, and unknown is a full round — never "the condition did not fire"**, which is the fail-open
-reading the Gate-outcome invariant already refuses for `HERMETIC_TEST_CMD`. If you are unsure
-whether some state belongs on this list, it does.
-
-**"Product" is a role, not a file extension — and this engine does not assume your project has
-declared the difference.** Where `SOURCE_LAYOUT` distinguishes product from non-product, that is
-where the line is drawn. Where it carries only *route* signals — which is all the `/init-loop`
-skeleton asks a project for — **nothing here classifies your files, so every round is full** until
-the project declares it. That inertness is the honest outcome and is preferable to the one
-substitution that must never be made: in a project whose deliverable is agent-executed markdown an
-engine rewrite **is** product and a `README` edit is not, so an extension test gets exactly that case
-backwards, classifying the rewrite as doc and never falling back. The threshold above lives **here,
-in this engine**, deliberately and not in a per-project binding: it is a default that errs toward
-over-gating, and a wrong default in a file a release can reach is corrected by the next release,
-where the same number written into a generated config would sit unreachable in consumer trees.
+not a list of the safe states:** the project's sensitive-path declaration is missing, `TODO`-valued
+or not path-shaped; the anchor is missing, untrusted, or not an ancestor of `HEAD`; a range will not
+resolve. **An absent declaration is unknown, and unknown is a full round — never "the condition did
+not fire"**, which is the fail-open reading the Gate-outcome invariant already refuses for
+`HERMETIC_TEST_CMD`. If you are unsure whether some state belongs on this list, it does.
 
 **Currency is preserved, and a scoped round is not a substitute for a full one.** A later round runs
 on `HEAD` and certifies `HEAD`, as any round does — **the delta bounds what it re-certifies, never
@@ -1324,31 +1309,26 @@ Never fold this into `mutation-survivors`. That slot's `n/a` list is closed at t
 hermetic result is a different question from whether a guard guards.
 
 The **`- Code-review:`** line names **the commit range each round read**, one element per round,
-alongside that round's result. Two things depend on it and neither is recoverable without it: a
-later reader cannot otherwise tell **what a verdict covers**, which is the question the currency
-clause turns on and the thing a merge gate has to weigh; and each element is where that round's
-`<reviewed>` anchor **persists**, since state lives in the ledger rather than in context.
+alongside that round's result. It is what lets a later reader tell **what a verdict covers** —
+the question the currency clause turns on and the thing a merge gate has to weigh. **It is a record
+for a reader, not a store a later step parses**: the orchestrator holds the anchor in context for as
+long as it can use it, and a round that no longer holds one runs full (step 8), so nothing reads
+this line back and no grammar is imposed on it.
 
-**Write each element when its round resolves — not at step 12**, for exactly the reason the
-`- Plan-gate:` line is written at step 5. A round's anchor is read back by the *next* round, so an
-element deferred to the close record is written after the only thing that consumes it: a `/clear`
-between two rounds would find nothing on disk, the anchor would be unrecoverable, and every resumed
-round would silently take step 8's full fallback while this paragraph claimed otherwise. The
-iteration therefore appends the element in the gate-decision block where that round resolves
-(`progress.md` licenses one block per gate decision), and the close record carries the accumulated
-line. Each element takes one of three spellings — enumerated for the same reason `- Hermetic:` and
-`- Restore:` enumerate theirs, that a shape whose only legal rendering asserts a scoped round is a
-template that pressures you to record one:
-**Elements are separated by `;`, and within an element the range is split from the result on the
-FIRST ` — `** — the same first-delimiter rule the `- Budget:` line uses to split a slot from its
-value, and it exists here for the same reason: a result may itself contain a dash, and this line is
-no longer only prose a human reads. Step 8 parses it to recover the anchor.
+**Write each element when its round resolves — not at step 12**, for the reason the `- Plan-gate:`
+line is written at step 5: an append-only journal records what happened when it happened, and a
+record reconstructed at the end of an iteration is written by whoever survived it, from memory,
+about rounds that may have run before a `/clear`. The iteration appends the element in the
+gate-decision block where that round resolves (`progress.md` licenses one block per gate decision),
+and the close record carries the accumulated line. Each element takes one of three shapes —
+enumerated for the same reason `- Hermetic:` and `- Restore:` enumerate theirs, that a shape whose
+only legal rendering asserts a scoped round is a template that pressures you to record one:
 
 - **`round <n> (main...<sha>) — <result>`** — an **unscoped** round: round 1 always, and any later
-  round that fell back to full. Where it is a *fallback*, name the reason first in the result —
-  `round 1 (main...9f3c1ab) — 0 findings; round 2 (main...a18061d) — fell back to full, no
-  sensitive-path declaration: 2 findings` — or the line cannot distinguish a scoped round from one
-  that declined to scope, which is the saving silently not happening.
+  round that fell back to full. Where it is a *fallback*, **name the reason** — `round 2
+  (main...a18061d) — fell back to full (no sensitive-path declaration), 2 findings` — or the line
+  cannot distinguish a scoped round from one that declined to scope, which is the saving silently
+  not happening.
 - **`round <n> (<sha>..<head>) — <result>`** — a **scoped** round, reading only what the previous
   round did not.
 - **`round <n> — no verdict`** — the round produced none; a `- gate-fallback:` or `- gate-error:`

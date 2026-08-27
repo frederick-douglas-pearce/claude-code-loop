@@ -1700,9 +1700,11 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
     * **step 8's three-bases aside** -- the opener's parenthetical, which names
       round 1's base, a later round's, and step 10's, and forbids "fixing" one to
       match another;
-    * **the Ledger format's ``- Code-review:`` paragraph** -- where each round's
-      anchor persists across ``/clear``, which is what step 8's full fallback
-      ("no recoverable anchor => the round is FULL") is the alternative to.
+    * **the Ledger format's ``- Code-review:`` paragraph** -- the human-readable
+      record of what each round covered, which is what the currency argument is
+      checked against at the merge gate. It is deliberately NOT parsed by any step:
+      an earlier draft made it a state store, and every finding that cost this
+      change its second and third review rounds descended from that.
 
     **The failure this catches is a silent disagreement, not a missing sentence.**
     Revert one site to ``main...HEAD`` while the others still say
@@ -1733,11 +1735,11 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
     So what review owns, because this test provably cannot:
 
     * whether round 1 is still specified as unscoped, or has been quietly narrowed;
-    * **whether the ledger paragraph still fixes a WRITE-TIME for each element.** This
-      is load-bearing -- an element deferred to the close record is written after the
-      round that consumes it, so the anchor is never recoverable and scoping silently
-      never happens -- and it is a proposition, not a coupling, so nothing here
-      reaches it; a reword defeats any literal that could;
+    * **whether the ledger paragraph still fixes a WRITE-TIME for each element** --
+      an append-only journal is only a record of what happened if it is written when
+      it happens, and a line reconstructed at step 12 is written from memory about
+      rounds that may predate a ``/clear``. It is a proposition, not a coupling, so
+      nothing here reaches it; a reword defeats any literal that could;
     * whether a site names the range while exempting itself from using it;
     * whether the escalation conditions still escalate, or have been inverted;
     * whether the threshold is a sane number.
