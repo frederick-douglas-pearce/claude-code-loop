@@ -1399,22 +1399,50 @@ class VerdictFirstInvariantTests(unittest.TestCase):
     ``PlanGateFrozenBlockTests`` records. A total passes when one site drops the name
     and another gains a spare mention, and a total cannot say *which* site went dark.
 
-    Regions are kept tight -- the paragraph that carries the reference, not the whole
-    pipeline step -- so that relocating the reference out of the recipe and into some
-    unrelated aside in the same step is caught rather than tolerated. No region's
-    START anchor may contain the invariant's name, or that region's subtest would be
-    unfalsifiable; ``test_no_region_is_satisfied_by_its_own_anchor`` enforces it.
+    Regions are scoped to the run of paragraphs carrying the reference rather than to
+    the whole pipeline step, which narrows how far the name can drift and still
+    satisfy the check. **It does not close that gap and this docstring must not say
+    it does.** An earlier draft claimed relocating the reference into an unrelated
+    aside in the same step was "caught rather than tolerated"; the acceptance gate's
+    mutation pass falsified it -- deleting the instruction and leaving a plausible
+    in-place exemption that still names the invariant passes green at every one of
+    the recipe sites. ``assertIn(name, region)`` cannot distinguish "the recipe
+    instructs X" from "the recipe says X does not apply here", and no amount of
+    tightening changes that.
+
+    No region's START anchor may contain the invariant's name, or that region's
+    subtest would be unfalsifiable; ``test_no_region_is_satisfied_by_its_own_anchor``
+    enforces that over ``_REFERENCE_REGIONS`` **and** the verbatim region, which is
+    every region ``_regions()`` returns.
+
+    **What review owns, because this test provably cannot.** Per ``CLAUDE.md``'s
+    ruling on prose guards, polarity is not reachable here and trying to reach it is
+    the displacement loop, not a gap someone forgot:
+
+    * whether a site's instruction *says* verdict-first or its opposite;
+    * whether a site exempts itself while still naming the invariant;
+    * whether the canonical definition still asserts the rule, or has demoted the
+      pinned clause to a historical aside.
+
+    All three were demonstrated as surviving mutations at this change's own
+    acceptance gate and are recorded here rather than chased with a broader literal.
     """
 
     _NAME = "Verdict-first invariant"
 
-    # The clause the verbatim site must carry in full. It INCLUDES the ordering token
-    # ("first, then deepen"), and that is the whole point: the invariant is *verdict
-    # before depth*, so a fragment starting at "then deepen" would be satisfied by an
-    # instruction that inverted the rule -- "start with the riskiest criterion and
-    # then deepen with whatever budget remains" -- which is depth-first wearing the
-    # invariant's words. Pinned in both the canonical definition and the verbatim
-    # copy, so deleting it from either end fails.
+    # The clause the verbatim site must carry in full, pinned in both the canonical
+    # definition and the verbatim copy so deleting it from either end fails.
+    #
+    # It includes the ordering token ("first, then"), which raised the bar and did
+    # NOT close it -- do not read the token as a polarity guard. The acceptance
+    # gate's mutation pass demonstrated the boundary with a paired probe:
+    #   "start with the riskiest criterion AND THEN deepen ..."  -> killed
+    #   "start with the riskiest criterion FIRST, THEN deepen ..." -> SURVIVED
+    # Same inversion, one word apart. The pin covers everything after "first,"; what
+    # must be complete first is the whole content of the invariant, and it sits
+    # before the pin. Extending this literal to swallow that variant would enumerate
+    # the phrasings an author happened to think of, which is the ALLOWED_NON_BINDINGS
+    # shape CLAUDE.md forbids. Polarity is review's; see the class docstring.
     _OPERATIVE = "first, then deepen with whatever budget remains"
 
     # (start, end) anchors. Each span must be the paragraph carrying the reference.
@@ -1505,7 +1533,9 @@ class VerdictFirstInvariantTests(unittest.TestCase):
         # A start anchor containing _NAME makes that region's subtest unfalsifiable:
         # the span always begins with the string being asserted. An earlier draft
         # shipped exactly that for the canonical definition.
-        for label, (start, end) in self._REFERENCE_REGIONS.items():
+        pairs = dict(self._REFERENCE_REGIONS)
+        pairs["the AC-verifier Part 1 verbatim prompt"] = self._VERBATIM
+        for label, (start, end) in pairs.items():
             with self.subTest(region=label):
                 for which, anchor in (("start", start), ("end", end)):
                     self.assertNotIn(

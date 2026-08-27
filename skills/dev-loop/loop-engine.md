@@ -1732,10 +1732,12 @@ be written to disk and then executed; sourcing one from untrusted input hands th
 confining paths to `--root` does not contain it.
 
 **Whichever agent you spawn here, instruct it verdict-first** (Verdict-first invariant, under
-Gates): the Class B verdict on every mutation the spec declares first, then depth. This is the gate
-the invariant's own source incident happened at — a verifier that spent its whole budget building
-mutation scaffolding and returned no verdict at all — so it is the last place depth may be allowed to
-crowd out the answer.
+Gates): the Class B verdict on every mutation the spec declares first, then depth. **The invariant's
+source incident is this part's own hazard, and it is worth naming precisely rather than loosely:** an
+acceptance-gate verifier spent its whole budget *building mutation scaffolding* — this part's work —
+and returned no verdict at all, including on the Part 1 criteria it also owed. Scaffolding is
+absorbing in a way answering is not, so this is the last place depth may be allowed to crowd out the
+answer.
 
 **The actor split.** The verifier **selects** the mutations and **judges** the results; the parent
 **applies** them — under isolation, by running the harness against the agent's copy. Each role
