@@ -1465,10 +1465,10 @@ class VerdictFirstInvariantTests(unittest.TestCase):
         ),
         "the Class B limit-case checker": (
             "- **Acceptance gate, Class B \u2014 the limit case needs its own recipe.**",
-            "- **Code review (step 8) \u2014 the change as it now stands",
+            "- **Code review (step 8) \u2014 the previous round's findings",
         ),
         "step 8's fresh re-check recipe": (
-            "- **Code review (step 8) \u2014 the change as it now stands",
+            "- **Code review (step 8) \u2014 the previous round's findings",
             "**The bound \u2014 one fresh re-check",
         ),
         "AC-verifier Part 2 (the mutating agent)": (
@@ -1686,6 +1686,183 @@ class ResumeHandoffPointerTests(unittest.TestCase):
                     "reading correctly. Re-point both ends together; do not drop a "
                     "region to make this pass.",
                 )
+
+
+class DeltaScopedRoundNotationTests(unittest.TestCase):
+    """#120's delta-scoped rounds name the SAME range at every site that fixes it.
+
+    Two sites specify what a code-review round after the first reads, and a third
+    is where the range it was scoped to is written down:
+
+    * **step 8's scoping rule** -- the pipeline text an orchestrator executes;
+    * **the Fresh-re-check invariant's code-review bullet** (under Gates) -- the
+      input recipe step 8 explicitly delegates to rather than restating;
+    * **the Ledger format's ``- Code-review:`` paragraph** -- where the anchor
+      persists across ``/clear``, which is what makes step 8's default-deny
+      ("no recoverable anchor => the round is FULL") reachable rather than notional.
+
+    **The failure this catches is a silent disagreement, not a missing sentence.**
+    Revert step 8 to ``main...HEAD`` while the Gates recipe still says
+    ``<certified>..HEAD`` and every word of both still reads correctly -- the
+    orchestrator follows one of them, the gate returns a verdict either way, and
+    nothing downstream can tell which range was actually read. The same holds if the
+    ledger paragraph drops the notation: the anchor stops being written, every
+    resumed round quietly falls back to full, and the only evidence is a saving that
+    stopped happening.
+
+    **This asserts a coupling's identity, never a proposition's truth** -- the
+    ceiling ``CLAUDE.md`` sets for a prose guard, and the reason no attempt is made
+    here to pin the POLARITY of "round 1 is unscoped". That class is ruled
+    unreachable after four defeats, the fourth at #119's own acceptance gate, and
+    re-attempting it is the displacement loop rather than a gap someone forgot.
+
+    So what review owns, because this test provably cannot:
+
+    * whether round 1 is still specified as unscoped, or has been quietly narrowed;
+    * whether a site names the range while exempting itself from using it;
+    * whether the escalation conditions still escalate, or have been inverted;
+    * whether the threshold is a sane number.
+
+    **Anchored per region, never counted globally** -- the lesson
+    ``PlanGateFrozenBlockTests`` records. A global count of the notation passes when
+    one site drops it and another gains a spare mention, and cannot say which site
+    went dark.
+    """
+
+    # The range notation every site must name. Deliberately the literal token rather
+    # than a pattern over "some range": a pattern matching `<anything>..HEAD` would
+    # be satisfied by `main..HEAD`, which is the mutation this exists to catch.
+    _NOTATION = "<certified>..HEAD"
+
+    # The ledger paragraph names the anchor but not the ..HEAD form -- it records a
+    # closed range against the head a round ran on, not an open one. Pinned
+    # separately for that reason; sharing one constant would force a spelling on it
+    # that is wrong there.
+    _ANCHOR = "<certified>"
+
+    # (start, end) anchors. Each span must be the passage that FIXES the range, not
+    # merely a paragraph that mentions rounds.
+    _REGIONS = {
+        "step 8's scoping rule": (
+            "**Round 1 reads the whole change;",
+            "**Currency is preserved, and a scoped round is not a substitute",
+        ),
+        "the Fresh-re-check code-review recipe (Gates)": (
+            "- **Code review (step 8) \u2014 the previous round's findings",
+            "**The bound \u2014 one fresh re-check",
+        ),
+    }
+
+    _LEDGER_REGION = (
+        "The **`- Code-review:`** line names",
+        "The **`- Restore:`** line records",
+    )
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
+
+    def _engine(self) -> str:
+        return _ENGINE.read_text(encoding="utf-8")
+
+    def _span(self, text: str, start: str, end: str, label: str) -> str:
+        # A duplicated START anchor fails OPEN: `find` takes the first occurrence, so
+        # the span can widen past this region and satisfy the containment check on a
+        # neighbour's text. Assert uniqueness rather than bounding the width, which
+        # cannot tell a long region from a runaway one.
+        self.assertEqual(
+            text.count(start), 1,
+            f"the start anchor for the {label} region occurs {text.count(start)} "
+            f"times in loop-engine.md ({start!r}); it must occur exactly once.",
+        )
+        i = text.find(start)
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it.",
+        )
+        return text[i:j]
+
+    def _regions(self):
+        text = self._engine()
+        return {
+            label: self._span(text, a, b, label)
+            for label, (a, b) in self._REGIONS.items()
+        }
+
+    def test_no_region_is_satisfied_by_its_own_anchor(self) -> None:
+        # An anchor containing the notation makes that region's check unfalsifiable.
+        pairs = dict(self._REGIONS)
+        pairs["the ledger's - Code-review: paragraph"] = self._LEDGER_REGION
+        for label, (start, end) in pairs.items():
+            with self.subTest(region=label):
+                for which, anchor in (("start", start), ("end", end)):
+                    self.assertNotIn(
+                        self._ANCHOR, anchor,
+                        f"the {which} anchor for {label} contains {self._ANCHOR!r}, so "
+                        "that region's containment check can never fail. Re-anchor it "
+                        "on text that does not carry the notation.",
+                    )
+
+    def test_the_span_anchors_actually_resolve(self) -> None:
+        regions = dict(self._regions())
+        regions["the ledger's - Code-review: paragraph"] = self._span(
+            self._engine(), *self._LEDGER_REGION,
+            "the ledger's - Code-review: paragraph",
+        )
+        for label, body in regions.items():
+            with self.subTest(region=label):
+                self.assertGreater(
+                    len(body), 80,
+                    f"the {label} region resolved to {len(body)} characters, which is "
+                    "too short to be that region -- the anchors have drifted.",
+                )
+
+    def test_each_site_that_fixes_the_range_names_the_same_one(self) -> None:
+        notation = self._normalize(self._NOTATION)
+        missing = sorted(
+            label
+            for label, body in self._regions().items()
+            if notation not in self._normalize(body)
+        )
+        self.assertEqual(
+            missing,
+            [],
+            f"these region(s) of loop-engine.md no longer name {self._NOTATION!r}: "
+            f"{missing}.\n\n"
+            "A MISMATCH IS SILENT. Step 8 and the Gates recipe both fix what a round "
+            "after the first reads; if one reverts to the full `main...HEAD` while "
+            "the other stays scoped, both still read correctly, the gate still "
+            "returns a verdict, and nothing downstream records which range was "
+            "actually read.\n\n"
+            "Each region is checked SEPARATELY: a global count passes when one site "
+            "drops the notation and another gains a spare mention. If you changed the "
+            "notation deliberately, change it in EVERY region and update _NOTATION. "
+            "Never delete a region from _REGIONS to make this pass -- that is the "
+            "check agreeing to cover less.",
+        )
+
+    def test_the_ledger_line_carries_the_anchor_it_is_the_persistence_for(self) -> None:
+        # Distinct failure from the one above, which is why it is its own test. The
+        # two engine sites can agree perfectly while the ledger paragraph stops
+        # naming the anchor -- and then nothing writes it down, every resumed round
+        # takes step 8's default-deny full path, and the only symptom is a saving
+        # that silently stopped.
+        body = self._span(
+            self._engine(), *self._LEDGER_REGION,
+            "the ledger's - Code-review: paragraph",
+        )
+        self.assertIn(
+            self._normalize(self._ANCHOR),
+            self._normalize(body),
+            "the Ledger format's `- Code-review:` paragraph no longer names "
+            f"{self._ANCHOR!r}.\n\n"
+            "That paragraph is where the anchor PERSISTS across /clear -- state "
+            "lives in the ledger, not in context. Step 8 tells the orchestrator to "
+            "write the anchor to this line and to run a FULL round when it cannot "
+            "read one back. Drop it here and the fallback becomes the only path, "
+            "silently.",
+        )
 
 
 class CurrencyExemptionAgreementTests(unittest.TestCase):
