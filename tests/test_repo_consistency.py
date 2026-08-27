@@ -1691,34 +1691,53 @@ class ResumeHandoffPointerTests(unittest.TestCase):
 class DeltaScopedRoundNotationTests(unittest.TestCase):
     """#120's delta-scoped rounds name the SAME range at every site that fixes it.
 
-    Two sites specify what a code-review round after the first reads, and a third
-    is where the range it was scoped to is written down:
+    Three sites specify what a code-review round after the first reads, and a fourth
+    is where the range it read is written down:
 
     * **step 8's scoping rule** -- the pipeline text an orchestrator executes;
     * **the Fresh-re-check invariant's code-review bullet** (under Gates) -- the
       input recipe step 8 explicitly delegates to rather than restating;
-    * **the Ledger format's ``- Code-review:`` paragraph** -- where the anchor
-      persists across ``/clear``, which is what makes step 8's default-deny
-      ("no recoverable anchor => the round is FULL") reachable rather than notional.
+    * **step 8's three-bases aside** -- the opener's parenthetical, which names
+      round 1's base, a later round's, and step 10's, and forbids "fixing" one to
+      match another;
+    * **the Ledger format's ``- Code-review:`` paragraph** -- where each round's
+      anchor persists across ``/clear``, which is what step 8's full fallback
+      ("no recoverable anchor => the round is FULL") is the alternative to.
 
     **The failure this catches is a silent disagreement, not a missing sentence.**
-    Revert step 8 to ``main...HEAD`` while the Gates recipe still says
-    ``<certified>..HEAD`` and every word of both still reads correctly -- the
+    Revert one site to ``main...HEAD`` while the others still say
+    ``<reviewed>..HEAD`` and every word of each still reads correctly -- the
     orchestrator follows one of them, the gate returns a verdict either way, and
     nothing downstream can tell which range was actually read. The same holds if the
     ledger paragraph drops the notation: the anchor stops being written, every
     resumed round quietly falls back to full, and the only evidence is a saving that
     stopped happening.
 
+    **Both region sets were narrowed after review defeated an earlier draft**, and the
+    reason generalises. The step-8 span originally ran to the end of the scoping
+    passage, which swept in an illustrative ``git diff --numstat`` line carrying the
+    same token -- so the normative bullet could go dark with the suite green. The
+    ledger check originally asserted the anchor NAME, which that paragraph's rationale
+    carries as well as its spec -- so deleting the entire format spec passed. **An
+    example is not a specification, and a rationale is not one either:** when a region
+    must contain a rule, anchor it on text that exists only in the rule.
+
     **This asserts a coupling's identity, never a proposition's truth** -- the
     ceiling ``CLAUDE.md`` sets for a prose guard, and the reason no attempt is made
     here to pin the POLARITY of "round 1 is unscoped". That class is ruled
-    unreachable after four defeats, the fourth at #119's own acceptance gate, and
-    re-attempting it is the displacement loop rather than a gap someone forgot.
+    unreachable -- every attempt so far has been defeated by a one-word edit -- and
+    re-attempting it is the displacement loop rather than a gap someone forgot. No
+    count of those attempts is given here on purpose: the figure lives in the ledger,
+    which is gitignored, so a reader of this repo cannot check it.
 
     So what review owns, because this test provably cannot:
 
     * whether round 1 is still specified as unscoped, or has been quietly narrowed;
+    * **whether the ledger paragraph still fixes a WRITE-TIME for each element.** This
+      is load-bearing -- an element deferred to the close record is written after the
+      round that consumes it, so the anchor is never recoverable and scoping silently
+      never happens -- and it is a proposition, not a coupling, so nothing here
+      reaches it; a reword defeats any literal that could;
     * whether a site names the range while exempting itself from using it;
     * whether the escalation conditions still escalate, or have been inverted;
     * whether the threshold is a sane number.
@@ -1732,24 +1751,43 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
     # The range notation every site must name. Deliberately the literal token rather
     # than a pattern over "some range": a pattern matching `<anything>..HEAD` would
     # be satisfied by `main..HEAD`, which is the mutation this exists to catch.
-    _NOTATION = "<certified>..HEAD"
+    _NOTATION = "<reviewed>..HEAD"
 
-    # The ledger paragraph names the anchor but not the ..HEAD form -- it records a
-    # closed range against the head a round ran on, not an open one. Pinned
-    # separately for that reason; sharing one constant would force a spelling on it
-    # that is wrong there.
-    _ANCHOR = "<certified>"
+    # The ledger's own spelling of a scoped round, pinned SEPARATELY and deliberately
+    # NOT on the anchor name. The anchor name appears in that paragraph's rationale
+    # as well as its spec, so asserting it there passed when the entire format spec --
+    # the only text discharging "the journal line records the range" -- was deleted and
+    # the rationale sentence left behind. This constant occurs only in the spec.
+    _LEDGER_SPELLING = "<sha>..<head>"
+
+    # Used only by the anchor-contamination meta-test, which needs a token shorter
+    # than either of the above.
+    _ANCHOR = "<reviewed>"
 
     # (start, end) anchors. Each span must be the passage that FIXES the range, not
     # merely a paragraph that mentions rounds.
     _REGIONS = {
+        # Narrowed to the BULLET RUN, not the whole scoping passage. The wider span
+        # also contained `git diff --numstat "<reviewed>..HEAD"` inside the fallback
+        # code fence, so the normative bullet could be reverted to `main...HEAD` while
+        # the illustrative line kept the containment check green -- the within-region
+        # form of the spare-mention defeat PlanGateFrozenBlockTests records. Do not
+        # widen this back to the section: an example is not a specification.
         "step 8's scoping rule": (
-            "**Round 1 reads the whole change;",
-            "**Currency is preserved, and a scoped round is not a substitute",
+            "- **Round 1 is unscoped.**",
+            "**The anchor is owed by every round after the first",
         ),
         "the Fresh-re-check code-review recipe (Gates)": (
             "- **Code review (step 8) \u2014 the previous round's findings",
             "**The bound \u2014 one fresh re-check",
+        ),
+        # The step-8 opener's parenthetical enumerates all three bases this engine
+        # uses and forbids "fixing" one to match another. It names the range, so it
+        # drifts the same way the other two do -- review found it reverted cleanly
+        # while the rest of the change stood.
+        "step 8's three-bases aside": (
+            "**These bases",
+            "Running those finders at once is permitted",
         ),
     }
 
@@ -1842,26 +1880,33 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
             "check agreeing to cover less.",
         )
 
-    def test_the_ledger_line_carries_the_anchor_it_is_the_persistence_for(self) -> None:
+    def test_the_ledger_paragraph_still_specifies_a_scoped_round(self) -> None:
         # Distinct failure from the one above, which is why it is its own test. The
         # two engine sites can agree perfectly while the ledger paragraph stops
-        # naming the anchor -- and then nothing writes it down, every resumed round
-        # takes step 8's default-deny full path, and the only symptom is a saving
-        # that silently stopped.
+        # specifying the range -- and then nothing writes the anchor down, every
+        # resumed round takes step 8's full fallback, and the only symptom is a
+        # saving that silently stopped.
+        #
+        # Pinned on the SPEC's spelling, not on the anchor name: an earlier draft
+        # asserted the anchor name, which also appears in the paragraph's rationale,
+        # so deleting the whole format spec and leaving the rationale passed green.
         body = self._span(
             self._engine(), *self._LEDGER_REGION,
             "the ledger's - Code-review: paragraph",
         )
         self.assertIn(
-            self._normalize(self._ANCHOR),
+            self._normalize(self._LEDGER_SPELLING),
             self._normalize(body),
-            "the Ledger format's `- Code-review:` paragraph no longer names "
-            f"{self._ANCHOR!r}.\n\n"
-            "That paragraph is where the anchor PERSISTS across /clear -- state "
-            "lives in the ledger, not in context. Step 8 tells the orchestrator to "
-            "write the anchor to this line and to run a FULL round when it cannot "
-            "read one back. Drop it here and the fallback becomes the only path, "
-            "silently.",
+            "the Ledger format's `- Code-review:` paragraph no longer specifies the "
+            f"scoped-round spelling {self._LEDGER_SPELLING!r}.\n\n"
+            "That spelling is what discharges 'the round's journal line records the "
+            "commit range it was scoped to', and each element is where that round's "
+            "anchor PERSISTS across /clear -- state lives in the ledger, not in "
+            "context. Without it nothing writes the anchor down, so step 8's full "
+            "fallback becomes the only path a resumed round can take.\n\n"
+            "Do NOT satisfy this by mentioning the anchor in the surrounding prose: "
+            "this constant is pinned on the format spec precisely because a rationale "
+            "sentence once kept the check green while the spec was deleted.",
         )
 
 
