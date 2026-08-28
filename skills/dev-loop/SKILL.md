@@ -81,6 +81,12 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   cannot determine which gates it re-armed, which you cannot without `loop-engine.md` loaded, that
   is the escalate branch, never the nothing-was-re-armed branch. Never merge on a verdict describing
   an earlier tree.
+- **Every gate finding re-arms its round unless the engine says otherwise.** Code review classifies
+  findings BLOCKING or EDITORIAL and only BLOCKING re-arms — but the classes, the two floors that may
+  raise one, and the containment on the sweep that discharges the rest all live in `loop-engine.md`.
+  **Reading this without it loaded, treat every finding as BLOCKING**: you cannot apply a
+  classification you have not read, and "it looked editorial" is not one. The class is emitted by the
+  gate agent and you may only ever raise it, never lower it.
 - **A fix for a gate finding is re-checked by a fresh instance, never by its author.** After you fix
   what a gate found, the re-check is a **new spawn** — not you re-reading your own diff, and not the
   round-1 agent re-contacted. If the fresh re-check is still dirty, **escalate to the human** rather

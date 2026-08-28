@@ -113,8 +113,8 @@ acceptance criteria, risk, agent disagreement, a value story that doesn't
 hold, or genuine uncertainty. The two settings are deliberately independent: relaxing how much of
 the planning you review never loosens what gets merged without you, and a ledger that doesn't
 mention the field at all is read as `always`. Neither setting reaches the loop's other mid-pipeline
-stops — such as the architect-rewrite stop below, or a gate finding still there after one fresh
-re-check, which stop and ask you regardless of both.
+stops — such as the architect-rewrite stop below, or a blocking gate finding still there after one
+fresh re-check, which stop and ask you regardless of both.
 
 **When its design reviewer rewrites the plan, you see the plan.** One mid-pipeline stop is
 unconditional — no mode setting, no `plan-gate:` value, and no route graduation can loosen it: if the architect review
@@ -123,6 +123,19 @@ code. A reviewer that decides is treated as a stronger reason to interrupt you t
 because the plan you would have approved is no longer the plan being built. The comparison is made
 against a copy of the approach frozen before the review ran, so the loop is reading a record rather
 than its own memory of what it had intended.
+
+**Some review findings are applied without a second review, and the loop tells you how many.**
+Code review sorts each finding into **blocking** or **editorial**, and only blocking ones send the
+gate round back around. Editorial ones — wording that asserts nothing about your code and changes no
+behavior — are applied in a single pass before the merge gate and are not re-reviewed. Four things
+bound that, and they are deliberately strict: the **reviewer** assigns the class, never the loop;
+the loop may only ever *raise* a finding to blocking, never lower one; a finding that something is
+**false, stale, unresolvable or self-contradictory is blocking wherever it lives** — including in
+prose, which is a correctness finding when prose is what your project ships; and the pass may not
+touch any path your config declares code-route or security-sensitive, which in most projects leaves
+it reaching only files you have explicitly marked inert. The practical effect is that this saves less
+than it may sound like it does, in the safe direction. **At the merge gate you are told the count**,
+and it is recorded in the ledger either way — including when it is zero.
 
 **A gate that did not run is never reported as one that passed.** For every gate the loop
 runs — plan, architect, your build commands, the offline tier, code review, security, acceptance,
