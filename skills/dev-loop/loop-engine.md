@@ -568,12 +568,15 @@ Advance the row to `in-review`. Run `CODE_REVIEW` on the diff.
 `CODE_REVIEW` names a **procedure you run, not a command you call**. The default — and the pattern
 that works in practice — is **parallel finder subagents over `git diff main...HEAD`, plus a pass
 that confirms each finding**, journaled under the gate's name. (`main...HEAD` is the right form
-*here*: step 7 has committed and opened the PR, so the branch head **is** the change. The
+*for round 1*: step 7 has committed and opened the PR, so the branch head **is** the change. A round
+*after* the first reads a narrower range — see the scoping rule at the end of this step. The
 acceptance gate at step 10 deliberately diffs the **working tree** instead, and still does now that
 it too runs post-commit — but for a changed reason: it is the gate of record for the merge
 candidate, so it must be able to **detect** a fix that is written but not yet committed. Detecting
-one is not certifying it; step 10 requires such a fix committed before it certifies. The two bases
-differ on purpose — do not "fix" one to match the other.)
+one is not certifying it; step 10 requires such a fix committed before it certifies. **These bases
+differ on purpose — do not "fix" any of them to match another.** There are three, and each answers a
+different question: round 1's `main...HEAD` (the whole change), a later round's `<reviewed>..HEAD`
+(what no round has read yet), and step 10's working tree (the merge candidate, committed or not).)
 Running those finders at once is permitted because they are read-only — the **read-only** form the
 Execution policy (Tool surface) allows; see it there for what that permission does and does not
 extend to. A review skill marked
@@ -607,20 +610,107 @@ production-readiness — overlap far less than repeated passes of the same one, 
 review misses most of what a diff carries. Scale the count with the surface: one light pass on
 `docs`, more when the diff touches a production or public-API path.
 
-Implement viable findings; decline others with a one-line rationale; then **commit the fixes** and
+Implement viable findings; decline others with a one-line rationale — **and record each decline,
+with that rationale, in the gate-decision block where this round resolves** (Ledger format →
+progress.md), exactly as an architect decline is recorded in the plan text. A later round is
+*required* to receive the declines (Gates), and a decline is the one outcome that leaves **no trace
+in the diff** for that round to recover it from: unrecorded, it is invisible to every subsequent
+fresh instance. Then **commit the fixes** and
 **verify recs were applied — by a fresh checker, never by yourself.** If you *delegated* any fix,
 that agent wrote to its own copy: collect the diff, apply it, and **remove the copy before you
 commit** (Execution policy, Tool surface) — directing a fix is authorship, and it is also the one
 spawn at this gate that opens the staging window. This is the Fresh-re-check
 invariant's sharpest instance (see Gates): you wrote the fixes, so confirming them yourself is the
-author agreeing with himself, not a gate. **Commit before spawning it** — the checker reads
-`main...HEAD` like the rest of this gate, so an uncommitted fix is invisible to it and the re-check
-would certify the pre-fix code (the F15 shape the acceptance gate had to fix). Spawn **one lighter
-checker** — the change as it now stands plus the list of what you claimed to fix, and none of your
-conclusions about whether it worked — rather than re-running the full finder fan-out; the input
-recipe and its licence to object are under Gates. Bounded to 2 rounds (round 1 being the review
+author agreeing with himself, not a gate. **Commit before spawning it** — the checker reads a diff
+ending at `HEAD`, so an uncommitted fix is invisible to it. Under a scoped round that is worse than
+the F15 shape the acceptance gate had to fix, not milder: the checker is handed not the pre-fix code
+but an **empty** delta, which reports clean rather than reporting the wrong thing (hence the
+empty-delta fallback below). Spawn **one lighter
+checker** — its inputs are fixed under Gates (Fresh-re-check invariant → the code-review bullet) and
+are not restated here — rather than re-running the full finder fan-out; that recipe carries its
+licence to object too. Bounded to 2 rounds (round 1 being the review
 itself, that re-check being round 2) — contested findings, and **any** finding the re-check returns,
 whether one round 1 raised or one only the fix introduced, escalate to the human, do not loop.
+
+**Round 1 reads the whole change; every round after it reads only what has changed since the last
+round read.** What ***this gate's*** re-check requires is a fresh **instance** — it does not
+additionally require re-ingesting material a prior round has already reported on. Read that as
+scoped to this gate and nowhere else: the acceptance gate's Class A re-check deliberately *does*
+re-run its whole recipe from scratch, and Gates forbids relaxing it. A majority of iterations reach
+a second round, which is what makes the repeated reading worth removing. Scoping changes **what a
+round re-reads**, never **what counts as a defect**: nothing is reclassified and no finding is
+suppressed.
+
+- **Round 1 is unscoped.** `main...HEAD`, and the full lens set the risk surface warrants. Nothing
+  below narrows it.
+- **Record what each round read.** Take `git rev-parse HEAD` when you spawn the round and write it
+  to that round's `- Code-review:` element **when that round resolves — not at step 12** (Ledger
+  format → progress.md, which fixes the spelling and the write-time, for the reason the
+  `- Plan-gate:` line fixes its own). That SHA — **the head the last round ran on** — is this gate's
+  anchor. It is deliberately **not** called *certified*: a round that returned findings certified
+  nothing, and a later round exists only because an earlier one returned findings.
+- **A later round reads `<reviewed>..HEAD`**, plus the previous round's findings **and the ones it
+  declined**, and one narrowed question. Its full input recipe is under Gates (Fresh-re-check
+  invariant → the code-review bullet); do not restate it here.
+- **The anchor is the one you hold, and it is validated before use.** It is the head you recorded
+  when you spawned the previous round, in this invocation. **Do not reconstruct it by reading the
+  journal back** — the ledger records it for a later *reader*, not for a parser, and a journal
+  scanned for "the most recent SHA" yields one that resolves and belongs to another branch. Where
+  you do not hold one — a resumed iteration, most often — the round is FULL; that is the whole
+  fallback, and it costs a round's saving rather than a round's coverage. Where you do hold one,
+  confirm it still describes this history: `git merge-base --is-ancestor <reviewed> HEAD` must
+  succeed, or a rebase, amend or force-push has moved the ground under it and the round is FULL.
+
+**The anchor is owed by every round after the first, not only this step's own round 2.** This gate
+can be re-armed from *outside* this step. **Which re-arms are owned by step 8's budget and which
+escalate instead is the Gate-outcome invariant's currency clause to decide — read it there and do
+not paraphrase it from here**; it turns on whether a round is actually left, which this step cannot
+see. What *this* step fixes is narrower: wherever a round after the first does run, it needs an
+anchor, and one computing its delta from the wrong anchor, or from none, **under-reviews in
+silence** — the failure the currency clause exists to prevent. **Where no anchor is available or
+trustworthy, the round is FULL.** Default-deny: the anchor buys a saving, and an unavailable saving
+is never a reason to review less.
+
+**Fall back to a full round — mechanically, default-deny — when any of these fires.** ("Fall back",
+not "escalate": this branch runs the round *unscoped*; it does not hand off to the human.)
+1. **A fix touched a path the project's security routing declares sensitive** (`loop.config.md`,
+   step 9). This is the **risk** test. **Never read a small delta as a low-risk one** — the defect
+   that motivated this rule lived in a 21-line delta that no round had yet seen; size and risk are
+   unrelated, which is why no size test appears in this list.
+   **Distinguish a declaration that does not match from a declaration that is not there.** A
+   present, path-shaped declaration that simply does not cover this diff is a **known** answer — no
+   sensitive path was touched, and the round may scope. Only a **missing, `TODO`-valued or
+   non-path-shaped** declaration is unknown, and unknown is a full round. Reading a non-match as
+   unknown would send every round to full in any project whose sensitive surface is narrow, which is
+   most of them.
+2. **The delta is empty.** A round handed nothing to read reports nothing and comes back clean —
+   a pass manufactured out of an absent input, which is the shape the AC-verifier's Part 1 already
+   refuses ("never read an empty diff as 'nothing to object to'"). **Confirm first that the fixes
+   were committed** — this step requires that before the round is spawned, and an uncommitted fix is
+   the likelier cause. Once they are, an empty delta means nothing was fixed, and the round runs
+   **full** rather than certifying an absence. (Like the condition above, this branch runs the
+   round unscoped; it does not hand off.)
+
+**Any unknown makes the round FULL. This list is sufficient, not exhaustive, and it is deliberately
+not a list of the safe states:** the project's sensitive-path declaration is missing, `TODO`-valued
+or not path-shaped; the anchor is missing, untrusted, or not an ancestor of `HEAD`; a range will not
+resolve. **An absent declaration is unknown, and unknown is a full round — never "the condition did
+not fire"**, which is the fail-open reading the Gate-outcome invariant already refuses for
+`HERMETIC_TEST_CMD`. If you are unsure whether some state belongs on this list, it does.
+
+**Currency is preserved, and a scoped round is not a substitute for a full one.** A later round runs
+on `HEAD` and certifies `HEAD`, as any round does — **the delta bounds what it re-certifies, never
+whether it certifies.** Every commit in `main...HEAD` was read by the round whose range contains it:
+round 1 read `main...<reviewed>`, the later round reads `<reviewed>..HEAD`, and a fix that rewrote a
+line round 1 read reappears in that second range. So no verdict is carried onto a commit no round
+ran on. **What scoping narrows is stated rather than argued away, and there is more than one thing
+in that set** — extend it, never prune it: a fix's correctness can turn on earlier-read code that
+has not changed since `<reviewed>`, which is outside the delta (hence the recipe's obligation under
+Gates to read the definition of any symbol the delta references but does not itself contain); and a
+finding round 1 *declined* leaves no trace in the delta at all, which is why the declines travel
+with the findings. **A round certifies `HEAD` whatever the delta holds** — carrying a prior verdict
+forward *instead of* running a round, on a docs-only delta or any other, is a different proposal and
+is not licensed here.
 
 ### 9. Security review (by route)
 Run `SECURITY_REVIEW` per the routing in `loop.config.md` (the local-skill-vs-label choice and any
@@ -1146,7 +1236,7 @@ by; omitting the record because there is no issue number is what would break it.
 - Implemented: <path>; recorded findings in <path>.
 - Hermetic: n/a: research route.
 - PR: #<pr> (chore scope). CI: green.
-- Code-review: 0 findings. Security: n/a (no deps added).
+- Code-review: round 1 (main...9f3c1ab) — 0 findings. Security: n/a (no deps added).
 - Restore: n/a: no mutation applied.
 - AC-verify: Class A 3/3 acceptance criteria met. Class B: mutation pass not due (research route).
 - Budget: subagent-runs=3 · gate-rounds=architect=0,code-review=1(correctness,robustness),ac-verify=1 · ac-findings=0 · mutation-survivors=n/a: research route · wall-clock=18m · tokens=deferred
@@ -1217,6 +1307,36 @@ fail-safe, just broken.
 
 Never fold this into `mutation-survivors`. That slot's `n/a` list is closed at two reasons, and a
 hermetic result is a different question from whether a guard guards.
+
+The **`- Code-review:`** line names **the commit range each round read**, one element per round,
+alongside that round's result. It is what lets a later reader tell **what a verdict covers** —
+the question the currency clause turns on and the thing a merge gate has to weigh. **It is a record
+for a reader, not a store a later step parses**: the orchestrator holds the anchor in context for as
+long as it can use it, and a round that no longer holds one runs full (step 8), so nothing reads
+this line back and no grammar is imposed on it.
+
+**Write each element when its round resolves — not at step 12**, for the reason the `- Plan-gate:`
+line is written at step 5: an append-only journal records what happened when it happened, and a
+record reconstructed at the end of an iteration is written by whoever survived it, from memory,
+about rounds that may have run before a `/clear`. The iteration appends the element in the
+gate-decision block where that round resolves (`progress.md` licenses one block per gate decision),
+and the close record carries the accumulated line. Each element takes one of three shapes —
+enumerated for the same reason `- Hermetic:` and `- Restore:` enumerate theirs, that a shape whose
+only legal rendering asserts a scoped round is a template that pressures you to record one:
+
+- **`round <n> (main...<sha>) — <result>`** — an **unscoped** round: round 1 always, and any later
+  round that fell back to full. Where it is a *fallback*, **name the reason** — `round 2
+  (main...a18061d) — fell back to full (no sensitive-path declaration), 2 findings` — or the line
+  cannot distinguish a scoped round from one that declined to scope, which is the saving silently
+  not happening.
+- **`round <n> (<sha>..<head>) — <result>`** — a **scoped** round, reading only what the previous
+  round did not.
+- **`round <n> — no verdict`** — the round produced none; a `- gate-fallback:` or `- gate-error:`
+  line carries what happened (Gate-outcome invariant). Never write a range here: there is no verdict
+  for one to bound.
+
+Keep the range **off** the `- Budget:` line: that line is one physical line and its
+`code-review=<c>(…)` parenthetical records lenses only.
 
 The **`- Restore:`** line records that a mutation pass gave the tree back. It gets its own line for
 the same reason `- Hermetic:` does — everything else about the pass is *prevention*, and prevention
@@ -2240,15 +2360,34 @@ your *conclusions*, not the instructions the checker needs).
   sufficient there,
   precisely because the survivor was established by running rather than by reading. That re-run is a
   fresh instance too, per the invariant above.)
-- **Code review (step 8) — the change as it now stands, plus the list of what you claimed to fix.**
-  Review has no fixed yardstick to re-derive from, so that list is what gives the checker something
-  to test rather than a blank re-review. It **reads the change itself and reports what it saw** — a
-  claimed fix is a claim, not evidence — and states for each whether the code now does it, citing
-  `file:line`. **One lighter checker**, not a re-run of the full finder fan-out. But it reviews the
-  change *as it now stands*, so **anything the fixes broke is in scope**: a defect the fix commits
-  introduced is a finding even though no one listed it. "Lighter" bounds the fan-out, never the
-  checker's licence to object. It carries the **Verdict-first invariant** (Gates) too: a verdict on
-  every claimed fix first, depth after.
+- **Code review (step 8) — the previous round's findings *and its declines*, the diff since the head
+  that round ran on, and one narrowed question.** Review has no fixed yardstick to re-derive from,
+  so those lists are what give the checker something to test rather than a blank re-review. Its diff
+  input is **`git diff <reviewed>..HEAD`** — what has changed since the head the last round read
+  (step 8, which fixes the anchor, validates it, and says when the round is **full** instead). Its
+  question is: **are these findings discharged, and does the new delta introduce anything?** **State
+  in the prompt that earlier material carries a verdict and is not re-litigated** — a checker handed
+  a diff and no such instruction re-reviews the diff it was handed, which is the cost this scoping
+  exists to remove. It **reads the change itself and reports what it saw** — a claimed fix is a
+  claim, not evidence — and states for each finding whether the code now does it, citing
+  `file:line`. **One lighter checker**, not a re-run of the full finder fan-out. **Anything the
+  fixes broke is in scope**: a defect the fix commits introduced is a finding even though no one
+  listed it. "Lighter" bounds the fan-out, never the checker's licence to object. It carries the
+  **Verdict-first invariant** (Gates) too: a verdict on every claimed fix first, depth after.
+
+  **The declines are not optional, and they are the one input scoping would otherwise delete.** A
+  finding round 1 raised and the orchestrator **declined** leaves nothing in the delta — no fix, no
+  diff, nothing for a scoped checker to see — so without the declines list a decline would pass
+  unexamined by any fresh instance, which the unscoped recipe never allowed. Hand over each declined
+  finding **with the one-line rationale given for it** (step 8), and say plainly that the checker may
+  **contest a decline**: that is a finding like any other, and it counts against this round.
+
+  **Scoping bounds what must be re-certified, never what the checker may read — and that is an
+  instruction to give it, not diligence to hope for.** Tell it to **read the definition of any
+  symbol the delta references but does not itself contain.** A fix whose correctness turns on
+  earlier-read code unchanged since `<reviewed>` is the other thing the delta genuinely does not
+  show; step 8's fallback conditions need not catch it — such a fix need not touch a sensitive
+  path, and nothing else in that list keys on it.
 
 **The bound — one fresh re-check, then escalate; there is no ladder.** The fresh re-check **is**
 round 2 of the 2-round cap each gate already carries, never a round on top of it. If round 2 comes
