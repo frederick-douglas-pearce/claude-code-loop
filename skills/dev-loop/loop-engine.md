@@ -619,8 +619,9 @@ oddly cost the same full round today, and nothing in the ledger records the diff
 
 - **BLOCKING** — correctness, security, test efficacy (a test that cannot fail), acceptance-criteria
   coverage, anything moving a safety boundary. Re-arms exactly as a finding does today.
-- **EDITORIAL** — discharged in one contained sweep at the close of this step (below), and **does
-  not re-arm a round**.
+- **EDITORIAL** — discharged in one contained sweep at the close of this step, and **does not
+  re-arm a round**, where the round runs *before* that sweep. A round running after it is governed
+  by the *"Once" is literal* rule, which escalates either class.
 
 **"Finding class" and "result class" are different vocabularies and never mix.** A *finding class* is
 BLOCKING or EDITORIAL, one per finding, and **only this gate's agents emit one** — its finders, and
@@ -710,9 +711,9 @@ measured zero rather than as an absence. The ID is **`r<round>.<lens>.<k>`** —
 finder's lens, and that finder's own item index. **The lens is what makes the ID stable across the
 fan-out**: rounds run several finders at once and each numbers its own items from 1, so
 `round <n>, item <k>` collides. Where two finders would carry the same lens label, **distinguish the
-labels** — that is the only thing preventing a collision, so do it when you spawn them (the rule is
-restated at the spawn site above, where it is actionable). **A round that is one lighter checker
-rather than a fan-out has no lens**: write `recheck` in that position, e.g. `r2.recheck.1`. This is a
+labels** — distinct labels are what keep two finders' items apart, so do it when you spawn
+them. **A round that is one lighter checker rather than a fan-out has no lens**: write
+`recheck` in that position, e.g. `r2.recheck.1`. This is a
 **new record in the gate-decision block**, not the `code-review=` parenthetical on the `- Budget:`
 line, which records **angles only** and carries no per-finding detail.
 
@@ -743,9 +744,8 @@ sweep's edits, at no extra round.
 3. **Journal what it applied** — the `- Editorial:` line (Ledger format → progress.md), whose
    enumerated spellings include the case where there was nothing to sweep.
 
-**"Once" is literal, and this is the one place that decides what happens after it.** Every other
-statement of the round bound points here rather than restating the rule, because the rule is about
-*when a round runs*, not about what class a finding carries:
+**"Once" is literal.** The rule is about *when a round runs*, not about what class a finding
+carries:
 
 > **Before the sweep has run**, an EDITORIAL finding joins it: it re-arms nothing and escalates
 > nothing. **After the sweep has run, there is no sweep left** — so **every** finding a later round
@@ -770,8 +770,8 @@ in the diff** for that round to recover it from: unrecorded, it is invisible to 
 fresh instance. **EDITORIAL findings are not implemented here** — they go to the sweep above, which
 has its own commit, and a round returning *only* EDITORIAL findings therefore commits nothing at this
 paragraph and spawns no checker: it is not dirty, so there is no fix to re-check. **That holds for a
-round raised before the sweep.** A round that runs after the sweep has no sweep to send them to, and
-the *"Once" is literal* rule governs it instead. Then **commit the
+round that runs before the sweep**; one that runs after it has no sweep to send them to, and the
+*"Once" is literal* rule governs it instead. Then, in either case, **commit the
 BLOCKING fixes** and
 **verify recs were applied — by a fresh checker, never by yourself.** If you *delegated* any fix,
 that agent wrote to its own copy: collect the diff, apply it, and **remove the copy before you
@@ -790,9 +790,8 @@ itself, that re-check being round 2) — contested findings, and **any BLOCKING 
 returns, whether one round 1 raised or one only the fix introduced, escalate to the human, do not
 loop. **An EDITORIAL finding raised before the sweep has run does not re-arm and does not escalate** —
 it joins that sweep. **A round that runs after the sweep has no sweep to join, so every finding it
-returns escalates whatever its class.** The *"Once" is literal* rule states that once, and nothing
-else restates it. Within that, the classes change nothing else about this bound: not the cap, not
-what counts as a defect, and not the escalation for anything else.
+returns escalates whatever its class.** The classes change nothing else about this bound: not the
+cap, not what counts as a defect, and not the escalation for anything else.
 
 **Round 1 reads the whole change; every round after it reads only what has changed since the last
 round read.** What ***this gate's*** re-check requires is a fresh **instance** — it does not
@@ -976,7 +975,7 @@ re-review** (step 8's sweep), and on which paths. A count, never a reassurance. 
 gate raised that no fresh instance ever re-read — a trade the human is the only actor positioned to
 price, and absorbed silently it reads as a clean review. **Read the number off the `- Editorial:`
 line** (Ledger format → progress.md) rather than from memory: the sweep resolved back at step 8, so on
-a resumed iteration the ledger is the only place it survives. **Write `0` where the line says `0`** —
+a resumed iteration the ledger is where it survives. **Write `0` where the line says `0`** —
 a measured zero and an absent count are different statements, and this is the one number AC5 exists to
 surface:
 - **No `- Editorial:` line on an iteration whose step 8 closed ⇒ unknown, never `0`** (Ledger format
@@ -986,10 +985,9 @@ surface:
   it as a count.
 - **More than one line can exist for one issue** — a `/clear` on an `in-review` row replays step 8
   (Resume), so read the lines belonging to **this issue's** step-8 blocks and **sum** them. If you
-  cannot tell which blocks belong to this iteration, that is unknown: escalate. Reading a
-  `progress.md` line back is deliberate here and at step 8's own sweep, and **nowhere else** — **do
-  not generalize it** into parsing the journal for anything further (step 8 forbids exactly that for
-  its round anchor).
+  cannot tell which blocks belong to this iteration, that is unknown: escalate. Reading this line
+  back is deliberate. **Do not generalize it** into deriving a gate's control state by parsing the
+  journal — step 8 forbids exactly that for its round anchor, and gives the reason.
 
 Where the row instead **auto-merges** there
 is no human to tell, which is why the same count is journalled either way.
@@ -1549,7 +1547,8 @@ back rather than recalling the number. It is **owed by an iteration whose step 8
 iteration that escalates at step 8 and stops runs no sweep and writes none, exactly as `- Hermetic:`
 enumerates a writes-none path. **The close record carries the line too**, as it carries `- Hermetic:`
 and `- Restore:` — written at step 8 when the sweep resolves, and repeated in the close record so one
-block holds the iteration's whole outcome. It takes the same **enumerated** forms, for the same reason — a single
+block holds the iteration's whole outcome. It takes the same **enumerated** forms, for the
+same reason — a single
 fixed shape whose only legal rendering asserts a clean sweep is a template that pressures you to
 assert one:
 
@@ -1559,7 +1558,8 @@ assert one:
 - **`- Editorial: 0 — <no EDITORIAL finding returned | all promoted by the content floor | all
   promoted by a path floor | all promoted for an unspecified remedy | promoted by a mix of the
   above>`** — nothing to sweep. **These reasons are sufficient, not exhaustive**: name the route that
-  actually promoted them rather than forcing it into the nearest reason listed here. **`0`, not `none`**,
+  actually promoted the findings rather than forcing it into the nearest reason listed here.
+  **`0`, not `none`**,
   so this line and the merge gate's count are the same statement; and **which** of those it was
   matters, because "the finders raised none" and "the floors promoted every one" are different facts
   about the change — in a project whose declared-inert set is small the second is the ordinary
@@ -2391,7 +2391,7 @@ Gate table:
 | Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure | the agent's review, **recorded by you** wherever this project records architect decisions — issue comment, issue-body marker, or decision-log entry (Resume) |
 | Human (plan) | user | **every issue under `plan-gate: always`** (the default under `calibration`; absent or unrecognized reads as `always`); under `plan-gate: conditional`, if uncertain/irreversible. Under **both**, **always** when the architect materially changed the plan (step 5's frozen-vs-live diff — decisiveness escalates exactly as a punt does, and neither `mode:`, `plan-gate:`, nor route graduation reaches this one) | approve/redirect |
 | Build commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`) | orchestrator | step 6, each per its own binding; `HERMETIC_TEST_CMD` additionally requires Route `code` **and** a change that adds or modifies a test, **whatever the binding says** — on such a row an absent or `TODO` binding is unknown, and unknown is due (the gate's four-state table) | **exit status per command**; non-zero blocks |
-| Code review | `CODE_REVIEW` (parallel finders you run — step 8); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes, each carrying a **finding class**: BLOCKING re-arms; EDITORIAL raised before that step's sweep is swept there, and anything raised after the sweep escalates (step 8) |
+| Code review | `CODE_REVIEW` (parallel finders you run — step 8); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes, each carrying a **finding class**: BLOCKING re-arms; EDITORIAL raised before step 8's sweep is swept there, and anything raised after that sweep escalates |
 | Security | `SECURITY_REVIEW` (local or label) | by route (step 9) | clean/findings |
 | AC-verify | fresh subagent (+`VERIFY`); **any re-check a fresh instance too** (Fresh-re-check invariant) | every issue with acceptance criteria (step 10 is unconditional; the **mutation pass within it** is scoped — Routing table). **Last gate before merge**, so it certifies the merge candidate and owns the commit boundary for its own fixes | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors); **either class blocks** |
 | Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI + security + acceptance green | `MERGE_METHOD` |
@@ -2631,11 +2631,11 @@ your *conclusions*, not the instructions the checker needs).
 round 2 of the 2-round cap each gate already carries, never a round on top of it. If round 2 comes
 back dirty — **whether it is a finding round 1 raised or one only the fix introduced** — escalate to
 the human; there is no round 3. **At code review, "dirty" means a BLOCKING finding**: an EDITORIAL one
-raised before that step's sweep joins it, re-arms nothing and escalates nothing. **A round that runs
-after the sweep is the exception, and it runs the other way** — step 8's *"Once" is literal* rule
-governs it, and every finding it returns escalates whatever its class. (Step 8 fixes the classes, the
-floors that may raise one, and that ordering rule.) **The acceptance gate has no finding class at all** — either of its
-two *result* classes is dirty, and neither may be swept.
+raised before step 8's sweep joins it, re-arms nothing and escalates nothing. **A round that runs
+after that sweep is the exception, and the rule runs the other way** — step 8's *"Once" is literal*
+rule governs it, and every finding it returns escalates whatever its class. (Step 8 fixes the classes, the
+floors that may raise one, and that ordering rule.) **The acceptance gate has no finding class
+at all** — either of its two *result* classes is dirty, and neither may be swept.
 
 **Reaching a cap is a handoff, never a terminal state.** The cap ends the *round* — not the run, not
 the issue. **STOP and put the decision to the human**, and do not proceed on your own judgement: an
