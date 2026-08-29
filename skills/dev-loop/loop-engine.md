@@ -769,7 +769,9 @@ progress.md), exactly as an architect decline is recorded in the plan text. A la
 in the diff** for that round to recover it from: unrecorded, it is invisible to every subsequent
 fresh instance. **EDITORIAL findings are not implemented here** — they go to the sweep above, which
 has its own commit, and a round returning *only* EDITORIAL findings therefore commits nothing at this
-paragraph and spawns no checker: it is not dirty, so there is no fix to re-check. Then **commit the
+paragraph and spawns no checker: it is not dirty, so there is no fix to re-check. **That holds for a
+round raised before the sweep.** A round that runs after the sweep has no sweep to send them to, and
+the *"Once" is literal* rule governs it instead. Then **commit the
 BLOCKING fixes** and
 **verify recs were applied — by a fresh checker, never by yourself.** If you *delegated* any fix,
 that agent wrote to its own copy: collect the diff, apply it, and **remove the copy before you
@@ -787,10 +789,10 @@ licence to object too. Bounded to 2 rounds (round 1 being the review
 itself, that re-check being round 2) — contested findings, and **any BLOCKING finding** the re-check
 returns, whether one round 1 raised or one only the fix introduced, escalate to the human, do not
 loop. **An EDITORIAL finding raised before the sweep has run does not re-arm and does not escalate** —
-it joins the sweep above. **After the sweep has run, every finding escalates whatever its class**; the
-*"Once" is literal* rule below is the one place that decides this, and nothing else restates it.
-Within that, the classes change nothing else about this bound: not the cap, not what counts as a
-defect, and not the escalation for anything else.
+it joins that sweep. **A round that runs after the sweep has no sweep to join, so every finding it
+returns escalates whatever its class.** The *"Once" is literal* rule states that once, and nothing
+else restates it. Within that, the classes change nothing else about this bound: not the cap, not
+what counts as a defect, and not the escalation for anything else.
 
 **Round 1 reads the whole change; every round after it reads only what has changed since the last
 round read.** What ***this gate's*** re-check requires is a fresh **instance** — it does not
@@ -957,8 +959,9 @@ only when ALL of these hold:
 - the row is **not** `hold`, AND
 - none of the always-escalate conditions apply: a `feat:`/breaking change, a risky/irreversible
   change, a touched security surface, a contested review finding, **an unresolved BLOCKING review
-  finding** (step 8 — EDITORIAL findings are swept there, never left unresolved), **an unresolved
-  Class B mutation survivor from the acceptance gate** (step 10 — a guard that does not guard is
+  finding** (step 8 — an EDITORIAL finding raised before that step's sweep is swept there and never
+  left unresolved; one raised after it escalates, by step 8's *"Once" is literal* rule), **an
+  unresolved Class B mutation survivor from the acceptance gate** (step 10 — a guard that does not guard is
   exactly the defect an auto-merge has no human to catch), or **an unresolved hermetic-tier finding**
   (step 6 — same shape: a declared invariant that is not true, with no human in the path to notice).
 
@@ -983,9 +986,10 @@ surface:
   it as a count.
 - **More than one line can exist for one issue** — a `/clear` on an `in-review` row replays step 8
   (Resume), so read the lines belonging to **this issue's** step-8 blocks and **sum** them. If you
-  cannot tell which blocks belong to this iteration, that is unknown: escalate. This is the one place
-  a later step reads a `progress.md` line back, and it is deliberate — **do not generalize it** into
-  parsing the journal for anything else (step 8 forbids exactly that for its round anchor).
+  cannot tell which blocks belong to this iteration, that is unknown: escalate. Reading a
+  `progress.md` line back is deliberate here and at step 8's own sweep, and **nowhere else** — **do
+  not generalize it** into parsing the journal for anything further (step 8 forbids exactly that for
+  its round anchor).
 
 Where the row instead **auto-merges** there
 is no human to tell, which is why the same count is journalled either way.
@@ -1053,7 +1057,9 @@ Scope/priority/requirements — including any plan whose value story lacks a cre
 checkable falsifier (step 3) — → `SCOPE_AGENT`, before implementing. Design/implementation →
 `DESIGN_AGENT`. Escalate to the HUMAN when those disagree/punt, ACs are unresolvable, an
 action is destructive/irreversible, a review finding is contested or is BLOCKING and unresolved
-(an EDITORIAL one raised before the sweep has run; after it, see step 8's *"Once" is literal* rule, where every finding escalates), or the same step failed twice —
+(an EDITORIAL one raised before step 8's sweep escalates nothing — it is swept there; one raised
+after that sweep escalates like any other, by step 8's *"Once" is literal* rule), or the same step
+failed twice —
 **and, always-on, when the architect *decides*: a material redirect of the plan escalates exactly as
 a punt does** (step 5). "Only when those disagree/punt" would read a decisive rewrite as a reason to
 proceed, which inverts the point of the gate.
@@ -1285,9 +1291,10 @@ rewrite of the plan**. The two modes:
   decision log — never frozen into this mechanism definition (the lesson: graduation *state* is
   evidence, not a rule). The human merge gate is **retained** for every non-graduated route and,
   regardless of route, for any of: a `feat:`/breaking change, a risky/irreversible change, a touched
-  security surface, a contested review finding, an unresolved BLOCKING review finding (step 8 —
-  EDITORIAL findings are swept there, never left unresolved), an unresolved Class B mutation survivor
-  from the acceptance gate (step 10),
+  security surface, a contested review finding, an unresolved BLOCKING review finding (step 8 — an
+  EDITORIAL finding raised before that step's sweep is swept there and never left unresolved; one
+  raised after it escalates, by step 8's *"Once" is literal* rule), an unresolved Class B mutation
+  survivor from the acceptance gate (step 10),
   an unresolved hermetic-tier finding (step 6), or a `hold` row — **and, by default-deny, whenever
   route graduation or any always-escalate condition is uncertain, fall back to the human merge
   gate.** Initialization pairs it with `plan-gate: conditional` (step 5) — **and neither that
@@ -1551,9 +1558,8 @@ assert one:
   reader can trace it back to the round and the lens that raised it.
 - **`- Editorial: 0 — <no EDITORIAL finding returned | all promoted by the content floor | all
   promoted by a path floor | all promoted for an unspecified remedy | promoted by a mix of the
-  above>`** — nothing to sweep. **These reasons are sufficient, not exhaustive** — every promotion
-  route the step defines has one here today, including sweep rule 1's unspecified-remedy route, but
-  name a new route rather than forcing it into the nearest wrong reason. **`0`, not `none`**,
+  above>`** — nothing to sweep. **These reasons are sufficient, not exhaustive**: name the route that
+  actually promoted them rather than forcing it into the nearest reason listed here. **`0`, not `none`**,
   so this line and the merge gate's count are the same statement; and **which** of those it was
   matters, because "the finders raised none" and "the floors promoted every one" are different facts
   about the change — in a project whose declared-inert set is small the second is the ordinary
@@ -2385,7 +2391,7 @@ Gate table:
 | Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure | the agent's review, **recorded by you** wherever this project records architect decisions — issue comment, issue-body marker, or decision-log entry (Resume) |
 | Human (plan) | user | **every issue under `plan-gate: always`** (the default under `calibration`; absent or unrecognized reads as `always`); under `plan-gate: conditional`, if uncertain/irreversible. Under **both**, **always** when the architect materially changed the plan (step 5's frozen-vs-live diff — decisiveness escalates exactly as a punt does, and neither `mode:`, `plan-gate:`, nor route graduation reaches this one) | approve/redirect |
 | Build commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`) | orchestrator | step 6, each per its own binding; `HERMETIC_TEST_CMD` additionally requires Route `code` **and** a change that adds or modifies a test, **whatever the binding says** — on such a row an absent or `TODO` binding is unknown, and unknown is due (the gate's four-state table) | **exit status per command**; non-zero blocks |
-| Code review | `CODE_REVIEW` (parallel finders you run — step 8); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes, each carrying a **finding class**: BLOCKING re-arms, EDITORIAL is swept at the close of the step (step 8) |
+| Code review | `CODE_REVIEW` (parallel finders you run — step 8); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes, each carrying a **finding class**: BLOCKING re-arms; EDITORIAL raised before that step's sweep is swept there, and anything raised after the sweep escalates (step 8) |
 | Security | `SECURITY_REVIEW` (local or label) | by route (step 9) | clean/findings |
 | AC-verify | fresh subagent (+`VERIFY`); **any re-check a fresh instance too** (Fresh-re-check invariant) | every issue with acceptance criteria (step 10 is unconditional; the **mutation pass within it** is scoped — Routing table). **Last gate before merge**, so it certifies the merge candidate and owns the commit boundary for its own fixes | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors); **either class blocks** |
 | Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI + security + acceptance green | `MERGE_METHOD` |
@@ -2625,9 +2631,10 @@ your *conclusions*, not the instructions the checker needs).
 round 2 of the 2-round cap each gate already carries, never a round on top of it. If round 2 comes
 back dirty — **whether it is a finding round 1 raised or one only the fix introduced** — escalate to
 the human; there is no round 3. **At code review, "dirty" means a BLOCKING finding**: an EDITORIAL one
-raised before the sweep has run; after it, see step 8's *"Once" is literal* rule, where every finding escalates joins that step's sweep, re-arms nothing and escalates nothing (step 8, which fixes the
-classes, the floors that may raise one, and the ordering rule that governs a round running after the
-sweep). **The acceptance gate has no finding class at all** — either of its
+raised before that step's sweep joins it, re-arms nothing and escalates nothing. **A round that runs
+after the sweep is the exception, and it runs the other way** — step 8's *"Once" is literal* rule
+governs it, and every finding it returns escalates whatever its class. (Step 8 fixes the classes, the
+floors that may raise one, and that ordering rule.) **The acceptance gate has no finding class at all** — either of its
 two *result* classes is dirty, and neither may be swept.
 
 **Reaching a cap is a handoff, never a terminal state.** The cap ends the *round* — not the run, not

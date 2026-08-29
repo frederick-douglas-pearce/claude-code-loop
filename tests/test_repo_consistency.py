@@ -2085,12 +2085,22 @@ class FindingClassAgreementTests(unittest.TestCase):
     **withdrawn**, and the bound-number comparison belongs with #114, where the
     bound actually moves.
 
-    **The span anchor is deliberately numeral-free for that reason.** An earlier
-    draft anchored on the literal ``"Bounded to 2 rounds"``, which pinned the cap
-    by accident: the one-sided cap mutation the paragraph above says survives was
-    in fact killed, and -- worse -- a *legitimate* both-sides cap change went red
+    **The span anchor is deliberately free of the CAP numeral** -- it still
+    contains ``round 1``, so "numeral-free" would overstate it. An earlier draft
+    anchored on the literal ``"Bounded to 2 rounds"``, which pinned the cap by
+    accident: the one-sided cap mutation the paragraph above says survives was in
+    fact killed, and -- worse -- a *legitimate* both-sides cap change went red
     with a message inviting the maintainer to bump the literal. #114 is queued to
-    make exactly that change. Do not reintroduce a numeral into either anchor.
+    make exactly that change. Do not reintroduce the cap numeral into either
+    anchor.
+
+    **A residual coupling to #114 remains, and is recorded rather than implied.**
+    The anchor spans the round *enumeration* (``round 1 being the review``), so a
+    cap change that also rewords that parenthetical -- the likely shape of #114's
+    edit -- still goes red. It fails **safely**: the message is ``cannot locate
+    the start of the step 8 bound region ... re-anchor this test before trusting
+    it``, which is correct guidance rather than an invitation to bump a literal.
+    Improved, not eliminated.
 
     **What coupling 2 does not reach.** It guards 2 of the 3+ statements of the
     always-escalate conditions: ``README.md`` states them a third time and the

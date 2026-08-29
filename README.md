@@ -136,9 +136,9 @@ loop may only ever *raise* a finding to blocking, never lower one; a finding tha
 **false, stale, unresolvable, self-contradictory, or misdescribes what it sits on is blocking wherever
 it lives** — including in
 prose, which is a correctness finding when prose is what your project ships; and the pass may touch
-**only** paths your config has positively marked inert — never source, never tests, and never a path
-it does not explicitly declare docs-or-research, which in most
-projects leaves it reaching very little. The practical effect is that
+**only** paths your config has positively marked inert — never source, never tests, never a path it
+does not explicitly declare docs-or-research, and never a path it declares security-sensitive, which
+in most projects leaves it reaching very little. The practical effect is that
 this saves less than it may sound like it does, in the safe direction. **At the merge gate you are
 told the count**, and it is recorded in the ledger either way — including when it is zero.
 
