@@ -619,9 +619,7 @@ oddly cost the same full round today, and nothing in the ledger records the diff
 
 - **BLOCKING** — correctness, security, test efficacy (a test that cannot fail), acceptance-criteria
   coverage, anything moving a safety boundary. Re-arms exactly as a finding does today.
-- **EDITORIAL** — discharged in one contained sweep at the close of this step, and **does not
-  re-arm a round**, where the round runs *before* that sweep. A round running after it is governed
-  by the *"Once" is literal* rule, which escalates either class.
+- **EDITORIAL** — discharged in one contained sweep at the close of this step.
 
 **"Finding class" and "result class" are different vocabularies and never mix.** A *finding class* is
 BLOCKING or EDITORIAL, one per finding, and **only this gate's agents emit one** — its finders, and
@@ -767,11 +765,7 @@ with that rationale, in the gate-decision block where this round resolves** (Led
 progress.md), exactly as an architect decline is recorded in the plan text. A later round is
 *required* to receive the declines (Gates), and a decline is the one outcome that leaves **no trace
 in the diff** for that round to recover it from: unrecorded, it is invisible to every subsequent
-fresh instance. **EDITORIAL findings are not implemented here** — they go to the sweep above, which
-has its own commit, and a round returning *only* EDITORIAL findings therefore commits nothing at this
-paragraph and spawns no checker: it is not dirty, so there is no fix to re-check. **That holds for a
-round that runs before the sweep**; one that runs after it has no sweep to send them to, and the
-*"Once" is literal* rule governs it instead. Then, in either case, **commit the
+fresh instance. Then **commit the
 BLOCKING fixes** and
 **verify recs were applied — by a fresh checker, never by yourself.** If you *delegated* any fix,
 that agent wrote to its own copy: collect the diff, apply it, and **remove the copy before you
@@ -985,9 +979,7 @@ surface:
   it as a count.
 - **More than one line can exist for one issue** — a `/clear` on an `in-review` row replays step 8
   (Resume), so read the lines belonging to **this issue's** step-8 blocks and **sum** them. If you
-  cannot tell which blocks belong to this iteration, that is unknown: escalate. Reading this line
-  back is deliberate. **Do not generalize it** into deriving a gate's control state by parsing the
-  journal — step 8 forbids exactly that for its round anchor, and gives the reason.
+  cannot tell which blocks belong to this iteration, that is unknown: escalate.
 
 Where the row instead **auto-merges** there
 is no human to tell, which is why the same count is journalled either way.
