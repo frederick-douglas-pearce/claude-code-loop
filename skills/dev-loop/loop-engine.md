@@ -970,8 +970,8 @@ gate raised that no fresh instance ever re-read — a trade the human is the onl
 price, and absorbed silently it reads as a clean review. **Read the number off the `- Editorial:`
 line** (Ledger format → progress.md) rather than from memory: the sweep resolved back at step 8, so on
 a resumed iteration the ledger is where it survives. **Write `0` where the line says `0`** —
-a measured zero and an absent count are different statements, and this is the one number AC5 exists to
-surface:
+a measured zero and an absent count are different statements, and this is the one number this
+disclosure exists to surface:
 - **No `- Editorial:` line on an iteration whose step 8 closed ⇒ unknown, never `0`** (Ledger format
   fixes that reading). Unknown is not a count you may report: say so and **escalate**.
 - **A `- Editorial: finding — …` line carries no count** — the sweep hit its containment rule and a

@@ -2064,9 +2064,9 @@ class FindingClassAgreementTests(unittest.TestCase):
     mid-step ("Bounded to 2 rounds ... escalate to the human, do not loop", with
     ~90 further lines of step 8 after it); the Fresh-re-check invariant restates
     the same bound under "there is no ladder".
-    #121 changed the *semantics* of both -- only BLOCKING re-arms. Edit one and
-    the engine tells the orchestrator two different things about when a round
-    escalates, with every word of both passages still reading correctly.
+    #121 changed the *semantics* of both -- only BLOCKING re-arms. Drop a class
+    from one and the engine names different classes in its two statements of the
+    bound, with every word of both passages still reading correctly.
 
     **Coupling 2 -- the merge gate's always-escalate list is written twice.**
     Step 11 enumerates it, and the ``escalation-only`` bullet in Ledger format
