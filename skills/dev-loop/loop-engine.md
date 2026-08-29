@@ -392,7 +392,8 @@ that includes files you did not write. The window is **not** "while the agent ru
 worktree outlives the agent that wrote to it (Tool surface), so the exposure runs until the parent
 removes it. So: **name the paths you mean**, and **read `git diff --cached` before every commit**
 rather than trusting what you meant to stage. It applies at every commit boundary — step 7, the fix
-commits at step 8, **and the acceptance gate's own fix commits at step 10** — not just the first.
+commits at step 8, **the editorial sweep's own commit at the close of step 8**, **and the acceptance
+gate's own fix commits at step 10** — not just the first.
 (Step 9 defines no commit of its own; where a security finding needs code, it is fixed and committed
 under step 8's rule.)
 The last of those is the newest and the most exposed: the acceptance gate's mutation pass takes a
@@ -608,7 +609,9 @@ a partial reading of the change, which this gate cannot tell apart from a clean 
 correctness; robustness/IO/network/filesystem; reuse/conventions/integration;
 production-readiness — overlap far less than repeated passes of the same one, and single-angle
 review misses most of what a diff carries. Scale the count with the surface: one light pass on
-`docs`, more when the diff touches a production or public-API path.
+`docs`, more when the diff touches a production or public-API path. **Give each finder a distinct
+lens label, distinct from every other finder's in the same round** — the label is a component of every
+finding ID this gate records (below), so two finders sharing one collide.
 
 **Finding classes — every finding carries one, and only one class re-arms a round.**
 "The gate returned findings" is not one state. A guard that cannot fail and a changelog line worded
@@ -661,7 +664,12 @@ invents.
 security routing (`loop.config.md`, step 9) declares a path sensitive, **promote**. Here a **present,
 path-shaped declaration that simply does not cover this diff is a *known* answer** — no sensitive path
 was touched, no promotion — exactly as this step's full-round fallback list already reads it. Only a
-**missing, `TODO`-valued or non-path-shaped** declaration is unknown, and unknown promotes.
+**missing, `TODO`-valued or non-path-shaped** declaration is unknown, and unknown promotes. **That
+list of unknown-making defects is sufficient, not exhaustive, and it is deliberately not a list of the
+safe states** — a stale, ambiguous, self-contradictory or unlocatable declaration is unknown too.
+**If you cannot tell whether the declaration answers the question for this path, it does not: treat it
+as unknown and promote.** (The fallback list this floor models itself on carries the same two clauses,
+and dropping them here would have inherited its known-answer reading without its catch-all.)
 
 **The two use opposite unmatched-readings on purpose, and unifying them is a regression.**
 `SOURCE_LAYOUT` enumerates the **exceptions** to a `code` default, so an unmentioned path is `code`;
@@ -702,13 +710,21 @@ measured zero rather than as an absence. The ID is **`r<round>.<lens>.<k>`** —
 finder's lens, and that finder's own item index. **The lens is what makes the ID stable across the
 fan-out**: rounds run several finders at once and each numbers its own items from 1, so
 `round <n>, item <k>` collides. Where two finders would carry the same lens label, **distinguish the
-labels** — that is the only thing preventing a collision, so do it when you spawn them. This is a
+labels** — that is the only thing preventing a collision, so do it when you spawn them (the rule is
+restated at the spawn site above, where it is actionable). **A round that is one lighter checker
+rather than a fan-out has no lens**: write `recheck` in that position, e.g. `r2.recheck.1`. This is a
 **new record in the gate-decision block**, not the `code-review=` parenthetical on the `- Budget:`
 line, which records **angles only** and carries no per-finding detail.
 
-**The editorial sweep — one pass, contained, at the close of THIS step.**
+**The editorial sweep — one pass, contained, at the close of THIS step.** It is specified here,
+beside the classes it discharges, but it **runs last** — after the round paragraphs below, including
+the round bound. Read the two together rather than in file order.
 Run it when this gate resolves with **no unresolved BLOCKING finding**, as its own commit at this
-step's commit boundary, under step 6's explicit-path staging rule like any other boundary. They are
+step's commit boundary, under step 6's explicit-path staging rule like any other boundary. **Take the
+set to sweep from every round's gate-decision block in `progress.md`, not from memory** — that is what
+the per-finding record above is written for, and reading it back is what makes the record load-bearing
+rather than decorative. A `/clear` between a round and this sweep is the ordinary case, not the
+exceptional one. They are
 not re-reviewed: the finder that raised one already said what to write. **Placing it here is what
 makes it cheap and safe** — every EDITORIAL finding is already known (the emission rule above), and
 whatever still runs after this step — step 9 where its route makes it due, step 10, and CI — sees the
@@ -727,21 +743,34 @@ sweep's edits, at no extra round.
 3. **Journal what it applied** — the `- Editorial:` line (Ledger format → progress.md), whose
    enumerated spellings include the case where there was nothing to sweep.
 
-**"Once" is literal, and the one path that reopens it escalates rather than sweeping again.** This
-gate can be re-armed from *downstream* — a step-9 security fix commits under this step's rule and
-lands after this gate certified the head (Gates → currency). A round re-armed that way runs after the
-sweep has already gone, and its checker returns finding classes on round 1's terms, so it can surface
-a **new** EDITORIAL finding. **It gets no second sweep: that finding escalates with the re-arm.** The
-licence to apply a finding unreviewed rests on containment inside *this step's* commit boundary, and
-that containment is gone once the pipeline has advanced past it — a sweep run then would sit
-downstream of step 9, which is exactly the certification the placement above buys.
+**"Once" is literal, and this is the one place that decides what happens after it.** Every other
+statement of the round bound points here rather than restating the rule, because the rule is about
+*when a round runs*, not about what class a finding carries:
 
-Implement viable findings; decline others with a one-line rationale — **and record each decline,
+> **Before the sweep has run**, an EDITORIAL finding joins it: it re-arms nothing and escalates
+> nothing. **After the sweep has run, there is no sweep left** — so **every** finding a later round
+> returns, of **either** class, **escalates with the re-arm**. There is never a second sweep.
+
+**Stated that way on purpose: as a rule about ordering, not an enumeration of the ways it can
+happen.** This gate can be re-armed from *downstream* — a step-9 security fix that commits under this
+step's rule, a CI fix, a change the human asked for at the merge gate, a step-10 fix — and that list
+is the currency clause's own, which is **sufficient, not exhaustive** (Gates → currency). Naming one
+member here and letting the rest fall through to the unqualified bound would be the enumerable-safe-set
+trap in its fail-open direction: a round re-armed by something unnamed would sweep again. **Whatever
+re-armed it, a round that runs after the sweep does not sweep.** The licence to apply a finding
+unreviewed rests on containment inside *this step's* commit boundary, and that containment is gone
+once the pipeline has advanced past it — a sweep run then would sit downstream of step 9, which is
+exactly the certification the placement above buys.
+
+**Implement viable BLOCKING findings**; decline others with a one-line rationale — **and record each decline,
 with that rationale, in the gate-decision block where this round resolves** (Ledger format →
 progress.md), exactly as an architect decline is recorded in the plan text. A later round is
 *required* to receive the declines (Gates), and a decline is the one outcome that leaves **no trace
 in the diff** for that round to recover it from: unrecorded, it is invisible to every subsequent
-fresh instance. Then **commit the fixes** and
+fresh instance. **EDITORIAL findings are not implemented here** — they go to the sweep above, which
+has its own commit, and a round returning *only* EDITORIAL findings therefore commits nothing at this
+paragraph and spawns no checker: it is not dirty, so there is no fix to re-check. Then **commit the
+BLOCKING fixes** and
 **verify recs were applied — by a fresh checker, never by yourself.** If you *delegated* any fix,
 that agent wrote to its own copy: collect the diff, apply it, and **remove the copy before you
 commit** (Execution policy, Tool surface) — directing a fix is authorship, and it is also the one
@@ -757,8 +786,10 @@ are not restated here — rather than re-running the full finder fan-out; that r
 licence to object too. Bounded to 2 rounds (round 1 being the review
 itself, that re-check being round 2) — contested findings, and **any BLOCKING finding** the re-check
 returns, whether one round 1 raised or one only the fix introduced, escalate to the human, do not
-loop. **An EDITORIAL finding does not re-arm and does not escalate** — it joins the sweep above.
-That is the *only* thing the classes change about this bound: not the cap, not what counts as a
+loop. **An EDITORIAL finding raised before the sweep has run does not re-arm and does not escalate** —
+it joins the sweep above. **After the sweep has run, every finding escalates whatever its class**; the
+*"Once" is literal* rule below is the one place that decides this, and nothing else restates it.
+Within that, the classes change nothing else about this bound: not the cap, not what counts as a
 defect, and not the escalation for anything else.
 
 **Round 1 reads the whole change; every round after it reads only what has changed since the last
@@ -897,10 +928,11 @@ one.** A re-arm would need three things this gate cannot supply:
   would be skipped in silence by the next `/clear`.
 The human is the path because the human is the only actor outside those three constraints.
 
-**These are *result* classes, not the *finding* classes code review emits.** Class A and Class B are
-one-per-result and belong to this gate; BLOCKING and EDITORIAL are one-per-finding and belong to step
-8. **Neither of this gate's classes may ever be swept** — "either class blocks" below means exactly
-that, and no finding here is EDITORIAL because nothing here emits a finding class at all.
+**These are *result* classes, not the *finding* classes code review emits — two vocabularies, not two
+granularities.** Class A and Class B are this gate's own vocabulary; BLOCKING and EDITORIAL are step
+8's. The engine calls an item in either a "finding", so **"a Class B finding" carries no finding class
+at all** — it is a result of this gate, which emits none. **Neither of this gate's classes may ever be
+swept**: "either class blocks" below means exactly that.
 
 The gate returns **two result classes, and they are never summed into one "findings" count**:
 **Class A — AC-satisfaction findings** (a criterion judged not met) and **Class B — mutation
@@ -941,8 +973,21 @@ re-review** (step 8's sweep), and on which paths. A count, never a reassurance. 
 gate raised that no fresh instance ever re-read — a trade the human is the only actor positioned to
 price, and absorbed silently it reads as a clean review. **Read the number off the `- Editorial:`
 line** (Ledger format → progress.md) rather than from memory: the sweep resolved back at step 8, so on
-a resumed iteration the ledger is the only place it survives. **Write `0` where there were none** — an
-absent count and a measured zero are different statements. Where the row instead **auto-merges** there
+a resumed iteration the ledger is the only place it survives. **Write `0` where the line says `0`** —
+a measured zero and an absent count are different statements, and this is the one number AC5 exists to
+surface:
+- **No `- Editorial:` line on an iteration whose step 8 closed ⇒ unknown, never `0`** (Ledger format
+  fixes that reading). Unknown is not a count you may report: say so and **escalate**.
+- **A `- Editorial: finding — …` line carries no count** — the sweep hit its containment rule and a
+  finding was misclassified. That is a BLOCKING finding standing open; do not merge, and do not report
+  it as a count.
+- **More than one line can exist for one issue** — a `/clear` on an `in-review` row replays step 8
+  (Resume), so read the lines belonging to **this issue's** step-8 blocks and **sum** them. If you
+  cannot tell which blocks belong to this iteration, that is unknown: escalate. This is the one place
+  a later step reads a `progress.md` line back, and it is deliberate — **do not generalize it** into
+  parsing the journal for anything else (step 8 forbids exactly that for its round anchor).
+
+Where the row instead **auto-merges** there
 is no human to tell, which is why the same count is journalled either way.
 **If the human holds the merge (now or in any later invocation),
 WRITE the hold to the row before stopping** — set Status `hold` (record the reason in Notes) so
@@ -1008,7 +1053,7 @@ Scope/priority/requirements — including any plan whose value story lacks a cre
 checkable falsifier (step 3) — → `SCOPE_AGENT`, before implementing. Design/implementation →
 `DESIGN_AGENT`. Escalate to the HUMAN when those disagree/punt, ACs are unresolvable, an
 action is destructive/irreversible, a review finding is contested or is BLOCKING and unresolved
-(an EDITORIAL one is swept at step 8 and escalates nothing), or the same step failed twice —
+(an EDITORIAL one raised before the sweep has run; after it, see step 8's *"Once" is literal* rule, where every finding escalates), or the same step failed twice —
 **and, always-on, when the architect *decides*: a material redirect of the plan escalates exactly as
 a punt does** (step 5). "Only when those disagree/punt" would read a decisive rewrite as a reason to
 proceed, which inverts the point of the gate.
@@ -1384,6 +1429,7 @@ by; omitting the record because there is no issue number is what would break it.
 - Hermetic: n/a: research route.
 - PR: #<pr> (chore scope). CI: green.
 - Code-review: round 1 (main...9f3c1ab) — 0 findings. Security: n/a (no deps added).
+- Editorial: 0 — no EDITORIAL finding returned.
 - Restore: n/a: no mutation applied.
 - AC-verify: Class A 3/3 acceptance criteria met. Class B: mutation pass not due (research route).
 - Budget: subagent-runs=3 · gate-rounds=architect=0,code-review=1(correctness,robustness),ac-verify=1 · ac-findings=0 · mutation-survivors=n/a: research route · wall-clock=18m · tokens=deferred
@@ -1494,7 +1540,9 @@ the sweep resolves — not at step 12**, for the reason the `- Plan-gate:` line 
 write-time: the sweep resolves several steps before the journal, and the merge gate reads this line
 back rather than recalling the number. It is **owed by an iteration whose step 8 closes**; an
 iteration that escalates at step 8 and stops runs no sweep and writes none, exactly as `- Hermetic:`
-enumerates a writes-none path. It takes the same **enumerated** forms, for the same reason — a single
+enumerates a writes-none path. **The close record carries the line too**, as it carries `- Hermetic:`
+and `- Restore:` — written at step 8 when the sweep resolves, and repeated in the close record so one
+block holds the iteration's whole outcome. It takes the same **enumerated** forms, for the same reason — a single
 fixed shape whose only legal rendering asserts a clean sweep is a template that pressures you to
 assert one:
 
@@ -1502,13 +1550,16 @@ assert one:
   sweep ran. Each `<id>` is the `r<round>.<lens>.<k>` the finding was recorded under (step 8), so a
   reader can trace it back to the round and the lens that raised it.
 - **`- Editorial: 0 — <no EDITORIAL finding returned | all promoted by the content floor | all
-  promoted by a path floor | promoted by a mix of floors>`** — nothing to sweep. **`0`, not `none`**,
+  promoted by a path floor | all promoted for an unspecified remedy | promoted by a mix of the
+  above>`** — nothing to sweep. **These reasons are sufficient, not exhaustive** — every promotion
+  route the step defines has one here today, including sweep rule 1's unspecified-remedy route, but
+  name a new route rather than forcing it into the nearest wrong reason. **`0`, not `none`**,
   so this line and the merge gate's count are the same statement; and **which** of those it was
   matters, because "the finders raised none" and "the floors promoted every one" are different facts
   about the change — in a project whose declared-inert set is small the second is the ordinary
   outcome.
 - **`- Editorial: finding — <the sweep edit that would have landed outside the swept set>`** — the
-  sweep's containment rule 2 fired, so a finding was misclassified. This is a **blocking finding**:
+  sweep's containment rule 2 fired, so a finding was misclassified. This is a **BLOCKING** finding:
   escalate, do not apply, and do not merge while it stands.
 - **no `- Editorial:` line at all** — on an iteration whose step 8 closed, **unknown, and unknown is
   not "0".** Absence cannot distinguish an iteration that swept nothing from one that swept without
@@ -2334,7 +2385,7 @@ Gate table:
 | Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure | the agent's review, **recorded by you** wherever this project records architect decisions — issue comment, issue-body marker, or decision-log entry (Resume) |
 | Human (plan) | user | **every issue under `plan-gate: always`** (the default under `calibration`; absent or unrecognized reads as `always`); under `plan-gate: conditional`, if uncertain/irreversible. Under **both**, **always** when the architect materially changed the plan (step 5's frozen-vs-live diff — decisiveness escalates exactly as a punt does, and neither `mode:`, `plan-gate:`, nor route graduation reaches this one) | approve/redirect |
 | Build commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`) | orchestrator | step 6, each per its own binding; `HERMETIC_TEST_CMD` additionally requires Route `code` **and** a change that adds or modifies a test, **whatever the binding says** — on such a row an absent or `TODO` binding is unknown, and unknown is due (the gate's four-state table) | **exit status per command**; non-zero blocks |
-| Code review | `CODE_REVIEW` (parallel finders you run — step 8); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes |
+| Code review | `CODE_REVIEW` (parallel finders you run — step 8); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes, each carrying a **finding class**: BLOCKING re-arms, EDITORIAL is swept at the close of the step (step 8) |
 | Security | `SECURITY_REVIEW` (local or label) | by route (step 9) | clean/findings |
 | AC-verify | fresh subagent (+`VERIFY`); **any re-check a fresh instance too** (Fresh-re-check invariant) | every issue with acceptance criteria (step 10 is unconditional; the **mutation pass within it** is scoped — Routing table). **Last gate before merge**, so it certifies the merge candidate and owns the commit boundary for its own fixes | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors); **either class blocks** |
 | Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI + security + acceptance green | `MERGE_METHOD` |
@@ -2547,7 +2598,10 @@ your *conclusions*, not the instructions the checker needs).
   exists to remove. It **reads the change itself and reports what it saw** — a claimed fix is a
   claim, not evidence — and states for each finding whether the code now does it, citing
   `file:line`. **It returns a finding class per finding on the same terms as round 1** (step 8): the
-  checker emits it, you may only raise it, and an unclassified finding is BLOCKING. **One lighter
+  checker emits it, you may only raise it, and an unclassified finding is BLOCKING. **Where this round
+  is running after the sweep already went, the class no longer changes the outcome** — step 8's
+  *"Once" is literal* rule escalates either class — but it is still emitted, because the `- Editorial:`
+  record and the merge gate's count read it. **One lighter
   checker**, not a re-run of the full finder fan-out. **Anything the
   fixes broke is in scope**: a defect the fix commits introduced is a finding even though no one
   listed it. "Lighter" bounds the fan-out, never the checker's licence to object. It carries the
@@ -2571,8 +2625,9 @@ your *conclusions*, not the instructions the checker needs).
 round 2 of the 2-round cap each gate already carries, never a round on top of it. If round 2 comes
 back dirty — **whether it is a finding round 1 raised or one only the fix introduced** — escalate to
 the human; there is no round 3. **At code review, "dirty" means a BLOCKING finding**: an EDITORIAL one
-joins that step's sweep, re-arms nothing and escalates nothing (step 8, which fixes the classes and
-the floors that may raise one). **The acceptance gate has no finding class at all** — either of its
+raised before the sweep has run; after it, see step 8's *"Once" is literal* rule, where every finding escalates joins that step's sweep, re-arms nothing and escalates nothing (step 8, which fixes the
+classes, the floors that may raise one, and the ordering rule that governs a round running after the
+sweep). **The acceptance gate has no finding class at all** — either of its
 two *result* classes is dirty, and neither may be swept.
 
 **Reaching a cap is a handoff, never a terminal state.** The cap ends the *round* — not the run, not

@@ -127,15 +127,18 @@ than its own memory of what it had intended.
 
 **Some review findings are applied without a second review, and the loop tells you how many.**
 Code review sorts each finding into **blocking** or **editorial**, and only blocking ones send the
-gate round back around. Editorial ones — wording that asserts nothing about your code and changes no
-behavior — are applied in a single pass at the close of code review and are not re-reviewed, so
-everything that pass writes still goes through security, acceptance and CI afterwards. Four things
+gate round back around. Editorial ones — wording that asserts no proposition about your repository
+and changes no behavior — are applied in a single pass at the close of code review and are not
+re-reviewed. What that pass writes still goes through acceptance and CI afterwards, and through
+security review where the change's route makes that gate due. Four things
 bound it, and they are deliberately strict: the **reviewer** assigns the class, never the loop; the
 loop may only ever *raise* a finding to blocking, never lower one; a finding that something is
-**false, stale, unresolvable or self-contradictory is blocking wherever it lives** — including in
-prose, which is a correctness finding when prose is what your project ships; and the pass may not
-touch source, tests, or any path your config declares code-route or security-sensitive, which in most
-projects leaves it reaching only files you have explicitly marked inert. The practical effect is that
+**false, stale, unresolvable, self-contradictory, or misdescribes what it sits on is blocking wherever
+it lives** — including in
+prose, which is a correctness finding when prose is what your project ships; and the pass may touch
+**only** paths your config has positively marked inert — never source, never tests, and never a path
+it does not explicitly declare docs-or-research, which in most
+projects leaves it reaching very little. The practical effect is that
 this saves less than it may sound like it does, in the safe direction. **At the merge gate you are
 told the count**, and it is recorded in the ledger either way — including when it is zero.
 
@@ -268,8 +271,9 @@ you rather than assuming.
 acceptance gate above, or code review, on any route — a freshly spawned checker decides whether the
 fix worked: not the thread that wrote it, and not the checker that raised the finding. Each such
 gate gets **one** re-check; if it comes back dirty the loop stops and asks you, rather than
-iterating on itself. At code review, "dirty" means a **blocking** finding — an editorial one joins
-the single unreviewed pass described above and neither re-arms the round nor stops for you.
+iterating on itself. At code review, "dirty" means a **blocking** finding — an editorial one raised
+before that pass has run joins it, and neither re-arms the round nor stops for you. Once the pass has
+run there is no second one, so a finding of either kind after that point stops and asks you.
 
 **Hard limits the engine commits to:**
 

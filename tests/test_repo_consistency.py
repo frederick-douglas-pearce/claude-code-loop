@@ -2060,9 +2060,10 @@ class FindingClassAgreementTests(unittest.TestCase):
     regions in the same wrong direction, and needs updating on every legitimate
     reword.
 
-    **Coupling 1 -- the round bound is written twice.** Step 8 ends with
-    "Bounded to 2 rounds ... escalate to the human, do not loop"; the
-    Fresh-re-check invariant restates the same bound under "there is no ladder".
+    **Coupling 1 -- the round bound is written twice.** Step 8 states it
+    mid-step ("Bounded to 2 rounds ... escalate to the human, do not loop", with
+    ~90 further lines of step 8 after it); the Fresh-re-check invariant restates
+    the same bound under "there is no ladder".
     #121 changed the *semantics* of both -- only BLOCKING re-arms. Edit one and
     the engine tells the orchestrator two different things about when a round
     escalates, with every word of both passages still reading correctly.
@@ -2077,21 +2078,43 @@ class FindingClassAgreementTests(unittest.TestCase):
     near-miss made mechanical.
 
     **What coupling 1 does NOT guard, stated because an earlier draft claimed it
-    did.** It compares the *set of class tokens* named in each region. It says
-    nothing about the round **bound** itself -- the numeral 2 -- so a mutation
-    changing the cap on one side only survives it. That draft's docstring cited
+    did.** It compares the *set of class tokens* named in each region, and says
+    nothing about the round **bound** itself -- the numeral -- so a mutation
+    changing the cap on one side only survives it. That earlier draft cited
     #114/AC7, which is exactly about the bound moving in lockstep; the claim is
     **withdrawn**, and the bound-number comparison belongs with #114, where the
     bound actually moves.
 
+    **The span anchor is deliberately numeral-free for that reason.** An earlier
+    draft anchored on the literal ``"Bounded to 2 rounds"``, which pinned the cap
+    by accident: the one-sided cap mutation the paragraph above says survives was
+    in fact killed, and -- worse -- a *legitimate* both-sides cap change went red
+    with a message inviting the maintainer to bump the literal. #114 is queued to
+    make exactly that change. Do not reintroduce a numeral into either anchor.
+
     **What coupling 2 does not reach.** It guards 2 of the 3+ statements of the
     always-escalate conditions: ``README.md`` states them a third time and the
     Escalation rubric carries a differently-worded mention. Neither is compared
-    here -- their agreement is review's to own. The extractor also assumes the
-    first ``:`` in each region introduces the list, and that no item contains a
-    non-parenthetical comma. Both assumptions fail **loud** (the guard-on-guard
-    tests below go red rather than the comparison going vacuous), but they are
-    assumptions and are written down rather than left to be rediscovered.
+    here -- their agreement is review's to own. Three further gaps, all measured
+    by mutation rather than reasoned about:
+
+    * **Step 11's peer bullets are outside the span.** It starts at "none of the
+      always-escalate conditions apply:", so a condition added as its own
+      ``- ... , AND`` bullet -- which is how ``hold`` and the release-bump
+      condition are already written -- is invisible here.
+    * **``_HOLD_ROW`` is subtracted from both sides unconditionally**, so the
+      escalation-only bullet dropping ``a hold row`` altogether is not caught.
+    * **A condition inserted before the introducing ``:``** is not parsed.
+
+    **Extractor assumptions, and how each fails.** The first ``:`` in a region
+    introduces the list, and no item contains a non-parenthetical comma. An
+    **asymmetric** violation of either fails loud -- but via
+    ``test_both_statements_of_the_always_escalate_list_agree``, *not* via the
+    guard-on-guard tests, which stay green because both regions still parse to
+    three or more items. A violation applied **identically to both regions** --
+    the likely shape, since this project's convention is to edit them together --
+    is absorbed **silently**: both lists mis-split the same way and still agree.
+    That is the one blind spot worth knowing before trusting a green run.
 
     **And what neither guards, deliberately.** Not the polarity or the
     correctness of any rule: nothing here knows that EDITORIAL *should* be the
@@ -2130,7 +2153,8 @@ class FindingClassAgreementTests(unittest.TestCase):
     def _bound_regions(self) -> dict:
         return {
             "step 8 (the gate's own bound)": self._span(
-                "Bounded to 2 rounds", "**Round 1 reads the whole change",
+                " rounds (round 1 being the review",
+                "**Round 1 reads the whole change",
                 "step 8 bound",
             ),
             "Fresh-re-check invariant (restates it)": self._span(
@@ -2188,16 +2212,26 @@ class FindingClassAgreementTests(unittest.TestCase):
         items = set()
         for raw in body[i + 1:].split(","):
             item = re.sub(r"^(or|and)\s+", "", raw.strip().rstrip(".")).strip()
-            if not item or " " not in item:
+            if not item:
                 continue
             items.add(item.lower())
         # step 11 carries `hold` as its own bullet above the list; the
         # escalation-only bullet folds it in. That divergence is structural, so
         # it is excluded explicitly rather than by a fuzzy comparison.
+        # DO NOT GROW THIS EXCLUSION. It has the shape CLAUDE.md flags for
+        # ALLOWED_NON_BINDINGS and _STOPWORDS: appending a term is the cheap way
+        # to green a failing comparison, and each one is a condition this guard
+        # stops comparing. A new divergence is a finding about the engine, not a
+        # constant to add here.
         return frozenset(x for x in items if x != self._HOLD_ROW)
 
     def test_the_extractor_actually_finds_both_escalate_lists(self) -> None:
-        """Guards the guard: an unmatched region would silently assert nothing."""
+        """Guards the guard: a region that matches but stops parsing asserts nothing.
+
+        An *unmatched* region is not the risk here -- ``_span`` asserts, so both
+        tests go red loudly. The silent case is a region that matches and then
+        parses to almost nothing, which would make the comparison below vacuous.
+        """
         for label, body in self._escalate_regions().items():
             with self.subTest(region=label):
                 self.assertGreaterEqual(
@@ -2220,6 +2254,7 @@ class FindingClassAgreementTests(unittest.TestCase):
             "missing there auto-merges past something step 11 would have stopped "
             "for. Edit them together.",
         )
+
 
 if __name__ == "__main__":
     unittest.main()
