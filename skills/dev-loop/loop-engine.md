@@ -610,6 +610,132 @@ production-readiness — overlap far less than repeated passes of the same one, 
 review misses most of what a diff carries. Scale the count with the surface: one light pass on
 `docs`, more when the diff touches a production or public-API path.
 
+**Finding classes — every finding carries one, and only one class re-arms a round.**
+"The gate returned findings" is not one state. A guard that cannot fail and a changelog line worded
+oddly cost the same full round today, and nothing in the ledger records the difference. Two classes:
+
+- **BLOCKING** — correctness, security, test efficacy (a test that cannot fail), acceptance-criteria
+  coverage, anything moving a safety boundary. Re-arms exactly as a finding does today.
+- **EDITORIAL** — discharged in one contained sweep at the close of this step (below), and **does
+  not re-arm a round**.
+
+**"Finding class" and "result class" are different vocabularies and never mix.** A *finding class* is
+BLOCKING or EDITORIAL, one per finding, and **only this gate's agents emit one** — its finders, and
+the fresh re-checker of a later round (Gates → Fresh-re-check invariant). A *result class* is the
+acceptance gate's Class A / Class B, one per result (step 10), and nothing there is ever BLOCKING or
+EDITORIAL. Step 9 returns clean-or-findings and emits no class at all. **That is what makes every
+EDITORIAL finding known by the close of this step** — not a survey of what the later gates happen to
+return, but a rule about who may emit the class. The one exception is written out at the sweep below,
+where a round re-armed from downstream reopens the question after the sweep has already run.
+
+**The finder emits the class; you never assign or reassign one.** Put it in the finder's prompt
+beside the acceptance criteria and the standing authoring check. Inference by the author is the
+judgment this gate exists to remove: an orchestrator under budget pressure will want to read a real
+finding as EDITORIAL, and the only structural defence is that the class arrives from outside. What
+you may do is **raise** it, by any floor below — **promotion only, never the reverse.**
+
+**Floor 1 — content.** EDITORIAL is the **affirmative claim the finder must establish**: this finding
+*asserts no proposition about the tree* **and** *has no behavioral consequence*. Everything else is
+BLOCKING. In particular, a finding that something is **false, stale, unresolvable,
+self-contradictory, or misdescribes what it sits on** is BLOCKING **whatever path it is on** — that
+is the step-6 authoring rule's own class, and where the deliverable is prose an agent executes such a
+finding *is* a correctness finding.
+
+**That list is sufficient, not exhaustive — extend it, never prune it — and if you are unsure, it is
+BLOCKING.** Stated the other way round, *"EDITORIAL is anything not on that list"*, the triggers
+become an enumeration of the **safe** set and a shape nobody enumerated ships: an **ambiguous**
+instruction carrying two readings, a **misleading-but-not-false** example, a **fragile**
+cross-reference. That is the same enumerable-assertion failure one level up from a topic list. The
+catch-all is what makes extension safe and pruning a regression.
+
+**"No behavioral consequence" is itself a judgment about an executed artifact, so it defaults to
+*assume there is one*.** Where prose is the product, a wrong sentence is a behavior change.
+
+**Floor 2a — code-route path (default-deny on the layout *default*).** A path is code-route **unless
+`SOURCE_LAYOUT` positively declares it `docs` or `research`**. Unmatched ⇒ `code` ⇒ **promote to
+BLOCKING**, regardless of content and regardless of what the finder returned. The unmatched reading is
+`code` because `code` is the Router's **default** route (Router rule 4), not a fallback this floor
+invents.
+
+**Floor 2b — sensitive-surface path (default-deny on an *absent* declaration).** Where the project's
+security routing (`loop.config.md`, step 9) declares a path sensitive, **promote**. Here a **present,
+path-shaped declaration that simply does not cover this diff is a *known* answer** — no sensitive path
+was touched, no promotion — exactly as this step's full-round fallback list already reads it. Only a
+**missing, `TODO`-valued or non-path-shaped** declaration is unknown, and unknown promotes.
+
+**The two use opposite unmatched-readings on purpose, and unifying them is a regression.**
+`SOURCE_LAYOUT` enumerates the **exceptions** to a `code` default, so an unmentioned path is `code`;
+security routing enumerates the sensitive set **positively**, so an unmentioned path is not sensitive.
+Reading 2b's known-answer rule into 2a lets a path no declaration mentions survive as EDITORIAL,
+which is fail-open on the default route. Reading 2a's rule into 2b sends every finding to BLOCKING in
+any project whose sensitive surface is narrow, which is most of them. **Do not merge these into one
+floor.**
+
+**What the path floors cost, stated here rather than discovered later.** They are deliberately blunt,
+and their reach is the consequence: EDITORIAL survives only on paths a project has **explicitly
+declared inert**. Where source is `code`-route, a stale docstring or a wrong comment *inside source*
+promotes to BLOCKING. Where a project declares no `docs`/`research` paths at all, everything promotes
+and this mechanism is inert until it declares some. That is the safe direction and it is deliberate.
+**Do not describe the saving as larger than it is**, here or in a journal, and **do not state a
+measured round saving anywhere in this engine** — whether the classes save rounds is a corpus
+question this document is not the place to answer.
+
+**Default-deny over every floor:** an unclassified, unrecognised, or ambiguous finding is BLOCKING.
+Never *"it is not on the BLOCKING list, so it is editorial."*
+
+**A worked negative example — the case where the floors disagree, and why content must win.**
+Take a project whose deliverable is prose an agent executes, and a change confined to a file that
+project's own config **positively declares `docs`**: a contributor guide, say, that ships to no
+consumer but that every agent working the repo reads as instructions. A finder returns *"this sentence
+says the generated artifact is unreachable by any later release — that is false; the generator is
+edited every release."* **Neither path floor fires** — the path is declared `docs`, and it is not
+security-sensitive. **Floor 1 does** — the finding asserts a proposition about the tree and says it is
+false. So the finding is **BLOCKING**. Decided by path alone it would have been swept in without
+re-review, and the round that would have caught what the fix broke would never have run at all. **A
+finding that says "this is false" is never editorial, wherever it lives.**
+
+**Recording an EDITORIAL finding — when its round resolves, under an ID stable across the fan-out.**
+Write each one into that round's gate-decision block (Ledger format → progress.md), beside the
+round's declines and on the same write-time discipline: **when the round resolves, not at step 12.**
+Accumulating them only in your context loses them to a `/clear`, and the loss then reads as a
+measured zero rather than as an absence. The ID is **`r<round>.<lens>.<k>`** — round number, the
+finder's lens, and that finder's own item index. **The lens is what makes the ID stable across the
+fan-out**: rounds run several finders at once and each numbers its own items from 1, so
+`round <n>, item <k>` collides. Where two finders would carry the same lens label, **distinguish the
+labels** — that is the only thing preventing a collision, so do it when you spawn them. This is a
+**new record in the gate-decision block**, not the `code-review=` parenthetical on the `- Budget:`
+line, which records **angles only** and carries no per-finding detail.
+
+**The editorial sweep — one pass, contained, at the close of THIS step.**
+Run it when this gate resolves with **no unresolved BLOCKING finding**, as its own commit at this
+step's commit boundary, under step 6's explicit-path staging rule like any other boundary. They are
+not re-reviewed: the finder that raised one already said what to write. **Placing it here is what
+makes it cheap and safe** — every EDITORIAL finding is already known (the emission rule above), and
+whatever still runs after this step — step 9 where its route makes it due, step 10, and CI — sees the
+sweep's edits, at no extra round.
+**Three rules make it safe, and none is optional:**
+1. **Apply only a remedy the finder specified.** A finding whose remedy is not specified precisely
+   enough to apply as given is **BLOCKING** by the same default-deny — the licence not to re-review
+   rests entirely on the reviewer having said what to write, so where they did not, it is absent.
+2. **The sweep may touch only paths that are neither source nor tests, and that no floor above would
+   promote.** Every such path is one the currency clause's existing exemption already covers — the
+   swept set is a **subset** of the exempt set, never a widening of it (Gates → currency) — so the
+   sweep re-arms nothing **by definition**. It is not given an exemption of its own and **must never
+   be given one**. Inherit that clause's default-deny with it: **if you
+   cannot tell whether a path is source or a test, it is — do not sweep it.** If a sweep edit would
+   land anywhere outside that set, **a finding was misclassified: escalate, do not apply.**
+3. **Journal what it applied** — the `- Editorial:` line (Ledger format → progress.md), whose
+   enumerated spellings include the case where there was nothing to sweep.
+
+**"Once" is literal, and the one path that reopens it escalates rather than sweeping again.** This
+gate can be re-armed from *downstream* — a step-9 security fix commits under this step's rule and
+lands after this gate certified the head (Gates → currency). A round re-armed that way runs after the
+sweep has already gone, and its checker returns finding classes on round 1's terms, so it can surface
+a **new** EDITORIAL finding. **It gets no second sweep: that finding escalates with the re-arm.** The
+licence to apply a finding unreviewed rests on containment inside *this step's* commit boundary, and
+that containment is gone once the pipeline has advanced past it — a sweep run then would sit
+downstream of step 9, which is exactly the certification the placement above buys.
+
 Implement viable findings; decline others with a one-line rationale — **and record each decline,
 with that rationale, in the gate-decision block where this round resolves** (Ledger format →
 progress.md), exactly as an architect decline is recorded in the plan text. A later round is
@@ -629,8 +755,11 @@ empty-delta fallback below). Spawn **one lighter
 checker** — its inputs are fixed under Gates (Fresh-re-check invariant → the code-review bullet) and
 are not restated here — rather than re-running the full finder fan-out; that recipe carries its
 licence to object too. Bounded to 2 rounds (round 1 being the review
-itself, that re-check being round 2) — contested findings, and **any** finding the re-check returns,
-whether one round 1 raised or one only the fix introduced, escalate to the human, do not loop.
+itself, that re-check being round 2) — contested findings, and **any BLOCKING finding** the re-check
+returns, whether one round 1 raised or one only the fix introduced, escalate to the human, do not
+loop. **An EDITORIAL finding does not re-arm and does not escalate** — it joins the sweep above.
+That is the *only* thing the classes change about this bound: not the cap, not what counts as a
+defect, and not the escalation for anything else.
 
 **Round 1 reads the whole change; every round after it reads only what has changed since the last
 round read.** What ***this gate's*** re-check requires is a fresh **instance** — it does not
@@ -768,6 +897,11 @@ one.** A re-arm would need three things this gate cannot supply:
   would be skipped in silence by the next `/clear`.
 The human is the path because the human is the only actor outside those three constraints.
 
+**These are *result* classes, not the *finding* classes code review emits.** Class A and Class B are
+one-per-result and belong to this gate; BLOCKING and EDITORIAL are one-per-finding and belong to step
+8. **Neither of this gate's classes may ever be swept** — "either class blocks" below means exactly
+that, and no finding here is EDITORIAL because nothing here emits a finding class at all.
+
 The gate returns **two result classes, and they are never summed into one "findings" count**:
 **Class A — AC-satisfaction findings** (a criterion judged not met) and **Class B — mutation
 survivors** (a test this change adds or modifies that stays green when the behavior it guards is
@@ -790,16 +924,26 @@ only when ALL of these hold:
   produces no bump, which qualifies, AND
 - the row is **not** `hold`, AND
 - none of the always-escalate conditions apply: a `feat:`/breaking change, a risky/irreversible
-  change, a touched security surface, a contested review finding, **an unresolved Class B
-  mutation survivor from the acceptance gate** (step 10 — a guard that does not guard is exactly the
-  defect an auto-merge has no human to catch), or **an unresolved hermetic-tier finding** (step 6 —
-  same shape: a declared invariant that is not true, with no human in the path to notice).
+  change, a touched security surface, a contested review finding, **an unresolved BLOCKING review
+  finding** (step 8 — EDITORIAL findings are swept there, never left unresolved), **an unresolved
+  Class B mutation survivor from the acceptance gate** (step 10 — a guard that does not guard is
+  exactly the defect an auto-merge has no human to catch), or **an unresolved hermetic-tier finding**
+  (step 6 — same shape: a declared invariant that is not true, with no human in the path to notice).
 
 **Default-deny:** if route graduation or any always-escalate condition is uncertain, the row is
 **not** auto-merge-eligible — fall back to the human merge gate.
 
 If the row is **not** auto-merge-eligible — which includes *every* row under `mode: calibration`
 (the default) and any `hold` row — STOP and ask the human before merging; never auto-merge.
+
+**What the stop must state, and it is not optional: how many EDITORIAL findings were applied without
+re-review** (step 8's sweep), and on which paths. A count, never a reassurance. Those are findings a
+gate raised that no fresh instance ever re-read — a trade the human is the only actor positioned to
+price, and absorbed silently it reads as a clean review. **Read the number off the `- Editorial:`
+line** (Ledger format → progress.md) rather than from memory: the sweep resolved back at step 8, so on
+a resumed iteration the ledger is the only place it survives. **Write `0` where there were none** — an
+absent count and a measured zero are different statements. Where the row instead **auto-merges** there
+is no human to tell, which is why the same count is journalled either way.
 **If the human holds the merge (now or in any later invocation),
 WRITE the hold to the row before stopping** — set Status `hold` (record the reason in Notes) so
 it persists across `/clear`; resume (step 0.3), step 1, and this gate all key on Status `hold` and
@@ -863,7 +1007,8 @@ re-invokes with fresh context for the next issue.)
 Scope/priority/requirements — including any plan whose value story lacks a credible user or a
 checkable falsifier (step 3) — → `SCOPE_AGENT`, before implementing. Design/implementation →
 `DESIGN_AGENT`. Escalate to the HUMAN when those disagree/punt, ACs are unresolvable, an
-action is destructive/irreversible, a review finding is contested, or the same step failed twice —
+action is destructive/irreversible, a review finding is contested or is BLOCKING and unresolved
+(an EDITORIAL one is swept at step 8 and escalates nothing), or the same step failed twice —
 **and, always-on, when the architect *decides*: a material redirect of the plan escalates exactly as
 a punt does** (step 5). "Only when those disagree/punt" would read a decisive rewrite as a reason to
 proceed, which inverts the point of the gate.
@@ -1095,7 +1240,9 @@ rewrite of the plan**. The two modes:
   decision log — never frozen into this mechanism definition (the lesson: graduation *state* is
   evidence, not a rule). The human merge gate is **retained** for every non-graduated route and,
   regardless of route, for any of: a `feat:`/breaking change, a risky/irreversible change, a touched
-  security surface, a contested review finding, an unresolved Class B mutation survivor (step 10),
+  security surface, a contested review finding, an unresolved BLOCKING review finding (step 8 —
+  EDITORIAL findings are swept there, never left unresolved), an unresolved Class B mutation survivor
+  from the acceptance gate (step 10),
   an unresolved hermetic-tier finding (step 6), or a `hold` row — **and, by default-deny, whenever
   route graduation or any always-escalate condition is uncertain, fall back to the human merge
   gate.** Initialization pairs it with `plan-gate: conditional` (step 5) — **and neither that
@@ -1337,6 +1484,35 @@ only legal rendering asserts a scoped round is a template that pressures you to 
 
 Keep the range **off** the `- Budget:` line: that line is one physical line and its
 `code-review=<c>(…)` parenthetical records lenses only.
+
+The **`- Editorial:`** line records step 8's editorial sweep — what was applied **without
+re-review**, and to what. It exists for the reason `- Hermetic:` and `- Restore:` do: everything the
+sweep's containment rules do is *prevention*, and prevention that fails, fails silently. Without this
+line an iteration that swept ten findings and one that raised none are identical in the ledger, and
+the merge gate's disclosure (step 11) would have nothing behind it to read. **Write it at step 8, when
+the sweep resolves — not at step 12**, for the reason the `- Plan-gate:` line fixes its own
+write-time: the sweep resolves several steps before the journal, and the merge gate reads this line
+back rather than recalling the number. It is **owed by an iteration whose step 8 closes**; an
+iteration that escalates at step 8 and stops runs no sweep and writes none, exactly as `- Hermetic:`
+enumerates a writes-none path. It takes the same **enumerated** forms, for the same reason — a single
+fixed shape whose only legal rendering asserts a clean sweep is a template that pressures you to
+assert one:
+
+- **`- Editorial: <count> applied without re-review — <id> (<path>): <what was applied>; …`** — the
+  sweep ran. Each `<id>` is the `r<round>.<lens>.<k>` the finding was recorded under (step 8), so a
+  reader can trace it back to the round and the lens that raised it.
+- **`- Editorial: 0 — <no EDITORIAL finding returned | all promoted by the content floor | all
+  promoted by a path floor | promoted by a mix of floors>`** — nothing to sweep. **`0`, not `none`**,
+  so this line and the merge gate's count are the same statement; and **which** of those it was
+  matters, because "the finders raised none" and "the floors promoted every one" are different facts
+  about the change — in a project whose declared-inert set is small the second is the ordinary
+  outcome.
+- **`- Editorial: finding — <the sweep edit that would have landed outside the swept set>`** — the
+  sweep's containment rule 2 fired, so a finding was misclassified. This is a **blocking finding**:
+  escalate, do not apply, and do not merge while it stands.
+- **no `- Editorial:` line at all** — on an iteration whose step 8 closed, **unknown, and unknown is
+  not "0".** Absence cannot distinguish an iteration that swept nothing from one that swept without
+  recording it, and the second is the failure this line exists to catch.
 
 The **`- Restore:`** line records that a mutation pass gave the tree back. It gets its own line for
 the same reason `- Hermetic:` does — everything else about the pass is *prevention*, and prevention
@@ -2370,7 +2546,9 @@ your *conclusions*, not the instructions the checker needs).
   a diff and no such instruction re-reviews the diff it was handed, which is the cost this scoping
   exists to remove. It **reads the change itself and reports what it saw** — a claimed fix is a
   claim, not evidence — and states for each finding whether the code now does it, citing
-  `file:line`. **One lighter checker**, not a re-run of the full finder fan-out. **Anything the
+  `file:line`. **It returns a finding class per finding on the same terms as round 1** (step 8): the
+  checker emits it, you may only raise it, and an unclassified finding is BLOCKING. **One lighter
+  checker**, not a re-run of the full finder fan-out. **Anything the
   fixes broke is in scope**: a defect the fix commits introduced is a finding even though no one
   listed it. "Lighter" bounds the fan-out, never the checker's licence to object. It carries the
   **Verdict-first invariant** (Gates) too: a verdict on every claimed fix first, depth after.
@@ -2392,7 +2570,10 @@ your *conclusions*, not the instructions the checker needs).
 **The bound — one fresh re-check, then escalate; there is no ladder.** The fresh re-check **is**
 round 2 of the 2-round cap each gate already carries, never a round on top of it. If round 2 comes
 back dirty — **whether it is a finding round 1 raised or one only the fix introduced** — escalate to
-the human; there is no round 3.
+the human; there is no round 3. **At code review, "dirty" means a BLOCKING finding**: an EDITORIAL one
+joins that step's sweep, re-arms nothing and escalates nothing (step 8, which fixes the classes and
+the floors that may raise one). **The acceptance gate has no finding class at all** — either of its
+two *result* classes is dirty, and neither may be swept.
 
 **Reaching a cap is a handoff, never a terminal state.** The cap ends the *round* — not the run, not
 the issue. **STOP and put the decision to the human**, and do not proceed on your own judgement: an
