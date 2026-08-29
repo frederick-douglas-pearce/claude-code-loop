@@ -2051,5 +2051,220 @@ class CurrencyExemptionAgreementTests(unittest.TestCase):
                 )
 
 
+class FindingClassAgreementTests(unittest.TestCase):
+    """#121's finding classes are restated in pairs; each pair must agree.
+
+    Two couplings, both the same shape as ``CurrencyExemptionAgreementTests``:
+    the lists are **extracted from the prose and compared to each other**, never
+    to a copy pinned here. A pinned copy passes for any edit that changes both
+    regions in the same wrong direction, and needs updating on every legitimate
+    reword.
+
+    **Coupling 1 -- the round bound is written twice.** Step 8 states it
+    mid-step ("Bounded to 2 rounds ... escalate to the human, do not loop", with
+    ~90 further lines of step 8 after it); the Fresh-re-check invariant restates
+    the same bound under "there is no ladder".
+    #121 changed the *semantics* of both -- only BLOCKING re-arms. Drop a class
+    from one and the engine names different classes in its two statements of the
+    bound, with every word of both passages still reading correctly.
+
+    **Coupling 2 -- the merge gate's always-escalate list is written twice.**
+    Step 11 enumerates it, and the ``escalation-only`` bullet in Ledger format
+    enumerates it again for the mode that can auto-merge. The second is the one
+    that matters most: it governs the path with **no human in it**, so a
+    condition present in step 11 and missing there is a row that auto-merges past
+    a finding step 11 would have stopped for. The first draft of #121's own plan
+    named only step 11 and the architect caught it -- this test is that
+    near-miss made mechanical.
+
+    **What coupling 1 does NOT guard, stated because an earlier draft claimed it
+    did.** It compares the *set of class tokens* named in each region, and says
+    nothing about the round **bound** itself -- the numeral -- so a mutation
+    changing the cap on one side only survives it. That earlier draft cited
+    #114/AC7, which is exactly about the bound moving in lockstep; the claim is
+    **withdrawn**, and the bound-number comparison belongs with #114, where the
+    bound actually moves.
+
+    **The span anchor is deliberately free of the CAP numeral** -- it still
+    contains ``round 1``, so "numeral-free" would overstate it. An earlier draft
+    anchored on the literal ``"Bounded to 2 rounds"``, which pinned the cap by
+    accident: the one-sided cap mutation the paragraph above says survives was in
+    fact killed, and -- worse -- a *legitimate* both-sides cap change went red
+    with a message inviting the maintainer to bump the literal. #114 is queued to
+    make exactly that change. Do not reintroduce the cap numeral into either
+    anchor.
+
+    **A residual coupling to #114 remains, and is recorded rather than implied.**
+    The anchor spans the round *enumeration* (``round 1 being the review``), so a
+    cap change that also rewords that parenthetical -- the likely shape of #114's
+    edit -- still goes red. It fails **safely**: the message is ``cannot locate
+    the start of the step 8 bound region ... re-anchor this test before trusting
+    it``, which is correct guidance rather than an invitation to bump a literal.
+    Improved, not eliminated.
+
+    **What coupling 2 does not reach.** It guards 2 of the 3+ statements of the
+    always-escalate conditions: ``README.md`` states them a third time and the
+    Escalation rubric carries a differently-worded mention. Neither is compared
+    here -- their agreement is review's to own. Three further gaps, all measured
+    by mutation rather than reasoned about:
+
+    * **Step 11's peer bullets are outside the span.** It starts at "none of the
+      always-escalate conditions apply:", so a condition added as its own
+      ``- ... , AND`` bullet -- which is how ``hold`` and the release-bump
+      condition are already written -- is invisible here.
+    * **``_HOLD_ROW`` is subtracted from both sides unconditionally**, so the
+      escalation-only bullet dropping ``a hold row`` altogether is not caught.
+    * **A condition inserted before the introducing ``:``** is not parsed.
+
+    **Extractor assumptions, and how each fails.** The first ``:`` in a region
+    introduces the list, and no item contains a non-parenthetical comma. An
+    **asymmetric** violation of either fails loud -- but via
+    ``test_both_statements_of_the_always_escalate_list_agree``, *not* via the
+    guard-on-guard tests, which stay green because both regions still parse to
+    three or more items. A violation applied **identically to both regions** --
+    the likely shape, since this project's convention is to edit them together --
+    is absorbed **silently**: both lists mis-split the same way and still agree.
+    That is the one blind spot worth knowing before trusting a green run.
+
+    **And what neither guards, deliberately.** Not the polarity or the
+    correctness of any rule: nothing here knows that EDITORIAL *should* be the
+    non-re-arming class, or that the promotion is one-directional. That is the
+    #33 ceiling ruling -- a mechanical guard pins a coupling's identity and
+    existence, never a proposition's truth -- and three attempts at the polarity
+    form were each defeated by a one-word edit. Do not "complete" this class by
+    adding it. Polarity is review's to own.
+    """
+
+    _CLASS_TOKENS = ("BLOCKING", "EDITORIAL")
+    _HOLD_ROW = "a hold row"
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        text = re.sub(r"\([^()]*\)", " ", text)      # drop parentheticals
+        text = text.replace("**", "").replace("`", "").replace("*", "")
+        return re.sub(r"\s+", " ", text).strip()
+
+    def _span(self, start: str, end: str, label: str) -> str:
+        text = _ENGINE.read_text(encoding="utf-8")
+        i = text.find(start)
+        self.assertNotEqual(
+            i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it.",
+        )
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it.",
+        )
+        return text[i:j]
+
+    # ---- coupling 1: the two statements of the round bound ----
+
+    def _bound_regions(self) -> dict:
+        return {
+            "step 8 (the gate's own bound)": self._span(
+                " rounds (round 1 being the review",
+                "**Round 1 reads the whole change",
+                "step 8 bound",
+            ),
+            "Fresh-re-check invariant (restates it)": self._span(
+                "**The bound \u2014 one fresh re-check",
+                "**Reaching a cap is a handoff", "invariant bound",
+            ),
+        }
+
+    def _classes_named(self, body: str) -> frozenset:
+        return frozenset(t for t in self._CLASS_TOKENS if t in body)
+
+    def test_the_extractor_actually_finds_a_class_in_both_bound_regions(self) -> None:
+        """Guards the guard: two empty sets compare equal and assert nothing."""
+        for label, body in self._bound_regions().items():
+            with self.subTest(region=label):
+                self.assertNotEqual(
+                    self._classes_named(body), frozenset(),
+                    f"{label} names neither BLOCKING nor EDITORIAL. The agreement "
+                    "check below compares the two regions to each other, so a "
+                    "region that names no class makes it vacuous rather than "
+                    "failing. Re-anchor the span, or restore the class the bound "
+                    "depends on -- do not delete a region to make this pass.",
+                )
+
+    def test_both_statements_of_the_round_bound_name_the_same_classes(self) -> None:
+        found = {k: self._classes_named(v) for k, v in self._bound_regions().items()}
+        shown = {k: sorted(v) for k, v in found.items()}
+        self.assertEqual(
+            len(set(found.values())), 1,
+            "step 8 and the Fresh-re-check invariant state the round bound in "
+            f"terms of DIFFERENT finding classes: {shown}. They are two "
+            "restatements of one bound, so they must move together or the engine "
+            "says two different things about when a round escalates while both "
+            "passages still read correctly.",
+        )
+
+    # ---- coupling 2: the two statements of the always-escalate list ----
+
+    def _escalate_regions(self) -> dict:
+        return {
+            "step 11 (the human merge gate)": self._span(
+                "none of the always-escalate conditions apply:", "**Default-deny:**",
+                "step 11 escalate list",
+            ),
+            "escalation-only bullet (the auto-merge path)": self._span(
+                "The human merge gate is **retained**", "\u2014 **and, by default-deny",
+                "escalation-only escalate list",
+            ),
+        }
+
+    def _conditions(self, body: str) -> frozenset:
+        body = self._normalize(body)
+        i = body.find(":")
+        self.assertNotEqual(i, -1, "no ':' introducing the condition list")
+        items = set()
+        for raw in body[i + 1:].split(","):
+            item = re.sub(r"^(or|and)\s+", "", raw.strip().rstrip(".")).strip()
+            if not item:
+                continue
+            items.add(item.lower())
+        # step 11 carries `hold` as its own bullet above the list; the
+        # escalation-only bullet folds it in. That divergence is structural, so
+        # it is excluded explicitly rather than by a fuzzy comparison.
+        # DO NOT GROW THIS EXCLUSION. It has the shape CLAUDE.md flags for
+        # ALLOWED_NON_BINDINGS and _STOPWORDS: appending a term is the cheap way
+        # to green a failing comparison, and each one is a condition this guard
+        # stops comparing. A new divergence is a finding about the engine, not a
+        # constant to add here.
+        return frozenset(x for x in items if x != self._HOLD_ROW)
+
+    def test_the_extractor_actually_finds_both_escalate_lists(self) -> None:
+        """Guards the guard: a region that matches but stops parsing asserts nothing.
+
+        An *unmatched* region is not the risk here -- ``_span`` asserts, so both
+        tests go red loudly. The silent case is a region that matches and then
+        parses to almost nothing, which would make the comparison below vacuous.
+        """
+        for label, body in self._escalate_regions().items():
+            with self.subTest(region=label):
+                self.assertGreaterEqual(
+                    len(self._conditions(body)), 3,
+                    "fewer than three always-escalate conditions extracted from "
+                    f"{label}. This test compares the two lists to each other, so "
+                    "a region that stops parsing makes it vacuous. Re-anchor the "
+                    "span or the splitter; do not drop a region to make this pass.",
+                )
+
+    def test_both_statements_of_the_always_escalate_list_agree(self) -> None:
+        found = {k: self._conditions(v) for k, v in self._escalate_regions().items()}
+        (a_label, a), (b_label, b) = found.items()
+        self.assertEqual(
+            a, b,
+            "the merge gate's always-escalate conditions are enumerated twice and "
+            f"the two lists DIFFER.\n  only in {a_label}: {sorted(a - b)}\n  only "
+            f"in {b_label}: {sorted(b - a)}\nThe escalation-only bullet governs "
+            "the path with no human in it, so a condition present in step 11 and "
+            "missing there auto-merges past something step 11 would have stopped "
+            "for. Edit them together.",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

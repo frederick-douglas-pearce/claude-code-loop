@@ -101,7 +101,8 @@ it, and in that mode **the human approves every merge — it never auto-merges.*
 Auto-merge exists only under the opt-in `escalation-only` mode, and even there it is
 per-route, limited to routes you have explicitly *graduated*, and withheld for feature
 or breaking changes, risky or irreversible changes, anything touching a security
-surface, contested review findings, unresolved acceptance-gate findings of
+surface, contested review findings, an unresolved blocking review finding,
+unresolved acceptance-gate findings of
 either kind, and an unresolved offline-tier finding.
 Wherever eligibility is unclear the rule is **default-deny**: fall back to the human.
 
@@ -113,8 +114,8 @@ acceptance criteria, risk, agent disagreement, a value story that doesn't
 hold, or genuine uncertainty. The two settings are deliberately independent: relaxing how much of
 the planning you review never loosens what gets merged without you, and a ledger that doesn't
 mention the field at all is read as `always`. Neither setting reaches the loop's other mid-pipeline
-stops — such as the architect-rewrite stop below, or a gate finding still there after one fresh
-re-check, which stop and ask you regardless of both.
+stops — such as the architect-rewrite stop below, or a blocking gate finding still there after one
+fresh re-check, which stop and ask you regardless of both.
 
 **When its design reviewer rewrites the plan, you see the plan.** One mid-pipeline stop is
 unconditional — no mode setting, no `plan-gate:` value, and no route graduation can loosen it: if the architect review
@@ -123,6 +124,23 @@ code. A reviewer that decides is treated as a stronger reason to interrupt you t
 because the plan you would have approved is no longer the plan being built. The comparison is made
 against a copy of the approach frozen before the review ran, so the loop is reading a record rather
 than its own memory of what it had intended.
+
+**Some review findings are applied without a second review, and the loop tells you how many.**
+Code review sorts each finding into **blocking** or **editorial**, and only blocking ones send the
+gate round back around. Editorial ones — wording that asserts no proposition about your repository
+and changes no behavior — are applied in a single pass at the close of code review and are not
+re-reviewed. What that pass writes still goes through acceptance and CI afterwards, and through
+security review where the change's route makes that gate due. Four things
+bound it, and they are deliberately strict: the **reviewer** assigns the class, never the loop; the
+loop may only ever *raise* a finding to blocking, never lower one; a finding that something is
+**false, stale, unresolvable, self-contradictory, or misdescribes what it sits on is blocking wherever
+it lives** — including in
+prose, which is a correctness finding when prose is what your project ships; and the pass may touch
+**only** paths your config has positively marked inert — never source, never tests, never a path it
+does not explicitly declare docs-or-research, and never a path it declares security-sensitive, which
+in most projects leaves it reaching very little. The practical effect is that
+this saves less than it may sound like it does, in the safe direction. **At the merge gate you are
+told the count**, and it is recorded in the ledger either way — including when it is zero.
 
 **A gate that did not run is never reported as one that passed.** For every gate the loop
 runs — plan, architect, your build commands, the offline tier, code review, security, acceptance,
@@ -253,7 +271,9 @@ you rather than assuming.
 acceptance gate above, or code review, on any route — a freshly spawned checker decides whether the
 fix worked: not the thread that wrote it, and not the checker that raised the finding. Each such
 gate gets **one** re-check; if it comes back dirty the loop stops and asks you, rather than
-iterating on itself.
+iterating on itself. At code review, "dirty" means a **blocking** finding — an editorial one raised
+before that pass has run joins it, and neither re-arms the round nor stops for you. Once the pass has
+run there is no second one, so a finding of either kind after that point stops and asks you.
 
 **Hard limits the engine commits to:**
 
