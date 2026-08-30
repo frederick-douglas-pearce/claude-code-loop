@@ -136,6 +136,95 @@ wrongly-chosen adjustment set. **Classify features by node first; select among t
 
 ---
 
+## E1 worked: what a targeted subagent has to be worth
+
+The estimands above are abstract. This is the first one made concrete, and it is the question that
+prompted the note's own extension: **if a subagent removes parent turns, when does it save more than
+it costs?**
+
+Under the parent-only DV the question cannot even be asked — a subagent is free by construction, so
+"delegate everything" is the answer and it is an artifact of the measurement. Whole-tree accounting
+makes the trade real. Scouting run over the same four projects, per assistant record:
+
+| | median bill/record | trend with agent length |
+|---|---:|---|
+| parent | **~26k** | rises, r = **+0.54** |
+| subagent | **~15k** | flat, r = +0.21 |
+
+**The flatness is the load-bearing part, and it refutes the obvious hypothesis.** The natural guess
+is that subagents look cheap only because they are short — less accumulated context, lower per-turn
+rate — in which case the saving would evaporate the moment one is given real work. That holds for
+the parent and does not hold for the subagent:
+
+```
+subagent length    n     median bill/record
+      1-5        282            4,952
+      6-15       228           15,365
+     16-30       409           15,542
+     31-60       373           15,290
+    61-120       136           15,452
+      121+         3           16,642
+```
+
+Past roughly six turns it is flat at ~15k regardless of length. **Subagent context plateaus; parent
+context does not.** So delegation scales — there is no per-turn penalty for handing a subagent a
+large job, which is the opposite of the intuition.
+
+**The break-even that follows.** A subagent doing `W` turns costs ~15k×`W`; the same work in the
+parent costs ~26k×`W`. It pays for itself if it removes more than **~0.6 parent turns per subagent
+turn it consumes**. At a 1:1 transfer, delegation wins by ~40%, and the true margin is larger,
+because the parent's rate *rises* with context (r = +0.54) — every turn kept out of the parent also
+lowers the rate on all subsequent parent turns.
+
+**The obvious counterweight is already measured and it is small.** A subagent's return enters parent
+context permanently, which is lever B — and B is marked *REFUTED*: Finding 6 puts `Agent` returns at
+0.9–3.7% of what enters the parent, under 1% of a run on the bill model. The return channel is not
+where delegation loses.
+
+**The confound that decides whether any of this transfers.** The ~15k rate reflects what subagents
+are used for *today* — largely search and review, which are read-heavy and context-light. A subagent
+doing implement-shaped work might not stay flat, because it accumulates file state the way the
+parent does. **The rate is a property of the workload, not of subagents**, and nothing here
+establishes it for a workload the corpus does not contain.
+
+### The first candidate: a docs-only subagent
+
+Proposed 2026-08-29 from field observation in `us-presidential-vote-analysis`, **recollection not
+measurement, recorded so it can be tested rather than relied on**: one to two parent turns per
+iteration go to fine-tuning documentation that *earlier turns in the same run over-claimed*.
+
+That is worth stating precisely, because it makes the overhead predictable rather than random.
+Those turns are not the cost of writing documentation — they are the cost of **correcting
+documentation written mid-run by an actor holding the whole run in context**. It is the same
+over-claiming pathology `CLAUDE.md` documents at length in this repo's own prose, arriving as a
+*cost* item: a claim is asserted while the work is in flight, and a later turn walks it back.
+
+If that reading is right, the fix is structural rather than behavioural. A docs subagent invoked
+once at the **end** of step 6, with a clean context and a scope limited to what the diff actually
+shows, cannot over-claim from run history it never saw — so the correction turns have nothing to
+correct. It is also close to the ideal shape for the economics above: bounded, terminal,
+context-light, and a plausible 1:1 turn transfer.
+
+**This is lever F, arrived at from the other direction.** The notebook already proposes a
+documentation subagent at the end of step 6, on the grounds that multi-site consistency propagation
+is a good subagent brief and a bad inline parent task. The contribution here is a cost model for it,
+a second mechanism (correction turns, above), and a falsifier. **F's two constraints carry over
+unchanged, and the second one bounds the economics:**
+
+- **Not after code review.** The currency clause means a commit no gate ran on does not inherit that
+  gate's verdict, so landing docs after step 8 re-arms code review every run — a cost *increase*.
+  End of step 6, before the commit.
+- **A subagent that returns a patch the parent must read saves less than it looks.** That is exactly
+  where the 1:1 turn transfer assumed above breaks down: ingestion is cheap (lever B), but *applying*
+  a returned patch is parent turns, and they come straight off the saving. F's answer — hand back a
+  worktree the parent applies from a path — is also what the tree-isolation invariant already
+  requires, so the cheap shape and the safe shape agree here.
+
+**Falsifier.** Count the doc-correcting turns in a run — turns whose only edit is to documentation
+already written earlier in the same session. If the rate is well under one per iteration, the lever
+is too small to bother with regardless of how good the economics look. Measure before building.
+---
+
 ## The trap that makes this worth doing carefully
 
 **Every lever on the table reduces cost by doing less work.** Fewer rounds, fewer finders, tighter
@@ -171,9 +260,9 @@ problem into a design problem.
 
 | design | what it buys | what it costs | verdict |
 |---|---|---|---|
-| **Paired within-issue runs** — same issue, two configs, separate worktrees | Removes `issue_difficulty` *by construction*. n≈5 pairs beats n≈50 observational | Two full runs per datapoint | **Decisive. Use for the one or two levers that matter most.** |
+| **Repeated runs on a reference issue** — one issue, many replicates, one lever varied | Removes `issue_difficulty` *by construction*, and is the only design that yields **within-config variance** | Many full runs — but see below, the usual cost objection does not apply here | **Decisive, and now the primary plan.** Own section below. |
 | **Randomised config assignment going forward** | Known propensity; identifies E1 with no unconfoundedness assumption to defend | Discipline only — the run happens anyway | **Start immediately.** Every unrandomised run is an observation that cannot serve E1. |
-| **DiD on the staggered engine rollout** | Uses data already on disk | Free | **Do first.** See below. |
+| **DiD on the staggered engine rollout** | Uses data already on disk | Free | **Do first — it is free and it is already sitting there.** |
 | Regression adjustment on observational rows | Nothing, unless difficulty is measured | Free | Descriptive only. Do not report as an effect. |
 | IV via a binding round cap | A cap moves rounds without touching difficulty | Weak instrument, thin | Note and park. |
 
@@ -189,6 +278,82 @@ fixed effects, whole-tree DV — is the cheapest available increase in rigour.
 post-treatment window in `agentfluent` and the vote repo before designing around it; a DiD with
 three days of post data is a picture of a transition, not an effect.
 
+---
+
+## The reference-issue experiment
+
+*Proposed 2026-08-29. This is the paired design from the table above taken to its limit, and it is
+the strongest identification available to this project.*
+
+**Shape.** Pick one well-scoped issue. Re-run it many times from an identical starting tree, varying
+one config lever at a time. Every replicate is the *same* issue, so `issue_difficulty` — the
+unmeasured confounder that Finding 11 correctly refuses to work around — is held fixed by
+construction rather than adjusted for. Nothing else on the table does that.
+
+**Why it is feasible here, which is the unusual part.** Repeated-run designs are normally ruled out
+on cost. They are not ruled out here: the operator is on a Max subscription that rarely reaches its
+weekly ceiling, so replicate runs draw on capacity that otherwise expires unused, and the natural
+scheduling window is the end of a billing week. **The binding constraint on the best available
+design is therefore close to zero**, which inverts the usual trade and is the reason this design
+should be preferred over the observational work rather than held as an aspiration.
+
+**Harness.** The Agent SDK, driving runs unattended against a fixed base commit in a throwaway
+worktree. Not the interactive loop — a replicate that a human nudges is not a replicate.
+
+### The first experiment is a replication, not a comparison
+
+**Run the same config `k` times before comparing any two configs.** This is the step most likely to
+be skipped and the one that decides whether anything after it means something.
+
+Nothing in the current corpus estimates **within-config variance**. Finding 11 has n=8 sessions with
+no repeated measures, so run-to-run noise and lever effects are perfectly confounded: there is no
+way to say whether a 20% difference between two configs is a lever or a coin flip. A reference issue
+supplies that number directly, and it is a prerequisite for every power calculation, every stopping
+rule, and every claim of the form "config A is cheaper than config B."
+
+There is a real chance σ is large enough that the modest levers are unmeasurable at any feasible
+`k`. **That is a result worth having early**, because it would redirect the whole programme toward
+the two or three levers big enough to clear the noise.
+
+### Validity threats specific to this design
+
+- **The tree must be identical across replicates.** Fixed base commit, fresh worktree, ledger reset,
+  and the *installed plugin version pinned and recorded* — the README already insists on the last
+  one and it matters more here than anywhere else.
+- **External validity is the price paid for the clean identification.** One issue is n=1 in the
+  issue dimension. An effect measured on the reference issue is an effect *on that issue*;
+  generalising needs a second reference issue of a different route and shape, and the honest move is
+  to treat cross-issue generalisation as a separate question rather than assume it.
+- **Reference-issue decay.** The more the issue is studied, the more the engine and config are
+  tuned to it. Refresh it periodically, and never let a lever's justification rest solely on the
+  issue it was tuned against.
+
+### The quality outcome, which is what makes the experiment safe
+
+The trap above applies with full force: every arm can win on cost by doing less. Three candidate
+measures, and they are complements rather than alternatives:
+
+1. **Review-to-exhaustion as the oracle.** Run the review gate on a finished implementation until it
+   stops producing new findings, with the round cap lifted. Expensive, and it yields something the
+   loop cannot otherwise get: an approximate ground-truth residual defect count for a given diff.
+   Run it on a handful of replicates only.
+2. **A fixed, blind evaluator agent.** The workhorse. One evaluator prompt, one model, one effort
+   level, held constant across every arm and **not told which config produced the diff**. Blinding
+   is trivial to arrange and easy to forget, and without it the evaluator can reward the arm it can
+   identify.
+3. **Quantified fan-out review output.** Cheapest, and the one with a structural hazard:
+   **if the treatment is a review-gate config, then review output is endogenous and cannot be the
+   outcome.** Tightening review lowers the finding count by construction, which would score as a
+   quality *improvement*. Usable only for arms that leave the review gate untouched.
+
+**The sequencing that makes these work together:** use (1) on a few replicates to establish ground
+truth, validate (2) against it, then run (2) at scale. An evaluator never checked against an oracle
+is a number, not a measurement.
+
+**Falsifier for the design itself.** If the fixed evaluator's scores on repeated runs of one config
+have a spread comparable to the differences between configs, the quality axis cannot support the
+comparison, and cost results must be reported as cost-only with the quality question stated as
+open — never as "quality held constant."
 ---
 
 ## Build order, and the gate on it
@@ -272,6 +437,16 @@ Stated per the directory's convention, so each claim above can die cleanly.
 - **The whole enterprise** is not worth it if Stage 3's descriptive decomposition shows cost
   concentrated in a step no config lever reaches — in which case the answer is engineering, not
   estimation, and the modelling should stop there.
+- **The delegation economics** die if the ~15k subagent rate is a property of today's read-heavy
+  subagent mix rather than of subagents. An implement- or docs-shaped subagent that accumulates file
+  state could land near the parent's rate, at which point the break-even moves and the lever with
+  it.
+- **The docs-subagent case** dies if doc-correcting turns are rare — well under one per iteration —
+  in which case the economics are irrelevant because there is nothing to recover.
+- **The reference-issue experiment** dies if within-config variance turns out comparable to the
+  between-config differences being chased. That is not a reason to skip it; it is the first thing it
+  measures, and learning it early redirects the programme toward the few levers large enough to
+  clear the noise.
 
 ---
 
@@ -288,4 +463,9 @@ Stated per the directory's convention, so each claim above can die cleanly.
    plan time? A weak one would still support blocking, which is worth more than adjustment.
 5. **Is per-issue randomisation acceptable in a repo whose loop is doing real work?** Assigning a
    worse config to a real issue has a real cost, and that is a judgement call, not a statistical
-   one.
+   one. *The reference-issue design largely dissolves this* — a throwaway worktree on a
+   fixed base commit is not real work — which is a further reason to prefer it.
+6. **What is `σ` for a loop run?** Unknown, unestimated, and a prerequisite for every comparison in
+   this note. The reference issue's first output.
+7. **Which issue should be the reference?** It needs to be well-scoped, representative of the `code`
+   route, and cheap enough to run many times — and those pull against each other.
