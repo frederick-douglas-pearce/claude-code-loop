@@ -16,6 +16,7 @@ rather than remembered.
 | `context-architecture-refactor.md` | Design note: why shard the engine, compared against `obra/superpowers`. |
 | `draft-core.md` | The seven-unit **target** architecture. Not the increment being shipped — do not implement from it. |
 | `core-self-sufficiency-audit.md` | Which engine references a shrunken core would break, and the replacement wording. |
+| `cost-model-design.md` | Design note: what it would take to *estimate* a lever's effect rather than read it off a slope — estimands, the identification designs available, and the instrumentation that has to land first. |
 
 ## Scripts
 
@@ -28,6 +29,7 @@ All stdlib-only, all read Claude Code session transcripts from `~/.claude/projec
 | `calls_per_turn.py` | How many tool calls per turn, and how many turns could have been merged? (Finding 12) | `test_calls_per_turn.py` (14) |
 | ~~`context_profile.py`~~ | **RETIRED 2026-08-26** → `deprecated/`. Kept only to reproduce Findings 6–9; its payload bug over-counts spilled reads by up to 13×, so **P4 and the "~50% of every byte" figure are withdrawn**. | — |
 | `budget_stats.py` | Ledger `- Budget:` aggregates by engine era. | none |
+| `tree_cost.py` | Parent **+ subagent** transcripts priced together — sizes the bill Finding 11 leaves unpriced. **Scouting only; output is not a finding.** | none |
 
 ```bash
 SLUG=~/.claude/projects/-home-fdpearce-Documents-Projects-git-us-presidential-vote-analysis
