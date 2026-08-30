@@ -28,7 +28,8 @@ matches, and sanity-check the distribution against what the system can physicall
 squeezed between the compaction ceiling above and the starting footprint below, so it barely varies;
 turn count has no ceiling. Regress cost on anything and the fit is dominated by its own arithmetic.
 
-The consequence is not cosmetic. It fixes the dependent variable:
+The consequence is not cosmetic. It fixes the dependent variable (DV) — the outcome a model is
+fit to predict:
 
 > **The outcome is `turns`, a count.** Poisson or negative-binomial with an offset, not OLS on
 > tokens. Cost is then read off the identity, not estimated.
