@@ -7,7 +7,7 @@ ran the v0.10.x / v0.11.0 releases). Install it once, drop a small per-project
 `loop.config.md` into a target repo, and run your backlog as a loop: one routed
 issue per invocation, with human gates on uncertainty and durable ledger state.
 
-> **Status — v0.2.1, just released; not yet stable.** Four pieces ship: the
+> **Status — v0.2.1; not yet stable.** Four pieces ship: the
 > `dev-loop` skill (`SKILL.md` + `loop-engine.md`), the `/init-loop` onboarding
 > command, the append-only guard hook, and the mutation harness the acceptance gate
 > runs (`tools/mutate_verify.py`). **Four repos drive it**: the first external adoption
@@ -15,10 +15,14 @@ issue per invocation, with human gates on uncertainty and durable ledger state.
 > the ongoing AgentFluent dogfood,
 > [claude-code-sessions](https://github.com/frederick-douglas-pearce/claude-code-sessions),
 > and (since 2026-07-28) this repo, which runs the loop it develops and is the source of
-> most of the findings below. All four re-installed onto v0.2.0 on 2026-08-21, and
-> **14 issues have run on it since** — across all four repos. That is enough to say the
-> plugin/config seam holds and that the hardening works under load; it is not enough to
-> call it stable, and those runs surfaced the defect this release fixes.
+> most of the findings below. All four moved onto v0.2.0 on 2026-08-21; **they now sit on
+> different versions deliberately** — this repo and `us-presidential-vote-analysis` on
+> v0.2.1 since 2026-08-26, AgentFluent and `claude-code-sessions` held back on v0.2.0 to
+> serve as an untreated control for the cost research in [`docs/research/`](docs/research/).
+> **14 issues had run on the loop as of the v0.2.1 cut** (2026-08-25), across all four
+> repos. That is enough to say the plugin/config seam holds and that the hardening works
+> under load; it is not enough to call it stable, and those runs surfaced the defect this
+> release fixes.
 >
 > **v0.2.1 is a single-fix patch.** `loop-engine.md` is larger than the harness's shell
 > output cap, so `cat`-ing it returned a silently truncated fragment — the first fifth,
