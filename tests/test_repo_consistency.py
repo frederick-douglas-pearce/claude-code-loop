@@ -2365,7 +2365,7 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
         return _ENGINE.read_text(encoding="utf-8")
 
     def _span(self, text: str, start: str, end: str, label: str) -> str:
-        # Same slicing as the six sibling helpers in this file: the body INCLUDES the
+        # Same slicing as the sibling helpers in this file: the body INCLUDES the
         # start anchor. Do not diverge -- an earlier draft returned
         # text[i + len(start):j], which silently made an anchor-exclusion test vacuous.
         # Because the anchor IS in the body, no inner start anchor may contain the
@@ -2490,30 +2490,36 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
             "mandate deliberately, update _MANDATE and _LABEL together.")
 
     def test_each_skip_site_spells_the_rendering(self) -> None:
-        """Both places the roster region carries the not-due rendering -- the prose
-        restatement and the enumerated bullet -- are located and checked SEPARATELY.
-        Counting occurrences over the region instead is satisfied by one surviving
-        rendering plus a spare mention, which is the anti-pattern this class's
-        docstring forbids and which a previous draft of this test shipped."""
+        """The prose restatement carries the rendering, checked over its own located
+        span rather than over the whole region -- counting across the region is
+        satisfied by one surviving rendering plus a spare mention, the anti-pattern
+        this class's docstring forbids and which a previous draft shipped.
+
+        The enumerated bullet is covered by the position pin below, not here. Both
+        anchors still get the hygiene check, because both feed ``_span``."""
         roster = self._normalize(self._regions()["step 8's roster naming duty"])
-        for site, (start, end) in self._SKIP_SITES.items():
-            with self.subTest(site=site):
-                ns, ne = self._normalize(start), self._normalize(end)
+        for site, (start, _end) in self._SKIP_SITES.items():
+            with self.subTest(anchor_hygiene=site):
                 self.assertNotIn(
-                    self._NOT_DUE, ns,
-                    f"the start anchor for {site} contains the rendering, so its "
-                    "containment check would pass on the boundary. Re-anchor it.")
-                span = self._span(roster, ns, ne, f"the roster region's {site}")
-                self.assertIn(
-                    self._NOT_DUE, span,
-                    f"{site} no longer spells the not-due rendering with the lens "
-                    f"label.\n\nExpected (normalized): {self._NOT_DUE!r}\n\n"
-                    "This is the rendering a SKIPPED floor must be written as, so it "
-                    "is what makes a not-due round auditable instead of silent. If "
-                    "you reworded it deliberately, update _NOT_DUE.\n\n"
-                    "Never drop a site from _SKIP_SITES to make this pass -- the two "
-                    "sites are located separately because a total over the region "
-                    "cannot say which one went dark.")
+                    self._NOT_DUE, self._normalize(start),
+                    f"the start anchor for {site} contains the rendering, so a "
+                    "check over its span would pass on the boundary rather than "
+                    "the body. Re-anchor it.")
+        site = "the prose restatement"
+        start, end = self._SKIP_SITES[site]
+        span = self._span(roster, self._normalize(start), self._normalize(end),
+                          f"the roster region's {site}")
+        self.assertIn(
+            self._NOT_DUE, span,
+            f"{site} no longer spells the not-due rendering with the lens label."
+            f"\n\nExpected (normalized): {self._NOT_DUE!r}\n\n"
+            "This is the rendering a SKIPPED floor must be written as, so it is "
+            "what makes a not-due round auditable instead of silent. If you "
+            "reworded it deliberately, update _NOT_DUE.\n\n"
+            "Never drop a site from _SKIP_SITES to make this pass. The enumerated "
+            "bullet is NOT checked here -- the position pin below strictly implies "
+            "it, over the same span, since _NOT_DUE is a substring of "
+            "_SKIP_RENDERING. Asserting it twice would be a knob, not coverage.")
 
     def test_the_skip_bullet_carries_the_whole_rendering(self) -> None:
         """The rendering must be the FIRST thing in the enumerated bullet's span.
@@ -2542,8 +2548,10 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
             "the enumerated skip rendering is not the first thing in its bullet.\n\n"
             f"Expected the span to start: {expected!r}\n\n"
             f"Span starts:                {span[:len(expected)]!r}\n\n"
-            "Either the label, the separator, or the one legal reason changed. The "
-            "reason is the due-when's only conjunct negated, so if the due-when "
+            "Either the rendering changed -- label, separator, or the one legal "
+            "reason -- or something was inserted between the anchor and it, or the "
+            "bullet moved. The reason is the due-when's only conjunct negated, so "
+            "if the due-when "
             "gained or lost a conjunct the rendering changed with it and BOTH the "
             "engine and _SKIP_RENDERING need updating -- deliberately, not to make "
             "this pass. A mention of the old text elsewhere in the bullet does NOT "
