@@ -2319,12 +2319,30 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
     #
     # NO leading backtick: an earlier draft carried one, which matched ONLY the prose
     # restatement and left the enumerated bullet -- the rendering the message names --
-    # unpinned, so renaming the bullet alone passed. Both occurrences are required.
+    # unpinned, so renaming the bullet alone passed.
     _NOT_DUE = "guard-efficacy -- not due:"
-    _MIN_NOT_DUE = 2
-    # The one legal reason, pinned SEPARATELY so a reword of the reason cannot be
-    # satisfied by the label literal above, or the reverse.
+    # The enumerated bullet must OPEN with the rendering. A sub-region containment check
+    # is not enough on its own: renaming the bullet while adding a spare mention of the
+    # spelling inside the same bullet keeps the region satisfied. Reproduced as a
+    # surviving mutation before this was added. Carries no reason text, so a reword of
+    # the reason cannot silently satisfy it, nor the reverse.
+    _SKIP_BULLET = "- **`… ; guard-efficacy -- not due:"
+    # The one legal reason, pinned SEPARATELY for that same reason.
     _NOT_DUE_REASON = "every path in the delta is declared docs or research"
+
+    # The two places inside the roster region that must spell the rendering, located
+    # SEPARATELY rather than counted. A total over the region is satisfied by one real
+    # rendering plus a spare mention and cannot say which site went dark -- the failure
+    # this class's own docstring names, and which an earlier draft of this test walked
+    # straight into with ``count(...) >= 2``.
+    _SKIP_SITES = {
+        "the prose restatement": (
+            "**Every fan-out round's roster names",
+            "The renderings, enumerated for the reason"),
+        "the enumerated bullet": (
+            "and `nothing to read` where a lens found nothing to apply its question to",
+            "- **`roster: none (recheck)`**"),
+    }
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -2444,25 +2462,43 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
             "it intact. That is review's, not this test's. If you reworded the "
             "mandate deliberately, update _MANDATE and _LABEL together.")
 
-    def test_the_skip_rendering_names_the_lens(self) -> None:
-        """The not-due rendering is spelled with the lens label in BOTH places the
-        roster region carries it -- the prose restatement and the enumerated bullet.
-        Counting rather than containing is the point: an earlier draft's literal
-        matched the prose occurrence only, so renaming the bullet -- the rendering
-        this test's message actually names -- passed."""
+    def test_each_skip_site_spells_the_rendering(self) -> None:
+        """Both places the roster region carries the not-due rendering -- the prose
+        restatement and the enumerated bullet -- are located and checked SEPARATELY.
+        Counting occurrences over the region instead is satisfied by one surviving
+        rendering plus a spare mention, which is the anti-pattern this class's
+        docstring forbids and which a previous draft of this test shipped."""
         roster = self._normalize(self._regions()["step 8's roster naming duty"])
-        found = roster.count(self._NOT_DUE)
-        self.assertGreaterEqual(
-            found, self._MIN_NOT_DUE,
-            f"step 8's roster record spells the not-due rendering {found} time(s); "
-            f"at least {self._MIN_NOT_DUE} are required.\n\n"
-            f"Expected (normalized): {self._NOT_DUE!r}\n\n"
-            "This is the rendering a SKIPPED floor must be written as, so it is what "
-            "makes a not-due round auditable instead of silent. The region check "
-            "above passes on any sibling mention of the label, which is why this "
-            "spelling is pinned on its own -- a mutation renaming one occurrence "
-            "survived the region check. If you reworded it deliberately, update "
-            "_NOT_DUE.")
+        for site, (start, end) in self._SKIP_SITES.items():
+            with self.subTest(site=site):
+                ns, ne = self._normalize(start), self._normalize(end)
+                self.assertNotIn(
+                    self._NOT_DUE, ns,
+                    f"the start anchor for {site} contains the rendering, so its "
+                    "containment check would pass on the boundary. Re-anchor it.")
+                span = self._span(roster, ns, ne, f"the roster region's {site}")
+                self.assertIn(
+                    self._NOT_DUE, span,
+                    f"{site} no longer spells the not-due rendering with the lens "
+                    f"label.\n\nExpected (normalized): {self._NOT_DUE!r}\n\n"
+                    "This is the rendering a SKIPPED floor must be written as, so it "
+                    "is what makes a not-due round auditable instead of silent. If "
+                    "you reworded it deliberately, update _NOT_DUE.")
+
+    def test_the_skip_bullet_opens_with_the_rendering(self) -> None:
+        """The bullet IS the rendering, so it must open with it. Without this, renaming
+        the bullet and adding a spare mention of the spelling inside that same bullet
+        satisfies the sub-region check above -- verified as a surviving mutation."""
+        start, end = self._SKIP_SITES["the enumerated bullet"]
+        roster = self._normalize(self._regions()["step 8's roster naming duty"])
+        span = self._span(roster, self._normalize(start), self._normalize(end),
+                          "the roster region's enumerated bullet")
+        self.assertIn(
+            self._SKIP_BULLET, span,
+            "the enumerated skip bullet no longer OPENS with the not-due rendering."
+            f"\n\nExpected (normalized): {self._SKIP_BULLET!r}\n\n"
+            "A mention elsewhere in the bullet does not substitute: the bullet is the "
+            "rendering a reader copies. If you reworded it, update _SKIP_BULLET.")
 
     def test_the_skip_carries_its_one_legal_reason(self) -> None:
         """The due-when has a single conjunct, so the skip has a single legal reason.

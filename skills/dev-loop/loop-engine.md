@@ -647,9 +647,10 @@ rule 3) and declares no research **path** gets the floor on that row too. Route-
 conditioning it on finding a guard would let *"there is no guard here"* — the answer this lens
 exists to return — be given by the orchestrator instead of by the lens.
 
-**The cost is Floor 2a's, stated the same way:** where a project declares no inert paths the floor
-fires on every round, including a `docs` round's light pass, until it declares some. That is the
-safe direction and it is deliberate.
+**The cost has Floor 2a's shape, and is stated the same way:** where a project declares no inert
+paths, every iteration's round 1 carries this lens whatever its route — on a `docs` round that is
+the light pass **plus** the floor, since this is a floor and never a ceiling (above). That holds
+until the project declares some. That is the safe direction and it is deliberate.
 
 **The floor is round 1's.** A later round of this gate is one lighter checker rather than a fan-out
 (below), so it carries no roster and no floor; round 1 is also the round that reads the whole
@@ -664,11 +665,12 @@ invariant). It is not a round that passed with a gap.
 re-checker's (Gates → Fresh-re-check invariant), and its answering discipline governs here too: the
 lens decides by **reading**, never by running, editing or breaking anything, and **"cannot tell" is
 a dirty answer** — at this gate a BLOCKING finding, never a no-verdict. It is BLOCKING whatever
-class the finder emitted: a finding that cannot say is ambiguous, and **Default-deny over every
-floor** below makes an ambiguous finding BLOCKING. Being a reader, it joins the fan-out under the
+class the finder emitted: EDITORIAL is an affirmative claim, and a finding that cannot say does not
+establish it, so **Floor 1** below carries it — as does that floor's *"if you are unsure, it is
+BLOCKING"* catch-all. Being a reader, it joins the fan-out under the
 Execution policy's read-only form like any other finder. **It never mutates** — improvising a
-mutation outside the harness is forbidden (AC-verifier → Part 2), and a mutating finder could not join a fan-out
-licensed on being read-only.
+mutation outside the harness is forbidden (AC-verifier → Part 2), and a mutating finder could not
+join a fan-out licensed on being read-only.
 
 **What its prompt must carry**, over and above every finder's standing inputs at this step (the
 acceptance criteria, the standing authoring check, the Verdict-first invariant, and the
@@ -752,17 +754,19 @@ one:
   distinguish a round that recorded nothing from one that carried no floor lens, and the second is
   the failure this record exists to catch.
 
-**Keep the floor lens out of any later tier decision read off the roster record.** A mandated lens fires
-on close to every qualifying round by construction, so counting it toward "the same lenses keep
-firing" would answer the review-tier question with evidence this floor manufactured. Read the tier
-question off the lenses the risk surface *chose*.
+**Keep the floor lens out of any later tier decision, whatever record it is read off** — the roster
+record and the `code-review=` parenthetical (progress.md → the Budget line) both list it. A mandated
+lens fires on close to every qualifying round by construction, so counting it toward "the same
+lenses keep firing" would answer the review-tier question with evidence this floor manufactured.
+Read the tier question off the lenses the risk surface *chose*.
 
 **This is deliberately a lowercase `roster:` record inside the gate-decision block, not a `- Name:`
 element, and it is not repeated in the close record.** The per-finding ID record and the declines
-record below are specified **here rather than in Ledger format**, for the same reason. **Never
-the `- Code-review:` element, and never the `code-review=` parenthetical** on the `- Budget:`
-line: that parenthetical is per-iteration and label-only, while this is per-round and carries the
-differential and the outcome, which is what makes allocation evaluable at all. Collapsing either into the other loses that.
+record below are specified **here rather than in Ledger format**, for the same reason: all three
+are per-round records of this gate, and Ledger format's elements are per-iteration. **Never the
+`- Code-review:` element, and never the `code-review=` parenthetical** on the `- Budget:` line:
+that parenthetical is per-iteration and label-only, while this is per-round and carries the
+differential and the outcome. Collapsing either into the other loses that.
 
 **Finding classes — every finding carries one, and only one class re-arms a round.**
 "The gate returned findings" is not one state. A guard that cannot fail and a changelog line worded
@@ -1833,8 +1837,8 @@ Fields:
 
     **No other reason is a legal `n/a`, and the list does not re-open.** Retiring a member is not an
     invitation to add one: a reachable extra reason is an off switch an agent can always reach for,
-    which is the failure this slot was designed against. In particular, three things that look like
-    candidates are not:
+    which is the failure this slot was designed against. In particular, these look like candidates
+    and are not:
     - a change that alters behavior *while adding no test* is the **limit case** — a Class B
       **finding**, written as a count;
     - an unrunnable `TEST_CMD` is a `- gate-error:`;
