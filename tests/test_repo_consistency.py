@@ -2290,8 +2290,7 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
     with review. Do not "complete" this test by adding them.
 
     **Regions are located by SECTION HEADING first, then narrowed**, the nesting
-    ``_plan_template_fence`` uses. (``PlanGateFrozenBlockTests`` anchors on whole
-    sections without narrowing; the nesting here is the same idea one level deeper.)
+    ``PlanGateFrozenBlockTests._plan_template_fence`` uses.
     An earlier draft anchored the step-8 regions on the paragraphs' own opening words,
     so a region was defined by the text under test: moving the floor out of step 8 --
     into an aside, or past a renumber -- left every assertion green with the floor no
@@ -2314,10 +2313,18 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
 
     _LABEL = "`guard-efficacy`"
     _MANDATE = "must carry a lens labelled `guard-efficacy`"
-    # The rendering a SKIP must be written as. Pinned as a literal for the same reason
-    # the mandate is: the region check passes on any sibling mention, and this is the
-    # occurrence that makes a not-due floor auditable rather than silent.
-    _NOT_DUE = "`guard-efficacy -- not due:"
+    # The label+separator a SKIP must be written with. Pinned as a literal for the same
+    # reason the mandate is: the region check passes on any sibling mention, and this is
+    # the spelling that makes a not-due floor auditable rather than silent.
+    #
+    # NO leading backtick: an earlier draft carried one, which matched ONLY the prose
+    # restatement and left the enumerated bullet -- the rendering the message names --
+    # unpinned, so renaming the bullet alone passed. Both occurrences are required.
+    _NOT_DUE = "guard-efficacy -- not due:"
+    _MIN_NOT_DUE = 2
+    # The one legal reason, pinned SEPARATELY so a reword of the reason cannot be
+    # satisfied by the label literal above, or the reverse.
+    _NOT_DUE_REASON = "every path in the delta is declared docs or research"
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -2367,7 +2374,8 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
         "Tool surface's bound on the fan-out": (
             "Tool surface", "Other bounds are unaffected:", "- **Isolated.**"),
         "the mutation-survivors slot's exclusion": (
-            "Ledger format", "**Nor does a step-8", "The three readings exist because"),
+            "Ledger format", "**This slot is not where a step-8",
+            "The three readings exist because"),
         "AC-verifier Part 2 (the pointer back)": (
             "AC-verifier", "**Part 2 \u2014 Class B: mutation survivors.**",
             "*Why a checklist cannot find these*"),
@@ -2437,17 +2445,39 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
             "mandate deliberately, update _MANDATE and _LABEL together.")
 
     def test_the_skip_rendering_names_the_lens(self) -> None:
+        """The not-due rendering is spelled with the lens label in BOTH places the
+        roster region carries it -- the prose restatement and the enumerated bullet.
+        Counting rather than containing is the point: an earlier draft's literal
+        matched the prose occurrence only, so renaming the bullet -- the rendering
+        this test's message actually names -- passed."""
         roster = self._normalize(self._regions()["step 8's roster naming duty"])
-        self.assertIn(
-            self._NOT_DUE, roster,
-            "step 8's roster record no longer spells the not-due rendering with the "
-            f"lens label.\n\nExpected (normalized): {self._NOT_DUE!r}\n\n"
+        found = roster.count(self._NOT_DUE)
+        self.assertGreaterEqual(
+            found, self._MIN_NOT_DUE,
+            f"step 8's roster record spells the not-due rendering {found} time(s); "
+            f"at least {self._MIN_NOT_DUE} are required.\n\n"
+            f"Expected (normalized): {self._NOT_DUE!r}\n\n"
             "This is the rendering a SKIPPED floor must be written as, so it is what "
             "makes a not-due round auditable instead of silent. The region check "
             "above passes on any sibling mention of the label, which is why this "
-            "occurrence is pinned on its own -- a mutation renaming just this one "
-            "survived the region check. If you reworded the rendering deliberately, "
-            "update _NOT_DUE.")
+            "spelling is pinned on its own -- a mutation renaming one occurrence "
+            "survived the region check. If you reworded it deliberately, update "
+            "_NOT_DUE.")
+
+    def test_the_skip_carries_its_one_legal_reason(self) -> None:
+        """The due-when has a single conjunct, so the skip has a single legal reason.
+        Pinned apart from _NOT_DUE so a reword of either cannot be satisfied by the
+        other still matching. This pins the reason's PRESENCE, not that the list is
+        closed -- ``CLAUDE.md`` records why a prose guard cannot reach that."""
+        roster = self._normalize(self._regions()["step 8's roster naming duty"])
+        self.assertIn(
+            self._NOT_DUE_REASON, roster,
+            "step 8's roster record no longer carries the skip's one legal reason.\n\n"
+            f"Expected (normalized): {self._NOT_DUE_REASON!r}\n\n"
+            "The reason is the due-when's only conjunct negated. If the due-when "
+            "gained or lost a conjunct, the reason list changed with it and BOTH the "
+            "engine and _NOT_DUE_REASON need updating -- deliberately, not to make "
+            "this pass.")
 
     def test_every_region_that_depends_on_the_lens_label_spells_it_the_same(
         self,

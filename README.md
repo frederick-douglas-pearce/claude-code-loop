@@ -129,15 +129,16 @@ because the plan you would have approved is no longer the plan being built. The 
 against a copy of the approach frozen before the review ran, so the loop is reading a record rather
 than its own memory of what it had intended.
 
-**Code review asks whether your new guards would actually catch anything — and where a change adds
-one, it must.** The loop picks review angles from what the change puts at risk, but one is a floor
-rather than a choice: on a `code`-route change that adds or modifies a test or other guard, on a path
-you have not declared inert, the first round's roster must include a lens that reads those guards and
-asks whether they pin the **mechanism** that would break or merely an **outcome** a broken
-implementation would still produce. If it cannot tell whether your change carries a guard at all, it
-runs anyway. It decides by reading — it never mutates your code — and "cannot tell" counts as a
-finding, not a pass. **This is not the acceptance gate's mutation pass**, which runs later and
-separately when it is due, and which actually breaks your code — in a copy, or, only with your
+**Code review asks whether your new guards would actually catch anything.** The loop picks review
+angles from what the change puts at risk, but one is a floor rather than a choice: on any change
+touching a path you have not declared inert, the first round's roster must include a lens that reads
+that change's guards and asks whether they pin the **mechanism** that would break or merely an
+**outcome** a broken implementation would still produce. Neither the route nor whether the change
+appears to carry a guard narrows this — where it carries none, *that* is the lens's answer, and it
+is the one worth hearing. The cost is the same one the blocking/editorial split carries: until you
+declare some paths inert, this fires on every change. It decides by reading — it never mutates
+your code — and "cannot tell" counts as a finding, not a pass. **This is not the acceptance gate's
+mutation pass**, which runs later and separately when it is due, and which actually breaks your code — in a copy, or, only with your
 explicit approval, your own tree (below) — to see whether the suite notices. Neither substitutes for
 the other, and neither one's result is written into the other's record. The lenses a round ran are
 written to the journal, each with what it returned.
