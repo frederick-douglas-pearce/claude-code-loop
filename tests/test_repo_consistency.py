@@ -2266,5 +2266,156 @@ class FindingClassAgreementTests(unittest.TestCase):
         )
 
 
+class GuardEfficacyLensLabelTests(unittest.TestCase):
+    """#122's mandatory review lens hangs on one label spelled the same everywhere.
+
+    Step 8 declares a **floor**: a round-1 finder roster must carry a lens with a
+    fixed label. Two other passages depend on that exact string -- the passage
+    distinguishing the lens from the acceptance gate's Class B pass, and Part 2's
+    pointer back to it. The label is also what the roster record and the
+    ``r<round>.<lens>.<k>`` finding IDs share, which is what lets a reader recover
+    *the lenses that ran and found nothing*.
+
+    **A drift here is silent in the dangerous direction.** The floor is written so
+    that a roster not naming the label is *incomplete*; rename the label at the floor
+    alone and every roster satisfies a floor nothing now mandates, while all three
+    passages still read correctly. Nothing else in the suite would notice.
+
+    What is asserted is a **string** coupling, not a meaning -- so this is neither
+    fragile nor vacuous. It does NOT assert that the lens reads rather than mutates,
+    that the floor is correctly scoped, or that the Class B distinction is true.
+    Those are propositions about prose, which ``CLAUDE.md`` records as beyond what a
+    guard over prose can pin; they stay with review. Do not "complete" this test by
+    adding them.
+
+    **A stated limit, because containment has one.** A region check is satisfied by
+    *any* occurrence, and two of these regions mention the label more than once. So
+    this does not catch one mention drifting while a sibling keeps its region green.
+    That is why the mandating sentence is pinned separately below: it is the one
+    occurrence whose drift actually turns the floor off. The remaining tolerance is
+    real and is left uncovered deliberately rather than papered over with a
+    near-miss blacklist, which would be the enumerable-assertion trap again.
+
+    **Anchored per region, never counted globally** -- the ``PlanGateFrozenBlockTests``
+    lesson. A total passes when one site loses the label and another gains a spare
+    mention, and a total cannot say *which* site went dark. Never replace the regions
+    with a count, and never drop a region to make this pass.
+    """
+
+    _LABEL = "`guard-efficacy`"
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
+
+    def _engine(self) -> str:
+        return _ENGINE.read_text(encoding="utf-8")
+
+    def _span(self, text: str, start: str, end: str, label: str) -> str:
+        i = text.find(start)
+        self.assertNotEqual(
+            i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it."
+        )
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it."
+        )
+        return text[i + len(start):j]
+
+    # Each anchor deliberately EXCLUDES the label, so no region can be satisfied by
+    # its own boundary -- asserted below.
+    _REGIONS = {
+        "step 8's floor (mandates the lens)": (
+            "**One lens is a floor, not a choice:",
+            "**What it asks, and what it may not do.**",
+        ),
+        "step 8's Class B distinction": (
+            "**This lens is NOT the acceptance gate's Class B pass",
+            "**Record the round's lens roster",
+        ),
+        "AC-verifier Part 2 (the pointer back)": (
+            "**Part 2 \u2014 Class B: mutation survivors.**",
+            "*Why a checklist cannot find these*",
+        ),
+    }
+
+    def _regions(self):
+        text = self._engine()
+        return {
+            label: self._span(text, start, end, label)
+            for label, (start, end) in self._REGIONS.items()
+        }
+
+    def test_the_span_anchors_actually_resolve(self) -> None:
+        # Guards the guard: an anchor that stopped matching would make every
+        # containment assertion below run against an empty or wrong string.
+        for label, body in self._regions().items():
+            with self.subTest(region=label):
+                self.assertTrue(
+                    body.strip(),
+                    f"the {label} region resolved to an empty span. Re-anchor it; "
+                    "do not delete the region.",
+                )
+
+    def test_no_region_is_satisfied_by_its_own_anchor(self) -> None:
+        for label, (start, end) in self._REGIONS.items():
+            with self.subTest(region=label):
+                self.assertNotIn(
+                    self._LABEL, self._normalize(start + " " + end),
+                    f"the {label} anchors contain the lens label themselves, so the "
+                    "containment check below would pass on the anchor rather than on "
+                    "the region's body. Re-anchor on text that excludes the label.",
+                )
+
+    def test_the_floor_region_mandates_the_label_not_merely_mentions_it(self) -> None:
+        # Containment over a region is satisfied by ANY occurrence, and the floor
+        # region carries several. So the region check alone tolerates the mandating
+        # sentence itself drifting while a later back-reference keeps the region
+        # green -- which is the one occurrence whose drift actually turns the floor
+        # off. Pin that sentence specifically.
+        floor = self._normalize(
+            self._regions()["step 8's floor (mandates the lens)"]
+        )
+        mandate = "carry a lens labelled " + self._LABEL
+        self.assertIn(
+            mandate, floor,
+            "step 8's floor no longer MANDATES the lens by its label.\n\n"
+            f"Expected (normalized): {mandate!r}\n\n"
+            "The region check above passes on any mention, so this is the assertion "
+            "that catches the mandating sentence drifting on its own -- a roster "
+            "would then satisfy a floor that names something else, while the "
+            "paragraph still reads as though a floor were in force. If you reworded "
+            "the mandate deliberately, update this expectation and _LABEL together.",
+        )
+
+    def test_every_region_that_depends_on_the_lens_label_spells_it_the_same(
+        self,
+    ) -> None:
+        missing = sorted(
+            label
+            for label, body in self._regions().items()
+            if self._LABEL not in self._normalize(body)
+        )
+        self.assertEqual(
+            missing,
+            [],
+            "these region(s) of loop-engine.md do not carry the mandatory review "
+            f"lens label: {missing}.\n\n"
+            f"Expected (normalized): {self._LABEL!r}\n\n"
+            "A MISMATCH IS SILENT AND FAILS OPEN. The floor is satisfied by a roster "
+            "naming this exact label, so if the floor renames it and the other "
+            "passages do not -- or the reverse -- a roster can satisfy a floor that "
+            "no longer mandates anything, while all three passages still read "
+            "correctly. Nothing else in this suite notices.\n\n"
+            "Each region is checked SEPARATELY on purpose: a global count of the "
+            "label passes when one region loses it and another gains a spare "
+            "mention, and a count cannot say which region went dark. If you renamed "
+            "the lens deliberately, rename it in every region and update _LABEL. "
+            "Never drop a region from _REGIONS to make this pass.",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -613,6 +613,70 @@ review misses most of what a diff carries. Scale the count with the surface: one
 lens label, distinct from every other finder's in the same round** — the label is a component of every
 finding ID this gate records (below), so two finders sharing one collide.
 
+**Distinct in question, not only in label — a roster may not carry two lenses that would return the
+same findings.** State, when you spawn the round, one thing each lens would find that no other lens
+in that roster would; **a lens you cannot state one for is the same lens, so run one of them.** Those
+differentials are journalled with the roster (below), and that record is the control rather than a
+default: this is the one rule at this gate that fails **open** — it reduces review — so default-deny
+cannot save it here. The safe default would be *run both*, which makes the rule vacuous.
+
+**No per-round lens count is fixed here, deliberately.** The corpus establishes that lenses
+**duplicate**; it does not establish a number. On the change that motivated this rule three finders
+returned two of five findings in common — and each still contributed one the others missed, the one
+lost under a cap of one being a *reading* lens whose unique finding was BLOCKING under Floor 1
+below. **Duplication is what the evidence shows; a count is what it does not.** Choosing one, or a
+per-route roster, is the deferred review-tier question and stays there — to be decided once the
+journalled rosters make per-lens attribution readable from the corpus, not here. **This step
+deliberately mints no route-to-lens matrix and no fixed roster.**
+
+**One lens is a floor, not a choice: `guard-efficacy`.** The rule above picks angles from the risk
+surface, and that judgment stands — this puts a floor beneath it and **never a ceiling**. On any diff
+touching a path `SOURCE_LAYOUT` does not **positively declare** `docs` or `research`, a round-1
+roster **must** carry a lens labelled `guard-efficacy`. Unmatched ⇒ `code` ⇒ the floor applies,
+exactly as Floor 2a reads an unmatched path and for the same reason: `code` is the Router's default
+(rule 4), so a path nobody declared inert is not thereby inert. **A round-1 roster on such a diff
+that does not name `guard-efficacy` is incomplete**, and an absent entry in the journalled roster
+means the lens **did not run** — never that it was not due. That is the `- Restore:`/`- Hermetic:`
+idiom: the reading that lets you off has to be *written*, never inferred from a silence.
+
+**What it asks, and what it may not do.** It reads: *do this change's guards assert the **mechanism**
+that would break, or only an **outcome** a broken implementation would still produce?* — the question
+Gates hands the Class B limit-case re-checker, whose recipe governs here too and is **not restated
+here**: it decides by **reading**, never by running, editing or breaking anything, and **"cannot
+tell" is a dirty answer, not a clean one.** Being a reader, it joins the fan-out under the Execution
+policy's read-only form like any other finder. **It never mutates** — improvising a mutation outside
+the harness is forbidden (AC-verifier → Part 2), and a mutating finder could not join a fan-out
+licensed on being read-only.
+
+**This lens is NOT the acceptance gate's Class B pass, and neither stands in for the other.** They
+ask different questions at different steps against different objects, and conflating them would let
+one be journalled as the other:
+
+| | `guard-efficacy` lens (step 8) | Class B (step 10) |
+|---|---|---|
+| asks | do the assertions pin the mechanism? | does a real mutant survive the suite? |
+| method | **reads** the guard | **runs** the harness against a mutated tree |
+| object | the round's delta | the merge candidate |
+| due when | round 1, on a path not declared inert | Part 2's three questions say so |
+| records to | the round's gate-decision block | `mutation-survivors=` |
+
+**A surviving mutant is step 10's and only step 10's.** A read cannot establish one — which is why
+this is a floor on *reading* and not a second mutation pass — and neither gate's verdict discharges
+the other's journal slot. A `guard-efficacy` finding is **test efficacy**, which Floor 1 already
+makes BLOCKING, so it never reaches the editorial sweep.
+
+**Record the round's lens roster where that round resolves.** Write it into that round's
+gate-decision block (Ledger format → progress.md), on the same write-time discipline as this step's
+other per-round records — **when the round resolves, not at step 12** — as the labels the round
+spawned, each with the differential you stated for it. **Use the same labels the round's finding IDs
+use** (`r<round>.<lens>.<k>`): the roster is the denominator and the IDs the numerator, so the set
+difference recovers **the lenses that ran and found nothing**, which the IDs alone cannot give and
+which is the datum a later tier decision is read off. **Round 2 is one lighter checker and carries no
+lens** — its IDs read `r2.recheck.1` — so its legal rendering is `roster: none (recheck)`, and the
+floor above is a **round-1** obligation. **This is a record in the gate-decision block: never the
+`- Code-review:` element, and never the `code-review=` parenthetical** on the `- Budget:` line, which
+records the iteration's angles and is fixed elsewhere.
+
 **Finding classes — every finding carries one, and only one class re-arms a round.**
 "The gate returned findings" is not one state. A guard that cannot fail and a changelog line worded
 oddly cost the same full round today, and nothing in the ledger records the difference. Two classes:
@@ -1899,7 +1963,9 @@ Promote to a dedicated `ac-verifier` agent only if the composed approach proves 
 
 **Part 2 — Class B: mutation survivors.** A test that this change adds or modifies, which stays
 green when the behavior it guards is broken, is a **survivor** — protection the human believes they
-have and does not. A survivor is a finding, **reported as prominently as a bug**.
+have and does not. A survivor is a finding, **reported as prominently as a bug**. (Step 8's mandatory
+`guard-efficacy` lens asks a related question by **reading** and is **not** this pass; the two are
+distinguished once, at that step.)
 
 *Why a checklist cannot find these* — the mechanism, quoted verbatim from the project retrospective
 that first made it nameable:
