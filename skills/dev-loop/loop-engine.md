@@ -725,7 +725,7 @@ EDITORIAL findings only (below), so a lens whose findings were all BLOCKING woul
 found nothing. **The label written here is the same string that round's finding IDs carry**, so the
 roster and the IDs join on it.
 
-**Every fan-out round's roster names `guard-efficacy`** — either as an entry with its differential
+**Every round-1 roster names `guard-efficacy`** — either as an entry with its differential
 and what it returned, or as `guard-efficacy — not due: <reason>`. Those are the only two, and there
 is no silence. **The duty presupposes a verdict:** a round that produced none writes
 `roster: no verdict` and names no lens (below) — the absence of a roster, not a third way to
@@ -762,8 +762,7 @@ Read the tier question off the lenses the risk surface *chose*.
 
 **This is deliberately a lowercase `roster:` record inside the gate-decision block, not a `- Name:`
 element, and it is not repeated in the close record.** The per-finding ID record and the declines
-record below are specified **here rather than in Ledger format**, for the same reason: all three
-are per-round records of this gate, and Ledger format's elements are per-iteration. **Never the
+record below are specified **here rather than in Ledger format**, for the same reason. **Never the
 `- Code-review:` element, and never the `code-review=` parenthetical** on the `- Budget:` line:
 that parenthetical is per-iteration and label-only, while this is per-round and carries the
 differential and the outcome. Collapsing either into the other loses that.
@@ -2061,7 +2060,7 @@ Promote to a dedicated `ac-verifier` agent only if the composed approach proves 
 green when the behavior it guards is broken, is a **survivor** — protection the human believes they
 have and does not. A survivor is a finding, **reported as prominently as a bug**. (Step 8's mandatory
 `guard-efficacy` lens asks a related question by **reading** and is **not** this pass; the two are
-distinguished once, at that step.)
+distinguished at that step.)
 
 *Why a checklist cannot find these* — the mechanism, quoted verbatim from the project retrospective
 that first made it nameable:

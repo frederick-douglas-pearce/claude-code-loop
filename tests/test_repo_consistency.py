@@ -2337,7 +2337,7 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
     # straight into with ``count(...) >= 2``.
     _SKIP_SITES = {
         "the prose restatement": (
-            "**Every fan-out round's roster names",
+            "**Every round-1 roster names",
             "The renderings, enumerated for the reason"),
         "the enumerated bullet": (
             "and `nothing to read` where a lens found nothing to apply its question to",
@@ -2387,7 +2387,7 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
             "step 8", "**A surviving mutant is step 10's",
             "**Record the round's lens roster"),
         "step 8's roster naming duty": (
-            "step 8", "**Every fan-out round's roster names",
+            "step 8", "**Every round-1 roster names",
             "**Keep the floor lens out of any later tier"),
         "Tool surface's bound on the fan-out": (
             "Tool surface", "Other bounds are unaffected:", "- **Isolated.**"),
@@ -2523,9 +2523,12 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
         other still matching. This pins the reason's PRESENCE, not that the list is
         closed -- ``CLAUDE.md`` records why a prose guard cannot reach that."""
         roster = self._normalize(self._regions()["step 8's roster naming duty"])
+        start, end = self._SKIP_SITES["the enumerated bullet"]
+        bullet = self._span(roster, self._normalize(start), self._normalize(end),
+                            "the roster region's enumerated bullet")
         self.assertIn(
-            self._NOT_DUE_REASON, roster,
-            "step 8's roster record no longer carries the skip's one legal reason.\n\n"
+            self._NOT_DUE_REASON, bullet,
+            "the enumerated skip bullet no longer carries the one legal reason.\n\n"
             f"Expected (normalized): {self._NOT_DUE_REASON!r}\n\n"
             "The reason is the due-when's only conjunct negated. If the due-when "
             "gained or lost a conjunct, the reason list changed with it and BOTH the "
