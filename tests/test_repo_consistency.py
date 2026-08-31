@@ -2332,9 +2332,13 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
     # there satisfies a reason pin while the rendering itself reads
     # "not due: the reviewer judged the delta inert".
     #
-    # One contiguous literal has no such gap -- nothing elsewhere in the span can stand
-    # in for a part of it. It REPLACES both of those constants rather than joining them:
-    # each was a strict substring of this one, so keeping them adds knobs, not coverage.
+    # A LONGER literal was the third attempt and failed the same way: `assertIn` over a
+    # span is a presence check whatever its literal, so a longer decoy defeats it. What
+    # closes the hole is asserting POSITION -- the rendering must be the FIRST thing in
+    # its span -- which is why the start anchor runs to the end of bullet 1's sentence.
+    # This constant REPLACES `_SKIP_BULLET` and `_NOT_DUE_REASON` rather than joining
+    # them: both were strict substrings read over the same span, so `assertIn` of this
+    # one strictly implied both, and keeping them adds knobs, not coverage.
     _SKIP_RENDERING = ("- **`… ; guard-efficacy -- not due: "
                        "every path in the delta is declared docs or research`**")
 
@@ -2348,7 +2352,8 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
             "**Every round-1 roster names",
             "The renderings, enumerated for the reason"),
         "the enumerated bullet": (
-            "and `nothing to read` where a lens found nothing to apply its question to",
+            "and `nothing to read` where a lens found nothing to apply its "
+            "question to (above).",
             "- **`roster: none (recheck)`**"),
     }
 
@@ -2511,13 +2516,16 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
                     "cannot say which one went dark.")
 
     def test_the_skip_bullet_carries_the_whole_rendering(self) -> None:
-        """The rendering must appear whole and contiguous in the enumerated bullet.
+        """The rendering must be the FIRST thing in the enumerated bullet's span.
 
-        Contiguity is the assertion, not presence. The sub-region this reads spans
-        bullet 1's tail and all of bullet 2's gloss, so any pin satisfied by a mention
-        *somewhere in the span* is defeated by rewording the rendering and planting the
-        old string in the gloss -- verified twice on this branch, once against a
-        region-wide check and once against a split opener/reason pair.
+        Position is the assertion. Presence is not enough at any literal length: the
+        span runs from bullet 1's tail to bullet 3, so a decoy planted anywhere in
+        bullet 2's gloss -- a parenthetical, a nested sub-bullet, a "superseded
+        spelling" note -- satisfies a containment check while the rendering itself
+        reads "not due: the reviewer judged the delta inert". Three pins were defeated
+        that way on this branch (a region-wide check, a split opener/reason pair, and a
+        single longer literal) before the assertion's SHAPE was changed rather than its
+        text.
 
         What this does NOT pin: that the reason list is closed, or that this is the
         only legal reason. Those are propositions about the prose, which ``CLAUDE.md``
@@ -2525,18 +2533,22 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
         """
         start, end = self._SKIP_SITES["the enumerated bullet"]
         roster = self._normalize(self._regions()["step 8's roster naming duty"])
-        span = self._span(roster, self._normalize(start), self._normalize(end),
+        ns = self._normalize(start)
+        span = self._span(roster, ns, self._normalize(end),
                           "the roster region's enumerated bullet")
-        self.assertIn(
-            self._SKIP_RENDERING, span,
-            "the enumerated skip rendering is no longer written whole.\n\n"
-            f"Expected (normalized): {self._SKIP_RENDERING!r}\n\n"
+        expected = ns + " " + self._SKIP_RENDERING
+        self.assertTrue(
+            span.startswith(expected),
+            "the enumerated skip rendering is not the first thing in its bullet.\n\n"
+            f"Expected the span to start: {expected!r}\n\n"
+            f"Span starts:                {span[:len(expected)]!r}\n\n"
             "Either the label, the separator, or the one legal reason changed. The "
             "reason is the due-when's only conjunct negated, so if the due-when "
             "gained or lost a conjunct the rendering changed with it and BOTH the "
             "engine and _SKIP_RENDERING need updating -- deliberately, not to make "
-            "this pass. A mention of the old text elsewhere in the bullet is NOT a "
-            "substitute, and is the reason this is pinned contiguously.")
+            "this pass. A mention of the old text elsewhere in the bullet does NOT "
+            "satisfy this -- the rendering must come first, which is the whole point "
+            "of pinning position rather than presence.")
 
     def test_every_region_that_depends_on_the_lens_label_spells_it_the_same(
         self,
