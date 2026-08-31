@@ -138,6 +138,26 @@ the dangerous reading requires *adding* a claim rather than deleting a word, whi
 property into structure where a guard can reach it. Failing that, polarity is review's to own, and
 saying so in the test's docstring is the honest record.
 
+**When the ceiling does not announce itself — a round cap on a single assertion.** A prose guard
+rewritten twice and defeated twice is *at* the ceiling, not two rounds short of clearing it. The
+third change may not be another literal or another locus: it must be a different **shape**
+(presence → position, prose → parsed structure), a **product fix**, or **deletion with the property
+named in the docstring as review's**. Retuning the literal is the displacement loop with a longer
+string. Established by #122 (PR #145), where one assertion — that step 8's `guard-efficacy` skip
+rendering carries its one legal reason — was rewritten **four** times, each after a fresh checker
+defeated the previous version. Every one of them changed the literal and none changed the
+assertion's shape, which is why each defeat read as a bad literal rather than as the pattern it was.
+
+**What a guard over prose must survive, and what it must not be asked to.** It must survive **edit**
+and **delete** — reword the pinned string, move it, remove it. It is **not** required to survive
+**append**: a spare mention beside the real one, a scope clause bolted onto a mandate, a second
+member added to a closed enumeration. No containment or position check over prose can stop an
+append, and #122 **measured** that rather than asserting it — its battery carries the append case
+with `expect: survived`, so the boundary sits where the next reviewer will look. Append-class
+hazards are real and they are **review's**, exactly as the ceiling above assigns polarity and scope.
+**A reviewer who defeats a prose guard by adding text has demonstrated the documented ceiling, not
+found a gap** — that goes on #1, never into another round on the branch.
+
 **The positive prescription the trap above has been missing: a rule about which states are *safe*
 must be written default-deny — unknown ⇒ unsafe — never as an enumeration of the safe set.** The
 section above governs *guards*; this governs *product prose*, and it is what the enumerable-assertion
