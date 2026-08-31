@@ -2433,6 +2433,20 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
                     outer[o].count(e), 1,
                     f"the end anchor for {label} occurs {outer[o].count(e)} times "
                     f"in {o}. Re-anchor it.")
+        roster = self._normalize(self._regions()["step 8's roster naming duty"])
+        for site, (s, e) in self._SKIP_SITES.items():
+            with self.subTest(skip_site=site):
+                ns, ne = self._normalize(s), self._normalize(e)
+                self.assertEqual(
+                    roster.count(ns), 1,
+                    f"the start anchor for {site} occurs {roster.count(ns)} times in "
+                    "the roster region; str.find takes the FIRST, so a duplicate "
+                    "relocates the sub-region and the pin can pass on a decoy while "
+                    "the real rendering is renamed. Re-anchor it.")
+                self.assertEqual(
+                    roster.count(ne), 1,
+                    f"the end anchor for {site} occurs {roster.count(ne)} times in "
+                    "the roster region. Re-anchor it.")
 
     def test_no_inner_anchor_contains_the_label(self) -> None:
         """``_span`` includes the start anchor in the body, so an anchor carrying the
@@ -2483,7 +2497,10 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
                     f"label.\n\nExpected (normalized): {self._NOT_DUE!r}\n\n"
                     "This is the rendering a SKIPPED floor must be written as, so it "
                     "is what makes a not-due round auditable instead of silent. If "
-                    "you reworded it deliberately, update _NOT_DUE.")
+                    "you reworded it deliberately, update _NOT_DUE.\n\n"
+                    "Never drop a site from _SKIP_SITES to make this pass -- the two "
+                    "sites are located separately because a total over the region "
+                    "cannot say which one went dark.")
 
     def test_the_skip_bullet_opens_with_the_rendering(self) -> None:
         """The bullet IS the rendering, so it must open with it. Without this, renaming
