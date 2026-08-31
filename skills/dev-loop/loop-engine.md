@@ -734,7 +734,7 @@ owed the floor and whose roster does not name it produced no verdict (above), no
 from it. The renderings, enumerated for the reason `- Restore:` and `- Hermetic:` enumerate theirs —
 a shape whose only legal rendering asserts a full roster is a template that pressures you to record
 one:
-- **`roster: <lens> (<differential>) — <n> findings; …`** — an ordinary fan-out round. `<n>` counts
+- **`roster: <lens> (<differential>) — <n> findings; …`** — an ordinary round-1 roster. `<n>` counts
   everything that lens returned, of **either** class. Write `0 findings` where a lens returned none,
   and `nothing to read` where a lens found nothing to apply its question to (above).
 - **`… ; guard-efficacy — not due: every path in the delta is declared docs or research`** — the
@@ -762,7 +762,7 @@ Read the tier question off the lenses the risk surface *chose*.
 
 **This is deliberately a lowercase `roster:` record inside the gate-decision block, not a `- Name:`
 element, and it is not repeated in the close record.** The per-finding ID record and the declines
-record below are specified **here rather than in Ledger format**, for the same reason. **Never the
+record below are specified **here rather than in Ledger format** too. **Never the
 `- Code-review:` element, and never the `code-review=` parenthetical** on the `- Budget:` line:
 that parenthetical is per-iteration and label-only, while this is per-round and carries the
 differential and the outcome. Collapsing either into the other loses that.

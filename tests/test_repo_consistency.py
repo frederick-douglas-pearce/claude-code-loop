@@ -2321,14 +2321,22 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
     # restatement and left the enumerated bullet -- the rendering the message names --
     # unpinned, so renaming the bullet alone passed.
     _NOT_DUE = "guard-efficacy -- not due:"
-    # The enumerated bullet must OPEN with the rendering. A sub-region containment check
-    # is not enough on its own: renaming the bullet while adding a spare mention of the
-    # spelling inside the same bullet keeps the region satisfied. Reproduced as a
-    # surviving mutation before this was added. Carries no reason text, so a reword of
-    # the reason cannot silently satisfy it, nor the reverse.
-    _SKIP_BULLET = "- **`… ; guard-efficacy -- not due:"
-    # The one legal reason, pinned SEPARATELY for that same reason.
-    _NOT_DUE_REASON = "every path in the delta is declared docs or research"
+    # The enumerated bullet must carry the rendering WHOLE and CONTIGUOUS -- marker,
+    # label, separator and the one legal reason, as one literal.
+    #
+    # Two weaker versions shipped and were each defeated by a mutation. A containment
+    # check over the region fell to renaming the bullet plus a spare mention anywhere in
+    # the region. Splitting it into a bullet-opener pin plus a separate reason pin fell
+    # to the same trick one level down: the sub-region below is anchored on bullet 1's
+    # TAIL and on bullet 3, so all of bullet 2's gloss is inside it, and a decoy planted
+    # there satisfies a reason pin while the rendering itself reads
+    # "not due: the reviewer judged the delta inert".
+    #
+    # One contiguous literal has no such gap -- nothing elsewhere in the span can stand
+    # in for a part of it. It REPLACES both of those constants rather than joining them:
+    # each was a strict substring of this one, so keeping them adds knobs, not coverage.
+    _SKIP_RENDERING = ("- **`… ; guard-efficacy -- not due: "
+                       "every path in the delta is declared docs or research`**")
 
     # The two places inside the roster region that must spell the rendering, located
     # SEPARATELY rather than counted. A total over the region is satisfied by one real
@@ -2502,38 +2510,33 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
                     "sites are located separately because a total over the region "
                     "cannot say which one went dark.")
 
-    def test_the_skip_bullet_opens_with_the_rendering(self) -> None:
-        """The bullet IS the rendering, so it must open with it. Without this, renaming
-        the bullet and adding a spare mention of the spelling inside that same bullet
-        satisfies the sub-region check above -- verified as a surviving mutation."""
+    def test_the_skip_bullet_carries_the_whole_rendering(self) -> None:
+        """The rendering must appear whole and contiguous in the enumerated bullet.
+
+        Contiguity is the assertion, not presence. The sub-region this reads spans
+        bullet 1's tail and all of bullet 2's gloss, so any pin satisfied by a mention
+        *somewhere in the span* is defeated by rewording the rendering and planting the
+        old string in the gloss -- verified twice on this branch, once against a
+        region-wide check and once against a split opener/reason pair.
+
+        What this does NOT pin: that the reason list is closed, or that this is the
+        only legal reason. Those are propositions about the prose, which ``CLAUDE.md``
+        puts beyond a guard's reach; a second rendering added elsewhere passes.
+        """
         start, end = self._SKIP_SITES["the enumerated bullet"]
         roster = self._normalize(self._regions()["step 8's roster naming duty"])
         span = self._span(roster, self._normalize(start), self._normalize(end),
                           "the roster region's enumerated bullet")
         self.assertIn(
-            self._SKIP_BULLET, span,
-            "the enumerated skip bullet no longer OPENS with the not-due rendering."
-            f"\n\nExpected (normalized): {self._SKIP_BULLET!r}\n\n"
-            "A mention elsewhere in the bullet does not substitute: the bullet is the "
-            "rendering a reader copies. If you reworded it, update _SKIP_BULLET.")
-
-    def test_the_skip_carries_its_one_legal_reason(self) -> None:
-        """The due-when has a single conjunct, so the skip has a single legal reason.
-        Pinned apart from _NOT_DUE so a reword of either cannot be satisfied by the
-        other still matching. This pins the reason's PRESENCE, not that the list is
-        closed -- ``CLAUDE.md`` records why a prose guard cannot reach that."""
-        roster = self._normalize(self._regions()["step 8's roster naming duty"])
-        start, end = self._SKIP_SITES["the enumerated bullet"]
-        bullet = self._span(roster, self._normalize(start), self._normalize(end),
-                            "the roster region's enumerated bullet")
-        self.assertIn(
-            self._NOT_DUE_REASON, bullet,
-            "the enumerated skip bullet no longer carries the one legal reason.\n\n"
-            f"Expected (normalized): {self._NOT_DUE_REASON!r}\n\n"
-            "The reason is the due-when's only conjunct negated. If the due-when "
-            "gained or lost a conjunct, the reason list changed with it and BOTH the "
-            "engine and _NOT_DUE_REASON need updating -- deliberately, not to make "
-            "this pass.")
+            self._SKIP_RENDERING, span,
+            "the enumerated skip rendering is no longer written whole.\n\n"
+            f"Expected (normalized): {self._SKIP_RENDERING!r}\n\n"
+            "Either the label, the separator, or the one legal reason changed. The "
+            "reason is the due-when's only conjunct negated, so if the due-when "
+            "gained or lost a conjunct the rendering changed with it and BOTH the "
+            "engine and _SKIP_RENDERING need updating -- deliberately, not to make "
+            "this pass. A mention of the old text elsewhere in the bullet is NOT a "
+            "substitute, and is the reason this is pinned contiguously.")
 
     def test_every_region_that_depends_on_the_lens_label_spells_it_the_same(
         self,
