@@ -621,56 +621,74 @@ default. **This is the one rule at this gate whose doubt subtracts**, so it need
 general default-deny below — the one that sends an unknown *range* to a FULL round — does not reach
 it: that rule governs how much of the change a round reads, this one governs how many lenses read
 it. Inverting this one would make it vacuous, since "keep both when unsure" is what it exists to
-stop; the record is what keeps it honest instead.
+stop; the record is what keeps it honest instead. **The floor lens below is never the one dropped:
+where another lens duplicates it, the other one goes.**
 
 **No per-round lens *ceiling* is fixed here, deliberately** — only the floor below. The corpus
-establishes that lenses **duplicate**; it does not establish a number, and the lens lost under a cap
-of one has in practice been a *reading* lens whose unique finding was BLOCKING under Floor 1 below.
-**Duplication is what the evidence shows; a count is what it does not.** Choosing one, or a
-per-route roster, is the deferred **review-tier matrix** question (progress.md → the Budget line's
-`code-review=` note) and stays there. **This step deliberately mints no route-to-lens matrix and no
-fixed roster.**
+establishes that lenses **duplicate**; it does not establish a number. **Duplication is what the
+evidence shows; a count is what it does not.** Choosing one, or a per-route roster, is the
+**review-tier matrix** question, which this step does not answer; the `code-review=` note
+(progress.md → the Budget line) is where the corpus for answering it accumulates. **This step
+deliberately mints no route-to-lens matrix and no fixed roster.**
 
 **One lens is a floor, not a choice: `guard-efficacy`.** The rule above picks angles from the risk
 surface, and that judgment stands — this puts a floor beneath it and **never a ceiling**.
 
 **Due when** the row's Route is `code` **and** the round's delta adds or modifies at least one test
-or guard. On a round it is due on, the roster **must carry a lens labelled `guard-efficacy`**.
-Route first, as every other route-scoped rule in this engine reads it — `research` carries
-no test-coverage gate and `docs` runs no such pass (Routing table), so neither is gated here. Within
-a `code` row the floor is **further** narrowed to paths `SOURCE_LAYOUT` does not **positively
-declare** `docs` or `research`: unmatched ⇒ the floor applies, exactly as Floor 2a reads an unmatched
-path. **Do not read that path test as a route test.** A project may declare its `research` route by
-*label* (Router rule 3) and declare no research **path** at all, in which case every path is
-unmatched — which is why Route decides first and the path test only narrows within it.
+or guard **on a path `SOURCE_LAYOUT` does not positively declare `docs` or `research`**. On a round
+it is due on, the roster **must carry a lens labelled `guard-efficacy`**. That is one predicate over
+the round, not a file-by-file test: a single qualifying change anywhere in the delta arms it. Read
+*guard* broadly — anything whose job is to fail when something else breaks — and **if you cannot
+tell whether the delta carries one, it does: the lens is due.** The predicate is deliberately wider
+than Part 2's question 3, which asks about a *test*; wider can only make this lens due more often.
 
-**It is owed by any round whose delta adds or modifies a guard, not by round 1 alone.** Guards
-written at a later round are written under fix pressure by the author, which is when this question
-matters most; a floor scoped to round 1 would miss exactly those.
+Route decides first, as every other route-scoped rule in this engine reads it — `research` carries
+no test-coverage gate and `docs` runs no such pass (Routing table), so neither is gated here. The
+path clause only narrows within a `code` row, exactly as Floor 2a reads an unmatched path. **Do not
+read that path test as a route test.** A project may declare its `research` route by *label* (Router
+rule 3) and declare no research **path** at all, in which case every path is unmatched — which is
+why Route decides first.
+
+**The floor is round 1's.** A later round of this gate is one lighter checker rather than a fan-out
+(below), so it carries no roster and no floor; round 1 is also the round that reads the whole
+change, so the floor reads every guard the change carried when the PR was opened.
 
 **A round that owes this lens and does not carry it has produced no verdict.** Spawn the missing
 lens before the round resolves; if you cannot, `- gate-error:` and escalate (Gate-outcome
 invariant). It is not a round that passed with a gap.
 
-**What it asks, and what it may not do.** It reads: *do this change's guards assert the **mechanism**
-that would break, or only an **outcome** a broken implementation would still produce?* That question
-is the Class B limit-case re-checker's (Gates → Fresh-re-check invariant), and **its answering
-discipline governs here too**: it decides by **reading**, never by running, editing or breaking
-anything; **"cannot tell" is a dirty answer, not a clean one** — which at this gate means a BLOCKING
-finding, never a no-verdict; and **the finder's prompt carries Part 2's blockquote verbatim**, as
-that recipe requires, since the worked example is what makes the distinction operable. What does
-**not** carry over is that recipe's own antecedent — it is written for a round-2 re-check of an
-already-found gap, and this lens has no prior finding and no fix to be handed. Being a reader, it
-joins the fan-out under the Execution policy's read-only form like any other finder. **It never
-mutates** — improvising a mutation outside the harness is forbidden (AC-verifier → Part 2), and a
-mutating finder could not join a fan-out licensed on being read-only.
+**What it asks.** *Do this change's guards assert the **mechanism** that would break, or only an
+**outcome** a broken implementation would still produce?* That question is the Class B limit-case
+re-checker's (Gates → Fresh-re-check invariant), and its answering discipline governs here too: the
+lens decides by **reading**, never by running, editing or breaking anything, and **"cannot tell" is
+a dirty answer** — at this gate a BLOCKING finding, by the promotion rule below and whatever class
+the finder emits, never a no-verdict. Being a reader, it joins the fan-out under the Execution
+policy's read-only form like any other finder. **It never mutates** — improvising a mutation outside
+the harness is forbidden (AC-verifier → Part 2), and a mutating finder could not join a fan-out
+licensed on being read-only.
 
-**Where the delta adds or changes no guard at all, this lens has nothing to read and returns exactly
-that.** It is **not** a finding here and does **not** re-arm the round: that absence is the
-acceptance gate's **limit case**, which step 10 reads straight off the diff and records as a Class B
-finding (AC-verifier → Part 2). Saying so is what stops one absence being charged twice, at two
-gates, off the same reading — and the roster records `nothing to read` rather than a clean pass, so
-the distinction survives into the ledger.
+**What its prompt must carry**, over and above every finder's standing inputs at this step (the
+acceptance criteria, the standing authoring check, the Verdict-first invariant, and the
+finding-class rule): **(1) Part 2's blockquote, verbatim** — the worked example is what makes the
+distinction operable; **(2) that it must not edit, break or execute anything to decide** — the
+prohibition on improvising a mutation does not otherwise reach a finder; and **(3) that it must say
+plainly when it cannot tell** — the rule making that a dirty answer lives here, where the finder
+cannot see it, so an unprompted finder hedges and the gate reads clean. These are the three the
+Class B limit-case re-checker's spawn prompt carries, for the same reasons; the fourth it already
+has. **Named by content, never by number** — that recipe's items are numbered in another section.
+What does **not** carry over is that recipe's antecedent: it is written for a re-check of an
+already-found gap, and this lens has no prior finding and no fix in hand. Its **differential** is
+fixed by construction — writing its question as its differential is sufficient, and no round need
+invent prose for it.
+
+**A lens spawned under the catch-all may find no guard in the delta, and returns exactly that.**
+`nothing to read` is the rendering for a lens that was **due, spawned, and found nothing to apply
+the question to** — never the orchestrator's substitute for spawning it, and never the rendering for
+a round the floor was not due on (that one is written as not-due, below). It is not a finding here
+and does not re-arm the round. **Whether an absence of guards is itself a defect is the acceptance
+gate's question, not this one:** step 10 asks it against the **merge candidate**, under Part 2's own
+three questions, where the limit case lives. The two gates read different objects, so neither one's
+answer is available to the other.
 
 **This lens is NOT the acceptance gate's Class B pass, and neither stands in for the other.** They
 ask different questions at different steps against different objects, and conflating them would let
@@ -681,7 +699,7 @@ one be journalled as the other:
 | asks | do the assertions pin the mechanism? | does a real mutant survive the suite? |
 | method | **reads** the guard | **runs** the harness against a mutated tree |
 | object | the round's delta | the merge candidate |
-| due when | Route `code`, a guard in the delta, path not declared inert | Part 2's three questions say so |
+| due when | the floor above says so | Part 2's three questions say so |
 | records to | the round's roster record | `mutation-survivors=`, `- Restore:`, the `- AC-verify:` line |
 
 **A surviving mutant is step 10's and only step 10's.** A read cannot establish one — which is why
@@ -689,23 +707,35 @@ this is a floor on *reading* and not a second mutation pass — and **neither ga
 the other's journal slot**: a step-8 `guard-efficacy` finding is never written to
 `mutation-survivors=`, whose readings are fixed elsewhere and closed. A `guard-efficacy` finding
 asserts a proposition about the tree, so **Floor 1 promotes it to BLOCKING** (it is the *test
-efficacy* class named in the finding-class list above), and it never reaches the editorial sweep.
+efficacy* class named in the finding-class list below), and it never reaches the editorial sweep.
 
 **Record the round's lens roster where that round resolves.** Write it into that round's
 gate-decision block (Ledger format → progress.md), on the same write-time discipline as this step's
-other per-round records — **when the round resolves, not at step 12**. **Each entry carries the lens
-label, the differential you stated for it, and what it returned** — the outcome is written per lens
-and is never inferred from which findings carry which ID, because those IDs are recorded for
-EDITORIAL findings only, so a lens whose findings were all BLOCKING would read as having found
-nothing. The renderings, enumerated for the reason `- Restore:` and `- Hermetic:` enumerate theirs —
+other per-round records — **when the round resolves, not at step 12**. Each entry carries the lens
+label, the differential you stated for it, and what it returned; the outcome is written per lens and
+is **never inferred** from which findings carry which ID, because those IDs are recorded for
+EDITORIAL findings only (below), so a lens whose findings were all BLOCKING would read as having
+found nothing. **The label written here is the same string that round's finding IDs carry**, so the
+roster and the IDs join on it.
+
+**Every fan-out round's roster names `guard-efficacy`** — either as an entry with its differential
+and what it returned, or as `guard-efficacy — not due: <reason>`. There is no third option and no
+silence. **An absent *entry* means the lens did not run, never that it was not due**; a round that
+owed the floor and whose roster does not name it produced no verdict (above), not a round excused
+from it. The renderings, enumerated for the reason `- Restore:` and `- Hermetic:` enumerate theirs —
 a shape whose only legal rendering asserts a full roster is a template that pressures you to record
 one:
-- **`roster: <lens> (<differential>) — <n> findings; …`** — an ordinary fan-out round. Write
-  `0 findings` where a lens returned none, and `nothing to read` for the floor lens where the delta
-  carried no guard.
-- **`roster: none (recheck)`** — a round that is one lighter checker rather than a fan-out (this
-  gate's round 2, and any later re-check). Its finding IDs read `r<n>.recheck.<k>`, and the floor is
-  not owed by a round that spawns no fan-out.
+- **`roster: <lens> (<differential>) — <n> findings; …`** — an ordinary fan-out round. `<n>` counts
+  everything that lens returned, of **either** class. Write `0 findings` where a lens returned none,
+  and `nothing to read` for the floor lens spawned under the catch-all.
+- **`… ; guard-efficacy — not due: <reason>`** — the floor was not due, written **visibly with its
+  reason** (`docs route`, `path declared inert`, `no test or guard in the delta`), exactly as
+  `- Hermetic:` writes its `n/a:`. The reasons are the due-when's own conjuncts; **if you could not
+  tell, it was due and this rendering is unavailable.**
+- **`roster: none (recheck)`** — a round that is one lighter checker rather than a fan-out (the floor
+  is round 1's, above).
+- **`roster: no verdict`** — the round produced none; a `- gate-fallback:` or `- gate-error:` line
+  carries what happened (Gate-outcome invariant). Never write lens entries beside it.
 - **no roster record at all** — **unknown, and unknown is not "the floor ran".** Absence cannot
   distinguish a round that recorded nothing from one that carried no floor lens, and the second is
   the failure this record exists to catch.
@@ -715,9 +745,12 @@ on close to every qualifying round by construction, so counting it toward "the s
 firing" would answer the review-tier question with evidence this floor manufactured. Read the tier
 question off the lenses the risk surface *chose*.
 
-**This is a record in the gate-decision block: never the `- Code-review:` element, and never the
-`code-review=` parenthetical** on the `- Budget:` line, which records the iteration's angles and is
-fixed elsewhere.
+**This is deliberately a lowercase `roster:` record inside the gate-decision block, not a `- Name:`
+element, and it is not repeated in the close record** — the per-finding ID record and the declines
+record below are specified here for the same reason. **Never the `- Code-review:` element, and never
+the `code-review=` parenthetical** on the `- Budget:` line: that parenthetical is per-iteration and
+label-only, while this is per-round and carries the differential and the outcome, which is what
+makes allocation evaluable at all. Collapsing either into the other loses that.
 
 **Finding classes — every finding carries one, and only one class re-arms a round.**
 "The gate returned findings" is not one state. A guard that cannot fail and a changelog line worded
@@ -1798,9 +1831,6 @@ Fields:
       in-tree fallback, is **also** a `- gate-error:` (Part 2's fallback ladder) — the pass was due
       and produced no verdict, which is not the same as never being due.
 
-    **Nor does a step-8 `guard-efficacy` finding belong in this slot** — that lens reads, this slot
-    records what the acceptance gate's mutation pass found, and the two are distinguished at step 8.
-
     Writing `n/a` for any of them would erase a finding or excuse a binding that did not work, which
     is the one reading this slot must never permit. The `n/a: <reason>` spelling follows the
     Gate-outcome invariant's not-run vocabulary, and it is deliberately visible.
@@ -1808,6 +1838,10 @@ Fields:
     carries, and those lines keep exactly that meaning. An omission must **never** be read
     retroactively as "the pass was scoped out": the corpus is append-only and is never rewritten, so
     the only honest reading of a missing slot is that nothing produced it.
+
+  **Nor does a step-8 `guard-efficacy` finding belong in this slot at all** — that lens reads, this
+  slot records what the acceptance gate's mutation pass found, and the two are distinguished at
+  step 8. It is not a fourth `n/a` reason; it is not this slot's business.
 
   The three readings exist because collapsing them onto one absent/zero axis would make it
   impossible to tell a clean pass from a skipped one from a nonexistent one — and the first stories
