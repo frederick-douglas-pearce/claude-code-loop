@@ -2579,5 +2579,82 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
             "_LABEL. Never drop a region from _REGIONS to make this pass.")
 
 
+class LensDifferentialAgreementTests(unittest.TestCase):
+    """#122's distinctness rule and the roster record are a two-passage coupling.
+
+    Step 8 says a roster may not carry two lenses that would return the same
+    findings, and that you state, per lens, one thing it would find that no other
+    lens in that roster would. That rule is enforced by **one thing only**: the
+    differentials are journalled with the roster, so the record is the control
+    rather than a default. The roster paragraph is what makes that true, by saying
+    each entry carries the differential.
+
+    So the rule makes a claim about another passage, exactly as #33's currency
+    clause does (see ``CurrencyExemptionAgreementTests``). Edit either side and the
+    rule silently loses its enforcement: drop ``differential`` from the roster entry
+    and the rule still reads correctly while nothing records what it asks for; drop
+    the journalling sentence from the rule and the roster keeps carrying a field no
+    rule requires. Neither shows up as a broken sentence.
+
+    **This is the shape a prose guard can reach: two passages pinned against each
+    other, where drift in either direction fails.** It does NOT assert that the rule
+    is right, that differentials are a good control, or that the roster is the only
+    enforcement -- those are propositions about the prose, which ``CLAUDE.md`` puts
+    beyond a guard. It asserts that the coupling still exists and still names the
+    same thing.
+
+    Written after the acceptance gate found this AC shipped with no guard at all --
+    a real Class B survivor, not a hypothetical: deleting the whole rule was green.
+    """
+
+    _RULE_ANCHORS = ("**Distinct in question, not only in label",
+                     "**Doubt subtracts under this rule**")
+    _ROSTER_ANCHORS = ("**Record the round's lens roster where that round resolves.**",
+                       "**Every round-1 roster names")
+    _TERM = "differential"
+
+    def _step8(self) -> str:
+        text = _ENGINE.read_text(encoding="utf-8")
+        i = text.find("### 8. Code review")
+        j = text.find("### 9. Security review", i + 1)
+        self.assertNotEqual(i, -1, "cannot locate step 8 in loop-engine.md")
+        self.assertNotEqual(j, -1, "cannot locate step 9 in loop-engine.md")
+        return re.sub(r"\s+", " ", text[i:j])
+
+    def _span(self, name: str, anchors: "tuple[str, str]") -> str:
+        text = self._step8()
+        start, end = (re.sub(r"\s+", " ", a) for a in anchors)
+        i = text.find(start)
+        self.assertNotEqual(
+            i, -1, f"cannot locate the {name} passage ({start!r}) in step 8 -- "
+            "re-anchor this test before trusting it.")
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the {name} passage ({end!r}) -- "
+            "re-anchor this test before trusting it.")
+        return text[i:j]
+
+    def test_the_rule_still_says_the_differentials_are_recorded(self) -> None:
+        rule = self._span("distinctness rule", self._RULE_ANCHORS)
+        self.assertIn(
+            self._TERM, rule,
+            "step 8's distinctness rule no longer says the differentials are "
+            "journalled.\n\nThat sentence is the rule's whole enforcement -- without "
+            "it the rule asks you to state something nothing records, which is a "
+            "default rather than a control. If the enforcement moved somewhere else, "
+            "re-anchor this test at the new site; do not delete it.")
+
+    def test_the_roster_entry_still_carries_the_differential(self) -> None:
+        roster = self._span("roster record", self._ROSTER_ANCHORS)
+        self.assertIn(
+            self._TERM, roster,
+            "the roster entry no longer carries the differential.\n\nStep 8's "
+            "distinctness rule says the differentials are journalled with the "
+            "roster, so this field is what makes that claim true. Dropping it "
+            "leaves the rule asserting a record that does not exist, and the rule "
+            "still reads correctly -- which is why this is pinned rather than left "
+            "to review.")
+
+
 if __name__ == "__main__":
     unittest.main()
