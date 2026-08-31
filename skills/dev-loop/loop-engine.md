@@ -617,36 +617,60 @@ finding ID this gate records (below), so two finders sharing one collide.
 same findings.** State, when you spawn the round, one thing each lens would find that no other lens
 in that roster would; **a lens you cannot state one for is the same lens, so run one of them.** Those
 differentials are journalled with the roster (below), and that record is the control rather than a
-default: this is the one rule at this gate that fails **open** — it reduces review — so default-deny
-cannot save it here. The safe default would be *run both*, which makes the rule vacuous.
+default. **This is the one rule at this gate whose doubt subtracts**, so it needs saying that the
+general default-deny below — the one that sends an unknown *range* to a FULL round — does not reach
+it: that rule governs how much of the change a round reads, this one governs how many lenses read
+it. Inverting this one would make it vacuous, since "keep both when unsure" is what it exists to
+stop; the record is what keeps it honest instead.
 
-**No per-round lens count is fixed here, deliberately.** The corpus establishes that lenses
-**duplicate**; it does not establish a number. On the change that motivated this rule three finders
-returned two of five findings in common — and each still contributed one the others missed, the one
-lost under a cap of one being a *reading* lens whose unique finding was BLOCKING under Floor 1
-below. **Duplication is what the evidence shows; a count is what it does not.** Choosing one, or a
-per-route roster, is the deferred review-tier question and stays there — to be decided once the
-journalled rosters make per-lens attribution readable from the corpus, not here. **This step
-deliberately mints no route-to-lens matrix and no fixed roster.**
+**No per-round lens *ceiling* is fixed here, deliberately** — only the floor below. The corpus
+establishes that lenses **duplicate**; it does not establish a number, and the lens lost under a cap
+of one has in practice been a *reading* lens whose unique finding was BLOCKING under Floor 1 below.
+**Duplication is what the evidence shows; a count is what it does not.** Choosing one, or a
+per-route roster, is the deferred **review-tier matrix** question (progress.md → the Budget line's
+`code-review=` note) and stays there. **This step deliberately mints no route-to-lens matrix and no
+fixed roster.**
 
 **One lens is a floor, not a choice: `guard-efficacy`.** The rule above picks angles from the risk
-surface, and that judgment stands — this puts a floor beneath it and **never a ceiling**. On any diff
-touching a path `SOURCE_LAYOUT` does not **positively declare** `docs` or `research`, a round-1
-roster **must** carry a lens labelled `guard-efficacy`. Unmatched ⇒ `code` ⇒ the floor applies,
-exactly as Floor 2a reads an unmatched path and for the same reason: `code` is the Router's default
-(rule 4), so a path nobody declared inert is not thereby inert. **A round-1 roster on such a diff
-that does not name `guard-efficacy` is incomplete**, and an absent entry in the journalled roster
-means the lens **did not run** — never that it was not due. That is the `- Restore:`/`- Hermetic:`
-idiom: the reading that lets you off has to be *written*, never inferred from a silence.
+surface, and that judgment stands — this puts a floor beneath it and **never a ceiling**.
+
+**Due when** the row's Route is `code` **and** the round's delta adds or modifies at least one test
+or guard. On a round it is due on, the roster **must carry a lens labelled `guard-efficacy`**.
+Route first, as every other route-scoped rule in this engine reads it — `research` carries
+no test-coverage gate and `docs` runs no such pass (Routing table), so neither is gated here. Within
+a `code` row the floor is **further** narrowed to paths `SOURCE_LAYOUT` does not **positively
+declare** `docs` or `research`: unmatched ⇒ the floor applies, exactly as Floor 2a reads an unmatched
+path. **Do not read that path test as a route test.** A project may declare its `research` route by
+*label* (Router rule 3) and declare no research **path** at all, in which case every path is
+unmatched — which is why Route decides first and the path test only narrows within it.
+
+**It is owed by any round whose delta adds or modifies a guard, not by round 1 alone.** Guards
+written at a later round are written under fix pressure by the author, which is when this question
+matters most; a floor scoped to round 1 would miss exactly those.
+
+**A round that owes this lens and does not carry it has produced no verdict.** Spawn the missing
+lens before the round resolves; if you cannot, `- gate-error:` and escalate (Gate-outcome
+invariant). It is not a round that passed with a gap.
 
 **What it asks, and what it may not do.** It reads: *do this change's guards assert the **mechanism**
-that would break, or only an **outcome** a broken implementation would still produce?* — the question
-Gates hands the Class B limit-case re-checker, whose recipe governs here too and is **not restated
-here**: it decides by **reading**, never by running, editing or breaking anything, and **"cannot
-tell" is a dirty answer, not a clean one.** Being a reader, it joins the fan-out under the Execution
-policy's read-only form like any other finder. **It never mutates** — improvising a mutation outside
-the harness is forbidden (AC-verifier → Part 2), and a mutating finder could not join a fan-out
-licensed on being read-only.
+that would break, or only an **outcome** a broken implementation would still produce?* That question
+is the Class B limit-case re-checker's (Gates → Fresh-re-check invariant), and **its answering
+discipline governs here too**: it decides by **reading**, never by running, editing or breaking
+anything; **"cannot tell" is a dirty answer, not a clean one** — which at this gate means a BLOCKING
+finding, never a no-verdict; and **the finder's prompt carries Part 2's blockquote verbatim**, as
+that recipe requires, since the worked example is what makes the distinction operable. What does
+**not** carry over is that recipe's own antecedent — it is written for a round-2 re-check of an
+already-found gap, and this lens has no prior finding and no fix to be handed. Being a reader, it
+joins the fan-out under the Execution policy's read-only form like any other finder. **It never
+mutates** — improvising a mutation outside the harness is forbidden (AC-verifier → Part 2), and a
+mutating finder could not join a fan-out licensed on being read-only.
+
+**Where the delta adds or changes no guard at all, this lens has nothing to read and returns exactly
+that.** It is **not** a finding here and does **not** re-arm the round: that absence is the
+acceptance gate's **limit case**, which step 10 reads straight off the diff and records as a Class B
+finding (AC-verifier → Part 2). Saying so is what stops one absence being charged twice, at two
+gates, off the same reading — and the roster records `nothing to read` rather than a clean pass, so
+the distinction survives into the ledger.
 
 **This lens is NOT the acceptance gate's Class B pass, and neither stands in for the other.** They
 ask different questions at different steps against different objects, and conflating them would let
@@ -657,25 +681,43 @@ one be journalled as the other:
 | asks | do the assertions pin the mechanism? | does a real mutant survive the suite? |
 | method | **reads** the guard | **runs** the harness against a mutated tree |
 | object | the round's delta | the merge candidate |
-| due when | round 1, on a path not declared inert | Part 2's three questions say so |
-| records to | the round's gate-decision block | `mutation-survivors=` |
+| due when | Route `code`, a guard in the delta, path not declared inert | Part 2's three questions say so |
+| records to | the round's roster record | `mutation-survivors=`, `- Restore:`, the `- AC-verify:` line |
 
 **A surviving mutant is step 10's and only step 10's.** A read cannot establish one — which is why
-this is a floor on *reading* and not a second mutation pass — and neither gate's verdict discharges
-the other's journal slot. A `guard-efficacy` finding is **test efficacy**, which Floor 1 already
-makes BLOCKING, so it never reaches the editorial sweep.
+this is a floor on *reading* and not a second mutation pass — and **neither gate's verdict discharges
+the other's journal slot**: a step-8 `guard-efficacy` finding is never written to
+`mutation-survivors=`, whose readings are fixed elsewhere and closed. A `guard-efficacy` finding
+asserts a proposition about the tree, so **Floor 1 promotes it to BLOCKING** (it is the *test
+efficacy* class named in the finding-class list above), and it never reaches the editorial sweep.
 
 **Record the round's lens roster where that round resolves.** Write it into that round's
 gate-decision block (Ledger format → progress.md), on the same write-time discipline as this step's
-other per-round records — **when the round resolves, not at step 12** — as the labels the round
-spawned, each with the differential you stated for it. **Use the same labels the round's finding IDs
-use** (`r<round>.<lens>.<k>`): the roster is the denominator and the IDs the numerator, so the set
-difference recovers **the lenses that ran and found nothing**, which the IDs alone cannot give and
-which is the datum a later tier decision is read off. **Round 2 is one lighter checker and carries no
-lens** — its IDs read `r2.recheck.1` — so its legal rendering is `roster: none (recheck)`, and the
-floor above is a **round-1** obligation. **This is a record in the gate-decision block: never the
-`- Code-review:` element, and never the `code-review=` parenthetical** on the `- Budget:` line, which
-records the iteration's angles and is fixed elsewhere.
+other per-round records — **when the round resolves, not at step 12**. **Each entry carries the lens
+label, the differential you stated for it, and what it returned** — the outcome is written per lens
+and is never inferred from which findings carry which ID, because those IDs are recorded for
+EDITORIAL findings only, so a lens whose findings were all BLOCKING would read as having found
+nothing. The renderings, enumerated for the reason `- Restore:` and `- Hermetic:` enumerate theirs —
+a shape whose only legal rendering asserts a full roster is a template that pressures you to record
+one:
+- **`roster: <lens> (<differential>) — <n> findings; …`** — an ordinary fan-out round. Write
+  `0 findings` where a lens returned none, and `nothing to read` for the floor lens where the delta
+  carried no guard.
+- **`roster: none (recheck)`** — a round that is one lighter checker rather than a fan-out (this
+  gate's round 2, and any later re-check). Its finding IDs read `r<n>.recheck.<k>`, and the floor is
+  not owed by a round that spawns no fan-out.
+- **no roster record at all** — **unknown, and unknown is not "the floor ran".** Absence cannot
+  distinguish a round that recorded nothing from one that carried no floor lens, and the second is
+  the failure this record exists to catch.
+
+**Keep the floor lens out of any later tier decision read off this corpus.** A mandated lens fires
+on close to every qualifying round by construction, so counting it toward "the same lenses keep
+firing" would answer the review-tier question with evidence this floor manufactured. Read the tier
+question off the lenses the risk surface *chose*.
+
+**This is a record in the gate-decision block: never the `- Code-review:` element, and never the
+`code-review=` parenthetical** on the `- Budget:` line, which records the iteration's angles and is
+fixed elsewhere.
 
 **Finding classes — every finding carries one, and only one class re-arms a round.**
 "The gate returned findings" is not one state. A guard that cannot fail and a changelog line worded
@@ -1208,8 +1250,9 @@ of on whether someone remembered to add it to a list. It has two satisfying form
   converse duty is yours: do not mutate the tree in place while a reader is in flight over it (Part
   2's in-tree rung is the one place you would). Other bounds are unaffected: each finder counts
   separately toward the **next** iteration's `subagent-cap` check (progress.md → the Budget line) —
-  retrospective, and advisory on a manual re-invoke — so step 8's scale-with-risk-surface rule is
-  the only bound that acts on the fan-out you are about to launch.
+  retrospective, and advisory on a manual re-invoke — so step 8's own roster rules — scale
+  with the risk surface, the `guard-efficacy` floor, and the distinct-question rule — are the bounds
+  that act on the fan-out you are about to launch.
 - **Isolated.** An agent that writes runs against **its own copy** of the tree, per the isolation
   duty above. **The escape hatch is isolation, not care** — "be careful not to collide" is not an
   available option, because the duties that make writing safe are ones the agent cannot discharge
@@ -1754,6 +1797,9 @@ Fields:
       change under verification cannot be materialized in it — where the human then declines the
       in-tree fallback, is **also** a `- gate-error:` (Part 2's fallback ladder) — the pass was due
       and produced no verdict, which is not the same as never being due.
+
+    **Nor does a step-8 `guard-efficacy` finding belong in this slot** — that lens reads, this slot
+    records what the acceptance gate's mutation pass found, and the two are distinguished at step 8.
 
     Writing `n/a` for any of them would erase a finding or excuse a binding that did not work, which
     is the one reading this slot must never permit. The `n/a: <reason>` spelling follows the
@@ -2633,6 +2679,10 @@ your *conclusions*, not the instructions the checker needs).
      here, where the checker cannot see it, so an unprompted checker hedges and the gate reads
      clean;
   4. the **Verdict-first invariant** (Gates) — answer the question put to it first, then deepen.
+
+  (**This recipe has a second caller.** Step 8's mandatory `guard-efficacy` lens borrows its
+  answering discipline and its blockquote, but not this bullet's antecedent — that lens runs with no
+  prior finding and no fix in hand. What follows is written for the acceptance gate.)
 
   **Why a read is a legitimate check here, when Part 2 says only mutation detects a survivor.**
   Two reasons, each from this engine's own text rather than from the cost of mutating: the defect

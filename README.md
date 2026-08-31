@@ -129,15 +129,16 @@ because the plan you would have approved is no longer the plan being built. The 
 against a copy of the approach frozen before the review ran, so the loop is reading a record rather
 than its own memory of what it had intended.
 
-**Code review always asks whether your new guards would actually catch anything.** The loop picks
-review angles from what the change puts at risk, but one is a floor rather than a choice: on any path
-your config does not positively declare inert (`docs` or `research`), the first round must include a
-lens that reads your new or changed tests and asks whether they pin the **mechanism** that would
-break or merely an **outcome** a broken implementation would still produce. It decides by reading —
-it never mutates your code — and "cannot tell" counts as a finding, not a pass. **This is not the
-acceptance gate's mutation pass**, which still runs later, separately, and actually breaks a copy of
-your code to see whether the suite notices; neither one substitutes for the other. The lenses a round
-ran are written to the journal, so you can see which ones found nothing.
+**Code review asks whether your new guards would actually catch anything — and where a change adds
+one, it must.** The loop picks review angles from what the change puts at risk, but one is a floor
+rather than a choice: on a `code`-route change whose round adds or modifies a test, on a path you
+have not declared inert, the roster must include a lens that reads your change's guards and asks
+whether they pin the **mechanism** that would break or merely an **outcome** a broken implementation
+would still produce. It decides by reading — it never mutates your code — and "cannot tell" counts as
+a finding, not a pass. **This is not the acceptance gate's mutation pass**, which runs later and
+separately when it is due, and which actually breaks your code — in a copy, or, only with your
+explicit approval, your own tree (below) — to see whether the suite notices. Neither substitutes for
+the other. The lenses a round ran are written to the journal, each with what it returned.
 
 **Some review findings are applied without a second review, and the loop tells you how many.**
 Code review sorts each finding into **blocking** or **editorial**, and only blocking ones send the

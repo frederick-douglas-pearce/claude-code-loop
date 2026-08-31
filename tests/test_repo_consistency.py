@@ -2269,40 +2269,43 @@ class FindingClassAgreementTests(unittest.TestCase):
 class GuardEfficacyLensLabelTests(unittest.TestCase):
     """#122's mandatory review lens hangs on one label spelled the same everywhere.
 
-    Step 8 declares a **floor**: a round-1 finder roster must carry a lens with a
-    fixed label. Two other passages depend on that exact string -- the passage
-    distinguishing the lens from the acceptance gate's Class B pass, and Part 2's
-    pointer back to it. The label is also what the roster record and the
-    ``r<round>.<lens>.<k>`` finding IDs share, which is what lets a reader recover
-    *the lenses that ran and found nothing*.
+    Step 8 declares a **floor**: on a round it is due on, the finder roster must carry a
+    lens with a fixed label. Two other passages depend on that exact string -- the
+    passage distinguishing the lens from the acceptance gate's Class B pass, and
+    Part 2's pointer back to it. Rename it at one site and the others go dark while
+    every word still reads correctly: a roster then satisfies a floor that mandates
+    something else, and nothing else in this suite notices.
 
-    **A drift here is silent in the dangerous direction.** The floor is written so
-    that a roster not naming the label is *incomplete*; rename the label at the floor
-    alone and every roster satisfies a floor nothing now mandates, while all three
-    passages still read correctly. Nothing else in the suite would notice.
+    What is asserted is a **string** coupling, not a meaning. This does NOT assert that
+    the lens reads rather than mutates, that its due-when clause is correctly scoped,
+    or that the Class B distinction is true -- those are propositions about prose,
+    which ``CLAUDE.md`` records as beyond what a guard over prose can pin. They stay
+    with review. Do not "complete" this test by adding them.
 
-    What is asserted is a **string** coupling, not a meaning -- so this is neither
-    fragile nor vacuous. It does NOT assert that the lens reads rather than mutates,
-    that the floor is correctly scoped, or that the Class B distinction is true.
-    Those are propositions about prose, which ``CLAUDE.md`` records as beyond what a
-    guard over prose can pin; they stay with review. Do not "complete" this test by
-    adding them.
+    **Regions are located by SECTION HEADING first, then narrowed**, following
+    ``PlanGateFrozenBlockTests`` and ``_plan_template_fence``. An earlier draft
+    anchored two regions on the floor paragraph's own opening words, which meant the
+    region was defined by the sentence under test: moving the whole floor out of
+    step 8 -- into an aside, or past a renumber -- left every assertion green with the
+    floor no longer at the gate.
 
-    **A stated limit, because containment has one.** A region check is satisfied by
-    *any* occurrence, and two of these regions mention the label more than once. So
-    this does not catch one mention drifting while a sibling keeps its region green.
-    That is why the mandating sentence is pinned separately below: it is the one
-    occurrence whose drift actually turns the floor off. The remaining tolerance is
-    real and is left uncovered deliberately rather than papered over with a
-    near-miss blacklist, which would be the enumerable-assertion trap again.
+    **Anchored per region, never counted globally.** A total passes when one site loses
+    the label and another gains a spare mention, and cannot say *which* site went dark.
 
-    **Anchored per region, never counted globally** -- the ``PlanGateFrozenBlockTests``
-    lesson. A total passes when one site loses the label and another gains a spare
-    mention, and a total cannot say *which* site went dark. Never replace the regions
-    with a count, and never drop a region to make this pass.
+    **What this does not pin, stated because the engine's own authoring rule makes an
+    overclaiming test message a defect.** A region check is satisfied by *any*
+    occurrence, and two of these regions mention the label more than once, so drift of
+    one mention beside a surviving sibling passes. The mandate is therefore pinned
+    separately -- including its modality, since a ``must`` softened to ``should`` turns
+    the floor into a suggestion -- but that pin is a *literal*, so a scope condition
+    appended after it ("...when the reviewer judges it warranted") would still pass.
+    Polarity and scope of the mandate stay with review; ``CLAUDE.md`` records why a
+    prose guard cannot reach them, and adding the assertion back is the displacement
+    loop, not a gap.
     """
 
     _LABEL = "`guard-efficacy`"
+    _MANDATE = "must carry a lens labelled `guard-efficacy`"
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -2312,6 +2315,9 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
         return _ENGINE.read_text(encoding="utf-8")
 
     def _span(self, text: str, start: str, end: str, label: str) -> str:
+        # Same slicing as the six sibling helpers in this file: the body INCLUDES the
+        # start anchor. Do not diverge -- an earlier draft returned
+        # text[i + len(start):j], which silently made an anchor-exclusion test vacuous.
         i = text.find(start)
         self.assertNotEqual(
             i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
@@ -2322,20 +2328,28 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it."
         )
-        return text[i + len(start):j]
+        return text[i:j]
 
-    # Each anchor deliberately EXCLUDES the label, so no region can be satisfied by
-    # its own boundary -- asserted below.
+    # Outer spans are SECTION headings, so a region stays the section it names even if
+    # the passage inside it is reworded or moved within that section.
+    _OUTER = {
+        "step 8": ("### 8. Code review", "### 9. Security review"),
+        "AC-verifier": ("## AC-verifier", "## Initialization procedure"),
+    }
+    # (outer, inner-start, inner-end)
     _REGIONS = {
         "step 8's floor (mandates the lens)": (
+            "step 8",
             "**One lens is a floor, not a choice:",
             "**What it asks, and what it may not do.**",
         ),
         "step 8's Class B distinction": (
+            "step 8",
             "**This lens is NOT the acceptance gate's Class B pass",
-            "**Record the round's lens roster",
+            "**A surviving mutant is step 10's",
         ),
         "AC-verifier Part 2 (the pointer back)": (
+            "AC-verifier",
             "**Part 2 \u2014 Class B: mutation survivors.**",
             "*Why a checklist cannot find these*",
         ),
@@ -2343,51 +2357,57 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
 
     def _regions(self):
         text = self._engine()
+        outer = {
+            name: self._span(text, s, e, f"{name} section")
+            for name, (s, e) in self._OUTER.items()
+        }
         return {
-            label: self._span(text, start, end, label)
-            for label, (start, end) in self._REGIONS.items()
+            label: self._span(outer[o], s, e, label)
+            for label, (o, s, e) in self._REGIONS.items()
         }
 
-    def test_the_span_anchors_actually_resolve(self) -> None:
-        # Guards the guard: an anchor that stopped matching would make every
-        # containment assertion below run against an empty or wrong string.
-        for label, body in self._regions().items():
+    def test_every_anchor_is_unique_within_its_scope(self) -> None:
+        """``str.find`` takes the FIRST match, so a duplicated anchor silently
+        relocates a region to a span that can sweep up unrelated mentions -- green
+        while the passage it was meant to pin has gone. This is the assertion the
+        earlier emptiness check was reaching for and did not make."""
+        text = self._engine()
+        for name, (s, e) in self._OUTER.items():
+            with self.subTest(section=name):
+                self.assertEqual(text.count(s), 1, f"section anchor {s!r} is not unique")
+                self.assertEqual(text.count(e), 1, f"section anchor {e!r} is not unique")
+        outer = {
+            name: self._span(text, s, e, name) for name, (s, e) in self._OUTER.items()
+        }
+        for label, (o, s, e) in self._REGIONS.items():
             with self.subTest(region=label):
-                self.assertTrue(
-                    body.strip(),
-                    f"the {label} region resolved to an empty span. Re-anchor it; "
-                    "do not delete the region.",
+                self.assertEqual(
+                    outer[o].count(s), 1,
+                    f"the start anchor for {label} occurs {outer[o].count(s)} times "
+                    f"in {o}; a region located by a non-unique anchor is not the "
+                    "region this test names. Re-anchor it.",
+                )
+                self.assertEqual(
+                    outer[o].count(e), 1,
+                    f"the end anchor for {label} occurs {outer[o].count(e)} times "
+                    f"in {o}. Re-anchor it.",
                 )
 
-    def test_no_region_is_satisfied_by_its_own_anchor(self) -> None:
-        for label, (start, end) in self._REGIONS.items():
-            with self.subTest(region=label):
-                self.assertNotIn(
-                    self._LABEL, self._normalize(start + " " + end),
-                    f"the {label} anchors contain the lens label themselves, so the "
-                    "containment check below would pass on the anchor rather than on "
-                    "the region's body. Re-anchor on text that excludes the label.",
-                )
-
-    def test_the_floor_region_mandates_the_label_not_merely_mentions_it(self) -> None:
-        # Containment over a region is satisfied by ANY occurrence, and the floor
-        # region carries several. So the region check alone tolerates the mandating
-        # sentence itself drifting while a later back-reference keeps the region
-        # green -- which is the one occurrence whose drift actually turns the floor
-        # off. Pin that sentence specifically.
+    def test_the_floor_mandates_the_label_with_its_modality(self) -> None:
         floor = self._normalize(
             self._regions()["step 8's floor (mandates the lens)"]
         )
-        mandate = "carry a lens labelled " + self._LABEL
         self.assertIn(
-            mandate, floor,
-            "step 8's floor no longer MANDATES the lens by its label.\n\n"
-            f"Expected (normalized): {mandate!r}\n\n"
-            "The region check above passes on any mention, so this is the assertion "
-            "that catches the mandating sentence drifting on its own -- a roster "
-            "would then satisfy a floor that names something else, while the "
-            "paragraph still reads as though a floor were in force. If you reworded "
-            "the mandate deliberately, update this expectation and _LABEL together.",
+            self._MANDATE, floor,
+            "step 8's floor no longer carries the mandate clause verbatim.\n\n"
+            f"Expected (normalized): {self._MANDATE!r}\n\n"
+            "The region check passes on any mention of the label, so this is what "
+            "pins the one occurrence that does the mandating -- and it includes "
+            "`must` deliberately, because softening the modality turns the floor "
+            "into a suggestion while the paragraph still reads as a floor. NOTE what "
+            "this does not catch: a scope condition appended after the clause leaves "
+            "it intact. That is review's, not this test's. If you reworded the "
+            "mandate deliberately, update _MANDATE and _LABEL together.",
         )
 
     def test_every_region_that_depends_on_the_lens_label_spells_it_the_same(
@@ -2405,15 +2425,13 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
             f"lens label: {missing}.\n\n"
             f"Expected (normalized): {self._LABEL!r}\n\n"
             "A MISMATCH IS SILENT AND FAILS OPEN. The floor is satisfied by a roster "
-            "naming this exact label, so if the floor renames it and the other "
-            "passages do not -- or the reverse -- a roster can satisfy a floor that "
-            "no longer mandates anything, while all three passages still read "
-            "correctly. Nothing else in this suite notices.\n\n"
-            "Each region is checked SEPARATELY on purpose: a global count of the "
-            "label passes when one region loses it and another gains a spare "
-            "mention, and a count cannot say which region went dark. If you renamed "
-            "the lens deliberately, rename it in every region and update _LABEL. "
-            "Never drop a region from _REGIONS to make this pass.",
+            "naming this exact label, so if one region renames it and the others do "
+            "not, a roster can satisfy a floor nothing now mandates while all three "
+            "passages still read correctly.\n\n"
+            "Each region is checked SEPARATELY on purpose: a global count passes "
+            "when one region loses the label and another gains a spare mention. If "
+            "you renamed the lens deliberately, rename it in every region and update "
+            "_LABEL. Never drop a region from _REGIONS to make this pass.",
         )
 
 
