@@ -129,6 +129,21 @@ because the plan you would have approved is no longer the plan being built. The 
 against a copy of the approach frozen before the review ran, so the loop is reading a record rather
 than its own memory of what it had intended.
 
+**Code review asks whether your new guards would actually catch anything.** The loop picks review
+angles from what the change puts at risk, but one is a floor rather than a choice: on any change
+touching a path you have not declared inert, the first round's roster must include a lens that reads
+that change's guards and asks whether they pin the **mechanism** that would break or merely an
+**outcome** a broken implementation would still produce. Neither the route nor whether the change
+appears to carry a guard narrows this — where it carries none, *that* is the lens's answer, and it
+is recorded as such; whether that absence is itself a defect is the acceptance gate's question, not
+this one. The cost is the same one the blocking/editorial split carries: until you declare some
+paths inert, this fires on every change. It decides by reading — it never mutates your code — and
+"cannot tell" counts as a finding, not a pass. **This is not the acceptance gate's mutation pass**,
+which runs later and separately when it is due, and which actually breaks your code — in a copy, or,
+only with your explicit approval, your own tree (below) — to see whether the suite notices. Neither
+substitutes for the other, and neither one's result is written into the other's record. The lenses a
+round ran are written to the journal, each with what it returned.
+
 **Some review findings are applied without a second review, and the loop tells you how many.**
 Code review sorts each finding into **blocking** or **editorial**, and only blocking ones send the
 gate round back around. Editorial ones — wording that asserts no proposition about your repository

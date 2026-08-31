@@ -2266,5 +2266,395 @@ class FindingClassAgreementTests(unittest.TestCase):
         )
 
 
+class GuardEfficacyLensLabelTests(unittest.TestCase):
+    """#122's mandatory review lens hangs on one label spelled the same everywhere.
+
+    Step 8 declares a **floor**: on a round it is due on, the finder roster must carry a
+    lens with a fixed label. Several other passages depend on that exact string -- the
+    distinction from the acceptance gate's Class B pass, the journal-slot separation,
+    the roster's naming duty, Tool surface's bound on the fan-out, the
+    ``mutation-survivors`` slot's exclusion, Part 2's pointer, and the recipe's
+    second-caller note. Rename it at one site and the others go dark while every word
+    still reads correctly: a roster then satisfies a floor that mandates something
+    else, and nothing else in this suite notices.
+
+    **No count of those sites appears here, deliberately.** An earlier draft said "two
+    other passages" and was wrong within one commit -- the set grew as the change did,
+    and a stated tally is the enumerable assertion this repo has retracted repeatedly.
+    ``_REGIONS`` is the list; read it rather than a sentence about it.
+
+    What is asserted is a **string** coupling, not a meaning. This does NOT assert that
+    the lens reads rather than mutates, that its due-when clause is correctly scoped,
+    or that the Class B distinction is true -- those are propositions about prose,
+    which ``CLAUDE.md`` records as beyond what a guard over prose can pin. They stay
+    with review. Do not "complete" this test by adding them.
+
+    **Regions are located by SECTION HEADING first, then narrowed**, the nesting
+    ``PlanGateFrozenBlockTests._plan_template_fence`` uses.
+    An earlier draft anchored the step-8 regions on the paragraphs' own opening words,
+    so a region was defined by the text under test: moving the floor out of step 8 --
+    into an aside, or past a renumber -- left every assertion green with the floor no
+    longer at the gate.
+
+    **Anchored per region, never counted globally.** A total passes when one site loses
+    the label and another gains a spare mention, and cannot say *which* site went dark.
+
+    **What this does not pin, stated because the engine's own authoring rule makes an
+    overclaiming test message a defect.** A region check is satisfied by *any*
+    occurrence, so within a region that mentions the label more than once, drift of one
+    mention beside a surviving sibling passes. The mandate is therefore pinned
+    separately -- including its modality, since a ``must`` softened to ``should`` turns
+    the floor into a suggestion -- but that pin is a *literal*, so a scope condition
+    appended after it ("...when the reviewer judges it warranted") would still pass.
+    Polarity and scope of the mandate stay with review; ``CLAUDE.md`` records why a
+    prose guard cannot reach them, and adding the assertion back is the displacement
+    loop, not a gap.
+    """
+
+    _LABEL = "`guard-efficacy`"
+    _MANDATE = "must carry a lens labelled `guard-efficacy`"
+    # The label+separator a SKIP must be written with. Pinned as a literal for the same
+    # reason the mandate is: the region check passes on any sibling mention, and this is
+    # the spelling that makes a not-due floor auditable rather than silent.
+    #
+    # NO leading backtick: an earlier draft carried one, which matched ONLY the prose
+    # restatement and left the enumerated bullet -- the rendering the message names --
+    # unpinned, so renaming the bullet alone passed.
+    _NOT_DUE = "guard-efficacy -- not due:"
+    # The enumerated bullet must carry the rendering WHOLE and CONTIGUOUS -- marker,
+    # label, separator and the one legal reason, as one literal.
+    #
+    # Two weaker versions shipped and were each defeated by a mutation. A containment
+    # check over the region fell to renaming the bullet plus a spare mention anywhere in
+    # the region. Splitting it into a bullet-opener pin plus a separate reason pin fell
+    # to the same trick one level down: the sub-region below is anchored on bullet 1's
+    # TAIL and on bullet 3, so all of bullet 2's gloss is inside it, and a decoy planted
+    # there satisfies a reason pin while the rendering itself reads
+    # "not due: the reviewer judged the delta inert".
+    #
+    # A LONGER literal was the third attempt and failed the same way: `assertIn` over a
+    # span is a presence check whatever its literal, so a longer decoy defeats it. What
+    # closes the hole is asserting POSITION -- the rendering must be the FIRST thing in
+    # its span -- which is why the start anchor runs to the end of bullet 1's sentence.
+    # This constant REPLACES `_SKIP_BULLET` and `_NOT_DUE_REASON` rather than joining
+    # them: both were strict substrings read over the same span, so `assertIn` of this
+    # one strictly implied both, and keeping them adds knobs, not coverage.
+    _SKIP_RENDERING = ("- **`… ; guard-efficacy -- not due: "
+                       "every path in the delta is declared docs or research`**")
+
+    # The two places inside the roster region that must spell the rendering, located
+    # SEPARATELY rather than counted. A total over the region is satisfied by one real
+    # rendering plus a spare mention and cannot say which site went dark -- the failure
+    # this class's own docstring names, and which an earlier draft of this test walked
+    # straight into with ``count(...) >= 2``.
+    _SKIP_SITES = {
+        "the prose restatement": (
+            "**Every round-1 roster names",
+            "The renderings, enumerated for the reason"),
+        "the enumerated bullet": (
+            "and `nothing to read` where a lens found nothing to apply its "
+            "question to (above).",
+            "- **`roster: none (recheck)`**"),
+    }
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
+
+    def _engine(self) -> str:
+        return _ENGINE.read_text(encoding="utf-8")
+
+    def _span(self, text: str, start: str, end: str, label: str) -> str:
+        # Same slicing as the sibling helpers in this file: the body INCLUDES the
+        # start anchor. Do not diverge -- an earlier draft returned
+        # text[i + len(start):j], which silently made an anchor-exclusion test vacuous.
+        # Because the anchor IS in the body, no inner start anchor may contain the
+        # label; test_no_inner_anchor_contains_the_label enforces that.
+        i = text.find(start)
+        self.assertNotEqual(
+            i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it."
+        )
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it."
+        )
+        return text[i:j]
+
+    _OUTER = {
+        "step 8": ("### 8. Code review", "### 9. Security review"),
+        "Tool surface": ("### Tool surface —", "## Ledger format"),
+        "Ledger format": ("## Ledger format", "## Router — classification"),
+        "AC-verifier": ("## AC-verifier", "## Initialization procedure"),
+        "Gates": ("## Gates, convergence & resting states", "**Convergence & the resting"),
+    }
+    # (outer, inner-start, inner-end) -- every inner start anchor excludes the label.
+    _REGIONS = {
+        "step 8's floor (mandates the lens)": (
+            "step 8", "**One lens is a floor, not a choice:", "**What it asks.**"),
+        "step 8's Class B distinction table": (
+            "step 8", "**This lens is NOT the acceptance gate's Class B pass",
+            "**A surviving mutant is step 10's"),
+        "step 8's journal-slot separation": (
+            "step 8", "**A surviving mutant is step 10's",
+            "**Record the round's lens roster"),
+        "step 8's roster naming duty": (
+            "step 8", "**Every round-1 roster names",
+            "**Keep the floor lens out of any later tier"),
+        "Tool surface's bound on the fan-out": (
+            "Tool surface", "Other bounds are unaffected:", "- **Isolated.**"),
+        "the mutation-survivors slot's exclusion": (
+            "Ledger format", "**This slot is not where a step-8",
+            "The three readings exist because"),
+        "AC-verifier Part 2 (the pointer back)": (
+            "AC-verifier", "**Part 2 \u2014 Class B: mutation survivors.**",
+            "*Why a checklist cannot find these*"),
+        "the recipe's second-caller note": (
+            "Gates", "(**This recipe has a second caller.**",
+            "**Why a read is a legitimate check here"),
+    }
+
+    def _outer(self):
+        text = self._engine()
+        return {n: self._span(text, s, e, f"{n} section")
+                for n, (s, e) in self._OUTER.items()}
+
+    def _regions(self):
+        outer = self._outer()
+        return {label: self._span(outer[o], s, e, label)
+                for label, (o, s, e) in self._REGIONS.items()}
+
+    def test_every_anchor_is_unique_within_its_scope(self) -> None:
+        """``str.find`` takes the FIRST match, so a duplicated anchor silently
+        relocates a region to a span that can sweep up unrelated mentions -- green
+        while the passage it was meant to pin has gone."""
+        text = self._engine()
+        for name, (s, e) in self._OUTER.items():
+            with self.subTest(section=name):
+                self.assertEqual(text.count(s), 1, f"section anchor {s!r} is not unique")
+                self.assertEqual(text.count(e), 1, f"section anchor {e!r} is not unique")
+        outer = self._outer()
+        for label, (o, s, e) in self._REGIONS.items():
+            with self.subTest(region=label):
+                self.assertEqual(
+                    outer[o].count(s), 1,
+                    f"the start anchor for {label} occurs {outer[o].count(s)} times "
+                    f"in {o}; a region located by a non-unique anchor is not the "
+                    "region this test names. Re-anchor it.")
+                self.assertEqual(
+                    outer[o].count(e), 1,
+                    f"the end anchor for {label} occurs {outer[o].count(e)} times "
+                    f"in {o}. Re-anchor it.")
+        roster = self._normalize(self._regions()["step 8's roster naming duty"])
+        for site, (s, e) in self._SKIP_SITES.items():
+            with self.subTest(skip_site=site):
+                ns, ne = self._normalize(s), self._normalize(e)
+                self.assertEqual(
+                    roster.count(ns), 1,
+                    f"the start anchor for {site} occurs {roster.count(ns)} times in "
+                    "the roster region; str.find takes the FIRST, so a duplicate "
+                    "relocates the sub-region and the pin can pass on a decoy while "
+                    "the real rendering is renamed. Re-anchor it.")
+                self.assertEqual(
+                    roster.count(ne), 1,
+                    f"the end anchor for {site} occurs {roster.count(ne)} times in "
+                    "the roster region. Re-anchor it.")
+
+    def test_no_inner_anchor_contains_the_label(self) -> None:
+        """``_span`` includes the start anchor in the body, so an anchor carrying the
+        label would satisfy its own region's containment check. This is the assertion
+        that keeps that from going unnoticed -- and unlike the version it replaces, it
+        can actually fail: the earlier draft excluded both anchors by construction, so
+        it certified a property the slicing made unconditional."""
+        for label, (_o, s, e) in self._REGIONS.items():
+            with self.subTest(region=label):
+                self.assertNotIn(
+                    self._LABEL, self._normalize(s + " " + e),
+                    f"the {label} anchors contain the lens label, so its containment "
+                    "check would pass on the boundary rather than the body. "
+                    "Re-anchor on text that excludes the label.")
+
+    def test_the_floor_mandates_the_label_with_its_modality(self) -> None:
+        floor = self._normalize(self._regions()["step 8's floor (mandates the lens)"])
+        self.assertIn(
+            self._MANDATE, floor,
+            "step 8's floor no longer carries the mandate clause verbatim.\n\n"
+            f"Expected (normalized): {self._MANDATE!r}\n\n"
+            "The region check passes on any mention of the label, so this is what "
+            "pins the one occurrence that does the mandating -- and it includes "
+            "`must` deliberately, because softening the modality turns the floor "
+            "into a suggestion while the paragraph still reads as a floor. NOTE what "
+            "this does not catch: a scope condition appended after the clause leaves "
+            "it intact. That is review's, not this test's. If you reworded the "
+            "mandate deliberately, update _MANDATE and _LABEL together.")
+
+    def test_each_skip_site_spells_the_rendering(self) -> None:
+        """The prose restatement carries the rendering, checked over its own located
+        span rather than over the whole region -- counting across the region is
+        satisfied by one surviving rendering plus a spare mention, the anti-pattern
+        this class's docstring forbids and which a previous draft shipped.
+
+        The enumerated bullet is covered by the position pin below, not here. Both
+        anchors still get the hygiene check, because both feed ``_span``."""
+        roster = self._normalize(self._regions()["step 8's roster naming duty"])
+        for site, (start, _end) in self._SKIP_SITES.items():
+            with self.subTest(anchor_hygiene=site):
+                self.assertNotIn(
+                    self._NOT_DUE, self._normalize(start),
+                    f"the start anchor for {site} contains the rendering, so a "
+                    "check over its span would pass on the boundary rather than "
+                    "the body. Re-anchor it.")
+        site = "the prose restatement"
+        start, end = self._SKIP_SITES[site]
+        span = self._span(roster, self._normalize(start), self._normalize(end),
+                          f"the roster region's {site}")
+        self.assertIn(
+            self._NOT_DUE, span,
+            f"{site} no longer spells the not-due rendering with the lens label."
+            f"\n\nExpected (normalized): {self._NOT_DUE!r}\n\n"
+            "This is the rendering a SKIPPED floor must be written as, so it is "
+            "what makes a not-due round auditable instead of silent. If you "
+            "reworded it deliberately, update _NOT_DUE.\n\n"
+            "Never drop a site from _SKIP_SITES to make this pass. The enumerated "
+            "bullet is NOT checked here -- the position pin below strictly implies "
+            "it, over the same span, since _NOT_DUE is a substring of "
+            "_SKIP_RENDERING. Asserting it twice would be a knob, not coverage.")
+
+    def test_the_skip_bullet_carries_the_whole_rendering(self) -> None:
+        """The rendering must be the FIRST thing in the enumerated bullet's span.
+
+        Position is the assertion. Presence is not enough at any literal length: the
+        span runs from bullet 1's tail to bullet 3, so a decoy planted anywhere in
+        bullet 2's gloss -- a parenthetical, a nested sub-bullet, a "superseded
+        spelling" note -- satisfies a containment check while the rendering itself
+        reads "not due: the reviewer judged the delta inert". Three pins were defeated
+        that way on this branch (a region-wide check, a split opener/reason pair, and a
+        single longer literal) before the assertion's SHAPE was changed rather than its
+        text.
+
+        What this does NOT pin: that the reason list is closed, or that this is the
+        only legal reason. Those are propositions about the prose, which ``CLAUDE.md``
+        puts beyond a guard's reach; a second rendering added elsewhere passes.
+        """
+        start, end = self._SKIP_SITES["the enumerated bullet"]
+        roster = self._normalize(self._regions()["step 8's roster naming duty"])
+        ns = self._normalize(start)
+        span = self._span(roster, ns, self._normalize(end),
+                          "the roster region's enumerated bullet")
+        expected = ns + " " + self._SKIP_RENDERING
+        self.assertTrue(
+            span.startswith(expected),
+            "the enumerated skip rendering is not the first thing in its bullet.\n\n"
+            f"Expected the span to start: {expected!r}\n\n"
+            f"Span starts:                {span[:len(expected)]!r}\n\n"
+            "Either the rendering changed -- label, separator, or the one legal "
+            "reason -- or something was inserted between the anchor and it, or the "
+            "bullet moved. The reason is the due-when's only conjunct negated, so "
+            "if the due-when "
+            "gained or lost a conjunct the rendering changed with it and BOTH the "
+            "engine and _SKIP_RENDERING need updating -- deliberately, not to make "
+            "this pass. A mention of the old text elsewhere in the bullet does NOT "
+            "satisfy this -- the rendering must come first, which is the whole point "
+            "of pinning position rather than presence.")
+
+    def test_every_region_that_depends_on_the_lens_label_spells_it_the_same(
+        self,
+    ) -> None:
+        missing = sorted(
+            label for label, body in self._regions().items()
+            if self._LABEL not in self._normalize(body))
+        self.assertEqual(
+            missing, [],
+            "these region(s) of loop-engine.md do not carry the mandatory review "
+            f"lens label: {missing}.\n\n"
+            f"Expected (normalized): {self._LABEL!r}\n\n"
+            "A MISMATCH IS SILENT AND FAILS OPEN. The floor is satisfied by a roster "
+            "naming this exact label, so if one region renames it and the others do "
+            "not, a roster can satisfy a floor nothing now mandates while all the "
+            "passages still read correctly.\n\n"
+            "Each region is checked SEPARATELY on purpose: a global count passes "
+            "when one region loses the label and another gains a spare mention. If "
+            "you renamed the lens deliberately, rename it in every region and update "
+            "_LABEL. Never drop a region from _REGIONS to make this pass.")
+
+
+class LensDifferentialAgreementTests(unittest.TestCase):
+    """#122's distinctness rule and the roster record are a two-passage coupling.
+
+    Step 8 says a roster may not carry two lenses that would return the same
+    findings, and that you state, per lens, one thing it would find that no other
+    lens in that roster would. That rule is enforced by **one thing only**: the
+    differentials are journalled with the roster, so the record is the control
+    rather than a default. The roster paragraph is what makes that true, by saying
+    each entry carries the differential.
+
+    So the rule makes a claim about another passage, exactly as #33's currency
+    clause does (see ``CurrencyExemptionAgreementTests``). Edit either side and the
+    rule silently loses its enforcement: drop ``differential`` from the roster entry
+    and the rule still reads correctly while nothing records what it asks for; drop
+    the journalling sentence from the rule and the roster keeps carrying a field no
+    rule requires. Neither shows up as a broken sentence.
+
+    **This is the shape a prose guard can reach: two passages pinned against each
+    other, where drift in either direction fails.** It does NOT assert that the rule
+    is right, that differentials are a good control, or that the roster is the only
+    enforcement -- those are propositions about the prose, which ``CLAUDE.md`` puts
+    beyond a guard. It asserts that the coupling still exists and still names the
+    same thing.
+
+    Written after the acceptance gate found this AC shipped with no guard at all --
+    a real Class B survivor, not a hypothetical: deleting the whole rule was green.
+    """
+
+    _RULE_ANCHORS = ("**Distinct in question, not only in label",
+                     "**Doubt subtracts under this rule**")
+    _ROSTER_ANCHORS = ("**Record the round's lens roster where that round resolves.**",
+                       "**Every round-1 roster names")
+    _TERM = "differential"
+
+    def _step8(self) -> str:
+        text = _ENGINE.read_text(encoding="utf-8")
+        i = text.find("### 8. Code review")
+        j = text.find("### 9. Security review", i + 1)
+        self.assertNotEqual(i, -1, "cannot locate step 8 in loop-engine.md")
+        self.assertNotEqual(j, -1, "cannot locate step 9 in loop-engine.md")
+        return re.sub(r"\s+", " ", text[i:j])
+
+    def _span(self, name: str, anchors: "tuple[str, str]") -> str:
+        text = self._step8()
+        start, end = (re.sub(r"\s+", " ", a) for a in anchors)
+        i = text.find(start)
+        self.assertNotEqual(
+            i, -1, f"cannot locate the {name} passage ({start!r}) in step 8 -- "
+            "re-anchor this test before trusting it.")
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the {name} passage ({end!r}) -- "
+            "re-anchor this test before trusting it.")
+        return text[i:j]
+
+    def test_the_rule_still_says_the_differentials_are_recorded(self) -> None:
+        rule = self._span("distinctness rule", self._RULE_ANCHORS)
+        self.assertIn(
+            self._TERM, rule,
+            "step 8's distinctness rule no longer says the differentials are "
+            "journalled.\n\nThat sentence is the rule's whole enforcement -- without "
+            "it the rule asks you to state something nothing records, which is a "
+            "default rather than a control. If the enforcement moved somewhere else, "
+            "re-anchor this test at the new site; do not delete it.")
+
+    def test_the_roster_entry_still_carries_the_differential(self) -> None:
+        roster = self._span("roster record", self._ROSTER_ANCHORS)
+        self.assertIn(
+            self._TERM, roster,
+            "the roster entry no longer carries the differential.\n\nStep 8's "
+            "distinctness rule says the differentials are journalled with the "
+            "roster, so this field is what makes that claim true. Dropping it "
+            "leaves the rule asserting a record that does not exist, and the rule "
+            "still reads correctly -- which is why this is pinned rather than left "
+            "to review.")
+
+
 if __name__ == "__main__":
     unittest.main()

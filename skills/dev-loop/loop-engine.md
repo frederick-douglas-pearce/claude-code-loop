@@ -613,6 +613,160 @@ review misses most of what a diff carries. Scale the count with the surface: one
 lens label, distinct from every other finder's in the same round** — the label is a component of every
 finding ID this gate records (below), so two finders sharing one collide.
 
+**Distinct in question, not only in label — a roster may not carry two lenses that would return the
+same findings.** State, when you spawn the round, one thing each lens would find that no other lens
+in that roster would; **a lens you cannot state one for is the same lens, so run one of them.** Those
+differentials are journalled with the roster (below), and that record is the control rather than a
+default. **Doubt subtracts under this rule**, so it needs saying that the
+general default-deny below — the one that sends an unknown *range* to a FULL round — does not reach
+it: that rule governs how much of the change a round reads, this one governs how many lenses read
+it. Inverting this one would make it vacuous, since "keep both when unsure" is what it exists to
+stop; the record is what keeps it honest instead. **The floor lens below is never the one dropped:
+where another lens duplicates it, the other one goes.**
+
+**No per-round lens *ceiling* is fixed here, deliberately** — only the floor below. The corpus
+establishes that lenses **duplicate**; it does not establish a number. **Duplication is what the
+evidence shows; a count is what it does not.** Choosing one, or a per-route roster, is the
+**review-tier matrix** question, which this step does not answer. **This step
+deliberately mints no route-to-lens matrix and no fixed roster.**
+
+**One lens is a floor, not a choice: `guard-efficacy`.** The rule above picks angles from the risk
+surface, and that judgment stands — this puts a floor beneath it and **never a ceiling**.
+
+**Due when** the round's delta touches at least one path `SOURCE_LAYOUT` does not positively
+declare `docs` or `research`. On a round it is due on, the roster **must carry a lens labelled
+`guard-efficacy`**. That is one predicate over the round, not a file-by-file test: a single
+unmatched path anywhere in the delta arms it. **If you cannot tell whether a declaration covers a
+path, it does not — the path is unmatched and the lens is due.**
+
+**This is a path test. Route does not gate it, and neither does whether the delta carries a
+guard.** The unmatched reading is Floor 2a's, for Floor 2a's reason (`code` is the Router's
+**default**, Router rule 4) — so a project that declares its `research` route by *label* (Router
+rule 3) and declares no research **path** gets the floor on that row too. Route-scoping a lens
+*inside* this gate would subtract from a gate the Gate table makes due on **every** route; and
+conditioning it on finding a guard would let *"there is no guard here"* — the answer this lens
+exists to return — be given by the orchestrator instead of by the lens.
+
+**The cost has Floor 2a's shape, and is stated the same way:** where a project declares no inert
+paths, every iteration's round 1 carries this lens whatever its route — on a `docs` round that is
+the light pass **plus** the floor, since this is a floor and never a ceiling (above). That holds
+until the project declares some. That is the safe direction and it is deliberate.
+
+**The floor is round 1's.** A later round of this gate is one lighter checker rather than a fan-out
+(below), so it carries no roster and no floor; round 1 is also the round that reads the whole
+change, so the floor reads every guard the change carried when the PR was opened.
+
+**A round that owes this lens and does not carry it has produced no verdict.** Spawn the missing
+lens before the round resolves; if you cannot, `- gate-error:` and escalate (Gate-outcome
+invariant). It is not a round that passed with a gap.
+
+**What it asks.** *Do this change's guards assert the **mechanism** that would break, or only an
+**outcome** a broken implementation would still produce?* That question is the Class B limit-case
+re-checker's (Gates → Fresh-re-check invariant), and its answering discipline governs here too: the
+lens decides by **reading**, never by running, editing or breaking anything, and **"cannot tell" is
+a dirty answer** — at this gate a BLOCKING finding, never a no-verdict. It is BLOCKING whatever
+class the finder emitted: EDITORIAL is an affirmative claim, and a finding that cannot say does not
+establish it, so **Floor 1** below carries it — as does that floor's *"if you are unsure, it is
+BLOCKING"* catch-all. Being a reader, it joins the fan-out under the
+Execution policy's read-only form like any other finder. **It never mutates** — improvising a
+mutation outside the harness is forbidden (AC-verifier → Part 2), and a mutating finder could not
+join a fan-out licensed on being read-only.
+
+**What its prompt must carry**, over and above every finder's standing inputs at this step (the
+acceptance criteria, the standing authoring check, the Verdict-first invariant, and the
+finding-class rule): **(1) Part 2's blockquote, verbatim** — the worked example is what makes the
+distinction operable; **(2) that it must not edit, break or execute anything to decide** — the
+prohibition on improvising a mutation does not otherwise reach a finder; and **(3) that it must say
+plainly when it cannot tell** — the rule making that a dirty answer lives here, where the finder
+cannot see it, so an unprompted finder hedges and the gate reads clean. These are the three the
+Class B limit-case re-checker's spawn prompt carries, for the same reasons; the fourth it already
+has. **Named by content, never by number** — that recipe's items are numbered in another section.
+What does **not** carry over is that recipe's antecedent: it is written for a re-check of an
+already-found gap, and this lens has no prior finding and no fix in hand. Its **differential** is
+fixed by construction — writing its question as its differential is sufficient, and no round need
+invent prose for it.
+
+**A lens may find nothing to apply its question to, and returns exactly that — on a delta that
+adds or modifies no guard, that is the ordinary outcome, and it is the lens that says so, not
+you.**
+`nothing to read` is the rendering for a lens that was **due, spawned, and found nothing to apply
+the question to** — never the orchestrator's substitute for spawning it, and never the rendering for
+a round the floor was not due on (that one is written as not-due, below). It is not a finding here
+and does not re-arm the round. **Whether an absence of guards is itself a defect is the acceptance
+gate's question, not this one:** step 10 asks it against the **merge candidate**, under Part 2's own
+three questions, where the limit case lives. The two gates read different objects, so neither one's
+answer is available to the other.
+
+**This lens is NOT the acceptance gate's Class B pass, and neither stands in for the other.** They
+ask different questions at different steps against different objects, and conflating them would let
+one be journalled as the other:
+
+| | `guard-efficacy` lens (step 8) | Class B (step 10) |
+|---|---|---|
+| asks | do the assertions pin the mechanism? | does a real mutant survive the suite? |
+| method | **reads** the guard | **runs** the harness against a mutated tree |
+| object | the round's delta | the merge candidate |
+| due when | the floor above says so | Part 2's three questions say so |
+| records to | the round's roster record | `mutation-survivors=`, `- Restore:`, the `- AC-verify:` line |
+
+**A surviving mutant is step 10's and only step 10's.** A read cannot establish one — which is why
+this is a floor on *reading* and not a second mutation pass — and **neither gate's verdict discharges
+the other's journal slot**: a step-8 `guard-efficacy` finding is never written to
+`mutation-survivors=`, whose readings are fixed elsewhere and closed. A `guard-efficacy` finding
+asserts a proposition about the tree, so **Floor 1 promotes it to BLOCKING** (it is the *test
+efficacy* class named in the finding-class list below), and it never reaches the editorial sweep.
+
+**Record the round's lens roster where that round resolves.** Write it into that round's
+gate-decision block (Ledger format → progress.md), on the same write-time discipline as this step's
+other per-round records — **when the round resolves, not at step 12**. Each entry carries the lens
+label, the differential you stated for it, and what it returned; the outcome is written per lens and
+is **never inferred** from which findings carry which ID, because those IDs are recorded for
+EDITORIAL findings only (below), so a lens whose findings were all BLOCKING would read as having
+found nothing. **The label written here is the same string that round's finding IDs carry**, so the
+roster and the IDs join on it.
+
+**Every round-1 roster names `guard-efficacy`** — either as an entry with its differential
+and what it returned, or as `guard-efficacy — not due: <reason>`. Those are the only two, and there
+is no silence. **The duty presupposes a verdict:** a round that produced none writes
+`roster: no verdict` and names no lens (below) — the absence of a roster, not a third way to
+satisfy this. **An absent *entry* means the lens did not run, never that it was not due**; a round that
+owed the floor and whose roster does not name it produced no verdict (above), not a round excused
+from it. The renderings, enumerated for the reason `- Restore:` and `- Hermetic:` enumerate theirs —
+a shape whose only legal rendering asserts a full roster is a template that pressures you to record
+one:
+- **`roster: <lens> (<differential>) — <n> findings; …`** — an ordinary round-1 roster. `<n>` counts
+  everything that lens returned, of **either** class. Write `0 findings` where a lens returned none,
+  and `nothing to read` where a lens found nothing to apply its question to (above).
+- **`… ; guard-efficacy — not due: every path in the delta is declared docs or research`** — the
+  floor was not due, written **visibly with its reason**, exactly as `- Hermetic:` writes its
+  `n/a:`. **That is the only legal reason, because it is the due-when's only conjunct negated, and
+  the list does not re-open.** In particular *"no test or guard in the delta"* is **not** a reason:
+  the floor is due on such a round, and its lens returns `nothing to read` (above). **If you could
+  not tell, it was due and this rendering is unavailable.**
+- **`roster: none (recheck)`** — a round that is one lighter checker rather than a fan-out (the floor
+  is round 1's, above).
+- **`roster: no verdict`** — the round produced none; a `- gate-fallback:` or `- gate-error:` line
+  carries what happened (Gate-outcome invariant). **Never write lens entries beside it, including a
+  `not due:` rendering.** This displaces the naming duty above rather than discharging it — and a
+  round that landed here *because* it owed the floor and did not carry it (above) is the failure
+  that duty exists to catch, not a round excused from it.
+- **no roster record at all** — **unknown, and unknown is not "the floor ran".** Absence cannot
+  distinguish a round that recorded nothing from one that carried no floor lens, and the second is
+  the failure this record exists to catch.
+
+**Keep the floor lens out of any later tier decision, whatever record it is read off** — the roster
+record and the `code-review=` parenthetical (progress.md → the Budget line) both list it. A mandated
+lens fires on close to every qualifying round by construction, so counting it toward "the same
+lenses keep firing" would answer the review-tier question with evidence this floor manufactured.
+Read the tier question off the lenses the risk surface *chose*.
+
+**This is deliberately a lowercase `roster:` record inside the gate-decision block, not a `- Name:`
+element, and it is not repeated in the close record.** The per-finding ID record and the declines
+record below are specified **here rather than in Ledger format** too. **Never the
+`- Code-review:` element, and never the `code-review=` parenthetical** on the `- Budget:` line:
+that parenthetical is per-iteration and label-only, while this is per-round and carries the
+differential and the outcome. Collapsing either into the other loses that.
+
 **Finding classes — every finding carries one, and only one class re-arms a round.**
 "The gate returned findings" is not one state. A guard that cannot fail and a changelog line worded
 oddly cost the same full round today, and nothing in the ledger records the difference. Two classes:
@@ -1144,8 +1298,9 @@ of on whether someone remembered to add it to a list. It has two satisfying form
   converse duty is yours: do not mutate the tree in place while a reader is in flight over it (Part
   2's in-tree rung is the one place you would). Other bounds are unaffected: each finder counts
   separately toward the **next** iteration's `subagent-cap` check (progress.md → the Budget line) —
-  retrospective, and advisory on a manual re-invoke — so step 8's scale-with-risk-surface rule is
-  the only bound that acts on the fan-out you are about to launch.
+  retrospective, and advisory on a manual re-invoke — so step 8's own roster rules — scale
+  with the risk surface, the `guard-efficacy` floor, and the distinct-question rule — are the bounds
+  that act on the fan-out you are about to launch.
 - **Isolated.** An agent that writes runs against **its own copy** of the tree, per the isolation
   duty above. **The escape hatch is isolation, not care** — "be careful not to collide" is not an
   available option, because the duties that make writing safe are ones the agent cannot discharge
@@ -1681,8 +1836,8 @@ Fields:
 
     **No other reason is a legal `n/a`, and the list does not re-open.** Retiring a member is not an
     invitation to add one: a reachable extra reason is an off switch an agent can always reach for,
-    which is the failure this slot was designed against. In particular, three things that look like
-    candidates are not:
+    which is the failure this slot was designed against. In particular, these look like candidates
+    and are not:
     - a change that alters behavior *while adding no test* is the **limit case** — a Class B
       **finding**, written as a count;
     - an unrunnable `TEST_CMD` is a `- gate-error:`;
@@ -1698,6 +1853,10 @@ Fields:
     carries, and those lines keep exactly that meaning. An omission must **never** be read
     retroactively as "the pass was scoped out": the corpus is append-only and is never rewritten, so
     the only honest reading of a missing slot is that nothing produced it.
+
+  **This slot is not where a step-8 `guard-efficacy` finding goes, at all** — that lens reads, this
+  slot records what the acceptance gate's mutation pass found, and the two are distinguished at
+  step 8. It is not a legal `n/a` reason; it is not this slot's business.
 
   The three readings exist because collapsing them onto one absent/zero axis would make it
   impossible to tell a clean pass from a skipped one from a nonexistent one — and the first stories
@@ -1899,7 +2058,9 @@ Promote to a dedicated `ac-verifier` agent only if the composed approach proves 
 
 **Part 2 — Class B: mutation survivors.** A test that this change adds or modifies, which stays
 green when the behavior it guards is broken, is a **survivor** — protection the human believes they
-have and does not. A survivor is a finding, **reported as prominently as a bug**.
+have and does not. A survivor is a finding, **reported as prominently as a bug**. (Step 8's mandatory
+`guard-efficacy` lens asks a related question by **reading** and is **not** this pass; the two are
+distinguished at that step.)
 
 *Why a checklist cannot find these* — the mechanism, quoted verbatim from the project retrospective
 that first made it nameable:
@@ -2567,6 +2728,10 @@ your *conclusions*, not the instructions the checker needs).
      here, where the checker cannot see it, so an unprompted checker hedges and the gate reads
      clean;
   4. the **Verdict-first invariant** (Gates) — answer the question put to it first, then deepen.
+
+  (**This recipe has a second caller.** Step 8's mandatory `guard-efficacy` lens borrows its
+  answering discipline and its blockquote, but not this bullet's antecedent — that lens runs with no
+  prior finding and no fix in hand. What follows is written for the acceptance gate.)
 
   **Why a read is a legitimate check here, when Part 2 says only mutation detects a survivor.**
   Two reasons, each from this engine's own text rather than from the cost of mutating: the defect
