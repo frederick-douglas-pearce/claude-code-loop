@@ -26,8 +26,19 @@ invariants below without them:
    **Read it with `Read`, never with `cat`/`sed`/`head`.** The engine is far larger than the Bash
    output cap, so a shell read returns a **silently truncated fragment** that ends inside the
    pipeline — before every gate, and before the ledger format, router, AC-verifier and Resume — and
-   spills the rest to a file you then have to page back anyway. `Read` reports `totalLines`; page
-   with `offset` until you have read **through the last line**.
+   spills the rest to a file you then have to page back anyway. `Read` reports `totalLines` on its
+   first result. **Keep that first read on its own turn** — it is what establishes the extent — and
+   then **request every remaining page in a single turn**, one `Read` per page issued together,
+   rather than one page per turn: slices of a file whose extent you already know cannot depend on
+   each other, so waiting for each in turn buys nothing and costs a full re-submission of your
+   accumulated context every time.
+
+   **Then confirm the pages you received cover through the last line (`totalLines`), and re-read any
+   gap.** Paging one at a time was gap-proof for free — you could not request page `k+1` without
+   page `k` — and requesting them together gives that up: a hole in the returned set still reads
+   like a complete load, and the slice you are missing may be the one carrying a gate. That check is
+   now yours to perform explicitly. **If you cannot confirm the file's extent, it is not known, and
+   you page it one turn at a time.**
 
 Read config for **bindings**, engine for **logic**. Execute the engine's pipeline exactly, for
 exactly one issue, then STOP.

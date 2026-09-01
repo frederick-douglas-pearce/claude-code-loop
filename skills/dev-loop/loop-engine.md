@@ -1243,6 +1243,22 @@ that looks wrong is a finding you journal and hand to the human, because a gate 
 your own reading entrenches your misreading instead of correcting it. The C1 append-only guard and
 the human/merge gates are the enforced backstops; the rest of this list is your contract.
 
+**Paging a file of known extent — ask for the remaining slices in one turn.** Where you are reading
+a file in slices and already know how long it is, every slice after the first is an independent
+request: issue them together rather than one per turn, since a turn re-submits your whole
+accumulated context and one carrying five calls bills the same as one carrying a single call.
+Establish the extent first, from whatever the tool reports — `Read`'s `totalLines`, or a `wc -l`
+ahead of shell slices, among others. Treat those as examples rather than the whole list, and note
+that `wc -l` counts newlines, so a final line lacking one is under-counted by exactly the slice you
+would then never ask for. **Then confirm the slices you received cover the whole file, and re-read
+any gap** — asking one at a time made that gap-proof for free, and asking together gives it up: a
+hole still reads like a complete load. **If you cannot confirm the file's extent, it is not known,
+and you page it one turn at a time.** This governs *slices of one file you have already sized*; it
+is **not** a licence to merge independent tool calls in general, because nothing distinguishes a
+dependent read from an independent one and merging across a dependency reorders effects. (The engine
+is the one file you must still read with `Read` rather than shell slices — see the engine-read
+protocol in `SKILL.md`.)
+
 **The working tree is parent-owned state; any agent that must write to it gets its own copy.** This
 governs every agent you spawn, not only a mutating one — the tree holds your uncommitted
 deliverables, and a subagent writing to it is writing to your work. Read-only agents need no copy;
