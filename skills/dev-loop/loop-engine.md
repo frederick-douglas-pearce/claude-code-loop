@@ -26,16 +26,16 @@ invocation resumes correctly.
 1. Identify the active run (most recent `LEDGER_ROOT/<run>/`). If none exists, ask the user which
    `BACKLOG_SOURCE` (milestone/label/`TODO.md`) to run, then INITIALIZE per the Initialization
    procedure below. Otherwise find the **most recent** run-state sentinel in `progress.md` — the
-   last of `{RUN COMPLETE, RUN PARKED, RUN RESUMED}` by append order (the log is append-only, so a
-   superseded sentinel still sits above; last one wins) — and act only on it. **Find it by searching
-   the file for those three strings and taking the last hit that is a sentinel; never bulk-read the
-   journal.** That file
-   grows without bound, a bulk read is capped **silently**, and a cap drops the end — which is where
-   last-wins puts the answer, so that failure is invisible and always in the wrong direction. The
-   search owes two things a read does not: the journal *discusses* sentinels in prose and a
-   discussion is not one; and if you cannot tell which hits are sentinels, or cannot confirm the
-   search covered the whole file, **STOP and ask the human** — acting on the wrong sentinel either
-   re-enters a terminal run or releases a park nothing released. Then:
+   last of `{RUN COMPLETE, RUN PARKED, RUN RESUMED}` by append order (the log is append-only, so
+   a superseded sentinel still sits above; last one wins) — and act only on it. **Find it by
+   searching the file for those three strings and taking the last hit that is a sentinel; never
+   bulk-read the journal.** That file grows without bound, a bulk read is capped **silently**,
+   and a cap drops the end — which is where last-wins puts the answer, so that failure is
+   invisible and always in the wrong direction. The search owes two things a read does not: the
+   journal *discusses* sentinels in prose and a discussion is not one; and if you cannot tell
+   which hits are sentinels, or cannot confirm the search covered the whole file, **STOP and ask
+   the human** — acting on the wrong sentinel either re-enters a terminal run or releases a park
+   nothing released. Then:
    - `RUN COMPLETE` (see Convergence) → report done and STOP; do not re-scan (the run is terminal).
    - `RUN PARKED — awaiting <condition>` (see Convergence) — the run finished all *workable* rows
      and rests on an external event:
