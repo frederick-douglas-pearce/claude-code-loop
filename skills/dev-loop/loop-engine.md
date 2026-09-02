@@ -1243,6 +1243,29 @@ that looks wrong is a finding you journal and hand to the human, because a gate 
 your own reading entrenches your misreading instead of correcting it. The C1 append-only guard and
 the human/merge gates are the enforced backstops; the rest of this list is your contract.
 
+**Paging a file of known extent — ask for the remaining slices in one turn.** Where you are reading
+a file in slices and already know how long it is, every slice after the first is an independent
+request: issue them together rather than one per turn, since a turn re-submits your whole
+accumulated context, and issuing five calls together costs **one** such re-submission instead of
+five. The results themselves are not free — only the turn is — so ask for each slice once and do not
+pad the ranges against a boundary you are unsure of; widening a slice to be safe is how this rule
+starts costing more than it saves. Establish the extent first, from whatever the tool reports —
+`Read`'s `totalLines`, or a `wc -l` ahead of shell slices, among others; treat those as examples
+rather than the whole list. Read `wc -l` as a **floor, never the extent**: it counts newlines, so a
+file whose last line carries no newline is one line longer than it reports, and that line is the one
+you would never ask for. **Then confirm what came back is contiguous and covers the whole file, and
+re-read anything missing** — asking one at a time made that self-correcting, because each request
+started from what the last result actually returned, and asking together gives that up: a hole still
+reads like a complete load. **Confirm the extent you received, not merely the range you asked for**:
+a tool result is capped independently of the range — a `Read` is bounded by tokens as well as lines,
+and a shell slice is bounded by the command-output cap, which truncates **silently** — so a pair of
+slices whose *requested* ranges tile the file can still arrive with the middle missing. **If you
+cannot confirm the file's extent, it is not known, and you page it one turn at a time.** This governs
+*slices of one file you have already sized*; it is **not** a licence to merge independent tool calls
+in general, because in general nothing distinguishes a dependent read from an independent one and
+merging across a dependency reorders effects. (The engine must still be read with `Read` rather than
+shell slices — see the engine-read protocol in `SKILL.md`.)
+
 **The working tree is parent-owned state; any agent that must write to it gets its own copy.** This
 governs every agent you spawn, not only a mutating one — the tree holds your uncommitted
 deliverables, and a subagent writing to it is writing to your work. Read-only agents need no copy;
