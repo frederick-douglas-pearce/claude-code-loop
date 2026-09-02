@@ -27,6 +27,11 @@ several entries, one per content block, each repeating the turn's `usage`.** Tre
 as a turn inflates turn counts, resident-turn tokens and output tokens by 2-3x at once, and the
 result still looks plausible. Entries are merged on `message.id` before anything is counted.
 
+**The anchor is a pattern, so it can false-positive.** Any session whose transcript merely
+*contains* an `issue-<N>.plan.md` path — a session editing this file, or one discussing a plan
+— will be reported as a loop iteration. Over a directory, confirm each session is a real
+invocation before pooling; the run that found this bug was itself misreported that way.
+
 ## Three bounds on every figure this prints
 
 1. `model output` is an **upper bound**. Thinking blocks are stripped from later turns, so not
