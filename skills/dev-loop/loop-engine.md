@@ -25,9 +25,16 @@ invocation resumes correctly.
 ### 0. Load or initialize state
 1. Identify the active run (most recent `LEDGER_ROOT/<run>/`). If none exists, ask the user which
    `BACKLOG_SOURCE` (milestone/label/`TODO.md`) to run, then INITIALIZE per the Initialization
-   procedure below. Otherwise scan the FULL `progress.md` for the **most recent** run-state
-   sentinel — the last of `{RUN COMPLETE, RUN PARKED, RUN RESUMED}` by append order (the log is
-   append-only, so a superseded sentinel still sits above; last one wins) — and act only on it:
+   procedure below. Otherwise find the **most recent** run-state sentinel in `progress.md` — the
+   last of `{RUN COMPLETE, RUN PARKED, RUN RESUMED}` by append order (the log is append-only, so a
+   superseded sentinel still sits above; last one wins) — and act only on it. **Search for it, the
+   way Guardrails greps for a stuck signature; never bulk-read the journal to find it.** That file
+   grows without bound, a bulk read is capped **silently**, and a cap drops the end — which is where
+   last-wins puts the answer, so that failure is invisible and always in the wrong direction. The
+   search owes two things a read does not: the journal *discusses* sentinels in prose and a
+   discussion is not one; and if you cannot tell which hits are sentinels, or cannot confirm the
+   search covered the whole file, **STOP and ask the human** — acting on the wrong sentinel either
+   re-enters a terminal run or releases a park nothing released. Then:
    - `RUN COMPLETE` (see Convergence) → report done and STOP; do not re-scan (the run is terminal).
    - `RUN PARKED — awaiting <condition>` (see Convergence) — the run finished all *workable* rows
      and rests on an external event:
@@ -41,8 +48,10 @@ invocation resumes correctly.
        re-append `RUN PARKED` at the next step-1 pass (last-wins over `RUN RESUMED`), which the
        existing machinery handles. A bare re-fire (e.g. the `/loop` driver) does NOT release the
        park.
-     - **Otherwise take the cheap parked path (no full re-scan):** read `queue.md` + the FULL
-       `progress.md`, run the step-1 roster reconciliation (the one scan a parked run still owes —
+     - **Otherwise take the cheap parked path (no full re-scan):** read `queue.md`, take
+       `progress.md` by the same searched read (never a bulk one — this is the path that exists to
+       be cheap, and the journal is the largest file in the ledger), run the step-1 roster
+       reconciliation (the one scan a parked run still owes —
        this is how `BACKLOG_SOURCE` drift is still caught), then **re-derive selectability from
        `queue.md` alone** (no git/PR reconcile). If that produced selectable work (a joiner the
        human pulled in, or an in-run dep that has since cleared) fall through to step 1 **at
