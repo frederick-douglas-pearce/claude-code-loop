@@ -22,6 +22,11 @@ It is deliberately **not** tool-result character size. That is the payload bug t
 `context_profile.py` (decision D010): it sized `toolUseResult` rather than the block the model
 received, over-counting spilled reads by up to 13x, and engine reads are exactly what spills.
 
+One transcript shape decides whether any of this is right. **A single API turn appears as
+several entries, one per content block, each repeating the turn's `usage`.** Treating an entry
+as a turn inflates turn counts, resident-turn tokens and output tokens by 2-3x at once, and the
+result still looks plausible. Entries are merged on `message.id` before anything is counted.
+
 ## Three bounds on every figure this prints
 
 1. `model output` is an **upper bound**. Thinking blocks are stripped from later turns, so not
@@ -141,23 +146,38 @@ def _timeline(path):
                 ]
                 for call_id, name, tool_input in calls:
                     calls_by_id[call_id] = (name, tool_input)
-                if context:
-                    events.append(("assistant", context, usage.get("output_tokens", 0), calls,
-                                   _output_blocks(message.get("content") or [])))
+                if not context:
+                    continue
+                # ONE API turn is written as SEVERAL transcript entries -- one per content
+                # block -- all sharing `message.id` and REPEATING the same `usage`. Summing
+                # entries counts a turn 2-3 times over, inflating turn counts, resident-turn
+                # tokens, and output tokens alike. Merge by id; never treat an entry as a turn.
+                turn_id = message.get("id")
+                if turn_id is not None and events and events[-1][0] == "assistant" \
+                        and events[-1][5] == turn_id:
+                    previous = events[-1]
+                    previous[3].extend(calls)
+                    previous[4].update(_output_blocks(message.get("content") or []))
+                    continue
+                events.append(["assistant", context, usage.get("output_tokens", 0), list(calls),
+                               _output_blocks(message.get("content") or []), turn_id])
             elif entry.get("type") == "user" and isinstance(message.get("content"), list):
                 for block in message["content"]:
                     if isinstance(block, dict) and block.get("type") == "tool_result":
-                        events.append(("result", block.get("tool_use_id"), _result_size(block), None))
+                        events.append(["result", block.get("tool_use_id"), _result_size(block),
+                                       None, None, None])
     return calls_by_id, events
 
 
 def _output_blocks(content):
     """Character size of the model's output by block type.
 
-    The split is the point. `output_tokens` bills all of it once, but only some of it stays
-    in the conversation: text and tool-call arguments persist, and thinking does not appear
-    in the transcript at all. A bucket labelled "model output" therefore overstates what the
-    parent is still *carrying* by whatever share was thinking.
+    This measures what the transcript RETAINS, not what the turn produced. Thinking is stored
+    as an empty placeholder carrying only a signature, so its character count is always zero
+    here and that says nothing about whether it stayed in context — read the `over_attribution`
+    figure for that. Reported because the composition of the retained text is itself the
+    answer to "what is the model's output": on this corpus it is overwhelmingly tool-call
+    arguments, not prose.
     """
     sizes = collections.Counter()
     for block in content:
@@ -315,8 +335,10 @@ def _report(result):
           % format(persisted, ","))
     for label, value in blocks.most_common():
         print("      %9s  %5.1f%%  %s" % (format(value, ","), 100 * value / max(persisted, 1), label))
-    print("      (`output_tokens` bills every one of those tokens once; thinking is absent from the"
-          "\n       transcript, so the gap between this and the bucket above did not stay resident)")
+    print("      (thinking blocks are stored as an empty placeholder plus a signature, so this"
+          "\n       counts what the transcript RETAINS, never what the turn produced. With"
+          "\n       over-attribution near zero the whole output bucket is resident — do not read"
+          "\n       the gap between these two figures as eviction.)")
     if result["issue"]:
         sel, gate = result["selection_resident_turns"], result["gate_resident_turns"]
         print("    selection phase — deciding WHICH issue, before #%s is first named:" % result["issue"])

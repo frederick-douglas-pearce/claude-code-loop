@@ -171,13 +171,75 @@ class AttributionTests(unittest.TestCase):
         self.assertEqual(result["baseline"], 55_000)
 
 
+class TranscriptShapeTests(unittest.TestCase):
+    """The shape that produced wrong numbers before it was noticed.
+
+    A real transcript writes ONE API turn as SEVERAL entries — one per content block — each
+    repeating the same `usage`. Every synthetic fixture in this module used one entry per
+    turn, so the whole suite passed while turn counts, resident-turn tokens and output tokens
+    were all inflated 2-3x on real data. These cases carry the real shape.
+    """
+
+    @staticmethod
+    def _split_turn(turn_id, context, output_tokens, calls):
+        """One logical turn, emitted the way the transcript actually emits it."""
+        blocks = [{"type": "thinking", "thinking": "", "signature": "s"}]
+        blocks += [{"type": "tool_use", "id": cid, "name": n, "input": a} for cid, n, a in calls]
+        usage = {"input_tokens": context, "cache_read_input_tokens": 0,
+                 "cache_creation_input_tokens": 0, "output_tokens": output_tokens}
+        return [{"type": "assistant", "message": {"id": turn_id, "usage": usage, "content": [b]}}
+                for b in blocks]
+
+    def test_entries_sharing_a_message_id_are_one_turn(self):
+        """Kills: counting transcript entries as turns."""
+        entries = self._split_turn("t1", 100_000, 500, [("c1", "Bash", {"command": "ls"})])
+        entries += [results(("c1", 10))]
+        entries += self._split_turn("t2", 200_000, 700, [PLAN_WRITE])
+        path = transcript(*entries)
+        result = pgc.analyze(path)
+        os.unlink(path)
+        self.assertEqual(result["gate_turns"], 2)
+
+    def test_a_repeated_usage_is_not_counted_twice(self):
+        """Kills: summing `output_tokens` and context per entry.
+
+        Both quantities repeat on every entry of a turn, so an un-merged reader reports 2-3x
+        and the error is invisible — the numbers stay plausible.
+        """
+        entries = self._split_turn("t1", 100_000, 500, [("c1", "Bash", {"command": "ls"})])
+        entries += [results(("c1", 10))]
+        entries += self._split_turn("t2", 200_000, 700, [("c2", "Bash", {"command": "gh issue view 42"})])
+        entries += [results(("c2", 10))]
+        entries += self._split_turn("t3", 300_000, 900, [PLAN_WRITE])
+        path = transcript(*entries)
+        result = pgc.analyze(path)
+        os.unlink(path)
+        self.assertEqual(result["model_output"], 1_200)          # 500 + 700, each once
+        self.assertEqual(result["selection_resident_turns"], 100_000)
+        self.assertEqual(result["gate_resident_turns"], 600_000)
+
+    def test_calls_from_every_entry_of_a_turn_are_kept(self):
+        """Merging must not drop the tool calls carried on the entries it folds in."""
+        entries = self._split_turn("t1", 100_000, 500,
+                                   [("c1", "Bash", {"command": "ls"}),
+                                    ("c2", "Bash", {"command": "git log"})])
+        entries += [results(("c1", 10), ("c2", 10))]
+        entries += self._split_turn("t2", 200_000, 0, [PLAN_WRITE])
+        path = transcript(*entries)
+        result = pgc.analyze(path)
+        os.unlink(path)
+        self.assertGreater(result["by_source"]["search"], 0)
+        self.assertGreater(result["by_source"]["git"], 0)
+
+
 class OutputCompositionTests(unittest.TestCase):
     def test_output_is_split_by_block_type(self):
-        """Kills: reporting `output_tokens` as one bucket.
+        """Kills: collapsing the retained-output blocks into one bucket.
 
-        Thinking is billed once and does not persist; text and tool-call arguments do. A
-        single figure cannot distinguish "the parent is carrying this" from "the parent was
-        billed for this once", and the whole read of the output bucket turns on that.
+        The composition is the answer to "what is the model's output" — on this corpus,
+        overwhelmingly tool-call arguments rather than prose. It is a measure of what the
+        transcript RETAINS, which is why thinking reads zero: it is stored as an empty
+        placeholder. That is not evidence about residency.
         """
         path = transcript(
             thinking_turn(1_000, 500, thinking="x" * 900, text="yy",
