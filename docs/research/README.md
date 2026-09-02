@@ -24,9 +24,10 @@ All stdlib-only, all read Claude Code session transcripts from `~/.claude/projec
 
 | script | answers | tests |
 |---|---|---|
-| `engine_cost.py` | What does carrying `loop-engine.md` cost across a whole run? (P2, P2c, P8/P9) | `test_engine_cost.py` (20 cases) |
-| `rounds_vs_turns.py` | Do gate rounds predict parent turns and bill? (Finding 11) | `test_rounds_vs_turns.py` (12) |
-| `calls_per_turn.py` | How many tool calls per turn, and how many turns could have been merged? (Finding 12) | `test_calls_per_turn.py` (14) |
+| `engine_cost.py` | What does carrying `loop-engine.md` cost across a whole run? (P2, P2c, P8/P9) | `test_engine_cost.py` |
+| `plan_gate_cost.py` | What is the parent carrying when the plan is written, and where did all of it come from? Attributes **everything** before implementation starts — including the two buckets no delta-based instrument sees: the always-loaded baseline and the model's own output. | `test_plan_gate_cost.py` |
+| `rounds_vs_turns.py` | Do gate rounds predict parent turns and bill? (Finding 11) | `test_rounds_vs_turns.py` |
+| `calls_per_turn.py` | How many tool calls per turn, and how many turns could have been merged? (Finding 12) | `test_calls_per_turn.py` |
 | ~~`context_profile.py`~~ | **RETIRED 2026-08-26** → `deprecated/`. Kept only to reproduce Findings 6–9; its payload bug over-counts spilled reads by up to 13×, so **P4 and the "~50% of every byte" figure are withdrawn**. | — |
 | `budget_stats.py` | Ledger `- Budget:` aggregates by engine era. | none |
 | `tree_cost.py` | Parent **+ subagent** transcripts priced together — sizes the bill Finding 11 leaves unpriced. **Scouting only; output is not a finding.** | none |
@@ -34,9 +35,10 @@ All stdlib-only, all read Claude Code session transcripts from `~/.claude/projec
 ```bash
 SLUG=~/.claude/projects/-home-fdpearce-Documents-Projects-git-us-presidential-vote-analysis
 python3 docs/research/engine_cost.py      $SLUG/<session>.jsonl
+python3 docs/research/plan_gate_cost.py  $SLUG/*.jsonl
 python3 docs/research/rounds_vs_turns.py  $SLUG/*.jsonl
 python3 docs/research/calls_per_turn.py   $SLUG/*.jsonl
-for t in docs/research/test_*.py; do python3 "$t" -q || break; done   # 46 fixtures
+for t in docs/research/test_*.py; do python3 "$t" -q || break; done   # each module prints its own count
 ```
 
 **Always record the installed plugin version with any measurement** —
