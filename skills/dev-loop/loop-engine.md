@@ -27,8 +27,9 @@ invocation resumes correctly.
    `BACKLOG_SOURCE` (milestone/label/`TODO.md`) to run, then INITIALIZE per the Initialization
    procedure below. Otherwise find the **most recent** run-state sentinel in `progress.md` — the
    last of `{RUN COMPLETE, RUN PARKED, RUN RESUMED}` by append order (the log is append-only, so a
-   superseded sentinel still sits above; last one wins) — and act only on it. **Search for it, the
-   way Guardrails greps for a stuck signature; never bulk-read the journal to find it.** That file
+   superseded sentinel still sits above; last one wins) — and act only on it. **Find it by searching
+   the file for those three strings and taking the last hit that is a sentinel; never bulk-read the
+   journal.** That file
    grows without bound, a bulk read is capped **silently**, and a cap drops the end — which is where
    last-wins puts the answer, so that failure is invisible and always in the wrong direction. The
    search owes two things a read does not: the journal *discusses* sentinels in prose and a
