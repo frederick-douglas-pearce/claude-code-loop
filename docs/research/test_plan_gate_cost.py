@@ -36,6 +36,24 @@ def assistant(context, output_tokens=0, calls=(), cache_creation=0):
     }
 
 
+def thinking_turn(context, output_tokens, thinking="", text="", calls=()):
+    """An assistant turn carrying real content blocks, not only tool calls."""
+    content = []
+    if thinking:
+        content.append({"type": "thinking", "thinking": thinking})
+    if text:
+        content.append({"type": "text", "text": text})
+    content += [{"type": "tool_use", "id": cid, "name": n, "input": a} for cid, n, a in calls]
+    return {
+        "type": "assistant",
+        "message": {
+            "usage": {"input_tokens": context, "cache_read_input_tokens": 0,
+                      "cache_creation_input_tokens": 0, "output_tokens": output_tokens},
+            "content": content,
+        },
+    }
+
+
 def results(*pairs):
     return {
         "type": "user",
@@ -151,6 +169,83 @@ class AttributionTests(unittest.TestCase):
         result = pgc.analyze(path)
         os.unlink(path)
         self.assertEqual(result["baseline"], 55_000)
+
+
+class OutputCompositionTests(unittest.TestCase):
+    def test_output_is_split_by_block_type(self):
+        """Kills: reporting `output_tokens` as one bucket.
+
+        Thinking is billed once and does not persist; text and tool-call arguments do. A
+        single figure cannot distinguish "the parent is carrying this" from "the parent was
+        billed for this once", and the whole read of the output bucket turns on that.
+        """
+        path = transcript(
+            thinking_turn(1_000, 500, thinking="x" * 900, text="yy",
+                          calls=[("c1", "Bash", {"command": "ls"})]),
+            results(("c1", 10)),
+            thinking_turn(2_000, 0, calls=[PLAN_WRITE]),
+        )
+        result = pgc.analyze(path)
+        os.unlink(path)
+        self.assertEqual(result["output_blocks"]["thinking"], 900)
+        self.assertEqual(result["output_blocks"]["text"], 2)
+        self.assertGreater(result["output_blocks"]["tool_use args"], 0)
+
+
+class SelectionPhaseTests(unittest.TestCase):
+    def test_split_is_the_first_turn_naming_the_issue_not_the_ledger_write(self):
+        """Kills: splitting on the row-status write.
+
+        The decision is made before it is recorded, so anchoring on the write attributes the
+        deciding turns to the wrong phase — which is the entire quantity being measured.
+        """
+        path = transcript(
+            thinking_turn(10_000, 0, calls=[("c1", "Bash", {"command": "cat queue.md"})]),
+            results(("c1", 10)),
+            thinking_turn(20_000, 0, calls=[("c2", "Bash", {"command": "gh issue view 42"})]),
+            results(("c2", 10)),
+            thinking_turn(30_000, 0, calls=[PLAN_WRITE]),
+        )
+        result = pgc.analyze(path)
+        os.unlink(path)
+        self.assertEqual(result["issue"], "42")
+        self.assertEqual(result["selection_turns"], 1)
+        self.assertEqual(result["selection_resident_turns"], 10_000)
+
+    def test_issue_number_match_respects_digit_boundaries(self):
+        """Kills: a substring match. Issue 42 must not be found in 421 or 1042 — which would
+        end the selection phase early and understate it."""
+        path = transcript(
+            thinking_turn(10_000, 0, calls=[("c1", "Bash", {"command": "gh issue view 421"})]),
+            results(("c1", 10)),
+            thinking_turn(20_000, 0, calls=[("c2", "Bash", {"command": "gh issue view 42"})]),
+            results(("c2", 10)),
+            thinking_turn(30_000, 0, calls=[PLAN_WRITE]),
+        )
+        result = pgc.analyze(path)
+        os.unlink(path)
+        self.assertEqual(result["selection_turns"], 1)
+
+    def test_resident_turns_sums_context_across_turns_not_the_final_value(self):
+        """Kills: reporting context at the boundary instead of turns x context.
+
+        `cost ~= turns x context` is the model; a phase that spends many turns at a high
+        floor is expensive even though it reads almost nothing, and only the sum shows it.
+        """
+        path = transcript(
+            thinking_turn(100_000, 0, calls=[("c1", "Bash", {"command": "ls"})]),
+            results(("c1", 10)),
+            thinking_turn(100_000, 0, calls=[("c2", "Bash", {"command": "ls -l"})]),
+            results(("c2", 10)),
+            thinking_turn(100_000, 0, calls=[("c3", "Bash", {"command": "gh issue view 42"})]),
+            results(("c3", 10)),
+            thinking_turn(100_000, 0, calls=[PLAN_WRITE]),
+        )
+        result = pgc.analyze(path)
+        os.unlink(path)
+        self.assertEqual(result["selection_turns"], 2)
+        self.assertEqual(result["selection_resident_turns"], 200_000)
+        self.assertEqual(result["gate_resident_turns"], 400_000)
 
 
 class AnchorTests(unittest.TestCase):

@@ -142,12 +142,65 @@ def _timeline(path):
                 for call_id, name, tool_input in calls:
                     calls_by_id[call_id] = (name, tool_input)
                 if context:
-                    events.append(("assistant", context, usage.get("output_tokens", 0), calls))
+                    events.append(("assistant", context, usage.get("output_tokens", 0), calls,
+                                   _output_blocks(message.get("content") or [])))
             elif entry.get("type") == "user" and isinstance(message.get("content"), list):
                 for block in message["content"]:
                     if isinstance(block, dict) and block.get("type") == "tool_result":
                         events.append(("result", block.get("tool_use_id"), _result_size(block), None))
     return calls_by_id, events
+
+
+def _output_blocks(content):
+    """Character size of the model's output by block type.
+
+    The split is the point. `output_tokens` bills all of it once, but only some of it stays
+    in the conversation: text and tool-call arguments persist, and thinking does not appear
+    in the transcript at all. A bucket labelled "model output" therefore overstates what the
+    parent is still *carrying* by whatever share was thinking.
+    """
+    sizes = collections.Counter()
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        kind = block.get("type")
+        if kind == "thinking":
+            sizes["thinking"] += len(block.get("thinking", ""))
+        elif kind == "text":
+            sizes["text"] += len(block.get("text", ""))
+        elif kind == "tool_use":
+            sizes["tool_use args"] += len(json.dumps(block.get("input") or {}))
+    return sizes
+
+
+def _selection_split(events, anchor):
+    """Index of the turn where the issue that gets planned is first named.
+
+    Everything before it is the parent deciding *which* issue to work — the phase a selector
+    subagent would carry. The boundary is the first tool call naming that issue number, not
+    the ledger write, because the decision is made before it is recorded.
+    """
+    issue = None
+    for _, name, tool_input in events[anchor][3] or []:
+        args = tool_input or {}
+        blob = str(args.get("file_path", "")) + " " + str(args.get("command", ""))
+        found = _PLAN_FILE.search(blob)
+        if found and name in ("Write", "Edit", "Bash"):
+            issue = re.search(r"issue-(\d+)\.plan\.md", blob).group(1)
+            break
+    if issue is None:
+        return anchor, None
+    pattern = re.compile(r"(?<!\d)%s(?!\d)" % issue)
+    for index, event in enumerate(events[: anchor + 1]):
+        if event[0] != "assistant":
+            continue
+        for _, _, tool_input in event[3] or []:
+            args = tool_input or {}
+            blob = " ".join([str(args.get("command", "")), str(args.get("file_path", "")),
+                             str(args.get("prompt", ""))[:400]])
+            if pattern.search(blob):
+                return index, issue
+    return anchor, issue
 
 
 def _result_size(block):
@@ -213,7 +266,21 @@ def analyze(path):
 
     resident = segment[-1][1]
     arrivals = baseline + model_output + sum(by_source.values())
+    split, issue = _selection_split(events, anchor)
+    assistant_turns = [e for e in segment if e[0] == "assistant"]
+    selection_turns = [e for e in events[:split] if e[0] == "assistant"]
+    output_blocks = collections.Counter()
+    for event in assistant_turns:
+        output_blocks.update(event[4])
     return {
+        "issue": issue,
+        "selection_turns": len(selection_turns),
+        "gate_turns": len(assistant_turns),
+        # resident-turn tokens: turns x context, the quantity `cost ~= turns x context` names.
+        "selection_resident_turns": sum(e[1] for e in selection_turns),
+        "gate_resident_turns": sum(e[1] for e in assistant_turns),
+        "selection_output": sum(e[2] for e in selection_turns),
+        "output_blocks": output_blocks,
         "session": os.path.basename(path)[:8],
         "resident_at_plan_gate": resident,
         "arrivals": arrivals,
@@ -242,6 +309,22 @@ def _report(result):
     rows += result["by_source"].most_common()
     for label, value in rows:
         print("    %8s  %5.1f%%  %s" % (format(round(value), ","), 100 * value / arrivals, label))
+    blocks = result["output_blocks"]
+    persisted = sum(blocks.values())
+    print("    of that model output, what the transcript still carries: %s chars"
+          % format(persisted, ","))
+    for label, value in blocks.most_common():
+        print("      %9s  %5.1f%%  %s" % (format(value, ","), 100 * value / max(persisted, 1), label))
+    print("      (`output_tokens` bills every one of those tokens once; thinking is absent from the"
+          "\n       transcript, so the gap between this and the bucket above did not stay resident)")
+    if result["issue"]:
+        sel, gate = result["selection_resident_turns"], result["gate_resident_turns"]
+        print("    selection phase — deciding WHICH issue, before #%s is first named:" % result["issue"])
+        print("      %2d of %d turns; %s of %s resident-turn tokens = %.0f%% of the pre-plan bill"
+              % (result["selection_turns"], result["gate_turns"], format(sel, ","),
+                 format(gate, ","), 100 * sel / max(gate, 1)))
+        print("      at %s tokens/turn average — a floor those turns did not create"
+              % format(sel // max(result["selection_turns"], 1), ","))
     if result["multi_call_estimated"]:
         print("    (%s of the above is multi-call turns split proportionally — estimated, not exact)"
               % format(round(result["multi_call_estimated"]), ","))
