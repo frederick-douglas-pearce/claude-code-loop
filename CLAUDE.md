@@ -198,10 +198,20 @@ and **thin entry point**:
    format, router, AC-verifier, initialization, resume, convergence/park/hold semantics, budget
    caps. **Project-agnostic — contains no project-specific values, ever.**
 3. `${CLAUDE_PROJECT_DIR}/.claude/loop.config.md` (lives in the *consuming* repo, not here) — the
-   ~40-line binding seam. Every `CAPS` name in the engine (`BACKLOG_SOURCE`, `SCOPE_AGENT`,
+   binding seam. Every `CAPS` name in the engine (`BACKLOG_SOURCE`, `SCOPE_AGENT`,
    `DESIGN_AGENT`, `LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`, `BRANCH_FMT`,
    `COMMIT_CONV`, `MERGE_METHOD`,
    `RELEASE_SCHEME`, …) resolves here.
+
+   **This was described as "~40-line" until #141, and the figure did the wrong work.** It names the
+   `/init-loop` skeleton and a typical fresh port; a long-lived consumer's config is legitimately
+   larger, because a `—`-plus-reason value and a delegated routing rule both take room and both are
+   read at runtime. The size was never the invariant. **The invariant is what a passage is: a
+   passage stays iff the engine reads it at runtime**, so a binding value, a `—`-plus-reason (the
+   reason is part of the value, never commentary), and project-specific logic the engine delegates
+   all stay — while rationale, history and findings belong to the tracker, where #1 is the only
+   copy. This repo's own config reached 350 lines by accreting a findings journal, 44% of the file,
+   that nothing dereferenced; #141 moved it. **Trim toward the value, never through it.**
 
 **The contract between layers is the parameter *vocabulary*, never layout.** The engine references
 config values by `CAPS` name only; the config's section structure is free to change. Porting a new
