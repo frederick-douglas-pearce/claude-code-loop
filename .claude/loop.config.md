@@ -44,7 +44,7 @@ See `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/loop-engine.md` for the operating pro
 >      list — is untouched and **already ships** as engine prose (from #10); what remains open under
 >      **#38** is only whether to formalize it as a `REVIEW_TIERS` matrix. This config still deviates
 >      from the 0.0.1 skeleton, and that deviation is now a **design choice recorded on its merits**
->      (§1, §5) rather than a workaround. Left in this list, not deleted, because the withdrawal is
+>      (§1) rather than a workaround. Left in this list, not deleted, because the withdrawal is
 >      the useful record.
 
 ---
@@ -61,7 +61,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `CODE_REVIEW` | parallel finder subagents over `git diff main...HEAD` (**round 1's base; later rounds are the engine's to scope**) **+ the issue's acceptance criteria**, angles chosen per the diff's risk surface (the code-review gate), then a pass confirming each finding | **the orchestrator runs this itself — a design choice, not a constraint.** `/code-review <effort>` (`low`→`max`) **is** model-invocable and could be bound here; only `ultra` is user-triggered, and that form degrades silently to a local review rather than refusing (F7's invocability claim withdrawn, #74). **One ground carries the decision:** this repo is **#38's corpus generator**, and per-lens `- Budget:` data is the instrument #38 needs to decide `REVIEW_TIERS` — the skill reports a flat finding list with no angle attribution (verified by extracting the live skill's report path from the CLI binary: a single findings call carrying file/line/summary/failure-scenario per finding, and no lens field), so binding it here starves that experiment. Structural, and independent of which angles the skill runs. **A second ground was considered and is recorded as NOT carrying the decision** — that the skill's remit excludes the engine's standing authoring check (every finder flags prose claiming a test/guard/invariant that does not resolve). The skill runs a **conventions angle at higher effort that reads this repo's `CLAUDE.md` and flags violations of the rules it states**, which is closer to that check than "its remit is X only" implied. A residual gap is plausible — the standing check covers claims that must *resolve*, not only rules `CLAUDE.md` *states* — but it has **never been measured (n=0)**. Do not cite it as decisive. **The counter-case, recorded because it is strong:** **n for "fan-out beats the skill" is also zero.** The corpus supports *diversity beats single-angle*, never this mechanism over one agent at high effort. Cost differs by roughly an order of magnitude at this gate (≈15–25 subagent runs on a hard issue vs. one invocation). **Revisit after #71** — an *open* question, not a ruling — which would make a skill binding journal its inability to carry the standing check instead of dropping it silently. |
 | `SECURITY_REVIEW` | the **`/security-review`** skill (local, model-invocable), scoped per §4 | no labeled workflow exists in this repo — `.github/workflows/` contains only `test.yml`. Local path only. |
 | `VERIFY` | `—` (no runnable app) | the deliverable is prompt artifacts + one hook; there is nothing to launch. Runtime proof for the hook comes from `TEST_CMD`. |
-| `PRIORITY_LABELS` | **no `priority:*` labels exist.** Selection order is the explicit `**Delivery order:** PR <n>` line in each issue body, then `Depends on:`, tiebreak issue-number ascending | ⚠ **vocabulary gap** — the engine's selection step assumes a *label* ordering. This repo encodes priority as prose in the body. Candidate finding: `PRIORITY_LABELS` needs a body-derived form (see §5). |
+| `PRIORITY_LABELS` | **no `priority:*` labels exist.** Selection order is the explicit `**Delivery order:** PR <n>` line in each issue body, then `Depends on:`, tiebreak issue-number ascending | ⚠ **vocabulary gap** — the engine's selection step assumes a *label* ordering. This repo encodes priority as prose in the body. Candidate finding: `PRIORITY_LABELS` needs a body-derived form ([#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1)). |
 | `ARCHITECT_TRIGGERS` | see §2 | **project-specific — edit when porting** |
 | `SOURCE_LAYOUT` | see §3 | router uses this; **edit when porting**. ⚠ This repo is the hard case — see §3. |
 | `TEST_CMD` | `python3 -m unittest discover -s tests` | from `CLAUDE.md` → Commands and `.github/workflows/test.yml`. **Stdlib only — never add pytest or any dependency.** |
@@ -73,7 +73,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `COMMIT_CONV` | Conventional Commits — `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `ci:` | stated in `CLAUDE.md` → Repo conventions; confirmed against `git log`. |
 | `PR_TEMPLATE` | `—` (none) | no `.github/PULL_REQUEST_TEMPLATE.md`. Write a body stating the change, the ACs it satisfies, and the Security-review choice. |
 | `MERGE_METHOD` | `gh pr merge <PR> --merge --delete-branch` | ⚠ **merge commits, not squash** — inferred from 4/4 PRs preserving branch history (`git log --format='%h %p'` shows two-parent merges). The engine's generic "set the squash `--subject` scope explicitly" discipline is therefore **inert here**; the individual commits already carry Conventional-Commit subjects. Repo allows all three methods; `delete_branch_on_merge` is `false` at the repo level, so pass `--delete-branch` explicitly. |
-| `APPEND_ONLY_FILES` | `TODO(init-loop)` — **this repo currently protects none**; no sidecar written | no decision-log / changelog with repeated `## <ID>` headings exists. ⚠ **Candidate:** the loop's own `LEDGER_ROOT/<run>/progress.md` *is* append-only by design and the loop is its only writer — protecting it is the natural dogfood target, but it does not exist until the first run. Revisit after init (see §5). |
+| `APPEND_ONLY_FILES` | `TODO(init-loop)` — **this repo currently protects none**; no sidecar written | no decision-log / changelog with repeated `## <ID>` headings exists. ⚠ **Candidate:** the loop's own `LEDGER_ROOT/<run>/progress.md` *is* append-only by design and the loop is its only writer — protecting it is the natural dogfood target, but it does not exist until the first run. Tracked as [#64](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/64). |
 | `PERMISSION_POSTURE` | subagents are **read-only/validate-only**; the parent thread performs every mutation (Write/Edit/commit/merge) | ⚠ **`TODO(init-loop)`-adjacent:** the engine names this parameter but never reads it — that is exactly #27 (S3.2: "wire `PERMISSION_POSTURE`, or retire it"). Recorded here as the intended posture so #27 has a concrete binding to wire or retire. |
 | `LEDGER_ROOT` | `.claude/loop/` | **gitignored** — local working state, never committed. |
 | `RELEASE_SCHEME` | semver in `.claude-plugin/plugin.json` (`version`), bumped by hand; milestones track releases (`v0.2.0`, `v0.3.0`). No package registry, no tags automation. | merge gate reads "≤ patch bump or no bump". **Every bump must update the `README.md` status block in the same PR** (`CLAUDE.md` → standing convention) — treat that as part of "done", and note that a `plugin.json` bump makes a change **minor**, i.e. never auto-merge-eligible. |
@@ -195,156 +195,14 @@ Tested by invoking it; it loaded and executed, failing only on the `origin/HEAD`
 
 ---
 
-## 5. Project examples referenced by the engine's guidance
+## 5. Findings — moved to the index
 
-Concrete instances this repo has produced, for the engine's triage/plan/journal steps to point at —
-and the running list of **dogfood findings this repo surfaces that the other two consumers cannot.**
+This section held a findings journal: eight dogfood entries this repo surfaced. **They live on
+[#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1), which is the only
+copy** (`CLAUDE.md` → Issue tracking). Moved by #141; the three that existed only here were
+pushed to #1 first.
 
-- **F7 reproduced at onboarding time (2026-07-28) — and the finding it reproduced was itself false
-  (#74, 2026-08-16).** The installed v0.0.1 `/init-loop` skeleton (line 130) does instruct the
-  generator to bind `CODE_REVIEW` to `/code-review`, and this config deviated from it deliberately.
-  But `/code-review` **is** model-invocable, so following the skeleton literally would **not** have
-  produced a silently-inert gate. The deviation stands as a **design choice** (§1), not a repair.
-  **The generic lesson survives the retraction and is the reason this entry is kept:** a fix that
-  lands in the working tree is not a fix for consumers until re-install (#36), and the window between
-  them is when new consumers get onboarded with the old bug. **Note that this entry is no longer an
-  instance of that lesson** — it is an instance of a *non-defect* propagating, which is the same
-  mechanism running in the other direction. For a real instance, see #10: its changes landed in-tree
-  2026-07-27, this repo onboarded 2026-07-28, and they are still absent from the installed 0.0.1.
+Nothing dereferenced this section — verified against both the in-tree engine and the installed
+one — so it cost a read on every invocation and bought nothing. **A finding does not belong
+here.** This file is a binding seam: a passage stays only if the engine reads it at runtime.
 
-- **F22 — the security gate's `origin/HEAD` precondition is stranded in AgentFluent's config
-  (2026-07-29).** Filed as [F22](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1#issuecomment-5115966313).
-  `loop-engine.md:548` names the "`origin/HEAD` incantation" and delegates it to `loop.config.md`,
-  but `commands/init-loop.md` never mentions it — so the generator emits a security gate that dies
-  on first use in every newly-onboarded repo. **Same class as F7, found at onboarding time two days
-  later:** knowledge that lives in one consumer's hand-patched config instead of in the thing that
-  writes configs. Suggests a mechanical audit for #40 — grep the engine for host-specifics it
-  delegates, confirm the skeleton emits each one. Also drove a scope extension on
-  [#21](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/21#issuecomment-5115977369):
-  a gate that *errors* is a third route to a skipped gate, alongside unbound and `TODO`-valued.
-
-- **F7's invocability claim — RETRACTED 2026-08-16 (#74), and the retraction is the finding.**
-  (Scope: F7's *first half*. Its second half — angles from the diff's risk surface — already ships as
-  engine prose and is not retracted; only its formalization is open, under **#38**.) This entry
-  previously read: *"Tested directly: `/security-review` loads and executes; `/code-review` does not.
-  Recorded so it is not re-litigated."* The first half reproduces. **The second half does not.**
-  `/code-review` is model-invocable: it appears in the orchestrator's available-skills list, which is
-  by construction the invocable set, and the live skill's own definition — extracted from the CLI
-  binary — carries an effort ladder (`low`→`max`) with only the `ultra` form gated, where the gate is
-  a **silent fallback to a local review**, not a refusal. The most likely explanation for the
-  2026-07-29 observation is that a refusal of the `ultra` form was generalized to the whole skill.
-
-  **Evidence provenance, stated because getting this wrong is how F7 happened.** There are **three
-  distinct `code-review` implementations** on this machine: a marketplace plugin command (not enabled
-  here, no effort ladder), a VS Code session skill, and the live CLI built-in — **which is compiled
-  into the binary and exists on no filesystem path.** The load-bearing evidence is the binary
-  extraction. A `grep` over `~/.claude/` cannot speak to the live skill at all, and the marketplace
-  file's `disable-model-invocation: false` describes a different artifact. #74's own first pass cited
-  both as evidence; that was **the same locus error F7 died of**, caught at review.
-
-  **The method failure is the transferable part, and it is why this entry is rewritten rather than
-  deleted.** F7 was recorded 2026-07-27 from **n=1**, generalized past what that observation
-  established (locus: the refusal was about one argument, the claim was about the skill). **It was
-  then re-tested two days later — and the re-test got the same wrong answer**, which is this entry's
-  2026-07-29 observation. Only *after* that second failure was it given **explicit protection from
-  re-testing** by the words "recorded so it is not re-litigated," and it went unchecked from there
-  until #74 on 2026-08-09.
-
-  **That sequence is worse than "never re-checked," and more useful.** A re-check is not a safeguard
-  if it re-runs the same flawed procedure against the same wrong object — both passes confused a
-  refusal of the `ultra` form with the skill's invocability, so the second confirmed the first
-  instead of testing it. What made the error durable was the *fencing*, not the absence of a check:
-  **the one note saying "do not re-check this" is the one that was wrong.**
-
-  The engine already owns the right instrument pointed the wrong way — the plan step's
-  **source-fidelity check** (locus / evidence base / current relevance) is scoped to *externally*
-  cited sources. This was the identical failure with an internal one. Widening it is filed on #1
-  (F43); do not treat this paragraph as having fixed it.
-
-  **Standing rule this entry now carries in place of its old conclusion:** a finding recorded from a
-  single observation may be written down, but it may **never** be written down with an instruction
-  not to re-check it.
-
-- **Candidate finding — `PRIORITY_LABELS` assumes labels.** This backlog encodes selection order as
-  a `**Delivery order:** PR <n>` line in the issue *body*, with `Depends on:` / `Blocks:` lines
-  beside it. There are no `priority:*` labels. The engine's selection step ("pick by `PRIORITY_LABELS`
-  order") has no binding that expresses this. Generic fix: allow `PRIORITY_LABELS` to name a
-  body-derived ordering key, not only a label set.
-
-- **Candidate finding — the `docs` route mis-serves prompt-as-product repos.** See §3. Any project
-  whose deliverable is agent-executed markdown hits this. Generic fix: the router should test
-  *path/role*, not file extension, before applying the `docs` route's reduced gate set.
-
-- **RESOLVED 2026-08-06 — what a mutation pass means for a prompt: mutate the *coupling*, not the
-  prose.** The standing hypothesis ("mutate the artifact the consistency check reads" — #18's AC2)
-  is now **confirmed by execution rather than argued.** During the #22 iteration a real mutation ran
-  against this repo's own product: `step 7` → `step 77` in `loop-engine.md` made
-  `PipelineStepOrderTests` fail; the file was restored byte-exact from an out-of-tree backup and the
-  suite returned green. So the mutable surface of an agent-executed markdown product is the set of
-  **couplings the mechanical checks read** — step-order references, the `CAPS` vocabulary, the
-  shipped example sidecar — and a mutation is breaking one and confirming the check goes red.
-
-  **The hard limit, which is the more important half of the answer.** This covers couplings
-  **only**. A killed mutant proves a coupling is guarded; it never proves an instruction is *right*.
-  Prompt semantics stay on review + dogfooding permanently — `CLAUDE.md` forbids growing the
-  consistency module into a semantic test of the engine, and nothing here changes that. Read a green
-  mutation result as "this cross-reference cannot silently rot", never as "this procedure is
-  correct."
-
-- **Consequence you will meet on almost every engine PR: the limit case fires here by default.**
-  Walk the engine's three due-ness questions (AC-verifier → Part 2) for a typical prose edit to
-  `loop-engine.md`: Route is `code` (§3's override), it alters behavior (agent-executed artifact),
-  and it adds no test. That is the **limit case** — so the row records
-  `mutation-survivors=1 (no guard added)`, and a Class B finding **blocks**.
-
-  **This is the gate working, not noise, and the standing decision is to disposition it every time
-  rather than silence it.** The finding is *true*: this repo has very little mechanical coverage of
-  its own product, and the running count of these is the honest measure of how little. At the merge
-  gate, take one of two dispositions and journal which:
-  1. **Add or extend a mechanical check** so the coupling this change touched is guarded (#62 is a
-     worked instance; #18/#44/#45 are the precedent), or
-  2. **State that the change touches no mechanically-checkable coupling** and merge on that basis.
-
-  **Do not ask for a fourth `n/a` reason.** The engine permits exactly three on purpose, and an
-  escape hatch an agent can reach for is how the off switch that #22 deliberately designed *out*
-  gets designed back in — the same failure shape `CLAUDE.md` flags for `ALLOWED_NON_BINDINGS` and
-  `_STOPWORDS`. If the recurrence ever becomes genuinely uninformative, that is a finding for #1
-  backed by counts, not a config workaround.
-
-  **Precedent set:** PR #59 (the #22 contract half) hit this limit case, journalled
-  `mutation-survivors=1 (no guard added)`, and merged on disposition 2.
-
-- **F-candidate — the router cannot see a row that is implementation-ready but *forbidden to this
-  actor* (2026-08-10, surfaced routing #73).** #73's acceptance criteria are **entirely
-  `loop.config.md` edits across three repositories** — no plugin code, no test, no engine text. Two
-  things make it unworkable as an ordinary `code` row: the engine's Tool surface says **"never edit
-  `loop.config.md`"**, and AC2–AC4 live in *other repos* the loop's one-PR-at-a-time machinery does
-  not span. #73's own body cites that prohibition as the reason the work was excluded from #39,
-  concluding *"config changes are human work landed outside a loop iteration."*
-
-  **The gap:** nothing in the Router detects this. Rule 1 defers only what `SOURCE_LAYOUT`'s
-  stub-defer marker names (§3 above: epic trackers, and #1) or a body that declares itself not
-  implementation-ready — **none of which is about *who* may do the work**. #73 is ready; it is
-  merely ready **for a different actor**. Routed `code` as its signals dictate, it walks into
-  the engine's implement step and the orchestrator edits three configs, breaking Tool surface. The only thing that
-  stopped it here was the orchestrator reading the issue body closely enough to notice — which is
-  exactly the "instruction to be more careful" the engine rejects everywhere else. **Same shape as
-  F14: a rule stated in prose that no mechanism enforces** (the *direction* is opposite — F14 is a
-  gate that fails open, this is a route that runs when it should not).
-
-  **Generic fix (for #40): one "workable-by-this-actor" predicate the Router tests before assigning
-  a route**, with two distinct detectors — (a) the change is confined to an artifact the orchestrator
-  is forbidden to write, sourced from **the set Tool surface already enumerates** rather than a new
-  list that will drift; and (b) the work lies outside the span of this run's repo, which is what
-  AC2–AC4 are and has nothing to do with `loop.config.md`. Do not collapse the two: a single
-  "`loop.config.md` is never loop-workable" rule both under-covers (a) — it omits the user-global
-  agent definitions the same prohibition names — and misses (b) entirely.
-
-  **The AC1/AC5 edit itself was authorized and is owned by the human, per PR #78; the reasoning is
-  recorded there and carried to #1/#40 as a proposed engine carve-out.** It is **not** precedent:
-  for the orchestrator, `never edit `loop.config.md`` holds absolutely.
-
-- **Deferred — protect `progress.md` with the append-only guard.** The ledger journal is append-only
-  by design and the loop is its only writer, making it the natural `APPEND_ONLY_FILES` target. It
-  does not exist until the first run completes; revisit then, and note the guard covers `Write` only
-  (not `Edit`, not `Bash` redirection).
