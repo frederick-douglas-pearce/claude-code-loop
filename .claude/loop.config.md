@@ -163,14 +163,37 @@ fan-out is a design choice — §1).
 
 ---
 
-## 5. Findings — moved to the index
+## 5. Class B at the merge gate
 
-This section held a findings journal: eight dogfood entries this repo surfaced. **They live on
+**The limit case fires here by default on almost every engine PR.** Walk the engine's three
+due-ness questions (AC-verifier → Part 2) for a typical prose edit to `loop-engine.md`: Route is
+`code` (§3's override), it alters behavior (an agent-executed artifact), and it adds no test. That
+is the limit case — the row records `mutation-survivors=1 (no guard added)`, and the Class B
+finding **blocks**.
+
+**This is the gate working, not noise, and the standing decision is to disposition it every time
+rather than silence it.** The finding is *true*: this repo has very little mechanical coverage of
+its own product, and the running count is the honest measure of how little. At the merge gate, take
+one of two dispositions and **journal which**:
+
+1. **Add or extend a mechanical check** so the coupling this change touched is guarded, or
+2. **State that the change touches no mechanically-checkable coupling** and merge on that basis.
+
+**Do not reach for a new `n/a` reason.** The engine's list is closed and this file does not reopen
+it — an escape hatch an agent can reach for is how an off switch gets designed back in. If the
+recurrence ever becomes genuinely uninformative, that is a finding for
+[#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1) backed by counts, not a
+config workaround.
+
+---
+
+## 6. Findings — moved to the index
+
+This file also held a findings journal: eight dogfood entries this repo surfaced. **They live on
 [#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1), which is the only
 copy** (`CLAUDE.md` → Issue tracking). Moved by #141; the three that existed only here were
 pushed to #1 first.
 
-Nothing dereferenced this section — verified against both the in-tree engine and the installed
-one — so it cost a read on every invocation and bought nothing. **A finding does not belong
-here.** This file is a binding seam: a passage stays only if the engine reads it at runtime.
+**A finding does not belong here.** This file is a binding seam: a passage stays only if the engine
+reads it at runtime — which is why §5 above stayed and the journal did not.
 
