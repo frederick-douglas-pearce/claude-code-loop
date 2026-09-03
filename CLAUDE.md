@@ -473,7 +473,7 @@ sentence.
 neither AgentFluent nor the vote repo produces. That breaks the router's assumption that markdown
 implies the `docs` route — so `.claude/loop.config.md` §3 carries a binding override sending
 `loop-engine.md`, `SKILL.md`, and `init-loop.md` to the `code` route. Findings unique to this shape
-are logged in that file's §5, and graduate to #1 once confirmed.
+are logged on #1, which is the only copy.
 
 ## Branching & PR flow
 
