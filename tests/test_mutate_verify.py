@@ -43,12 +43,15 @@ from mutate_verify import (  # noqa: E402  # type: ignore[import-not-found]
     EXIT_HARNESS_ERROR,
     EXIT_RESTORE_FAILED,
     EXIT_SURVIVORS,
+    EXIT_UNATTRIBUTED,
     EXIT_UNPROVEN,
+    AttributionError,
     Mutation,
     MutationError,
     RestoreError,
     SpecError,
     apply_mutation,
+    attribution_refusal,
     dedupe_survivors,
     load_spec,
     mutate_text,
@@ -80,6 +83,11 @@ class _Scratch:
 
     def __init__(self, case: unittest.TestCase, suite: str = _OBSERVING_SUITE) -> None:
         self.root = Path(tempfile.mkdtemp(prefix="mutate-verify-test-"))
+        # A stand-in for the tree the caller is protecting. Every `run_pass` that takes a `_Scratch`
+        # passes it (one test deliberately omits it, to pin the fail-closed path), because
+        # the harness refuses to mutate a `--root` it cannot tell apart from `--parent-root`; a
+        # separate directory is what an isolated copy looks like from the harness's side.
+        self.parent_root = Path(tempfile.mkdtemp(prefix="mutate-verify-test-parent-"))
         case.addCleanup(self._cleanup)
         self.source = self.root / "src.py"
         self.source.write_text(_SOURCE, encoding="utf-8")
@@ -89,6 +97,7 @@ class _Scratch:
         import shutil
 
         shutil.rmtree(str(self.root), ignore_errors=True)
+        shutil.rmtree(str(self.parent_root), ignore_errors=True)
 
 
 def _mutation(**kwargs: object) -> Mutation:
@@ -250,6 +259,328 @@ class RestoreTests(unittest.TestCase):
             "the command must be a passed-in variable, never a literal the harness chose",
         )
         self.assertEqual(call.args[0].id, "test_cmd")
+
+
+
+class AttributionTests(unittest.TestCase):
+    """#111: the harness must not mutate a tree it cannot tell apart from the caller's own.
+
+    The outcome alone is cheap to fake: an implementation that mutates the parent, runs the suite,
+    restores, and *then* returns exit 5 satisfies "the exit code is 5" while doing the exact thing
+    this interlock exists to prevent. `test_a_root_that_is_the_parent_is_refused_before_anything_is_
+    touched` is written against that specifically — bytes untouched, the test command never run,
+    `baseline_exit` still -1, no snapshot directory — and
+    `test_the_refusal_beats_target_resolution` pins the ordering. **No claim is made here that
+    every test in this class is mechanism-shaped**; some assert an exit code and nothing more, and
+    a file-level guarantee of it is the enumerable assertion `CLAUDE.md` warns this repo keeps
+    having to retract. Check the test, not this docstring.
+    """
+
+    def _tree(self, name: str) -> Path:
+        root = Path(tempfile.mkdtemp(prefix="mutate-verify-attr-{}-".format(name)))
+        self.addCleanup(lambda: __import__("shutil").rmtree(str(root), ignore_errors=True))
+        (root / "src.py").write_text(_SOURCE, encoding="utf-8")
+        return root
+
+    def _tattling_suite(self, sentinel: Path) -> str:
+        """A test command whose only job is to prove, by side effect, that it was executed."""
+        return "{exe} -c \"open(r'{path}', 'w').write('ran')\"".format(
+            exe=sys.executable, path=sentinel
+        )
+
+    def test_a_root_that_is_the_parent_is_refused_before_anything_is_touched(self) -> None:
+        root = self._tree("same")
+        sentinel = root / "the-suite-ran"
+        report, code = run_pass(
+            [_mutation(), _control()], self._tattling_suite(sentinel), root, parent_root=root
+        )
+
+        self.assertEqual(code, EXIT_UNATTRIBUTED)
+        # The mechanism, in three parts. Each one independently fails a "refuse afterwards"
+        # implementation, which is the shape that would pass an exit-code-only assertion.
+        self.assertEqual(
+            (root / "src.py").read_text(encoding="utf-8"), _SOURCE, "the tree was mutated anyway"
+        )
+        self.assertFalse(sentinel.exists(), "the test command ran despite the refusal")
+        self.assertEqual(report.baseline_exit, -1, "the baseline was run before attribution")
+        self.assertEqual(report.applied, 0)
+        self.assertIsNone(report.snapshot_dir, "a snapshot directory was created before the refusal")
+
+    def test_the_refusal_beats_target_resolution(self) -> None:
+        """Ordering, asserted rather than assumed.
+
+        A spec naming a file that does not exist raises `SpecError` from `resolve_target`. If that
+        error surfaces instead of exit 5, attribution is running too late — behind at least one
+        step that already inspected the tree.
+        """
+        root = self._tree("ordering")
+        _, code = run_pass(
+            [_mutation(file="no_such_file.py"), _control()],
+            self._tattling_suite(root / "unused"),
+            root,
+            parent_root=root,
+        )
+        self.assertEqual(code, EXIT_UNATTRIBUTED)
+
+    def test_a_distinct_tree_is_not_refused(self) -> None:
+        """A guard that fires on everything guards nothing."""
+        root, parent = self._tree("distinct-root"), self._tree("distinct-parent")
+        _, code = run_pass([_mutation(), _control()], _OBSERVING_SUITE.format(exe=sys.executable),
+                           root, parent_root=parent)
+        self.assertEqual(code, EXIT_CLEAN)
+
+    def test_a_copy_nested_inside_the_parent_is_not_refused(self) -> None:
+        """The regression test for the discriminator.
+
+        A worktree the host materializes *inside* the repository is a genuinely separate working
+        tree — `git rev-parse --show-toplevel` differs from the parent's. An earlier draft compared
+        by path *containment*, which refuses exactly this layout; since it is the primary path the
+        engine documents, that would have pushed every pass onto `--in-tree-authorized`.
+        """
+        parent = self._tree("nested-parent")
+        nested = parent / "worktree-agent-1"
+        nested.mkdir()
+        (nested / "src.py").write_text(_SOURCE, encoding="utf-8")
+
+        self.assertIsNone(attribution_refusal(nested, parent))
+
+        _, code = run_pass([_mutation(), _control()], _OBSERVING_SUITE.format(exe=sys.executable),
+                           nested, parent_root=parent)
+        self.assertEqual(code, EXIT_CLEAN)
+
+    def test_a_parent_root_that_does_not_exist_fails_closed(self) -> None:
+        """`Path.resolve()` does not raise on a path that is not there.
+
+        So a mistyped `--parent-root` resolves to something that never equals `--root` and would
+        sail through a bare equality check — the silent bypass this must refuse instead.
+        """
+        root = self._tree("bad-parent")
+        missing = root / "not" / "a" / "real" / "tree"
+        self.assertNotEqual(Path(missing).resolve(), Path(root).resolve())  # the bypass, shown
+
+        with self.assertRaises(AttributionError) as ctx:
+            attribution_refusal(root, missing)
+        self.assertIn("not an existing directory", str(ctx.exception))
+
+    def test_a_parent_root_that_is_a_file_fails_closed(self) -> None:
+        root = self._tree("file-parent")
+        with self.assertRaises(AttributionError):
+            attribution_refusal(root, root / "src.py")
+
+    def test_an_omitted_parent_root_fails_closed(self) -> None:
+        """Default-deny at the function boundary, not only at the CLI.
+
+        The interlock has to sit on the thing that mutates: an in-process caller that simply omits
+        the argument must not get an unchecked pass.
+        """
+        root = self._tree("no-parent")
+        with self.assertRaises(AttributionError) as ctx:
+            run_pass([_mutation(), _control()], self._tattling_suite(root / "unused"), root)
+        self.assertIn("--parent-root is required", str(ctx.exception))
+
+    def test_in_tree_authorized_proceeds_and_is_recorded_in_the_report(self) -> None:
+        """The escape hatch works — and cannot be used quietly."""
+        root = self._tree("in-tree")
+        report, code = run_pass(
+            [_mutation(), _control()],
+            _OBSERVING_SUITE.format(exe=sys.executable),
+            root,
+            parent_root=root,
+            in_tree_authorized=True,
+        )
+        self.assertEqual(code, EXIT_CLEAN)
+        self.assertTrue(report.in_tree_authorized)
+        self.assertIn("in_tree_authorized", report.to_json())
+        self.assertIn("IN-TREE PASS", mutate_verify._render(report, code))
+
+    def test_the_cli_refuses_to_run_without_a_parent_root(self) -> None:
+        """The mandate binds at the CLI too — that is the surface the engine actually invokes."""
+        import contextlib
+        import io
+
+        root = self._tree("cli-no-parent")
+        spec = root / "spec.json"
+        spec.write_text(
+            json.dumps({"mutations": [{"id": "m", "file": "src.py", "find": "GOOD",
+                                       "replace": "BAD"}]}),
+            encoding="utf-8",
+        )
+        argv = ["run", "--spec", str(spec), "--test-cmd", "true", "--root", str(root)]
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            with self.assertRaises(SystemExit) as ctx:
+                mutate_verify.main(argv)
+        self.assertEqual(ctx.exception.code, EXIT_HARNESS_ERROR)
+        self.assertIn("--parent-root", err.getvalue())
+
+    def test_a_parent_root_inside_the_root_is_refused(self) -> None:
+        """The other containment direction, and it is not symmetric with the one above.
+
+        `--root` inside `--parent-root` is the ordinary nested-worktree layout and must pass. The
+        reverse — the parent's tree sitting *inside* the tree about to be mutated — means mutating
+        `--root` writes the parent's tree, which is the whole harm. Reachable in practice as
+        `--parent-root "$(pwd)"` issued from a subdirectory while `--root` is the repository root.
+        """
+        root = self._tree("outer")
+        inner = root / "protected"
+        inner.mkdir()
+        self.assertIsNotNone(attribution_refusal(root, inner))
+
+    def test_two_path_spellings_of_one_directory_are_both_refused(self) -> None:
+        """Both shapes below are absolute and textually unequal while naming one directory.
+
+        **This does not pin `.resolve()`**, and an earlier docstring here claimed it did — measured
+        false: swapping `_resolved_dir` to `.absolute()` leaves this test green, because `stat()`
+        follows the symlink and the kernel collapses `sub/..`, so the `(st_dev, st_ino)` branch
+        supplies the refusal instead. Either mechanism satisfies it, which is the point at this
+        level. `test_resolved_dir_actually_resolves` is what pins the resolution itself.
+        """
+        parent = self._tree("resolve-parent")
+        link = parent.parent / (parent.name + "-link")
+        link.symlink_to(parent, target_is_directory=True)
+        self.addCleanup(lambda: link.unlink(missing_ok=True))
+
+        (parent / "sub").mkdir()
+
+        self.assertNotEqual(str(link), str(parent))
+        self.assertIsNotNone(attribution_refusal(link, parent))
+        self.assertIsNotNone(attribution_refusal(parent / "sub" / "..", parent))
+
+    def test_resolved_dir_actually_resolves(self) -> None:
+        """Pins `.resolve()` against `.absolute()` in isolation.
+
+        At the integration level the two mechanisms cover each other — the inode comparison also
+        catches a symlinked root — so neither is pinned by an end-to-end assertion alone. This
+        exercises the resolution directly, where `.absolute()` would return the unresolved path.
+        """
+        parent = self._tree("resolved-dir")
+        link = parent.parent / (parent.name + "-alias")
+        link.symlink_to(parent, target_is_directory=True)
+        self.addCleanup(lambda: link.unlink(missing_ok=True))
+
+        self.assertNotEqual(Path(link).absolute(), parent.resolve())
+        self.assertEqual(mutate_verify._resolved_dir(link, "--root"), parent.resolve())
+
+    def test_identity_is_the_same_for_two_paths_naming_one_directory(self) -> None:
+        """Pins the `(st_dev, st_ino)` premise, which the path comparison cannot supply.
+
+        `resolve()` does not case-normalize and knows nothing of bind mounts, so identity is the
+        backstop for two unequal paths that are one directory. The portable way to *construct* that
+        divergence is a symlink; a bind mount or a case-insensitive filesystem is the case this
+        defends and neither can be built in this suite, which is why the assertion is on the helper
+        rather than on a contrived mount.
+        """
+        parent = self._tree("identity")
+        link = parent.parent / (parent.name + "-alias")
+        link.symlink_to(parent, target_is_directory=True)
+        self.addCleanup(lambda: link.unlink(missing_ok=True))
+
+        self.assertNotEqual(str(link), str(parent))
+        self.assertEqual(mutate_verify._identity(Path(link)), mutate_verify._identity(parent))
+        self.assertIsNone(mutate_verify._identity(parent / "no-such-dir"))
+
+    def test_a_bad_parent_root_fails_closed_even_when_authorized(self) -> None:
+        """The escape hatch must not be able to suppress a fail-closed refusal.
+
+        This pins the ORDER inside `attribution_refusal`: validation happens in `trees_overlap`,
+        which runs before `in_tree_authorized` is consulted. Hoisting the authorization check above
+        it would let a mistyped `--parent-root` through whenever the flag was set — and every other
+        fail-closed test here passes the flag as False, so none of them would notice.
+        """
+        root = self._tree("authorized-bad-parent")
+        with self.assertRaises(AttributionError):
+            attribution_refusal(root, root / "not" / "there", in_tree_authorized=True)
+
+    def test_the_refusal_says_why(self) -> None:
+        """A verdict with no reason sends the reader back to guessing."""
+        root = self._tree("reason")
+        report, _ = run_pass(
+            [_mutation(), _control()], self._tattling_suite(root / "unused"), root, parent_root=root
+        )
+        self.assertTrue(
+            any("not isolated" in e for e in report.errors), report.errors
+        )
+
+    def test_the_cli_carries_the_escape_hatch_through_to_the_pass(self) -> None:
+        """The flag's whole surface, end to end — argparse wiring and the stderr banner.
+
+        Both were unguarded: deleting the `in_tree_authorized=args.in_tree_authorized` pass-through
+        made the documented in-tree rung silently unreachable from the command line, and deleting
+        the stderr banner removed the only human-visible record under `--json`, where `_render`
+        never runs.
+        """
+        import contextlib
+        import io
+
+        root = self._tree("cli-in-tree")
+        spec = root / "spec.json"
+        spec.write_text(
+            json.dumps({"mutations": [
+                {"id": "m", "file": "src.py", "find": "GOOD", "replace": "BAD"},
+                {"id": "c", "file": "src.py", "find": "SPARE_A", "replace": "SPARE_Z",
+                 "expect": "survived"},
+            ]}),
+            encoding="utf-8",
+        )
+        argv = ["run", "--spec", str(spec), "--test-cmd",
+                _OBSERVING_SUITE.format(exe=sys.executable), "--root", str(root),
+                "--parent-root", str(root), "--in-tree-authorized", "--json"]
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = mutate_verify.main(argv)
+
+        self.assertEqual(code, EXIT_CLEAN)
+        self.assertIn("IN-TREE PASS", err.getvalue())
+        # The VALUE, not the key: hardcoding `False` in `to_json` passed a key-presence check.
+        self.assertTrue(json.loads(out.getvalue())["in_tree_authorized"])
+
+    def test_the_escape_hatch_does_not_mislabel_an_isolated_pass(self) -> None:
+        """The flag records the observed fact, not the argument.
+
+        Passing `--in-tree-authorized` over a genuinely isolated copy is harmless, and the report
+        must not then claim the pass ran in the parent's tree — a false line in the ledger, in the
+        direction of describing a clean pass as the escalated rung.
+        """
+        root, parent = self._tree("mislabel-root"), self._tree("mislabel-parent")
+        report, code = run_pass(
+            [_mutation(), _control()], _OBSERVING_SUITE.format(exe=sys.executable), root,
+            parent_root=parent, in_tree_authorized=True,
+        )
+        self.assertEqual(code, EXIT_CLEAN)
+        self.assertFalse(report.in_tree_authorized)
+        self.assertNotIn("IN-TREE PASS", mutate_verify._render(report, code))
+
+    def test_a_controls_only_spec_still_records_an_in_tree_pass(self) -> None:
+        """The early return builds its own Report, which was omitting the flag entirely."""
+        root = self._tree("controls-only-in-tree")
+        report, code = run_pass(
+            [_control()], _OBSERVING_SUITE.format(exe=sys.executable), root,
+            parent_root=root, in_tree_authorized=True,
+        )
+        self.assertEqual(code, EXIT_HARNESS_ERROR)
+        self.assertTrue(report.in_tree_authorized)
+
+    def test_an_unreadable_parent_root_fails_closed(self) -> None:
+        """An unanswerable question is not a 'no'."""
+        parent = self._tree("unreadable")
+        target = parent / "inner"
+        target.mkdir()
+        import os
+
+        if os.geteuid() == 0:
+            self.skipTest("root bypasses directory permissions")
+        os.chmod(str(parent), 0o000)
+        self.addCleanup(lambda: os.chmod(str(parent), 0o755))
+        with self.assertRaises(AttributionError):
+            attribution_refusal(self._tree("unreadable-root"), target)
+
+    def test_an_ordinary_pass_is_not_labelled_in_tree(self) -> None:
+        """The counterpart: the banner must distinguish, not decorate every report."""
+        root, parent = self._tree("plain-root"), self._tree("plain-parent")
+        report, code = run_pass([_mutation(), _control()],
+                                _OBSERVING_SUITE.format(exe=sys.executable), root,
+                                parent_root=parent)
+        self.assertFalse(report.in_tree_authorized)
+        self.assertNotIn("IN-TREE PASS", mutate_verify._render(report, code))
 
 
 class ResolveTargetTests(unittest.TestCase):
@@ -426,7 +757,7 @@ class RunPassTests(unittest.TestCase):
 
     def test_a_killed_mutation_plus_a_control_is_clean(self) -> None:
         scratch = _Scratch(self)
-        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root)
+        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_CLEAN, report.errors)
         self.assertEqual(report.applied, 2)
         self.assertEqual(report.killed, 1)
@@ -436,12 +767,12 @@ class RunPassTests(unittest.TestCase):
 
     def test_the_tree_is_byte_identical_after_a_pass(self) -> None:
         scratch = _Scratch(self)
-        run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root)
+        run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(scratch.source.read_text(encoding="utf-8"), _SOURCE)
 
     def test_a_survivor_is_reported_and_exits_nonzero(self) -> None:
         scratch = _Scratch(self, suite=_BLIND_SUITE)
-        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root)
+        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_SURVIVORS)
         self.assertEqual(len(report.survivor_groups), 1)
         self.assertEqual(report.survivor_groups[0]["count"], 1)
@@ -450,7 +781,7 @@ class RunPassTests(unittest.TestCase):
         # AC6: a green verdict must prove it can go red. Everything killed, but nothing showed the
         # pipeline is *able* to report a survivor — so this must not read as clean.
         scratch = _Scratch(self)
-        report, code = run_pass([_mutation()], scratch.test_cmd, scratch.root)
+        report, code = run_pass([_mutation()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_UNPROVEN)
         self.assertEqual(report.killed, 1)
         self.assertFalse(report.control_proved)
@@ -465,7 +796,7 @@ class RunPassTests(unittest.TestCase):
         # EXIT_HARNESS_ERROR, so the error text is asserted to tell this one from those.
         scratch = _Scratch(self)
         killed_control = _control(find="GOOD", replace="BAD", id="bad-control")
-        report, code = run_pass([_mutation(), killed_control], scratch.test_cmd, scratch.root)
+        report, code = run_pass([_mutation(), killed_control], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_HARNESS_ERROR)
         self.assertFalse(report.control_proved)
         self.assertTrue(
@@ -478,7 +809,7 @@ class RunPassTests(unittest.TestCase):
         # authoritative-sounding verdict with nothing behind it. Integrity gates every verdict.
         scratch = _Scratch(self, suite=_CONTROL_OBSERVING_SUITE)
         report, code = run_pass(
-            [_mutation(), _control(replace="SPARE_Z")], scratch.test_cmd, scratch.root
+            [_mutation(), _control(replace="SPARE_Z")], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root
         )
         # The real mutation survived (this suite ignores GOOD) AND the control was killed.
         self.assertEqual(report.survived, 1)
@@ -492,7 +823,7 @@ class RunPassTests(unittest.TestCase):
         # the capability a control exists to establish, so a missing control must not downgrade a
         # real finding to "unproven".
         scratch = _Scratch(self, suite=_BLIND_SUITE)
-        _, code = run_pass([_mutation()], scratch.test_cmd, scratch.root)
+        _, code = run_pass([_mutation()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_SURVIVORS)
 
     def _explode(self, name: str, exc: Exception) -> None:
@@ -521,7 +852,7 @@ class RunPassTests(unittest.TestCase):
         self.addCleanup(lambda: setattr(mutate_verify, "run_tests", original_run))
         self._explode("restore_file", RestoreError("simulated failure while restoring"))
 
-        report, code = run_pass([_mutation()], scratch.test_cmd, scratch.root)
+        report, code = run_pass([_mutation()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_RESTORE_FAILED)
         self.assertTrue(any("restore also failed" in e for e in report.errors))
         self.assertIn("BAD", scratch.source.read_text(encoding="utf-8"))  # the mutation IS live
@@ -542,7 +873,7 @@ class RunPassTests(unittest.TestCase):
         self._explode("apply_mutation", OSError("simulated read-only target"))
         self._explode("restore_file", RestoreError("simulated failure while restoring"))
 
-        report, code = run_pass([_mutation()], scratch.test_cmd, scratch.root)
+        report, code = run_pass([_mutation()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_HARNESS_ERROR)
         self.assertTrue(any("tree is intact" in e for e in report.errors))
         self.assertEqual(scratch.source.read_text(encoding="utf-8"), _SOURCE)
@@ -564,7 +895,7 @@ class RunPassTests(unittest.TestCase):
         )
         cmd = "{} {}".format(sys.executable, writer)
 
-        report, code = run_pass([_mutation(), _control()], cmd, scratch.root)
+        report, code = run_pass([_mutation(), _control()], cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_RESTORE_FAILED)
         self.assertNotEqual(code, EXIT_CLEAN)
         self.assertIn("DEVWORK", scratch.source.read_text(encoding="utf-8"))
@@ -588,7 +919,7 @@ class RunPassTests(unittest.TestCase):
         mutate_verify.apply_mutation = apply_then_report_different_original  # type: ignore
         self.addCleanup(lambda: setattr(mutate_verify, "apply_mutation", original_apply))
 
-        report, code = run_pass([_mutation()], scratch.test_cmd, scratch.root)
+        report, code = run_pass([_mutation()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_RESTORE_FAILED)
         self.assertTrue(any("between the snapshot and the mutation" in e for e in report.errors))
         self.assertTrue(Path(report.snapshot_dir).is_dir(), "the safe repair was deleted")
@@ -612,7 +943,7 @@ class RunPassTests(unittest.TestCase):
         _shutil.rmtree = silently_failing_rmtree  # type: ignore[assignment]
         self.addCleanup(lambda: setattr(_shutil, "rmtree", original_rmtree))
 
-        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root)
+        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_CLEAN)
         self.assertIsNotNone(report.snapshot_dir, "cleared the field while the directory survived")
         self.assertTrue(any("stale, not evidence" in e for e in report.errors))
@@ -622,19 +953,19 @@ class RunPassTests(unittest.TestCase):
 
     def test_restored_is_counted_because_the_ledger_line_names_it(self) -> None:
         scratch = _Scratch(self)
-        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root)
+        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_CLEAN)
         self.assertEqual(report.restored, report.applied)
         self.assertEqual(report.restored, 2)
 
     def test_a_red_baseline_carries_the_output_that_explains_it(self) -> None:
         scratch = _Scratch(self, suite=_NOISY_RED_SUITE)
-        report, _ = run_pass([_mutation()], scratch.test_cmd, scratch.root)
+        report, _ = run_pass([_mutation()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertTrue(any("DIAGNOSTIC-MARKER" in e for e in report.errors))
 
     def test_a_red_baseline_takes_no_verdicts_at_all(self) -> None:
         scratch = _Scratch(self, suite=_RED_SUITE)
-        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root)
+        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_HARNESS_ERROR)
         self.assertEqual(report.applied, 0)
         self.assertEqual(report.results, [])
@@ -643,7 +974,7 @@ class RunPassTests(unittest.TestCase):
     def test_a_pattern_that_does_not_match_aborts_the_pass(self) -> None:
         scratch = _Scratch(self)
         report, code = run_pass(
-            [_mutation(find="NOT_PRESENT"), _control()], scratch.test_cmd, scratch.root
+            [_mutation(find="NOT_PRESENT"), _control()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root
         )
         self.assertEqual(code, EXIT_HARNESS_ERROR)
         self.assertEqual(report.applied, 0)
@@ -654,7 +985,7 @@ class RunPassTests(unittest.TestCase):
         # actually changed, which is the difference between a real pass and a vacuous one.
         scratch = _Scratch(self)
         report, _ = run_pass(
-            [_mutation(find="GOOD", replace="GOOD")], scratch.test_cmd, scratch.root
+            [_mutation(find="GOOD", replace="GOOD")], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root
         )
         self.assertEqual(report.applied, 0)
 
@@ -675,7 +1006,7 @@ class RunPassTests(unittest.TestCase):
         mutate_verify.tempfile.mkdtemp = spy  # type: ignore[assignment]
         self.addCleanup(lambda: setattr(mutate_verify.tempfile, "mkdtemp", original_mkdtemp))
 
-        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root)
+        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_CLEAN)
         self.assertEqual(len(seen), 1)
         self.assertFalse(Path(seen[0]).exists(), "snapshot directory was left on disk")
@@ -685,7 +1016,7 @@ class RunPassTests(unittest.TestCase):
         # Every other condition for a clean verdict would hold, and the pass would report
         # `killed: 0` as clean — certifying that nothing was tested.
         scratch = _Scratch(self)
-        report, code = run_pass([_control()], scratch.test_cmd, scratch.root)
+        report, code = run_pass([_control()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_HARNESS_ERROR)
         self.assertEqual(report.applied, 0)
         self.assertTrue(any("no real mutation" in e for e in report.errors))
@@ -702,7 +1033,7 @@ class RunPassTests(unittest.TestCase):
         mutate_verify.apply_mutation = exploding_apply  # type: ignore[assignment]
         self.addCleanup(lambda: setattr(mutate_verify, "apply_mutation", original_apply))
 
-        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root)
+        report, code = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertNotEqual(code, EXIT_SURVIVORS)
         self.assertEqual(code, EXIT_HARNESS_ERROR)
         self.assertTrue(any("OSError" in e for e in report.errors))
@@ -719,7 +1050,7 @@ class RunPassTests(unittest.TestCase):
             "sys.exit(0) if 'GOOD' in c else time.sleep(30)\""
         ).format(exe=sys.executable)
 
-        report, code = run_pass([_mutation()], hangs_only_when_mutated, scratch.root, timeout=2)
+        report, code = run_pass([_mutation()], hangs_only_when_mutated, scratch.root, timeout=2, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_HARNESS_ERROR)
         self.assertEqual(report.baseline_exit, 0, "the baseline must have completed, not timed out")
         self.assertEqual(report.applied, 1, "the timeout must happen with a mutation live")
@@ -734,7 +1065,7 @@ class RunPassTests(unittest.TestCase):
             run_pass(
                 [_mutation(), _mutation(id="m2", file="../escape.py")],
                 scratch.test_cmd,
-                scratch.root,
+                scratch.root, parent_root=scratch.parent_root,
             )
         self.assertEqual(scratch.source.read_text(encoding="utf-8"), _SOURCE)
 
@@ -750,7 +1081,7 @@ class RunPassTests(unittest.TestCase):
         mutate_verify.restore_file = exploding_restore  # type: ignore[assignment]
         self.addCleanup(lambda: setattr(mutate_verify, "restore_file", original_restore))
 
-        report, code = run_pass([_mutation()], scratch.test_cmd, scratch.root)
+        report, code = run_pass([_mutation()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         self.assertEqual(code, EXIT_RESTORE_FAILED)
         self.assertIsNotNone(report.snapshot_dir)
         self.assertTrue(Path(report.snapshot_dir).is_dir())
@@ -864,6 +1195,8 @@ class CliTests(unittest.TestCase):
             scratch.test_cmd,
             "--root",
             str(scratch.root),
+            "--parent-root",
+            str(scratch.parent_root),
         ]
 
     def _run(self, scratch: _Scratch, mutations: list, extra: list = None) -> int:
@@ -876,6 +1209,8 @@ class CliTests(unittest.TestCase):
             scratch.test_cmd,
             "--root",
             str(scratch.root),
+            "--parent-root",
+            str(scratch.parent_root),
         ]
         return self._quiet(argv + (extra or []))
 
@@ -920,7 +1255,10 @@ class CliTests(unittest.TestCase):
         spec = scratch.root / "spec.json"
         spec.write_text("{not json", encoding="utf-8")
         code = self._quiet(
-            ["run", "--spec", str(spec), "--test-cmd", scratch.test_cmd, "--root", str(scratch.root)]
+            [
+                "run", "--spec", str(spec), "--test-cmd", scratch.test_cmd,
+                "--root", str(scratch.root), "--parent-root", str(scratch.parent_root),
+            ]
         )
         self.assertEqual(code, EXIT_HARNESS_ERROR)
 
@@ -973,7 +1311,8 @@ class CliTests(unittest.TestCase):
         argv = [
             "run", "--spec", str(spec),
             "--test-cmd", '{} -c "import time; time.sleep(30)"'.format(sys.executable),
-            "--root", str(scratch.root), "--timeout", "1",
+            "--root", str(scratch.root), "--parent-root", str(scratch.parent_root),
+            "--timeout", "1",
         ]
         code, out, _ = self._invoke(argv)
         self.assertEqual(code, EXIT_HARNESS_ERROR)
@@ -1011,7 +1350,7 @@ class CliTests(unittest.TestCase):
 
     def test_json_report_carries_the_fields_a_caller_journals(self) -> None:
         scratch = _Scratch(self)
-        report, _ = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root)
+        report, _ = run_pass([_mutation(), _control()], scratch.test_cmd, scratch.root, parent_root=scratch.parent_root)
         payload = json.loads(report.to_json())
         for key in (
             "applied",
@@ -1040,12 +1379,14 @@ class ExitCodeTests(unittest.TestCase):
             EXIT_HARNESS_ERROR,
             EXIT_UNPROVEN,
             EXIT_RESTORE_FAILED,
+            EXIT_UNATTRIBUTED,
         ]
         self.assertEqual(len(set(codes)), len(codes))
 
     def test_only_clean_is_zero(self) -> None:
         self.assertEqual(EXIT_CLEAN, 0)
-        for code in (EXIT_SURVIVORS, EXIT_HARNESS_ERROR, EXIT_UNPROVEN, EXIT_RESTORE_FAILED):
+        for code in (EXIT_SURVIVORS, EXIT_HARNESS_ERROR, EXIT_UNPROVEN, EXIT_RESTORE_FAILED,
+                     EXIT_UNATTRIBUTED):
             self.assertNotEqual(code, 0)
 
 

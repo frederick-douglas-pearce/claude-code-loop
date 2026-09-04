@@ -1279,8 +1279,8 @@ shell slices — see the engine-read protocol in `SKILL.md`.)
 **The working tree is parent-owned state; any agent that must write to it gets its own copy.** This
 governs every agent you spawn, not only a mutating one — the tree holds your uncommitted
 deliverables, and a subagent writing to it is writing to your work. Read-only agents need no copy;
-any agent that writes gets one, via the host's worktree-isolation option. Three duties follow, and
-all three are **yours**, because the agent cannot discharge them from inside its own copy:
+any agent that writes gets one, via the host's worktree-isolation option. Four duties follow, and
+all four are **yours**, because the agent cannot discharge them from inside its own copy:
 - **Never stage its copy.** Where the host materializes the isolated tree inside the repository it
   shows up in your `git status` as untracked, and a blanket `git add` lands it as a gitlink.
   Explicit-path staging (step 6) is the control, and that step describes what the mistake looks like.
@@ -1304,6 +1304,24 @@ all three are **yours**, because the agent cannot discharge them from inside its
 - **Never let its copy stand in for the change under review.** A file inside an isolated tree is not
   evidence of anything until you have applied it; cite `file:line` in the merge candidate, never in
   a copy.
+- **Attribute the copy before you trust anything that came out of it.** Confirm the copy's own
+  `git rev-parse --show-toplevel` **differs from yours**. This governs **every** scratch copy this
+  engine directs — the acceptance gate's mutation copy is only the sharpest case, and a
+  revert-and-observe copy taken to see how the tree behaved before a change is the same duty.
+  Isolation that silently did not happen is the hazard: where a `git worktree add` fails and the
+  commands after it still run — a `;`-separated sequence, or separately-issued steps — everything
+  downstream runs in **your** tree, printing exactly what success prints, and the sequence reports
+  the *last* command's status, so it exits 0. (An `&&` chain short-circuits: nothing after the
+  failure runs. It is the safer spelling, not the hazard.) **A result from an unattributed copy is `unproven`, not clean** — it
+  describes some tree, and you cannot say which. Where the copy feeds the mutation harness this is
+  enforced rather than remembered (AC-verifier → Part 2's third precondition); everywhere else it is
+  yours to run, and it is two commands.
+
+  **What this duty does not reach, stated so nobody reads it as wider than it is:** it compares
+  *trees*, so it catches a copy that is not a separate tree. It says nothing about **where code
+  under test is imported from** — an environment inside a correctly-isolated copy can still resolve
+  imports to the original repository (an editable install is the recorded way), and no toplevel
+  check sees that. Do not treat this duty as covering it.
 
 The concrete path an isolated tree appears at is a **host** fact, not a project one, so this engine
 names none. **Get it from `git worktree list`**, which answers whatever the host does or does not
@@ -1314,7 +1332,7 @@ acceptance gate's untracked scan to find a stray copy: it is `git ls-files --oth
 after seeing one appear — sees nothing. Its position is no help either: that scan runs in the
 acceptance gate's Part 1, *before* Part 2 creates the copy most likely to be stranded.
 `git worktree list` has neither blind spot. A host whose isolated trees land *outside*
-the repository discharges the first duty for free and still owes the other two.
+the repository discharges the first duty for free and still owes the other three.
 
 **Execution policy — the parent owns the tree, and nothing may concurrently mutate it.** Pipeline
 steps run one after another — **do not overlap them**; the parent thread owns the working tree
@@ -1874,8 +1892,9 @@ Fields:
     - a change that alters behavior *while adding no test* is the **limit case** — a Class B
       **finding**, written as a count;
     - an unrunnable `TEST_CMD` is a `- gate-error:`;
-    - an isolated copy that cannot be made **usable** — the suite will not go green there, or the
-      change under verification cannot be materialized in it — where the human then declines the
+    - an isolated copy that cannot be made **usable** — the suite will not go green there, the
+      change under verification cannot be materialized in it, or it is not a distinct tree from the
+      parent at all — where the human then declines the
       in-tree fallback, is **also** a `- gate-error:` (Part 2's fallback ladder) — the pass was due
       and produced no verdict, which is not the same as never being due.
 
@@ -2151,7 +2170,7 @@ index. Two duties stay with the **parent**, not the agent:
 - **Remove the worktree once the agent is done.** A host that auto-cleans an *unchanged* worktree
   will not clean this one — a mutation agent changes it by definition.
 
-**Its precondition, which often fails: `TEST_CMD` must be green *in the copy*.** A bare copy carries
+**Its first precondition, which often fails: `TEST_CMD` must be green *in the copy*.** A bare copy carries
 none of the environment a suite needs — installed dependencies, build artifacts, an activated
 environment — so a suite that passes in the parent can be unrunnable beside it. Confirm it green in
 the copy **before** the mutating run begins.
@@ -2196,15 +2215,67 @@ any commit state must not require a commit to run. If the
 change cannot be materialized in the copy, the copy is unusable for this pass and takes exactly the
 rung below.
 
-**If it cannot be made green, the fallback is in-tree mutation with BOTH compensating controls —
+**Its third precondition — attribution: the copy must be a DIFFERENT TREE from the parent, and you
+check that rather than assume it.** **Run this one FIRST, whatever its number** — it is numbered
+third only so the two above keep the numbers they already had. Until it holds, neither of the others
+means anything, because they are then answering questions about the parent's own tree, and
+precondition 1 in particular *runs your suite* — on an unattributed copy that means running it in
+your own tree, which is the recorded incident below, verbatim. **The check is two commands, and the second runs in the
+parent — `git -C` is there so you never need to `cd` into the copy at all:**
+
+```bash
+git -C <copy> rev-parse --show-toplevel     # must DIFFER from the parent's
+git rev-parse --show-toplevel               # the parent's, for comparison
+```
+
+**It is orthogonal to the second precondition, and that is the whole reason it exists.** A copy that
+*is* the parent tree contains the change trivially, so precondition 2 passes on it — cleanly,
+loudly, with a correct-looking diff. The recorded instance is exactly this: a sequence that created
+a worktree, changed into it, and ran the suite, where the **create failed**, the `cd` therefore
+failed, and the suite ran in the **main repository** and printed `98 passed`. Read quickly that is a
+satisfied precondition. Nothing had been tested in any copy.
+
+**So CHECK each step; do not infer it from the sequence's exit status.** A `;`-separated sequence,
+or steps issued separately, keeps going after a failed `cd` and reports the **last** command's
+status — so the suite runs in the parent and the whole thing exits 0. An `&&` chain does *not*
+produce that shape: it short-circuits, so nothing after the failed `cd` runs at all. **`&&` is the
+safer spelling and this engine uses it deliberately elsewhere; the hazard is the unchecked sequence,
+not the operator.** What makes either safe is the same thing: create the copy, check that it exists
+and that its toplevel differs from yours, and only then run anything in it.
+
+**The verdict, and this is the load-bearing half: a green result from an unattributed copy is
+`unproven`, never clean.** It is not a pass you may journal, exactly as a run with no control is not
+(the exit table below). Treat it as the same class of answer: the pipeline was not shown to be
+capable of reporting what it claims to have looked for. Re-materialize the copy correctly and re-run.
+
+**The harness enforces a path-level form of this rather than trusting you to remember it** — the
+tree-level question is still yours, via the two commands above; what the harness can see is paths and
+inode identity. `--parent-root` is required,
+and `mutate_verify.py` refuses a `--root` that is not isolated from it — the same tree, or the
+parent's tree lying inside it — **exit `5`**, before any
+target is resolved, any snapshot taken, or any test run, so a refusal costs nothing and leaves
+nothing behind. **That refusal is not yours to discharge with `--in-tree-authorized`.** The flag
+does technically lift it — that is what it is for — but it is the escalated in-tree rung below, which
+is the human's choice for a tree that genuinely cannot be isolated. Reaching for it to quiet a copy
+that was *supposed* to be isolated and was not is the one use it must never have.
+
+**If the isolated copy cannot be used — whichever of the three preconditions failed — the
+fallback is in-tree mutation with BOTH compensating controls —
 explicit-path staging (step 6) **and** the restore journal (below) — and never in-tree mutation
 alone.** But **do not take that rung on your own judgement.** It moves a deliberately-destructive
 operation onto the tree holding the human's uncommitted work, which is a destructive and
 irreversible action, so the Escalation rubric applies: **escalate to the human and let them choose
 it.** If they decline, the pass was due and produced no verdict, so emit
 `- gate-error: acceptance (Class B) — isolated copy unusable: <TEST_CMD unrunnable | change under
-verification not present> — <first line of the error>` and STOP. **One gate-error shape covers both
-preconditions**, so widening the ladder never needs a second spelling. **Do not record
+verification not present | copy not attributed as a distinct tree> — <first line of the error>` and
+STOP. **One gate-error shape covers all three preconditions**, so widening the ladder never needs a
+second spelling.
+
+**Note the ladder for an attribution failure specifically, because it is the one that usually
+resolves without escalating.** A refusal means *this* copy was not isolated, which is ordinarily
+repaired by re-materializing it — a re-created worktree, or one re-pointed at the right commit.
+Re-materialize and re-run first. Only where the tree genuinely **cannot** be isolated does the rung
+above apply, and only where the human then declines it is this a `- gate-error:`. **Do not record
 `mutation-survivors=n/a`**: that list is closed at two reasons and neither of them is this one
 (progress.md → the Budget line). An unrunnable `TEST_CMD` was *already* ruled a `- gate-error:`
 everywhere else, and "the copy could not run the tests" as an `n/a` is an off switch that silently
@@ -2242,13 +2313,20 @@ to re-invent:
 
 ```
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py" run \
-    --spec <spec.json> --test-cmd "<TEST_CMD>" --root "<the tree being mutated>"
+    --spec <spec.json> --test-cmd "<TEST_CMD>" --root "<the tree being mutated>" \
+    --parent-root "$(git rev-parse --show-toplevel)"
 ```
 
 `--test-cmd` is passed as a **parameter**, never read from a config file: this engine stays
 project-agnostic and `TEST_CMD` is bound per project in `loop.config.md`. `--root` is the tree the
 envelope above selected — the agent's own copy on the primary path, the project root on the
-escalated in-tree path.
+escalated in-tree path. **`--parent-root` is the tree you are protecting — your own working tree,
+holding your uncommitted deliverables — and it is required. Derive it with
+`git rev-parse --show-toplevel`, never with `$(pwd)`:** run from a subdirectory, `$(pwd)` names a
+path *inside* your tree rather than the tree itself. The two together are what let the
+harness refuse a pass whose `--root` is not isolated (the third precondition above); passing your
+own root as both is the in-tree path, and on that path the refusal is lifted only by
+`--in-tree-authorized`, which a human chooses.
 
 **Who writes the spec — and what it may never be built from.** The spec is authored **per change, by
 the verifier**: it names mutations that would break *the guard this change just added*, so it is not
@@ -2303,7 +2381,7 @@ clean pass either: it exercised no guard.
 normalized pattern)`; a group larger than one is reported once, with a count, marked as repeated.
 The same mutation shape recurring in near-identical code is one thing to say about that shape.
 
-**Read the exit status — the five codes are distinct on purpose**, and collapsing any two of them
+**Read the exit status — the six codes are distinct on purpose**, and collapsing any two of them
 lets a result read as a different result:
 
 | Exit | Meaning | What you do |
@@ -2313,6 +2391,7 @@ lets a result read as a different result:
 | `2` | harness error — no match, a no-op mutation, a bad spec, a red baseline, a control that was **killed**, a spec made only of controls, or any other harness failure | `- gate-error:`, STOP |
 | `3` | unproven — no control, so the clean verdict is not trustworthy | not a pass; add a control and re-run. If a control cannot be produced, the pass was due and produced no verdict: `- gate-error:` and STOP — **never `=0`**, which would report an unproven pipeline as a clean one, and never `n/a` |
 | `4` | restore failed — **a mutation may still be live in the tree** | `- Restore: finding`, and **read the harness's error lines before touching anything** — see below |
+| `5` | unattributed — `--root` is not isolated from `--parent-root`: the same tree, or the parent's tree lying inside it. Refused before any target was resolved, any snapshot taken, or any test run | not a pass and **never `=0`**, and never `n/a` — the ladder above owns what this row does not restate. Re-materialize the copy and re-run. `--in-tree-authorized` is **not** your remedy — it is the human's escalated rung for a tree that cannot be isolated at all |
 
 **Exit 4 has two shapes and they take opposite actions, which is why the row above sends you to the
 error text first.** Where the harness reports that it **refused** to restore because the file changed
