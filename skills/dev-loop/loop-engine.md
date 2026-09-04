@@ -2258,7 +2258,8 @@ does technically lift it — that is what it is for — but it is the escalated 
 is the human's choice for a tree that genuinely cannot be isolated. Reaching for it to quiet a copy
 that was *supposed* to be isolated and was not is the one use it must never have.
 
-**If it cannot be made green, the fallback is in-tree mutation with BOTH compensating controls —
+**If the isolated copy cannot be used — whichever of the three preconditions failed — the
+fallback is in-tree mutation with BOTH compensating controls —
 explicit-path staging (step 6) **and** the restore journal (below) — and never in-tree mutation
 alone.** But **do not take that rung on your own judgement.** It moves a deliberately-destructive
 operation onto the tree holding the human's uncommitted work, which is a destructive and
@@ -2321,8 +2322,7 @@ envelope above selected — the agent's own copy on the primary path, the projec
 escalated in-tree path. **`--parent-root` is the tree you are protecting — your own working tree,
 holding your uncommitted deliverables — and it is required. Derive it with
 `git rev-parse --show-toplevel`, never with `$(pwd)`:** run from a subdirectory, `$(pwd)` names a
-path *inside* your tree, and a `--root` at the repository root then contains it — which the harness
-reads as an in-tree pass over a tree you did not mean to name. The two together are what let the
+path *inside* your tree rather than the tree itself. The two together are what let the
 harness refuse a pass whose `--root` is not isolated (the third precondition above); passing your
 own root as both is the in-tree path, and on that path the refusal is lifted only by
 `--in-tree-authorized`, which a human chooses.

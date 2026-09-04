@@ -604,7 +604,10 @@ def trees_overlap(root: object, parent_root: object) -> bool:
     git can say it belongs to the parent's working tree. This harness may not ask git (see the
     module docstring), so that residual rests on the same trusted-caller bound as the spec itself.
 
-    Raises `AttributionError` when the question cannot be decided — failing closed, never open.
+    **Input resolution fails closed:** `_resolved_dir` raises `AttributionError` for a path that
+    is missing, is not a directory, or cannot be inspected. The `_identity` refinement below is
+    best-effort defence in depth and degrades to the path comparison rather than raising — say no
+    more for it than that.
     """
     if parent_root is None:
         raise AttributionError(
@@ -947,14 +950,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         required=True,
         type=Path,
         help="the tree being PROTECTED — the orchestrator's own working tree. Required: a "
-        "destructive pass must not take its blast radius on trust. Refused (exit 5) when it "
-        "resolves to the same tree as --root.",
+        "destructive pass must not take its blast radius on trust. Refused (exit 5) when --root "
+        "is not isolated from it: the same tree, or --parent-root lying inside --root.",
     )
     run_parser.add_argument(
         "--in-tree-authorized",
         action="store_true",
-        help="proceed even though --root IS --parent-root. The engine's escalated in-tree rung, "
-        "which a human chooses; it is never the remedy for an attribution refusal.",
+        help="proceed even when --root is not isolated from --parent-root. The engine's "
+        "escalated in-tree rung, chosen by a human only for a tree that genuinely cannot be "
+        "isolated — not a way to clear a refusal for a copy that was meant to be isolated and "
+        "was not.",
     )
     run_parser.add_argument("--timeout", default=_DEFAULT_TIMEOUT, type=int, help="per-run seconds")
     run_parser.add_argument("--json", action="store_true", help="emit the report as JSON")
