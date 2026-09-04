@@ -16,7 +16,7 @@ The fail posture is a deliberate asymmetry — preserve it in any change
 --------------------------------------------------------------------
 ``exit 0`` means *clean and trustworthy*, and it is reachable only when ALL of these hold:
 
-* ``--root`` was **attributed** as a tree distinct from ``--parent-root`` — an unisolated pass
+* ``--root`` was **attributed** as isolated from ``--parent-root`` — an unisolated pass
   breaks the caller's own working tree, and a green verdict from one is unproven, not clean. This
   is the one condition a flag can lift: ``--in-tree-authorized`` is the engine's escalated in-tree
   rung, which a human chooses, and a pass taken on it is recorded as such in the report and on
@@ -156,7 +156,7 @@ EXIT_SURVIVORS = 1  # the pass worked and found Class B findings — a result, n
 EXIT_HARNESS_ERROR = 2  # no match / no-op / bad spec / red baseline / test-run error
 EXIT_UNPROVEN = 3  # no control mutation, so a clean verdict is not trustworthy
 EXIT_RESTORE_FAILED = 4  # a mutation may still be live in the tree — the most severe outcome
-EXIT_UNATTRIBUTED = 5  # `--root` was not attributed as a tree distinct from `--parent-root`
+EXIT_UNATTRIBUTED = 5  # `--root` was not attributed as isolated from `--parent-root`
 
 _VALID_EXPECT = ("killed", "survived")
 _DEFAULT_TIMEOUT = 1800
@@ -620,7 +620,8 @@ def trees_overlap(root: object, parent_root: object) -> bool:
     if resolved_root == resolved_parent:
         return True
     # Defense in depth, and DELIBERATELY UNGUARDED BY THE SUITE — said plainly so the next reader
-    # does not take a green run as evidence for it. The cases this branch exists for (a bind mount,
+    # does not take a green run as evidence for it. The masking runs BOTH ways: deleting the
+    # path-equality check above survives too, because this branch catches what it would have. The cases this branch exists for (a bind mount,
     # a case-insensitive filesystem) are the ones `resolve()` cannot unify, and neither is portably
     # constructible in a stdlib test, so a mutation deleting this branch survives. What IS pinned is
     # the premise it rests on — `test_identity_is_the_same_for_two_paths_naming_one_directory`

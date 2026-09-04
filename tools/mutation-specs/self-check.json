@@ -1,12 +1,17 @@
 {
   "_comment": [
-    "Self-check spec for tools/mutate_verify.py \u2014 the harness pointed at its own source.",
+    "Self-check spec for tools/mutate_verify.py — the harness pointed at its own source.",
     "Committed so the mutation numbers quoted in #60's PR are reproducible by a reviewer,",
     "rather than a property of a spec only the author ever saw. Run from the repo root:",
     "  python3 tools/mutate_verify.py run --spec tools/mutation-specs/self-check.json \\",
-    "      --test-cmd 'python3 -m unittest discover -s tests' --root . --timeout 600",
+    "      --test-cmd 'python3 -m unittest discover -s tests' \\",
+    "      --root . --parent-root . --in-tree-authorized --timeout 600",
     "Expected: every entry killed, the single control survived, exit 0, tree byte-identical.",
-    "A `find` that stops matching is a LOUD failure (exit 2), not a silent skip \u2014 so this file",
+    "--in-tree-authorized is REQUIRED here and is not a workaround: this self-check deliberately",
+    "mutates the harness's own source in the repo root, so --root IS --parent-root and the",
+    "attribution interlock refuses it (exit 5) without the flag. That is the interlock working.",
+    "Anywhere other than this self-check, reach for a real isolated copy instead of the flag.",
+    "A `find` that stops matching is a LOUD failure (exit 2), not a silent skip — so this file",
     "going stale is visible rather than quietly reducing coverage."
   ],
   "mutations": [

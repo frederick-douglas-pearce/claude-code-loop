@@ -425,11 +425,14 @@ class AttributionTests(unittest.TestCase):
         inner.mkdir()
         self.assertIsNotNone(attribution_refusal(root, inner))
 
-    def test_attribution_compares_resolved_paths_not_merely_absolute_ones(self) -> None:
-        """`.resolve()` is load-bearing, so pin it against `.absolute()`.
+    def test_two_path_spellings_of_one_directory_are_both_refused(self) -> None:
+        """Both shapes below are absolute and textually unequal while naming one directory.
 
-        Both shapes below are absolute and textually unequal while naming one directory, so a check
-        that stopped at `.absolute()` would return "distinct" and let the pass mutate the parent.
+        **This does not pin `.resolve()`**, and an earlier docstring here claimed it did — measured
+        false: swapping `_resolved_dir` to `.absolute()` leaves this test green, because `stat()`
+        follows the symlink and the kernel collapses `sub/..`, so the `(st_dev, st_ino)` branch
+        supplies the refusal instead. Either mechanism satisfies it, which is the point at this
+        level. `test_resolved_dir_actually_resolves` is what pins the resolution itself.
         """
         parent = self._tree("resolve-parent")
         link = parent.parent / (parent.name + "-link")
