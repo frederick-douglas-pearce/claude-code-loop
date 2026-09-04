@@ -16,6 +16,8 @@ The fail posture is a deliberate asymmetry — preserve it in any change
 --------------------------------------------------------------------
 ``exit 0`` means *clean and trustworthy*, and it is reachable only when ALL of these hold:
 
+* ``--root`` was **attributed** as a tree distinct from ``--parent-root`` — an unisolated pass
+  breaks the caller's own working tree, and a green verdict from one is unproven, not clean;
 * the spec declared **at least one real mutation** (``"expect": "killed"``) — a pass made only of
   controls exercises no guard, so a clean verdict from it would certify nothing;
 * the baseline suite was **green before any mutation** (a red baseline invalidates every verdict);
@@ -33,10 +35,27 @@ Anything else exits non-zero. There is no flag that produces ``exit 0`` without 
 as a harness error (exit 2), never allowed to surface as the process exit 1 that means "survivors
 found". A crash is not a result.
 
+**Attribution — the interlock on ``--root``.** ``--parent-root`` is required, and a ``--root`` that
+resolves to the same tree is refused with ``exit 5`` **before** anything is resolved, snapshotted or
+run. Until this existed ``--root`` was taken entirely on faith: a failed ``git worktree add`` (or a
+``cd`` that failed after it in an ``&&`` chain) leaves the pass running in the caller's own tree,
+mutating working code beside uncommitted deliverables and reporting green. ``--in-tree-authorized``
+is the sole way past it — the engine's escalated in-tree rung, chosen by a human, recorded in the
+report and on stderr so it can never be journalled as an ordinary pass.
+
+The comparison is resolved-path **equality**, deliberately not containment: a worktree the host
+materializes *inside* the repository is a genuinely separate working tree, and refusing it would
+push every pass onto the escape hatch. The bound this leaves — a ``--root`` pointing at a plain
+subdirectory of the parent, which shares its toplevel — is real and is not covered here, because
+deciding it needs git and this script may not ask.
+
 Two things this script must never do:
 
 * **Never run ``git``.** Restoring a mutation from the index destroys uncommitted work the mutation
   never touched. Restores come from the snapshot copy, never from ``git checkout``/``git restore``.
+  This is why attribution above is a path comparison rather than the ``rev-parse --show-toplevel``
+  the calling agent runs: the check the *agent* performs and the interlock the *harness* enforces
+  are deliberately different mechanisms answering the same question.
 * **Never mutate outside ``--root``.** A target whose *resolved path* leaves the root is a spec
   error, which covers ``..`` traversal, absolute paths and symlinks. It does **not** cover a hard
   link, which is indistinguishable from an ordinary file by path — that residual case rests on the
@@ -130,6 +149,7 @@ EXIT_SURVIVORS = 1  # the pass worked and found Class B findings — a result, n
 EXIT_HARNESS_ERROR = 2  # no match / no-op / bad spec / red baseline / test-run error
 EXIT_UNPROVEN = 3  # no control mutation, so a clean verdict is not trustworthy
 EXIT_RESTORE_FAILED = 4  # a mutation may still be live in the tree — the most severe outcome
+EXIT_UNATTRIBUTED = 5  # `--root` was not attributed as a tree distinct from `--parent-root`
 
 _VALID_EXPECT = ("killed", "survived")
 _DEFAULT_TIMEOUT = 1800
@@ -147,6 +167,16 @@ class MutationError(Exception):
 
 class RestoreError(Exception):
     """A file could not be given back byte-exact. The tree may still hold a mutation."""
+
+
+class AttributionError(Exception):
+    """`--parent-root` is unusable, so attribution cannot be decided at all.
+
+    Its own class because it must fail **closed** and loudly rather than resolving to either
+    verdict. A path that is not there is the specific trap: ``Path.resolve()`` does not raise on
+    one, so a mistyped or missing ``--parent-root`` would resolve to something that never equals
+    ``--root``, pass the comparison, and license a mutation pass over the parent's tree.
+    """
 
 
 class ConcurrentModification(Exception):
@@ -474,6 +504,10 @@ class Report:
     control_proved: bool = False
     errors: List[str] = field(default_factory=list)
     snapshot_dir: Optional[str] = None
+    # Carried so a pass that ran on the parent's own tree cannot be journalled as an ordinary one.
+    # The flag is the only thing separating an authorized in-tree pass from the failure this
+    # harness now refuses, so it travels with the verdict rather than being left to the caller.
+    in_tree_authorized: bool = False
 
     def to_json(self) -> str:
         return json.dumps(
@@ -484,6 +518,7 @@ class Report:
                 "killed": self.killed,
                 "survived": self.survived,
                 "control_proved": self.control_proved,
+                "in_tree_authorized": self.in_tree_authorized,
                 "survivor_groups": self.survivor_groups,
                 "results": [
                     {
@@ -506,18 +541,86 @@ class Report:
         )
 
 
+def attribution_refusal(
+    root: Path,
+    parent_root: Optional[Path],
+    in_tree_authorized: bool = False,
+) -> Optional[str]:
+    """Return a refusal string when `root` is the parent's own tree, else ``None``.
+
+    The interlock this harness was missing. A mutation pass is destructive by design, and until now
+    ``--root`` was taken entirely on faith: nothing checked that the tree about to be broken was the
+    throwaway copy rather than the tree holding the caller's uncommitted work.
+
+    **Why the comparison is resolved-path equality and not containment.** A worktree the host
+    materializes *inside* the repository — the layout the engine documents as typical — is a
+    genuinely separate working tree whose ``git rev-parse --show-toplevel`` differs from the
+    parent's. Containment would refuse it, and a guard that refuses the primary path would push
+    every pass onto the in-tree escape, which is worse than no guard.
+
+    **Known bound, stated rather than claimed away:** a ``--root`` pointing at a plain
+    *subdirectory* of the parent shares the parent's toplevel and is **not** refused here.
+    ``Path.resolve()`` cannot compute "is a distinct git working tree" from a path relationship, and
+    this harness may not ask git (see the module docstring). That residual rests on the same
+    trusted-caller bound as the spec itself.
+
+    Raises `AttributionError` when the question cannot be decided — which fails closed, never open.
+    """
+    if parent_root is None:
+        raise AttributionError(
+            "--parent-root is required: with nothing to attribute --root against, an isolated copy "
+            "cannot be told apart from the parent's own tree"
+        )
+    parent = Path(parent_root)
+    if not parent.is_dir():
+        raise AttributionError(
+            "--parent-root {!r} is not an existing directory. Path.resolve() does not raise on a "
+            "path that is not there, so a mistyped one would resolve to something that never "
+            "equals --root and would pass this check silently. Refused instead.".format(
+                str(parent_root)
+            )
+        )
+    if not Path(root).is_dir():
+        raise AttributionError("--root {!r} is not an existing directory".format(str(root)))
+    if Path(root).resolve() != parent.resolve():
+        return None
+    if in_tree_authorized:
+        return None
+    return (
+        "--root and --parent-root resolve to the SAME tree ({}), so nothing here is isolated. "
+        "No mutation was applied and no test was run. A pass over the parent's tree breaks working "
+        "code beside its uncommitted deliverables, and a green verdict from it would be UNPROVEN "
+        "rather than clean. Re-materialize the isolated copy and re-run. If the tree genuinely "
+        "cannot be isolated, that is the engine's escalated in-tree rung, which is the human's "
+        "choice to make and not this harness's default.".format(Path(root).resolve())
+    )
+
+
 def run_pass(
     mutations: Sequence[Mutation],
     test_cmd: str,
     root: Path,
+    parent_root: Optional[Path] = None,
     timeout: int = _DEFAULT_TIMEOUT,
     snapshot_root: Optional[Path] = None,
+    in_tree_authorized: bool = False,
 ) -> Tuple[Report, int]:
     """Run a whole mutation pass. Returns the report and the exit code.
 
     One mutation is live at a time: apply, run, restore, then move on. Snapshots are taken **before**
     each mutation and deleted only when the whole pass completes cleanly.
     """
+    # ATTRIBUTION FIRST — ahead of target resolution, ahead of the snapshot directory, ahead of the
+    # baseline. A refusal that arrives after any of those has already touched something, and the
+    # whole point of this interlock is that a pass over the parent's tree costs nothing because it
+    # never starts. `attribution_refusal` raises when the question cannot be decided, which reaches
+    # `main` as a harness error (exit 2) rather than resolving to either verdict.
+    refusal = attribution_refusal(root, parent_root, in_tree_authorized)
+    if refusal is not None:
+        report = Report(baseline_exit=-1)
+        report.errors.append(refusal)
+        return report, EXIT_UNATTRIBUTED
+
     # Resolve every target before touching anything, so a bad spec cannot leave a half-mutated tree.
     targets = {m.id: resolve_target(root, m.file) for m in mutations}
 
@@ -535,7 +638,9 @@ def run_pass(
     snapshot_dir = Path(
         tempfile.mkdtemp(prefix="mutate-verify-", dir=str(snapshot_root) if snapshot_root else None)
     )
-    report = Report(baseline_exit=-1, snapshot_dir=str(snapshot_dir))
+    report = Report(
+        baseline_exit=-1, snapshot_dir=str(snapshot_dir), in_tree_authorized=in_tree_authorized
+    )
 
     def discard_snapshots() -> None:
         """Drop the snapshots once the tree is known-good.
@@ -725,6 +830,12 @@ def _render(report: Report, code: int) -> str:
             "yes" if report.control_proved else "NO"
         ),
     ]
+    if report.in_tree_authorized:
+        lines.append(
+            "IN-TREE PASS, AUTHORIZED: --root was NOT isolated from --parent-root and ran anyway "
+            "on --in-tree-authorized. That is the human's escalated rung, never this harness's "
+            "default, and it is recorded here so the ledger cannot describe it as an ordinary pass."
+        )
     for group in report.survivor_groups:
         lines.append(
             "SURVIVOR [{}] {!r} x{}{}".format(
@@ -759,6 +870,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="the project's TEST_CMD, passed as a parameter (never read from config)",
     )
     run_parser.add_argument("--root", default=Path("."), type=Path, help="repository root")
+    run_parser.add_argument(
+        "--parent-root",
+        required=True,
+        type=Path,
+        help="the tree being PROTECTED — the orchestrator's own working tree. Required: a "
+        "destructive pass must not take its blast radius on trust. Refused (exit 5) when it "
+        "resolves to the same tree as --root.",
+    )
+    run_parser.add_argument(
+        "--in-tree-authorized",
+        action="store_true",
+        help="proceed even though --root IS --parent-root. The engine's escalated in-tree rung, "
+        "which a human chooses; it is never the remedy for an attribution refusal.",
+    )
     run_parser.add_argument("--timeout", default=_DEFAULT_TIMEOUT, type=int, help="per-run seconds")
     run_parser.add_argument("--json", action="store_true", help="emit the report as JSON")
 
@@ -766,8 +891,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     try:
         mutations = load_spec(args.spec)
-        report, code = run_pass(mutations, args.test_cmd, args.root, timeout=args.timeout)
-    except (SpecError, MutationError) as exc:
+        report, code = run_pass(
+            mutations,
+            args.test_cmd,
+            args.root,
+            parent_root=args.parent_root,
+            timeout=args.timeout,
+            in_tree_authorized=args.in_tree_authorized,
+        )
+    except (SpecError, MutationError, AttributionError) as exc:
         print("mutate_verify: {}".format(exc), file=sys.stderr)
         return EXIT_HARNESS_ERROR
     except Exception as exc:  # noqa: BLE001 - fail closed; a crash must never read as a result
@@ -775,6 +907,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         # EXIT_SURVIVORS. A traceback would silently become "the pass found survivors".
         print("mutate_verify: unexpected {}: {}".format(type(exc).__name__, exc), file=sys.stderr)
         return EXIT_HARNESS_ERROR
+
+    if report.in_tree_authorized:
+        # Also on stderr, because stdout is routinely piped or read as `--json`, and this is the one
+        # line whose absence would let an in-tree pass be read as an ordinary isolated one.
+        print(
+            "mutate_verify: IN-TREE PASS — --root was not isolated from --parent-root and ran on "
+            "--in-tree-authorized. Journal it as the escalated rung, not as an ordinary pass.",
+            file=sys.stderr,
+        )
 
     # Reporting is guarded too, and separately, because it fails for ordinary reasons: stdout piped
     # into `head` (BrokenPipeError), or an ASCII stdout encoding meeting a `find` string copied out
