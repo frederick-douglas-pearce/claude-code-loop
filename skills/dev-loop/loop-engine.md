@@ -2170,7 +2170,7 @@ index. Two duties stay with the **parent**, not the agent:
 - **Remove the worktree once the agent is done.** A host that auto-cleans an *unchanged* worktree
   will not clean this one — a mutation agent changes it by definition.
 
-**Its precondition, which often fails: `TEST_CMD` must be green *in the copy*.** A bare copy carries
+**Its first precondition, which often fails: `TEST_CMD` must be green *in the copy*.** A bare copy carries
 none of the environment a suite needs — installed dependencies, build artifacts, an activated
 environment — so a suite that passes in the parent can be unrunnable beside it. Confirm it green in
 the copy **before** the mutating run begins.
@@ -2251,7 +2251,8 @@ capable of reporting what it claims to have looked for. Re-materialize the copy 
 **The harness enforces a path-level form of this rather than trusting you to remember it** — the
 tree-level question is still yours, via the two commands above; what the harness can see is paths and
 inode identity. `--parent-root` is required,
-and `mutate_verify.py` refuses a `--root` that resolves to the same tree — **exit `5`**, before any
+and `mutate_verify.py` refuses a `--root` that is not isolated from it — the same tree, or the
+parent's tree lying inside it — **exit `5`**, before any
 target is resolved, any snapshot taken, or any test run, so a refusal costs nothing and leaves
 nothing behind. **That refusal is not yours to discharge with `--in-tree-authorized`.** The flag
 does technically lift it — that is what it is for — but it is the escalated in-tree rung below, which
@@ -2390,7 +2391,7 @@ lets a result read as a different result:
 | `2` | harness error — no match, a no-op mutation, a bad spec, a red baseline, a control that was **killed**, a spec made only of controls, or any other harness failure | `- gate-error:`, STOP |
 | `3` | unproven — no control, so the clean verdict is not trustworthy | not a pass; add a control and re-run. If a control cannot be produced, the pass was due and produced no verdict: `- gate-error:` and STOP — **never `=0`**, which would report an unproven pipeline as a clean one, and never `n/a` |
 | `4` | restore failed — **a mutation may still be live in the tree** | `- Restore: finding`, and **read the harness's error lines before touching anything** — see below |
-| `5` | unattributed — `--root` is not isolated from `--parent-root`: the same tree, or the parent's tree lying inside it. Refused before any target was resolved, any snapshot taken, or any test run | not a pass and **never `=0`**: the copy was not a copy. Re-materialize it and re-run. **No `- Restore:` line is owed** — the refusal applies nothing, so there is nothing to give back. `--in-tree-authorized` is **not** your remedy — it is the human's escalated rung for a tree that cannot be isolated at all |
+| `5` | unattributed — `--root` is not isolated from `--parent-root`: the same tree, or the parent's tree lying inside it. Refused before any target was resolved, any snapshot taken, or any test run | not a pass and **never `=0`**: the copy was not a copy. Re-materialize it and re-run. `--in-tree-authorized` is **not** your remedy — it is the human's escalated rung for a tree that cannot be isolated at all |
 
 **Exit 4 has two shapes and they take opposite actions, which is why the row above sends you to the
 error text first.** Where the harness reports that it **refused** to restore because the file changed

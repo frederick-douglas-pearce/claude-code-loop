@@ -944,7 +944,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         required=True,
         help="the project's TEST_CMD, passed as a parameter (never read from config)",
     )
-    run_parser.add_argument("--root", default=Path("."), type=Path, help="repository root")
+    run_parser.add_argument(
+        "--root",
+        default=Path("."),
+        type=Path,
+        help="the tree to MUTATE — the isolated copy, not the repository root. Passing the "
+        "repository root here alongside a correctly-derived --parent-root is the refused case.",
+    )
     run_parser.add_argument(
         "--parent-root",
         required=True,
