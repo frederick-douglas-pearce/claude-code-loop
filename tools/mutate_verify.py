@@ -17,7 +17,10 @@ The fail posture is a deliberate asymmetry — preserve it in any change
 ``exit 0`` means *clean and trustworthy*, and it is reachable only when ALL of these hold:
 
 * ``--root`` was **attributed** as a tree distinct from ``--parent-root`` — an unisolated pass
-  breaks the caller's own working tree, and a green verdict from one is unproven, not clean;
+  breaks the caller's own working tree, and a green verdict from one is unproven, not clean. This
+  is the one condition a flag can lift: ``--in-tree-authorized`` is the engine's escalated in-tree
+  rung, which a human chooses, and a pass taken on it is recorded as such in the report and on
+  stderr rather than reading as an ordinary clean one;
 * the spec declared **at least one real mutation** (``"expect": "killed"``) — a pass made only of
   controls exercises no guard, so a clean verdict from it would certify nothing;
 * the baseline suite was **green before any mutation** (a red baseline invalidates every verdict);
@@ -29,25 +32,28 @@ The fail posture is a deliberate asymmetry — preserve it in any change
   verdict proves it can go red;
 * nothing raised unexpectedly along the way.
 
-Anything else exits non-zero. There is no flag that produces ``exit 0`` without that proof.
+Anything else exits non-zero. **No flag lifts any of those but the first**, and the one that
+lifts the first does not hide that it did.
 
 **An unexpected exception fails closed**, mirroring ``hooks/guard_append_only.py``: it is reported
 as a harness error (exit 2), never allowed to surface as the process exit 1 that means "survivors
 found". A crash is not a result.
 
-**Attribution — the interlock on ``--root``.** ``--parent-root`` is required, and a ``--root`` that
-resolves to the same tree is refused with ``exit 5`` **before** anything is resolved, snapshotted or
-run. Until this existed ``--root`` was taken entirely on faith: a failed ``git worktree add`` (or a
-``cd`` that failed after it in an ``&&`` chain) leaves the pass running in the caller's own tree,
-mutating working code beside uncommitted deliverables and reporting green. ``--in-tree-authorized``
-is the sole way past it — the engine's escalated in-tree rung, chosen by a human, recorded in the
-report and on stderr so it can never be journalled as an ordinary pass.
+**Attribution — the interlock on ``--root``.** ``--parent-root`` is required, and a ``--root`` not
+isolated from it is refused with ``exit 5`` **before** anything is resolved, snapshotted or run.
+Until this existed ``--root`` was taken entirely on faith: where a ``git worktree add`` fails and
+the commands after it still run — a ``;``-separated sequence, or separately-issued steps, both of
+which continue past the failure and report the *last* command's status — the pass runs in the
+caller's own tree, mutating working code beside uncommitted deliverables and reporting green.
+(An ``&&`` chain short-circuits and does not produce that shape; it is the safer spelling, not the
+hazard.) ``--in-tree-authorized`` is the sole way past the refusal — the engine's escalated in-tree
+rung, chosen by a human, recorded in the report and on stderr so it can never be journalled as an
+ordinary pass.
 
-The comparison is resolved-path **equality**, deliberately not containment: a worktree the host
-materializes *inside* the repository is a genuinely separate working tree, and refusing it would
-push every pass onto the escape hatch. The bound this leaves — a ``--root`` pointing at a plain
-subdirectory of the parent, which shares its toplevel — is real and is not covered here, because
-deciding it needs git and this script may not ask.
+See ``trees_overlap`` for what "isolated" means here and for the bound it leaves; the short version
+is that the containment test is deliberately **asymmetric** — ``root`` inside ``parent_root`` is the
+ordinary nested-worktree layout and is allowed, while ``parent_root`` inside ``root`` is refused —
+and that identity is compared by ``(st_dev, st_ino)`` as well as by resolved path.
 
 Two things this script must never do:
 
@@ -109,7 +115,8 @@ default false — replace the first occurrence only), ``kind`` (string, default 
 Usage::
 
     python3 "${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py" run \\
-        --spec <spec.json> --test-cmd "<TEST_CMD>" --root "${CLAUDE_PROJECT_DIR}"
+        --spec <spec.json> --test-cmd "<TEST_CMD>" --root "<the isolated copy>" \\
+        --parent-root "${CLAUDE_PROJECT_DIR}"
 
 **The two paths are two different trees, and conflating them is the standing hazard here.** The
 script lives in the installed plugin (``${CLAUDE_PLUGIN_ROOT}``); the tree it mutates is the
@@ -541,58 +548,118 @@ class Report:
         )
 
 
-def attribution_refusal(
-    root: Path,
-    parent_root: Optional[Path],
-    in_tree_authorized: bool = False,
-) -> Optional[str]:
-    """Return a refusal string when `root` is the parent's own tree, else ``None``.
+def _resolved_dir(path: object, label: str) -> Path:
+    """Resolve `path`, refusing anything that is not an existing directory.
 
-    The interlock this harness was missing. A mutation pass is destructive by design, and until now
-    ``--root`` was taken entirely on faith: nothing checked that the tree about to be broken was the
-    throwaway copy rather than the tree holding the caller's uncommitted work.
+    `Path.resolve()` does **not** raise on a path that is not there, so a mistyped `--parent-root`
+    would resolve to something that never equals `--root` and would sail through the comparison
+    below. That is the silent bypass this exists to close, which is why it raises rather than
+    returning a verdict.
+    """
+    candidate = Path(path)  # type: ignore[arg-type]
+    try:
+        is_dir = candidate.is_dir()
+    except OSError as exc:
+        # An unreadable directory is a question we cannot answer, not a "no".
+        raise AttributionError(
+            "{} {!r} could not be inspected ({}: {})".format(
+                label, str(path), type(exc).__name__, exc
+            )
+        )
+    if not is_dir:
+        raise AttributionError("{} {!r} is not an existing directory".format(label, str(path)))
+    return candidate.resolve()
 
-    **Why the comparison is resolved-path equality and not containment.** A worktree the host
-    materializes *inside* the repository — the layout the engine documents as typical — is a
-    genuinely separate working tree whose ``git rev-parse --show-toplevel`` differs from the
-    parent's. Containment would refuse it, and a guard that refuses the primary path would push
-    every pass onto the in-tree escape, which is worse than no guard.
 
-    **Known bound, stated rather than claimed away:** a ``--root`` pointing at a plain
-    *subdirectory* of the parent shares the parent's toplevel and is **not** refused here.
-    ``Path.resolve()`` cannot compute "is a distinct git working tree" from a path relationship, and
-    this harness may not ask git (see the module docstring). That residual rests on the same
-    trusted-caller bound as the spec itself.
+def _identity(path: Path) -> Optional[Tuple[int, int]]:
+    """`(st_dev, st_ino)` — what actually says "the same directory" when two paths disagree."""
+    try:
+        info = path.stat()
+    except OSError:
+        return None
+    return (info.st_dev, info.st_ino)
 
-    Raises `AttributionError` when the question cannot be decided — which fails closed, never open.
+
+def trees_overlap(root: object, parent_root: object) -> bool:
+    """True when mutating `root` would write into the tree at `parent_root`.
+
+    The question the interlock turns on, separated from the policy about what to do with the
+    answer, so the validation below can never be short-circuited by an authorization flag.
+
+    **The comparison is deliberately asymmetric**, and that is the whole of the design:
+
+    * `root` **inside** `parent_root` is **allowed** — a worktree the host materializes inside the
+      repository is a genuinely separate working tree, whose `git rev-parse --show-toplevel`
+      differs from the parent's. This is the layout the engine documents as typical, so refusing it
+      would push every pass onto the escape hatch, which is worse than no guard at all.
+    * `parent_root` **inside** `root` is **refused** — mutating `root` then writes the parent's
+      tree. Refusing this direction costs nothing, because it is not the layout above.
+
+    Identity is compared by `(st_dev, st_ino)` as well as by resolved path: `resolve()` unifies
+    symlinks, `.`, `..` and trailing slashes, but not a bind mount or a case-insensitive
+    filesystem, where two unequal paths are one directory and a path-only check fails **open**.
+
+    **Known bound, stated rather than claimed away:** a `--root` pointing at a plain *subdirectory*
+    of the parent is **not** refused — it is a distinct directory with a distinct inode, and only
+    git can say it belongs to the parent's working tree. This harness may not ask git (see the
+    module docstring), so that residual rests on the same trusted-caller bound as the spec itself.
+
+    Raises `AttributionError` when the question cannot be decided — failing closed, never open.
     """
     if parent_root is None:
         raise AttributionError(
             "--parent-root is required: with nothing to attribute --root against, an isolated copy "
             "cannot be told apart from the parent's own tree"
         )
-    parent = Path(parent_root)
-    if not parent.is_dir():
-        raise AttributionError(
-            "--parent-root {!r} is not an existing directory. Path.resolve() does not raise on a "
-            "path that is not there, so a mistyped one would resolve to something that never "
-            "equals --root and would pass this check silently. Refused instead.".format(
-                str(parent_root)
-            )
-        )
-    if not Path(root).is_dir():
-        raise AttributionError("--root {!r} is not an existing directory".format(str(root)))
-    if Path(root).resolve() != parent.resolve():
+    resolved_root = _resolved_dir(root, "--root")
+    resolved_parent = _resolved_dir(parent_root, "--parent-root")
+
+    if resolved_root == resolved_parent:
+        return True
+    # Defense in depth, and DELIBERATELY UNGUARDED BY THE SUITE — said plainly so the next reader
+    # does not take a green run as evidence for it. The cases this branch exists for (a bind mount,
+    # a case-insensitive filesystem) are the ones `resolve()` cannot unify, and neither is portably
+    # constructible in a stdlib test, so a mutation deleting this branch survives. What IS pinned is
+    # the premise it rests on — `test_identity_is_the_same_for_two_paths_naming_one_directory`
+    # asserts `_identity` agrees for two distinct paths naming one directory. That this branch is
+    # consulted is review's, not the suite's.
+    root_id = _identity(resolved_root)
+    if root_id is not None and root_id == _identity(resolved_parent):
+        return True
+    if resolved_root in resolved_parent.parents:
+        # `parent_root` lies inside `root`: mutating `root` writes the parent's tree.
+        return True
+    # Everything else — including `root` inside `parent_root` — is a distinct tree.
+    return False
+
+
+def attribution_refusal(
+    root: object,
+    parent_root: object,
+    in_tree_authorized: bool = False,
+) -> Optional[str]:
+    """Return a refusal string when `root` is not isolated from `parent_root`, else ``None``.
+
+    The interlock this harness was missing. A mutation pass is destructive by design, and until now
+    ``--root`` was taken entirely on faith: nothing checked that the tree about to be broken was the
+    throwaway copy rather than the tree holding the caller's uncommitted work.
+
+    The *fact* is `trees_overlap` above; this is only the policy laid over it. Note the ordering —
+    `trees_overlap` runs, and so validates its inputs, **before** `in_tree_authorized` is consulted,
+    so the escape hatch can never suppress a fail-closed refusal.
+    """
+    if not trees_overlap(root, parent_root):
         return None
     if in_tree_authorized:
         return None
     return (
-        "--root and --parent-root resolve to the SAME tree ({}), so nothing here is isolated. "
-        "No mutation was applied and no test was run. A pass over the parent's tree breaks working "
-        "code beside its uncommitted deliverables, and a green verdict from it would be UNPROVEN "
-        "rather than clean. Re-materialize the isolated copy and re-run. If the tree genuinely "
-        "cannot be isolated, that is the engine's escalated in-tree rung, which is the human's "
-        "choice to make and not this harness's default.".format(Path(root).resolve())
+        "--root ({}) is not isolated from --parent-root ({}): they are the same tree, or the "
+        "parent's tree lies inside the one about to be mutated. No mutation was applied and no "
+        "test was run. A pass over the parent's tree breaks working code beside its uncommitted "
+        "deliverables, and a green verdict from it would be UNPROVEN rather than clean. "
+        "Re-materialize the isolated copy and re-run. If the tree genuinely cannot be isolated, "
+        "that is the engine's escalated in-tree rung, which is the human's choice to make and not "
+        "this harness's default.".format(Path(root).resolve(), Path(parent_root).resolve())
     )
 
 
@@ -600,6 +667,7 @@ def run_pass(
     mutations: Sequence[Mutation],
     test_cmd: str,
     root: Path,
+    *,
     parent_root: Optional[Path] = None,
     timeout: int = _DEFAULT_TIMEOUT,
     snapshot_root: Optional[Path] = None,
@@ -620,6 +688,10 @@ def run_pass(
         report = Report(baseline_exit=-1)
         report.errors.append(refusal)
         return report, EXIT_UNATTRIBUTED
+    # Record the OBSERVED relationship, never the flag. `--in-tree-authorized` on a genuinely
+    # isolated copy is harmless and must not make the report claim the pass ran in-tree; getting
+    # here at all means either the trees are distinct, or they overlap and the human authorized it.
+    ran_in_tree = trees_overlap(root, parent_root)
 
     # Resolve every target before touching anything, so a bad spec cannot leave a half-mutated tree.
     targets = {m.id: resolve_target(root, m.file) for m in mutations}
@@ -628,7 +700,7 @@ def run_pass(
     # condition below and report `killed: 0` as clean, which is the vacuous-pass shape AC5 exists to
     # rule out — so it is refused before the baseline is even run.
     if not any(m.expect == "killed" for m in mutations):
-        report = Report(baseline_exit=-1)
+        report = Report(baseline_exit=-1, in_tree_authorized=ran_in_tree)
         report.errors.append(
             "spec declares no real mutation (every entry is a control) — such a pass exercises no "
             "guard, so a clean verdict from it would certify nothing"
@@ -639,7 +711,7 @@ def run_pass(
         tempfile.mkdtemp(prefix="mutate-verify-", dir=str(snapshot_root) if snapshot_root else None)
     )
     report = Report(
-        baseline_exit=-1, snapshot_dir=str(snapshot_dir), in_tree_authorized=in_tree_authorized
+        baseline_exit=-1, snapshot_dir=str(snapshot_dir), in_tree_authorized=ran_in_tree
     )
 
     def discard_snapshots() -> None:

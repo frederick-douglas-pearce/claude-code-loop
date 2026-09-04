@@ -83,7 +83,8 @@ class _Scratch:
 
     def __init__(self, case: unittest.TestCase, suite: str = _OBSERVING_SUITE) -> None:
         self.root = Path(tempfile.mkdtemp(prefix="mutate-verify-test-"))
-        # A stand-in for the tree the caller is protecting. Every `run_pass` below passes it, because
+        # A stand-in for the tree the caller is protecting. Every `run_pass` that takes a `_Scratch`
+        # passes it (one test deliberately omits it, to pin the fail-closed path), because
         # the harness refuses to mutate a `--root` it cannot tell apart from `--parent-root`; a
         # separate directory is what an isolated copy looks like from the harness's side.
         self.parent_root = Path(tempfile.mkdtemp(prefix="mutate-verify-test-parent-"))
@@ -264,11 +265,15 @@ class RestoreTests(unittest.TestCase):
 class AttributionTests(unittest.TestCase):
     """#111: the harness must not mutate a tree it cannot tell apart from the caller's own.
 
-    Every assertion here is about the **mechanism**, because the outcome alone is cheap to fake: an
-    implementation that mutates the parent, runs the suite, restores, and *then* returns exit 5
-    satisfies "the exit code is 5" while doing the exact thing this interlock exists to prevent. So
-    the tests below check that the file's bytes are untouched, that the test command never ran, and
-    that the refusal beats target resolution — none of which a late refusal can satisfy.
+    The outcome alone is cheap to fake: an implementation that mutates the parent, runs the suite,
+    restores, and *then* returns exit 5 satisfies "the exit code is 5" while doing the exact thing
+    this interlock exists to prevent. `test_a_root_that_is_the_parent_is_refused_before_anything_is_
+    touched` is written against that specifically — bytes untouched, the test command never run,
+    `baseline_exit` still -1, no snapshot directory — and
+    `test_the_refusal_beats_target_resolution` pins the ordering. **No claim is made here that
+    every test in this class is mechanism-shaped**; some assert an exit code and nothing more, and
+    a file-level guarantee of it is the enumerable assertion `CLAUDE.md` warns this repo keeps
+    having to retract. Check the test, not this docstring.
     """
 
     def _tree(self, name: str) -> Path:
@@ -406,6 +411,164 @@ class AttributionTests(unittest.TestCase):
                 mutate_verify.main(argv)
         self.assertEqual(ctx.exception.code, EXIT_HARNESS_ERROR)
         self.assertIn("--parent-root", err.getvalue())
+
+    def test_a_parent_root_inside_the_root_is_refused(self) -> None:
+        """The other containment direction, and it is not symmetric with the one above.
+
+        `--root` inside `--parent-root` is the ordinary nested-worktree layout and must pass. The
+        reverse — the parent's tree sitting *inside* the tree about to be mutated — means mutating
+        `--root` writes the parent's tree, which is the whole harm. Reachable in practice as
+        `--parent-root "$(pwd)"` issued from a subdirectory while `--root` is the repository root.
+        """
+        root = self._tree("outer")
+        inner = root / "protected"
+        inner.mkdir()
+        self.assertIsNotNone(attribution_refusal(root, inner))
+
+    def test_attribution_compares_resolved_paths_not_merely_absolute_ones(self) -> None:
+        """`.resolve()` is load-bearing, so pin it against `.absolute()`.
+
+        Both shapes below are absolute and textually unequal while naming one directory, so a check
+        that stopped at `.absolute()` would return "distinct" and let the pass mutate the parent.
+        """
+        parent = self._tree("resolve-parent")
+        link = parent.parent / (parent.name + "-link")
+        link.symlink_to(parent, target_is_directory=True)
+        self.addCleanup(lambda: link.unlink(missing_ok=True))
+
+        (parent / "sub").mkdir()
+
+        self.assertNotEqual(str(link), str(parent))
+        self.assertIsNotNone(attribution_refusal(link, parent))
+        self.assertIsNotNone(attribution_refusal(parent / "sub" / "..", parent))
+
+    def test_resolved_dir_actually_resolves(self) -> None:
+        """Pins `.resolve()` against `.absolute()` in isolation.
+
+        At the integration level the two mechanisms cover each other — the inode comparison also
+        catches a symlinked root — so neither is pinned by an end-to-end assertion alone. This
+        exercises the resolution directly, where `.absolute()` would return the unresolved path.
+        """
+        parent = self._tree("resolved-dir")
+        link = parent.parent / (parent.name + "-alias")
+        link.symlink_to(parent, target_is_directory=True)
+        self.addCleanup(lambda: link.unlink(missing_ok=True))
+
+        self.assertNotEqual(Path(link).absolute(), parent.resolve())
+        self.assertEqual(mutate_verify._resolved_dir(link, "--root"), parent.resolve())
+
+    def test_identity_is_the_same_for_two_paths_naming_one_directory(self) -> None:
+        """Pins the `(st_dev, st_ino)` premise, which the path comparison cannot supply.
+
+        `resolve()` does not case-normalize and knows nothing of bind mounts, so identity is the
+        backstop for two unequal paths that are one directory. The portable way to *construct* that
+        divergence is a symlink; a bind mount or a case-insensitive filesystem is the case this
+        defends and neither can be built in this suite, which is why the assertion is on the helper
+        rather than on a contrived mount.
+        """
+        parent = self._tree("identity")
+        link = parent.parent / (parent.name + "-alias")
+        link.symlink_to(parent, target_is_directory=True)
+        self.addCleanup(lambda: link.unlink(missing_ok=True))
+
+        self.assertNotEqual(str(link), str(parent))
+        self.assertEqual(mutate_verify._identity(Path(link)), mutate_verify._identity(parent))
+        self.assertIsNone(mutate_verify._identity(parent / "no-such-dir"))
+
+    def test_a_bad_parent_root_fails_closed_even_when_authorized(self) -> None:
+        """The escape hatch must not be able to suppress a fail-closed refusal.
+
+        This pins the ORDER inside `attribution_refusal`: validation happens in `trees_overlap`,
+        which runs before `in_tree_authorized` is consulted. Hoisting the authorization check above
+        it would let a mistyped `--parent-root` through whenever the flag was set — and every other
+        fail-closed test here passes the flag as False, so none of them would notice.
+        """
+        root = self._tree("authorized-bad-parent")
+        with self.assertRaises(AttributionError):
+            attribution_refusal(root, root / "not" / "there", in_tree_authorized=True)
+
+    def test_the_refusal_says_why(self) -> None:
+        """A verdict with no reason sends the reader back to guessing."""
+        root = self._tree("reason")
+        report, _ = run_pass(
+            [_mutation(), _control()], self._tattling_suite(root / "unused"), root, parent_root=root
+        )
+        self.assertTrue(
+            any("not isolated" in e for e in report.errors), report.errors
+        )
+
+    def test_the_cli_carries_the_escape_hatch_through_to_the_pass(self) -> None:
+        """The flag's whole surface, end to end — argparse wiring and the stderr banner.
+
+        Both were unguarded: deleting the `in_tree_authorized=args.in_tree_authorized` pass-through
+        made the documented in-tree rung silently unreachable from the command line, and deleting
+        the stderr banner removed the only human-visible record under `--json`, where `_render`
+        never runs.
+        """
+        import contextlib
+        import io
+
+        root = self._tree("cli-in-tree")
+        spec = root / "spec.json"
+        spec.write_text(
+            json.dumps({"mutations": [
+                {"id": "m", "file": "src.py", "find": "GOOD", "replace": "BAD"},
+                {"id": "c", "file": "src.py", "find": "SPARE_A", "replace": "SPARE_Z",
+                 "expect": "survived"},
+            ]}),
+            encoding="utf-8",
+        )
+        argv = ["run", "--spec", str(spec), "--test-cmd",
+                _OBSERVING_SUITE.format(exe=sys.executable), "--root", str(root),
+                "--parent-root", str(root), "--in-tree-authorized", "--json"]
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = mutate_verify.main(argv)
+
+        self.assertEqual(code, EXIT_CLEAN)
+        self.assertIn("IN-TREE PASS", err.getvalue())
+        # The VALUE, not the key: hardcoding `False` in `to_json` passed a key-presence check.
+        self.assertTrue(json.loads(out.getvalue())["in_tree_authorized"])
+
+    def test_the_escape_hatch_does_not_mislabel_an_isolated_pass(self) -> None:
+        """The flag records the observed fact, not the argument.
+
+        Passing `--in-tree-authorized` over a genuinely isolated copy is harmless, and the report
+        must not then claim the pass ran in the parent's tree — a false line in the ledger, in the
+        direction of describing a clean pass as the escalated rung.
+        """
+        root, parent = self._tree("mislabel-root"), self._tree("mislabel-parent")
+        report, code = run_pass(
+            [_mutation(), _control()], _OBSERVING_SUITE.format(exe=sys.executable), root,
+            parent_root=parent, in_tree_authorized=True,
+        )
+        self.assertEqual(code, EXIT_CLEAN)
+        self.assertFalse(report.in_tree_authorized)
+        self.assertNotIn("IN-TREE PASS", mutate_verify._render(report, code))
+
+    def test_a_controls_only_spec_still_records_an_in_tree_pass(self) -> None:
+        """The early return builds its own Report, which was omitting the flag entirely."""
+        root = self._tree("controls-only-in-tree")
+        report, code = run_pass(
+            [_control()], _OBSERVING_SUITE.format(exe=sys.executable), root,
+            parent_root=root, in_tree_authorized=True,
+        )
+        self.assertEqual(code, EXIT_HARNESS_ERROR)
+        self.assertTrue(report.in_tree_authorized)
+
+    def test_an_unreadable_parent_root_fails_closed(self) -> None:
+        """An unanswerable question is not a 'no'."""
+        parent = self._tree("unreadable")
+        target = parent / "inner"
+        target.mkdir()
+        import os
+
+        if os.geteuid() == 0:
+            self.skipTest("root bypasses directory permissions")
+        os.chmod(str(parent), 0o000)
+        self.addCleanup(lambda: os.chmod(str(parent), 0o755))
+        with self.assertRaises(AttributionError):
+            attribution_refusal(self._tree("unreadable-root"), target)
 
     def test_an_ordinary_pass_is_not_labelled_in_tree(self) -> None:
         """The counterpart: the banner must distinguish, not decorate every report."""
@@ -1213,12 +1376,14 @@ class ExitCodeTests(unittest.TestCase):
             EXIT_HARNESS_ERROR,
             EXIT_UNPROVEN,
             EXIT_RESTORE_FAILED,
+            EXIT_UNATTRIBUTED,
         ]
         self.assertEqual(len(set(codes)), len(codes))
 
     def test_only_clean_is_zero(self) -> None:
         self.assertEqual(EXIT_CLEAN, 0)
-        for code in (EXIT_SURVIVORS, EXIT_HARNESS_ERROR, EXIT_UNPROVEN, EXIT_RESTORE_FAILED):
+        for code in (EXIT_SURVIVORS, EXIT_HARNESS_ERROR, EXIT_UNPROVEN, EXIT_RESTORE_FAILED,
+                     EXIT_UNATTRIBUTED):
             self.assertNotEqual(code, 0)
 
 

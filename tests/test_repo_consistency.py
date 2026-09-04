@@ -1074,7 +1074,10 @@ class MutationNaReasonTests(unittest.TestCase):
     # `--test-cmd` from the prose below it -- so deleting `--test-cmd` from the command
     # still passed, while the failure message claimed the block had been checked.
     _FENCED_BLOCK = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
-    _INVOCATION_PARTS = ("mutate_verify.py", "run", "--spec", "--test-cmd")
+    # `--parent-root` is `required=True` in the harness, so a fenced command missing it does not
+    # merely under-specify -- it dies in argparse before the pass starts. An engine that ships an
+    # unrunnable command is the same defect this guard already exists for, one flag later.
+    _INVOCATION_PARTS = ("mutate_verify.py", "run", "--spec", "--test-cmd", "--parent-root")
 
     @classmethod
     def _has_runnable_invocation(cls, text: str) -> bool:

@@ -221,11 +221,11 @@ that means for your repo:
   uncommitted work the mutation never touched.
 - **The harness now refuses to break a tree it cannot tell apart from yours.** Previously it took
   the path it was handed on trust, so a copy that silently was not a copy — a `git worktree add`
-  that failed, leaving everything after it running in your real tree — got mutated and reported
-  green. It is now told which tree is yours, and a pass whose target resolves to that same tree
-  stops before it resolves a target, takes a snapshot, or runs anything. That refusal is not a clean
-  result and not a finding; it means nothing was checked. Only you can lift it, and lifting it is
-  the fallback in the point above.
+  that failed, with the steps after it still running, in your real tree — got mutated and reported
+  green. It is now told which tree is yours, and a pass whose target is that same tree (or contains
+  it) stops before it resolves a target, takes a snapshot, or runs anything. That refusal is not a
+  clean result and not a finding; it means nothing was checked. Only you can lift it, and lifting it
+  is the fallback in the point above.
 - **Every pass that mutates anything journals whether it gave the tree back**, and a pass that
   cannot restore reports that as its most severe outcome, ahead of any finding. A pass that ends up
   applying **no** mutation is an error rather than a quiet success — otherwise a check that found
