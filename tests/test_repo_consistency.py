@@ -1362,70 +1362,102 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
 
 
 class PlanGateInferredDefinitionTests(unittest.TestCase):
-    """#108's two emit sites point at one definition BY NAME; this pins that it exists.
+    """#108's two emit sites point at one definition BY PATH; this pins that it is there.
 
     Step 0.1's cheap parked path and step 0.2 both say "emit per Ledger format ->
-    ``- Plan-gate-inferred:``" and deliberately restate nothing else -- not the trigger,
-    not the dedupe, not the spellings. So the definition heading is a live
-    cross-reference target, and if it is renamed or removed both emitters point at
-    nothing while every word of their prose still reads correctly.
+    ``progress.md`` -> ``- Plan-gate-inferred:``" and deliberately restate almost
+    nothing else -- not the trigger, not the spellings, not the remedies. So that
+    heading is a live cross-reference target **at a location**, and the pointer breaks
+    if it is renamed, removed, *or moved out of the ``progress.md`` section* while every
+    word of the emitters' prose still reads correctly.
 
-    **This asserts the definition still exists, and nothing more.** It is the
-    ``PlanGateFrozenBlockTests`` shape -- an arbitrary heading string, where any change
-    is a real change -- deliberately kept narrow.
+    **Presence AND position, because presence alone was defeated by a move.** The first
+    version of this assertion counted the heading across the whole file. Review moved
+    the entire definition block to the end of the engine: the count stayed 1, the suite
+    stayed green, and both emitters pointed outside the section they name.
+    ``CLAUDE.md``'s "what a guard over prose must survive" lists move alongside reword
+    and remove, so that was a real defeat, and the fix is the shape change that file
+    sanctions (presence -> position) rather than another literal.
 
-    **Why there is no longer a per-region spelling check.** There was one. It pinned the
-    line name across three regions, and it was defeated twice by edit-class mutations:
-    first because the definition region's start anchor contained the pinned literal, and
-    then, after that was fixed, because the region's *prose* mentions of the name satisfy
-    containment on their own -- so renaming every literal actually written to
-    ``progress.md`` left the suite green. Per ``CLAUDE.md``'s round cap on a single
-    assertion, a third retune of that literal or its locus is the displacement loop, so
-    the assertion was **deleted** rather than rewritten a third time.
+    **This is NOT the ``PlanGateFrozenBlockTests`` shape, and the earlier docstring's
+    claim that it was is corrected here.** That test pins one string across *four*
+    regions and its whole value is being per-region rather than a global count. This one
+    pins a *single* heading's existence and location. Same family, different assertion;
+    do not describe it as the other.
 
-    **What replaced it is a product fix, not a test.** The engine now renders each
-    written line exactly **once** (Ledger format -> ``- Plan-gate-inferred:``, the two
-    variant bullets), with the block template reduced to a skeleton that points at them.
-    Two renderings cannot disagree when there is one rendering; the property the deleted
-    test was reaching for is now structural.
+    **Why there is no per-region spelling check any more.** There was one, pinning the
+    line name across three regions. It was defeated twice by edit-class mutations --
+    first because the definition region's start anchor contained the pinned literal,
+    then, after that was fixed, because the region's *prose* mentions satisfied
+    containment on their own. Per ``CLAUDE.md``'s round cap on a single assertion it was
+    **deleted** rather than retuned a third time, and the property it was reaching for
+    was moved into the product: the engine now renders each written line exactly **once**
+    (the two variant bullets), so there are no longer two renderings that could disagree.
+    Re-adding a per-region name check would be two-thirds of the capped assertion.
 
     **Named as review's, because no regex over prose reaches them:**
 
-    * that the emit sites spell the cross-reference the same way the definition heading
-      does -- this test pins the heading, not the pointers;
+    * that **both emit sites still carry an emit obligation at all** -- deleting either
+      instruction leaves this green. The step 0.1 parked-path site is the one #108
+      exists for: the cheap parked path never reaches step 0.2, so without it a pre-v0.2
+      ledger resting at ``RUN PARKED`` works issues under a posture nobody stated;
+    * that the emit sites spell the cross-reference the way the heading does;
+    * that the definition's **body** survives beneath the heading -- this pins the
+      heading, not its contents;
     * that the dedupe greps the same string the engine tells you to write;
-    * that each variant keeps its own remedy, and that the absent-field remedy is never
-      handed to the unrecognized-value case (which would tell an operator to add a
+    * that each variant keeps its **own** remedy, and that the absent-field remedy is
+      never handed to the unrecognized-value case (which would tell an operator to add a
       second ``plan-gate:`` line);
     * that the posture rule (*absent or unrecognized reads as* ``always``) still agrees
       across step 5, the ``queue.md`` section and this line -- already known to have
       drifted (``CLAUDE.md``: F57/F58, #35).
 
-    **Append-class defeats are the documented ceiling, not gaps.** A spare copy of the
-    heading elsewhere, or a clause bolted onto it, cannot be stopped by a presence check
-    over prose. Per ``CLAUDE.md`` that goes on #1, never into another round here.
+    **Append-class defeats are the documented ceiling, not gaps.** A clause bolted onto
+    the heading, or a third variant with a wrong remedy, cannot be stopped by a presence
+    check over prose. Per ``CLAUDE.md`` that goes on #1, never into another round here.
     """
 
     _HEADING = "#### `- Plan-gate-inferred:` — the run-level posture inference"
+    _SECTION_START = "### `progress.md` — append-only journal"
+    _SECTION_END = "### `issue-<N>.plan.md`"
 
-    def test_the_definition_the_emit_sites_point_at_still_exists(self) -> None:
+    def test_the_definition_the_emit_sites_point_at_is_where_they_say_it_is(self) -> None:
         text = _ENGINE.read_text(encoding="utf-8")
-        found = text.count(self._HEADING)
+
+        in_file = text.count(self._HEADING)
         self.assertEqual(
-            found,
+            in_file,
             1,
             f"expected exactly one {self._HEADING!r} heading in loop-engine.md; found "
-            f"{found}.\n\n"
-            "Step 0.1 and step 0.2 both emit the posture-inference record BY REFERENCE "
-            "to this heading and restate none of its content, so if it is renamed or "
-            "removed both emitters point at nothing -- silently, since their own prose "
-            "still reads correctly. If you renamed it deliberately, update both emit "
-            "sites and _HEADING together.\n\n"
-            "This pins the heading's existence ONLY. That the emitters spell the "
-            "reference the same way, that the dedupe greps what the engine says to "
-            "write, and that each variant keeps its own remedy are review's -- see the "
-            "docstring for why a per-region spelling check was deleted rather than "
-            "rewritten a third time.",
+            f"{in_file}. Both step-0 emit sites reach the posture-inference record BY "
+            "REFERENCE to this heading and restate almost none of its content, so if it "
+            "is renamed or removed they point at nothing -- silently, since their own "
+            "prose still reads correctly. If you renamed it deliberately, update both "
+            "emit sites and _HEADING together.",
+        )
+
+        i = text.find(self._SECTION_START)
+        self.assertNotEqual(
+            i, -1,
+            f"cannot locate {self._SECTION_START!r} in loop-engine.md -- re-anchor this "
+            "test before trusting it.",
+        )
+        j = text.find(self._SECTION_END, i)
+        self.assertNotEqual(
+            j, -1,
+            f"cannot locate {self._SECTION_END!r} after the progress.md section -- "
+            "re-anchor this test before trusting it.",
+        )
+        self.assertIn(
+            self._HEADING,
+            text[i:j],
+            "the posture-inference definition exists but has MOVED OUT of the "
+            f"{self._SECTION_START!r} section. Both emit sites name the path 'Ledger "
+            "format -> progress.md -> `- Plan-gate-inferred:`', so that pointer now "
+            "resolves to nothing while the count of the heading is still 1 -- which is "
+            "exactly how the previous version of this assertion was defeated. Move the "
+            "definition back inside the section, or update both emit sites and this "
+            "test together.",
         )
 
 

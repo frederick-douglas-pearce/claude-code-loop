@@ -72,8 +72,9 @@ invocation resumes correctly.
    `hold`/`parked` rows) and the tail of `progress.md`. **Then emit the plan-gate inference record
    if it is owed** (Ledger format → `progress.md` → `- Plan-gate-inferred:`) — that section states
    when it is owed, how it dedupes to once per run, and that it is surfaced to the human as well as
-   journalled — and its dedupe is a search of the **FULL** `progress.md`, not the tail read above.
-   Do not re-derive any of that here, and do not write the field: it is the human's.
+   journalled. **Its dedupe reads the FULL `progress.md`, not the tail read above** — restated here
+   deliberately, because the clause before it hands you a tail read. Do not write the field: it is
+   the human's.
 3. **Resume before selecting (see the Resume procedure below).** **Recognise each issue row's
    Status first, then classify it** — the three Status sets are closed (Ledger format → queue.md),
    and a Status in none of them is unrecognised: **STOP and ask the human** rather than deciding
@@ -1987,8 +1988,9 @@ carrying a rule's consequence without becoming another place the rule is stated.
 is silent about can assert the opposite — a header reading `mode: escalation-only` and
 `graduated-routes: docs, research` while every plan stops anyway. That is the argument `- Hermetic:`
 and `- Restore:` were given dedicated spellings on. Initialization writes the field once and does not
-run again, and the orchestrator never writes it, so without this line a run whose ledger predates the
-field is over-gated for the rest of its life with nothing naming the remedy.
+run again, and the orchestrator never writes the field outside Initialization, so without this line
+a run whose ledger predates the field is over-gated for the rest of its life with nothing naming the
+remedy.
 
 **When it is owed — this is the one statement of the trigger, and step 0 invokes it by reference
 rather than restating the condition.** It is owed when the run's `queue.md` header carries **no
@@ -2021,20 +2023,22 @@ The block's shape — a skeleton, because the lines themselves are rendered **on
 ```markdown
 ## <ISO8601> — plan-gate inference
 
-- <the applicable line from the two variants below, verbatim>
+<the applicable line from the two variants below, verbatim — it already carries its `- ` marker>
 
-  <that variant's own remedy paragraph>
+  <that variant's own remedy paragraph, indented beneath it>
 ```
 
 **Two variants, and this is the one place either is written out.** Each carries **its own** remedy:
 the two are not interchangeable, because they describe opposite states of the header.
 - **`- Plan-gate-inferred: no plan-gate: field in this run's header — reading as always.`**
   Remedy: *a human may set the posture by adding `_plan-gate: always_` (or `conditional`) to this
-  run's `queue.md` header, beside `mode:`. The orchestrator never writes this field.*
+  run's `queue.md` header, beside `mode:`. The orchestrator never writes this field outside
+  Initialization, which for this run has already happened.*
 - **`- Plan-gate-inferred: unrecognized value "<the literal found>" — reading as always.`**
   **Quote what you found**, never a tidied version of it. Remedy: *a human may correct the existing
   value in this run's `queue.md` header — **replace it in place; do not add a second `plan-gate:`
-  line**. The orchestrator never writes this field.*
+  line**. The orchestrator never writes this field outside Initialization, which for this run has
+  already happened.*
 
 **Never hand the absent-field remedy to the unrecognized-value case.** There the field is already
 present, so "add it beside `mode:`" yields a header carrying **two** `plan-gate:` lines — a state
@@ -2050,8 +2054,10 @@ point. A missing line reads as *unknown*, on the same terms as an omitted `- Bud
 "the posture was stated". **A `- Human gate:` line naming a posture is not that evidence either**: it
 names the posture in force, which on an owed run is the inferred one.
 
-**The orchestrator never writes the `plan-gate:` field.** This line is a message, never an edit —
-not here, and not at any later invocation.
+**The orchestrator never writes the `plan-gate:` field outside Initialization** — the scope the
+canonical statement carries (`queue.md` above: never *rewrites* it *after Initialization*, which
+step 4 of Initialization is what writes it in the first place). This line is a message, never an
+edit — not here, and not at any later invocation.
 
 ### `issue-<N>.plan.md` — per-issue plan (architect-reviewed, human-approved)
 ```markdown
