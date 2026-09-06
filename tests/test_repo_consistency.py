@@ -1361,6 +1361,156 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
                 )
 
 
+class PlanGateInferredLineTests(unittest.TestCase):
+    """#108's posture-inference record hangs on one line name spelled the same everywhere.
+
+    Two step-0 entry points EMIT the line and the Ledger-format section DEFINES it.
+    The definition is also what the emitters point at for the trigger and the dedupe,
+    so the name is the whole coupling: if an emitter's spelling drifts from the
+    definition's, the emitter writes a line no reader defines and the once-per-run
+    dedupe -- a search of ``progress.md`` for this literal -- stops matching itself.
+    **The failure is silent and it fails toward noise**: the record becomes
+    per-invocation instead of per-run while every word of the prose still reads
+    correctly.
+
+    **Two emit sites, not one, and that is the point of the second region.** Step 0.1's
+    cheap parked path never reaches step 0.2, so a pre-v0.2 ledger resting at
+    ``RUN PARKED`` can fall through to selection and work an issue under a posture
+    nobody stated. Dropping that region to make this pass would restore exactly the
+    gap #108 exists to close.
+
+    **Anchored per region, never counted globally** -- the ``PlanGateFrozenBlockTests``
+    lesson. A total passes when one site loses the name and another gains a spare
+    mention, which leaves the mechanism dead. The regions are additionally asserted
+    **disjoint**, so an emitter region cannot be satisfied by the definition's copy of
+    the literal.
+
+    **What this must survive, and what it need not.** It must survive **edit** (rename
+    the line at any site) and **delete** (drop it from any site) -- those are the
+    coupling breaks it exists to catch. It is **not** required to survive **append**: a
+    spare ``- Plan-gate-inferred:`` mention elsewhere, or an extra clause bolted onto
+    the line, cannot be stopped by a containment check over prose. Per ``CLAUDE.md``,
+    append-class hazards are review's, and defeating this guard by adding text
+    demonstrates the documented ceiling rather than finding a gap.
+
+    **What is NOT guarded here, deliberately** -- all of it review's:
+
+    * that the posture rule (*absent or unrecognized reads as* ``always``) still agrees
+      across step 5, the ``queue.md`` section and this line. That is a proposition's
+      truth, which no regex over prose can pin, and those sites are already known to
+      have drifted (``CLAUDE.md``: F57/F58, #35);
+    * that the emitters invoke the trigger **by reference** rather than restating the
+      condition -- the #35 cost control. Asserting the absence of a restatement is the
+      polarity shape ``CLAUDE.md`` records as unreachable;
+    * that the remedy paragraph beneath the line survives. A shortening edit that keeps
+      the line prefix keeps the dedupe working while AC4's content silently vanishes;
+    * that the dedupe is actually performed, or that the line is surfaced to the human
+      as well as journalled.
+    """
+
+    _LINE = "- Plan-gate-inferred:"
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
+
+    def _bounds(self, text: str, start: str, end: str, label: str):
+        i = text.find(start)
+        self.assertNotEqual(
+            i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it."
+        )
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it."
+        )
+        return i, j
+
+    def _regions(self):
+        text = _ENGINE.read_text(encoding="utf-8")
+        spec = {
+            "step 0.1 (the cheap parked path emits it)": (
+                "**Otherwise take the cheap parked path",
+                "- `RUN RESUMED` or no sentinel",
+            ),
+            "step 0.2 (the normal path emits it)": (
+                "2. Read `queue.md` (note its",
+                "3. **Resume before selecting",
+            ),
+            "Ledger format (defines it)": (
+                "#### `- Plan-gate-inferred:`",
+                "**An absent or `TODO`-valued binding is never",
+            ),
+        }
+        return {
+            label: self._bounds(text, start, end, label)
+            for label, (start, end) in spec.items()
+        }, text
+
+    def test_every_emit_site_and_the_definition_spell_the_line_the_same(self) -> None:
+        regions, text = self._regions()
+        missing = sorted(
+            label
+            for label, (i, j) in regions.items()
+            if self._LINE not in self._normalize(text[i:j])
+        )
+        self.assertEqual(
+            missing,
+            [],
+            "these region(s) of loop-engine.md do not carry the posture-inference "
+            f"line name: {missing}.\n\n"
+            f"Expected (normalized): {self._LINE!r}\n\n"
+            "A MISMATCH IS SILENT. The emitters point at the Ledger-format section "
+            "for the trigger and the dedupe, and the dedupe is a search of "
+            "progress.md for this literal -- so a name that drifts at one site means "
+            "the record is written under a name nothing looks for, and the "
+            "once-per-run guarantee degrades to once-per-invocation without any "
+            "error.\n\n"
+            "Each region is checked SEPARATELY on purpose: a global count passes "
+            "when one site loses the name and another gains a spare mention. If you "
+            "renamed the line deliberately, rename it in all three regions and "
+            "update _LINE. NEVER drop a region to make this pass -- dropping step "
+            "0.1 in particular restores the parked-path gap #108 exists to close.",
+        )
+
+    def test_the_regions_are_disjoint(self) -> None:
+        # Without this, an emitter region that had lost the name could still pass by
+        # overlapping the definition region, which carries several copies of it.
+        regions, _ = self._regions()
+        items = sorted(regions.items(), key=lambda kv: kv[1])
+        for (a_label, (a_i, a_j)), (b_label, (b_i, b_j)) in zip(items, items[1:]):
+            self.assertLessEqual(
+                a_j,
+                b_i,
+                f"the {a_label} and {b_label} regions of loop-engine.md overlap "
+                f"({a_i}-{a_j} vs {b_i}-{b_j}). An emit-site region could then be "
+                "satisfied by the definition's copy of the line name, which would "
+                "make this test vacuous. Re-anchor the spans.",
+            )
+
+    def test_the_span_anchors_are_alive(self) -> None:
+        # Guards the vacuous pass: a region that silently collapsed to a few
+        # characters would still "contain" nothing and fail loudly above, but a
+        # region that swallowed the rest of the file would pass for the wrong
+        # reason. Both directions are caught by asserting a sane size.
+        regions, text = self._regions()
+        for label, (i, j) in regions.items():
+            with self.subTest(region=label):
+                size = j - i
+                self.assertGreater(
+                    size, 200,
+                    f"the {label} region is only {size} characters -- the anchors "
+                    "have almost certainly slipped. Re-anchor this test.",
+                )
+                self.assertLess(
+                    size, len(text) // 3,
+                    f"the {label} region spans {size} characters, over a third of "
+                    "loop-engine.md. Its end anchor has slipped, so this test is "
+                    "checking far more than the region it names. Re-anchor it.",
+                )
+
+
 class VerdictFirstInvariantTests(unittest.TestCase):
     """#119's Verdict-first invariant reaches its gates by NAME, at located sites.
 
