@@ -72,7 +72,8 @@ invocation resumes correctly.
    `hold`/`parked` rows) and the tail of `progress.md`. **Then emit the plan-gate inference record
    if it is owed** (Ledger format → `progress.md` → `- Plan-gate-inferred:`) — that section states
    when it is owed, how it dedupes to once per run, and that it is surfaced to the human as well as
-   journalled. **Its dedupe reads the FULL `progress.md`, not the tail read above** — restated here
+   journalled. **Its dedupe SEARCHES the FULL `progress.md`, not the tail read above** — never a
+   bulk read of it, for the reason step 0.1 gives; restated here
    deliberately, because the clause before it hands you a tail read. Do not write the field: it is
    the human's.
 3. **Resume before selecting (see the Resume procedure below).** **Recognise each issue row's
@@ -1971,9 +1972,9 @@ distinguishable: a value, a visible not-due, and an omission that means only "un
 
 #### `- Plan-gate-inferred:` — the run-level posture inference
 
-**Placed last in this section deliberately.** It is the only per-run record here; everything above
-is per-issue and belongs to an iteration block. A heading earlier in the section would nest those
-under it.
+**Placed last in this section deliberately.** A heading earlier in the section would nest
+everything after it — the open and close records, `- Hermetic:`, `- Restore:`, `- Budget:` — under a
+heading about the posture inference.
 
 **Three plan-gate-family lines exist; keep them apart.** `- Human gate:` records how the plan gate
 **resolved** on an issue. `- Plan-gate:` records the always-on stop's **frozen-vs-live diff** on an
@@ -2031,7 +2032,7 @@ The block's shape — a skeleton, because the lines themselves are rendered **on
 **Two variants, and this is the one place either is written out.** Each carries **its own** remedy:
 the two are not interchangeable, because they describe opposite states of the header.
 - **`- Plan-gate-inferred: no plan-gate: field in this run's header — reading as always.`**
-  Remedy: *a human may set the posture by adding `_plan-gate: always_` (or `conditional`) to this
+  Remedy: *a human may set the posture by adding `_plan-gate: always_` (or `_plan-gate: conditional_`) to this
   run's `queue.md` header, beside `mode:`. The orchestrator never writes this field outside
   Initialization, which for this run has already happened.*
 - **`- Plan-gate-inferred: unrecognized value "<the literal found>" — reading as always.`**
@@ -2054,10 +2055,11 @@ point. A missing line reads as *unknown*, on the same terms as an omitted `- Bud
 "the posture was stated". **A `- Human gate:` line naming a posture is not that evidence either**: it
 names the posture in force, which on an owed run is the inferred one.
 
-**The orchestrator never writes the `plan-gate:` field outside Initialization** — the scope the
-canonical statement carries (`queue.md` above: never *rewrites* it *after Initialization*, which
-step 4 of Initialization is what writes it in the first place). This line is a message, never an
-edit — not here, and not at any later invocation.
+**The orchestrator never writes the `plan-gate:` field outside Initialization.** Read that as
+written and do not weaken it to "never rewrites it": on a ledger that never had the field there is
+nothing to rewrite, and an orchestrator reasoning from the weaker form can talk itself into adding
+one — freezing a posture the human never chose, which is the single outcome this must not produce.
+This line is a message, never an edit — not here, and not at any later invocation.
 
 ### `issue-<N>.plan.md` — per-issue plan (architect-reviewed, human-approved)
 ```markdown
