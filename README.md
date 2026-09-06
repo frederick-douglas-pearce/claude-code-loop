@@ -434,9 +434,8 @@ every plan; if your header looks loosened and your plans keep stopping, this is 
 And **the loop will not add the field to an existing run for you** — Initialization
 is the only place it ever writes this field, and that already happened for your run.
 It is yours to set, and an engine that wrote one now would be freezing a posture you
-never chose. The remedy is a one-line
-hand edit: add `_plan-gate: always_` (or `_plan-gate: conditional_`) to `queue.md`'s header, beside
-`mode:`.
+never chose. The remedy is a one-line hand edit: add `_plan-gate: always_`
+(or `_plan-gate: conditional_`) to `queue.md`'s header, beside `mode:`.
 
 The finish-before-you-upgrade rule at the top of this section is a rule, not an
 enforcement: nothing in the plugin can stop you upgrading mid-iteration.
