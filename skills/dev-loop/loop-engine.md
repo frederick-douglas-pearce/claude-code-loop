@@ -51,13 +51,14 @@ invocation resumes correctly.
        park.
      - **Otherwise take the cheap parked path (no full re-scan):** read `queue.md`, take
        `progress.md` by the same searched read (never a bulk one — this is the path that exists to
-       be cheap, and the journal is the largest file in the ledger), run the step-1 roster
-       reconciliation (the one scan a parked run still owes —
-       this is how `BACKLOG_SOURCE` drift is still caught), **and emit the plan-gate inference
+       be cheap, and the journal is the largest file in the ledger), **emit the plan-gate inference
        record if it is owed** (Ledger format → `progress.md` → `- Plan-gate-inferred:`, which states
        when it is owed and how it dedupes) — **this path never reaches step 0.2**, so without it a
        parked run can fall through to selection below and work an issue under a posture nobody
-       stated. Then **re-derive selectability from
+       stated, and it goes before the reconciliation because that sub-unit can stop for a human
+       answer — run the step-1 roster
+       reconciliation (the one scan a parked run still owes —
+       this is how `BACKLOG_SOURCE` drift is still caught), then **re-derive selectability from
        `queue.md` alone** (no git/PR reconcile). If that produced selectable work (a joiner the
        human pulled in, or an in-run dep that has since cleared) fall through to step 1 **at
        selection** (the reconciliation just ran — do not repeat it); otherwise STOP and report
@@ -71,7 +72,8 @@ invocation resumes correctly.
    `hold`/`parked` rows) and the tail of `progress.md`. **Then emit the plan-gate inference record
    if it is owed** (Ledger format → `progress.md` → `- Plan-gate-inferred:`) — that section states
    when it is owed, how it dedupes to once per run, and that it is surfaced to the human as well as
-   journalled. Do not re-derive any of that here, and do not write the field: it is the human's.
+   journalled — and its dedupe is a search of the **FULL** `progress.md`, not the tail read above.
+   Do not re-derive any of that here, and do not write the field: it is the human's.
 3. **Resume before selecting (see the Resume procedure below).** **Recognise each issue row's
    Status first, then classify it** — the three Status sets are closed (Ledger format → queue.md),
    and a Status in none of them is unrecognised: **STOP and ask the human** rather than deciding
@@ -1581,7 +1583,10 @@ _Last updated: <ISO8601 by orchestrator>_
 
 ### `progress.md` — append-only journal (survives /clear + compaction)
 The orchestrator APPENDS one block **per gate decision** and, over an iteration, the two records
-below; it is never rewritten. This is the audit trail and the resume anchor.
+below; it is never rewritten. This is the audit trail and the resume anchor. Two block kinds sit
+outside that per-iteration shape and are **per-run**: the `## <ISO8601> — curation` block step 1's
+roster reconciliation writes, and the `## <ISO8601> — plan-gate inference` block defined at the end
+of this section.
 
 **The pipeline names the step that writes each record, and each is owed only by an iteration that
 reaches that step:**
@@ -1700,71 +1705,6 @@ enumerates a writes-none path.
 - **`- Plan-gate: n/a: architect skipped (<route/reason>)`** — **no architect pass ran at all**: not
   at step 4, not at step 5, and not as the inline composition that substitutes for an unrunnable
   binding. If any pass ran, by any actor, this spelling is unavailable.
-
-#### `- Plan-gate-inferred:` — the run-level posture inference
-
-**Three plan-gate-family lines now sit within a few paragraphs of each other; keep them apart.**
-`- Human gate:` records how the plan gate **resolved** on an issue. `- Plan-gate:` records the
-always-on stop's **frozen-vs-live diff** on an issue. `- Plan-gate-inferred:` — this line — records
-that the **run's header stated no posture at all**, so one was inferred. The first two are per-issue
-and sit in an iteration block; this one is per-run and gets its own.
-
-**Step 5 is the sole authority on what a missing or unreadable value resolves to.** This line never
-restates that rule; it reports that the rule fired. Written in that reporting register it is the
-same kind of record as `- Hermetic: n/a: no test change` — carrying a rule's consequence without
-becoming a second place the rule is stated. This is the one enumeration of *its* spellings, exactly
-as the paragraph above is for `- Plan-gate:`.
-
-**Why it exists.** An inferred posture is a state whose only rendering is silence, and the ledger it
-is silent about can assert the opposite — a header reading `mode: escalation-only` and
-`graduated-routes: docs, research` while every plan stops anyway. That is the argument `- Hermetic:`
-and `- Restore:` were given dedicated spellings on. It is also the **only notice an upgraded-in-place
-ledger ever gets**: Initialization writes the field once and does not run again, and the orchestrator
-is forbidden to write it afterwards, so a run that predates the field would otherwise be over-gated
-for the rest of its life with nothing ever naming the remedy.
-
-**When it is owed — this is the one statement of the trigger, and step 0 invokes it by reference
-rather than restating the condition.** It is owed when the run's `queue.md` header carries **no
-`plan-gate:` field, or a value step 5 does not recognise**. Emit it **at most once per run**, deduped
-by a searched read of the FULL `progress.md` for the colon-terminated literal
-`- Plan-gate-inferred:`. **Match it with the colon:** a bare `- Plan-gate` also matches the per-issue
-line above, so a row that wrote one of those would otherwise read as this run having already been
-told.
-
-**It is journalled AND surfaced**, and the second half is not optional: put the same text in front of
-the human in that invocation's output. A record the operator never opens has told them nothing, and
-telling them is the entire point — they are the only actor permitted to set the field.
-
-It takes its own dated block, headed `## <ISO8601> — plan-gate inference`. **Keep the literals `RUN
-COMPLETE`, `RUN PARKED` and `RUN RESUMED` out of both the heading and the body**: step 0.1 greps the
-whole journal for those, and a block carrying one would be read as a run-state sentinel.
-
-```markdown
-## <ISO8601> — plan-gate inference
-
-- Plan-gate-inferred: no `plan-gate:` field in this run's header — reading as `always`.
-
-  A human may set the posture by adding `_plan-gate: always_` (or `conditional`) to this run's
-  `queue.md` header, beside `mode:`. The orchestrator never writes this field.
-```
-
-Two spellings for the line, and the remedy paragraph beneath it is owed by **both**:
-- **`- Plan-gate-inferred: no `plan-gate:` field in this run's header — reading as `always`.`** — the
-  remedy is to **add** the field, and to say where it goes.
-- **`- Plan-gate-inferred: unrecognized value "<the literal found>" — reading as `always`.`** —
-  **quote what you found**, never a tidied version of it; the remedy is to **correct** the value.
-
-**The line stays terse and the remedy is the paragraph, deliberately** — the two have different
-readers. The line is what a grep across a ledger's history returns; the paragraph is what an operator
-acts on. Folding the remedy into the line makes the grep output unreadable and buys nothing.
-
-**Absence of this line is not evidence the header stated a posture.** Every ledger written before
-this line existed lacks it whatever its header said, and so does a run that never reached an emit
-point. A missing line reads as *unknown*, on the same terms as an omitted `- Budget:` slot — never as
-"the posture was stated".
-
-**The orchestrator never writes the field.** This line is a message, never an edit. The prohibition
-it reports is stated where the field itself is defined (`queue.md` above) and is not re-derived here.
 
 **An absent or `TODO`-valued binding is never an `n/a: no offline/hermetic tier declared`** — that
 reason quotes a config that did not give one. On a row the trigger fires on it is unknown, unknown
@@ -2027,6 +1967,82 @@ Where a slot's procedure exists but was **not due** on this row, that is its own
 `n/a: <reason>` rather than omitting (`mutation-survivors` above is the worked instance; the
 spelling follows the Gate-outcome invariant's not-run vocabulary). So three states stay
 distinguishable: a value, a visible not-due, and an omission that means only "unknown".
+
+#### `- Plan-gate-inferred:` — the run-level posture inference
+
+**Placed last in this section deliberately.** It is the only per-run record here; everything above
+is per-issue and belongs to an iteration block. A heading earlier in the section would nest those
+under it.
+
+**Three plan-gate-family lines exist; keep them apart.** `- Human gate:` records how the plan gate
+**resolved** on an issue. `- Plan-gate:` records the always-on stop's **frozen-vs-live diff** on an
+issue. `- Plan-gate-inferred:` — this line — records that the **run's header stated no posture at
+all**, so one was inferred.
+
+**Step 5 states the rule; this line does not restate it — it reports that the rule fired.** Written
+in that reporting register it is the same kind of record as `- Hermetic: n/a: no test change`,
+carrying a rule's consequence without becoming another place the rule is stated.
+
+**Why it exists.** An inferred posture is a state whose only rendering is silence, and the ledger it
+is silent about can assert the opposite — a header reading `mode: escalation-only` and
+`graduated-routes: docs, research` while every plan stops anyway. That is the argument `- Hermetic:`
+and `- Restore:` were given dedicated spellings on. Initialization writes the field once and does not
+run again, and the orchestrator never writes it, so without this line a run whose ledger predates the
+field is over-gated for the rest of its life with nothing naming the remedy.
+
+**When it is owed — this is the one statement of the trigger, and step 0 invokes it by reference
+rather than restating the condition.** It is owed when the run's `queue.md` header carries **no
+`plan-gate:` field, or a value step 5 does not recognise**.
+
+**Emit at most once per run — and dedupe on the LINE YOU ARE ABOUT TO WRITE, never on the name
+alone.** Search the FULL `progress.md` (never the tail) for that exact line; write the block only if
+it is absent. **The two spellings below are two different facts with two different remedies, and the
+second commonly follows the first *because the human acted on the first*.** A run that reports the
+absent field, gets a hand-edited header with a typo in it, and then suppresses the unrecognized-value
+notice on a name match has gone quiet at the exact moment its ledger started asserting a posture —
+strictly worse than never having spoken. Keying on the name alone produces that; keying on the line
+does not. This still is not a per-issue record: the line can only change when the **header** changes,
+which is the property AC-level "once per run" is about.
+
+**Surface first, then journal — the order is load-bearing.** An invocation can stop between the two
+(step 0.3 halts on an orphan PR, the driver halts on a budget breach, a `/clear` lands). Journalling
+first and stopping suppresses the message permanently while the ledger shows full compliance;
+surfacing first and stopping merely re-emits next invocation, which is harmless.
+
+It takes its own dated block, headed `## <ISO8601> — plan-gate inference`. **Keep the literals `RUN
+COMPLETE`, `RUN PARKED` and `RUN RESUMED` out of the heading and the body**: step 0.1 greps the whole
+journal for those, and a block carrying one risks reading as a run-state sentinel or forcing that
+step to stop and ask. **If the unrecognized value you must quote itself contains one of the three,
+do not write the block — STOP and ask the human**, rather than choosing between quoting it faithfully
+and keeping the journal readable.
+
+```markdown
+## <ISO8601> — plan-gate inference
+
+- Plan-gate-inferred: no `plan-gate:` field in this run's header — reading as `always`.
+
+  A human may set the posture by adding `_plan-gate: always_` (or `conditional`) to this run's
+  `queue.md` header, beside `mode:`. The orchestrator never writes this field.
+```
+
+Two spellings for the line, and the remedy paragraph beneath it is owed by **both**:
+- **`- Plan-gate-inferred: no plan-gate: field in this run's header — reading as always.`** — the
+  remedy is to **add** the field, and to say where it goes.
+- **`- Plan-gate-inferred: unrecognized value "<the literal found>" — reading as always.`** —
+  **quote what you found**, never a tidied version of it; the remedy is to **correct** the value.
+
+**The line stays terse and the remedy is the paragraph, deliberately** — the two have different
+readers. The line is what a grep across a ledger's history returns; the paragraph is what an operator
+acts on. Folding the remedy into the line makes the grep output unreadable and buys nothing.
+
+**Absence of this line is not evidence the header stated a posture.** Every ledger written before
+this line existed lacks it whatever its header said, and so does a run that never reached an emit
+point. A missing line reads as *unknown*, on the same terms as an omitted `- Budget:` slot — never as
+"the posture was stated". **A `- Human gate:` line naming a posture is not that evidence either**: it
+names the posture in force, which on an owed run is the inferred one.
+
+**The orchestrator never writes the `plan-gate:` field.** This line is a message, never an edit —
+not here, and not at any later invocation.
 
 ### `issue-<N>.plan.md` — per-issue plan (architect-reviewed, human-approved)
 ```markdown

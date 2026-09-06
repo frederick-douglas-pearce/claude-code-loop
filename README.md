@@ -424,7 +424,7 @@ you are most likely to actually make.** v0.2.0 added that field, which sets whet
 the plan gate stops on every issue or only on the engine's judgment conditions. A
 `queue.md` written before it simply does not carry the line, and there is no second
 Initialization to add one. The engine reads an absent field as `always` — it stops for
-your approval on every issue — which is the safe direction, and **as of v0.2.2 it says
+your approval on every issue — which is the safe direction, and **the engine now says
 so once per run**, both in `progress.md` and in its own output, instead of inferring it
 in silence.
 
@@ -436,8 +436,8 @@ that wrote one would be freezing a posture you never chose. The remedy is a one-
 hand edit: add `_plan-gate: always_` (or `conditional`) to `queue.md`'s header, beside
 `mode:`.
 
-The rule above is a rule, not an enforcement: nothing in the plugin can stop you
-upgrading mid-iteration.
+The finish-before-you-upgrade rule at the top of this section is a rule, not an
+enforcement: nothing in the plugin can stop you upgrading mid-iteration.
 
 ## Onboard a repo — `/init-loop`
 
