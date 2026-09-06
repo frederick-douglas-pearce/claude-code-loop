@@ -1361,187 +1361,72 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
                 )
 
 
-class PlanGateInferredLineTests(unittest.TestCase):
-    """#108's posture-inference record hangs on one line name spelled the same everywhere.
+class PlanGateInferredDefinitionTests(unittest.TestCase):
+    """#108's two emit sites point at one definition BY NAME; this pins that it exists.
 
-    Two step-0 entry points EMIT the line and the Ledger-format section DEFINES it. The
-    emitters point at the definition **by reference** for the trigger and the dedupe, so
-    the name is the whole coupling: if an emitter's spelling drifts from the
-    definition's, the emitter writes a line no reader defines, and the once-per-run
-    dedupe -- a search of ``progress.md`` for that line -- stops matching itself. **The
-    failure is silent and it fails toward noise**: the record becomes per-invocation
-    while every word of the prose still reads correctly.
+    Step 0.1's cheap parked path and step 0.2 both say "emit per Ledger format ->
+    ``- Plan-gate-inferred:``" and deliberately restate nothing else -- not the trigger,
+    not the dedupe, not the spellings. So the definition heading is a live
+    cross-reference target, and if it is renamed or removed both emitters point at
+    nothing while every word of their prose still reads correctly.
 
-    **Two emit sites, not one.** Step 0.1's cheap parked path never reaches step 0.2, so
-    a pre-v0.2 ledger resting at ``RUN PARKED`` could otherwise fall through to selection
-    and work an issue under a posture nobody stated. Dropping that region to make this
-    pass restores the gap #108 exists to close.
+    **This asserts the definition still exists, and nothing more.** It is the
+    ``PlanGateFrozenBlockTests`` shape -- an arbitrary heading string, where any change
+    is a real change -- deliberately kept narrow.
 
-    **The checked text EXCLUDES each region's start anchor, and that is not a detail.**
-    The definition region is anchored on a heading that contains the line name verbatim,
-    so checking ``text[i:j]`` made that region self-satisfying -- it asserted only that
-    the anchor it had just located was still there. Review caught it by renaming every
-    body occurrence *including the dedupe literal* while keeping the heading: the suite
-    stayed green and the emitters were left pointing at a name the definition no longer
-    used. Slicing past the anchor is what gives the third region any assertion power.
-    **Never widen a region back to include its anchor.**
+    **Why there is no longer a per-region spelling check.** There was one. It pinned the
+    line name across three regions, and it was defeated twice by edit-class mutations:
+    first because the definition region's start anchor contained the pinned literal, and
+    then, after that was fixed, because the region's *prose* mentions of the name satisfy
+    containment on their own -- so renaming every literal actually written to
+    ``progress.md`` left the suite green. Per ``CLAUDE.md``'s round cap on a single
+    assertion, a third retune of that literal or its locus is the displacement loop, so
+    the assertion was **deleted** rather than rewritten a third time.
 
-    **Anchored per region, never counted globally** -- the ``PlanGateFrozenBlockTests``
-    lesson. A total passes when one site loses the name and another gains a spare
-    mention. The regions are additionally asserted **disjoint**, so no region can be
-    satisfied by another's copy of the literal.
+    **What replaced it is a product fix, not a test.** The engine now renders each
+    written line exactly **once** (Ledger format -> ``- Plan-gate-inferred:``, the two
+    variant bullets), with the block template reduced to a skeleton that points at them.
+    Two renderings cannot disagree when there is one rendering; the property the deleted
+    test was reaching for is now structural.
 
-    **What this must survive, and what it need not.** It must survive **edit** (rename
-    the line at any site) and **delete** (drop it from any site). It is **not** required
-    to survive **append**: a spare mention elsewhere, or a clause bolted onto the line,
-    cannot be stopped by a containment check over prose. Per ``CLAUDE.md``, append-class
-    hazards are review's, and defeating this guard by adding text demonstrates the
-    documented ceiling rather than finding a gap.
+    **Named as review's, because no regex over prose reaches them:**
 
-    **What is NOT guarded here, deliberately** -- all of it review's:
-
-    * **Polarity.** An emit site can keep the name and lose the obligation -- negate
-      step 0.1's instruction while leaving its cross-reference intact and this stays
-      green. That is the ceiling ``CLAUDE.md`` documents ("assert the token appears, and
-      the negation is deleted"); the round-cap rule there says name it here rather than
-      chase it with another assertion.
-    * That the posture rule (*absent or unrecognized reads as* ``always``) still agrees
-      across step 5, the ``queue.md`` section and this line -- a proposition's truth,
-      which no regex over prose can pin, and those sites are already known to have
+    * that the emit sites spell the cross-reference the same way the definition heading
+      does -- this test pins the heading, not the pointers;
+    * that the dedupe greps the same string the engine tells you to write;
+    * that each variant keeps its own remedy, and that the absent-field remedy is never
+      handed to the unrecognized-value case (which would tell an operator to add a
+      second ``plan-gate:`` line);
+    * that the posture rule (*absent or unrecognized reads as* ``always``) still agrees
+      across step 5, the ``queue.md`` section and this line -- already known to have
       drifted (``CLAUDE.md``: F57/F58, #35).
-    * That the emitters invoke the trigger **by reference** rather than restating it.
-    * That the remedy paragraph beneath the line survives, or that the dedupe keys on
-      the whole line rather than the name. A shortening edit that keeps the name keeps
-      this green while #108's AC4 content vanishes.
-    * That the line is surfaced to the human as well as journalled, or that the
-      surface-then-journal order holds.
+
+    **Append-class defeats are the documented ceiling, not gaps.** A spare copy of the
+    heading elsewhere, or a clause bolted onto it, cannot be stopped by a presence check
+    over prose. Per ``CLAUDE.md`` that goes on #1, never into another round here.
     """
 
-    _LINE = "- Plan-gate-inferred:"
+    _HEADING = "#### `- Plan-gate-inferred:` — the run-level posture inference"
 
-    # Shortest unique prefixes. Mid-sentence prose anchors made innocent rewording go
-    # red -- including a reword of a *different gate's* paragraph, which is how the
-    # definition region used to end.
-    _SPEC = {
-        "step 0.1 (the cheap parked path emits it)": (
-            "**Otherwise take the cheap parked path",
-            "- `RUN RESUMED` or no sentinel",
-        ),
-        "step 0.2 (the normal path emits it)": (
-            "2. Read `queue.md`",
-            "3. **Resume",
-        ),
-        "Ledger format (defines it)": (
-            "#### `- Plan-gate-inferred:`",
-            "### `issue-<N>.plan.md`",
-        ),
-    }
-
-    @staticmethod
-    def _normalize(text: str) -> str:
-        return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
-
-    def _regions(self):
+    def test_the_definition_the_emit_sites_point_at_still_exists(self) -> None:
         text = _ENGINE.read_text(encoding="utf-8")
-        out = {}
-        for label, (start, end) in self._SPEC.items():
-            i = text.find(start)
-            self.assertNotEqual(
-                i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
-                "loop-engine.md -- re-anchor this test before trusting it."
-            )
-            self.assertEqual(
-                text.count(start), 1,
-                f"the start anchor for the {label} region ({start!r}) appears "
-                f"{text.count(start)} times in loop-engine.md; it must be unique or the "
-                "region is not the one this test names. Re-anchor it.",
-            )
-            j = text.find(end, i + len(start))
-            self.assertNotEqual(
-                j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
-                "loop-engine.md -- re-anchor this test before trusting it."
-            )
-            # Body EXCLUDES the start anchor -- see the docstring. The definition
-            # region's anchor contains _LINE, so including it made that region assert
-            # nothing at all.
-            out[label] = (i + len(start), j)
-        return out, text
-
-    def test_every_emit_site_and_the_definition_spell_the_line_the_same(self) -> None:
-        regions, text = self._regions()
-        missing = sorted(
-            label
-            for label, (i, j) in regions.items()
-            if self._LINE not in self._normalize(text[i:j])
-        )
+        found = text.count(self._HEADING)
         self.assertEqual(
-            missing,
-            [],
-            "these region(s) of loop-engine.md do not carry the posture-inference "
-            f"line name in their BODY: {missing}.\n\n"
-            f"Expected (normalized): {self._LINE!r}\n\n"
-            "A MISMATCH IS SILENT. The emitters point at the Ledger-format section for "
-            "the trigger and the dedupe, and the dedupe is a search of progress.md for "
-            "the line -- so a name that drifts at one site means the record is written "
-            "under a name nothing looks for, and the once-per-run guarantee degrades to "
-            "once-per-invocation without any error.\n\n"
-            "Each region is checked SEPARATELY, and each is checked EXCLUDING its start "
-            "anchor: the definition region's anchor contains the name, so including it "
-            "would make that region self-satisfying. If you renamed the line "
-            "deliberately, rename it in all three regions and update _LINE. NEVER drop "
-            "a region or widen one back over its anchor to make this pass -- dropping "
-            "step 0.1 restores the parked-path gap #108 exists to close.",
+            found,
+            1,
+            f"expected exactly one {self._HEADING!r} heading in loop-engine.md; found "
+            f"{found}.\n\n"
+            "Step 0.1 and step 0.2 both emit the posture-inference record BY REFERENCE "
+            "to this heading and restate none of its content, so if it is renamed or "
+            "removed both emitters point at nothing -- silently, since their own prose "
+            "still reads correctly. If you renamed it deliberately, update both emit "
+            "sites and _HEADING together.\n\n"
+            "This pins the heading's existence ONLY. That the emitters spell the "
+            "reference the same way, that the dedupe greps what the engine says to "
+            "write, and that each variant keeps its own remedy are review's -- see the "
+            "docstring for why a per-region spelling check was deleted rather than "
+            "rewritten a third time.",
         )
-
-    def test_the_regions_are_disjoint(self) -> None:
-        # Without this a region that had lost the name could still pass by overlapping
-        # a region that carries it -- the two emit sites are ~1.4k apart, so that is the
-        # reachable case; the definition is far enough away to be caught by the span
-        # bounds below as well.
-        regions, _ = self._regions()
-        items = sorted(regions.items(), key=lambda kv: kv[1])
-        for (a_label, (a_i, a_j)), (b_label, (b_i, b_j)) in zip(items, items[1:]):
-            self.assertLessEqual(
-                a_j,
-                b_i,
-                f"the {a_label} and {b_label} regions of loop-engine.md overlap "
-                f"({a_i}-{a_j} vs {b_i}-{b_j}). A region could then be satisfied by a "
-                "neighbouring region's copy of the line name, which would make this "
-                "test vacuous. Re-anchor the spans.",
-            )
-
-    def test_no_region_swallows_a_section_boundary(self) -> None:
-        # Replaces a fixed character ceiling, which was 18x the largest real region and
-        # grew with the file. A region that ran past its section is the failure that
-        # ceiling was reaching for, and a heading is what actually marks it.
-        regions, text = self._regions()
-        for label, (i, j) in regions.items():
-            with self.subTest(region=label):
-                # Strip fenced blocks first: the definition region carries a worked
-                # ```markdown example whose body legitimately contains a `## <ISO8601>`
-                # line. A heading inside a fence is not a document heading, and
-                # counting one would make this fire on correct content.
-                body = re.sub(r"```.*?```", "", text[i:j], flags=re.S)
-                stray = re.findall(r"^#{1,4} .*$", body, flags=re.M)
-                self.assertEqual(
-                    stray, [],
-                    f"the {label} region runs past a heading boundary and now contains "
-                    f"{stray}. Its end anchor has slipped, so this test is checking a "
-                    "larger span than the region it names. Re-anchor it.",
-                )
-
-    def test_each_region_is_more_than_its_anchor(self) -> None:
-        # The floor that matters is not a character count: it is that the body carries
-        # something beyond the anchor at all. A collapsed region is anchor rot, and it
-        # must not read as a passing coupling check.
-        regions, text = self._regions()
-        for label, (i, j) in regions.items():
-            with self.subTest(region=label):
-                self.assertGreater(
-                    len(text[i:j].strip()), 0,
-                    f"the {label} region has an empty body -- its anchors have "
-                    "collapsed onto each other. Re-anchor this test.",
-                )
 
 
 class VerdictFirstInvariantTests(unittest.TestCase):

@@ -1583,10 +1583,10 @@ _Last updated: <ISO8601 by orchestrator>_
 
 ### `progress.md` — append-only journal (survives /clear + compaction)
 The orchestrator APPENDS one block **per gate decision** and, over an iteration, the two records
-below; it is never rewritten. This is the audit trail and the resume anchor. Two block kinds sit
-outside that per-iteration shape and are **per-run**: the `## <ISO8601> — curation` block step 1's
-roster reconciliation writes, and the `## <ISO8601> — plan-gate inference` block defined at the end
-of this section.
+below; it is never rewritten. This is the audit trail and the resume anchor. Some blocks sit outside that
+per-iteration shape and are **run-level rather than per-issue** — among them the
+`## <ISO8601> — curation` block step 1's roster reconciliation writes, and the
+`## <ISO8601> — plan-gate inference` block defined at the end of this section.
 
 **The pipeline names the step that writes each record, and each is owed only by an iteration that
 reaches that step:**
@@ -2016,20 +2016,29 @@ step to stop and ask. **If the unrecognized value you must quote itself contains
 do not write the block — STOP and ask the human**, rather than choosing between quoting it faithfully
 and keeping the journal readable.
 
+The block's shape — a skeleton, because the lines themselves are rendered **once**, below:
+
 ```markdown
 ## <ISO8601> — plan-gate inference
 
-- Plan-gate-inferred: no `plan-gate:` field in this run's header — reading as `always`.
+- <the applicable line from the two variants below, verbatim>
 
-  A human may set the posture by adding `_plan-gate: always_` (or `conditional`) to this run's
-  `queue.md` header, beside `mode:`. The orchestrator never writes this field.
+  <that variant's own remedy paragraph>
 ```
 
-Two spellings for the line, and the remedy paragraph beneath it is owed by **both**:
-- **`- Plan-gate-inferred: no plan-gate: field in this run's header — reading as always.`** — the
-  remedy is to **add** the field, and to say where it goes.
-- **`- Plan-gate-inferred: unrecognized value "<the literal found>" — reading as always.`** —
-  **quote what you found**, never a tidied version of it; the remedy is to **correct** the value.
+**Two variants, and this is the one place either is written out.** Each carries **its own** remedy:
+the two are not interchangeable, because they describe opposite states of the header.
+- **`- Plan-gate-inferred: no plan-gate: field in this run's header — reading as always.`**
+  Remedy: *a human may set the posture by adding `_plan-gate: always_` (or `conditional`) to this
+  run's `queue.md` header, beside `mode:`. The orchestrator never writes this field.*
+- **`- Plan-gate-inferred: unrecognized value "<the literal found>" — reading as always.`**
+  **Quote what you found**, never a tidied version of it. Remedy: *a human may correct the existing
+  value in this run's `queue.md` header — **replace it in place; do not add a second `plan-gate:`
+  line**. The orchestrator never writes this field.*
+
+**Never hand the absent-field remedy to the unrecognized-value case.** There the field is already
+present, so "add it beside `mode:`" yields a header carrying **two** `plan-gate:` lines — a state
+this engine has no rule for, reached by an operator doing exactly what they were told.
 
 **The line stays terse and the remedy is the paragraph, deliberately** — the two have different
 readers. The line is what a grep across a ledger's history returns; the paragraph is what an operator
