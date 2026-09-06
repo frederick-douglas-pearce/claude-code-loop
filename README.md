@@ -419,8 +419,26 @@ point in the pipeline looks valid to it; and it runs on the resume path, so a ru
 resting at `RUN PARKED` — which re-derives its work from `queue.md` without that scan
 — is not separately covered.
 
-The rule above is a rule, not an enforcement: nothing in the plugin can stop you
-upgrading mid-iteration.
+**A ledger written before v0.2.0 has no `plan-gate:` field — and this is the upgrade
+you are most likely to actually make.** v0.2.0 added that field, which sets whether
+the plan gate stops on every issue or only on the engine's judgment conditions. A
+`queue.md` written before it simply does not carry the line, and there is no second
+Initialization to add one. The engine reads an absent field as `always` — it stops for
+your approval on every issue — which is the safe direction, and **the engine now says
+so once per run**, both in `progress.md` and in its own output, instead of inferring it
+in silence.
+
+Two consequences worth knowing before you upgrade. The inference does not consult
+`mode:`, so a run sitting at `escalation-only` with graduated routes still stops on
+every plan; if your header looks loosened and your plans keep stopping, this is why.
+And **the loop will not add the field to an existing run for you** — Initialization
+is the only place it ever writes this field, and that already happened for your run.
+It is yours to set, and an engine that wrote one now would be freezing a posture you
+never chose. The remedy is a one-line hand edit: add `_plan-gate: always_`
+(or `_plan-gate: conditional_`) to `queue.md`'s header, beside `mode:`.
+
+The finish-before-you-upgrade rule at the top of this section is a rule, not an
+enforcement: nothing in the plugin can stop you upgrading mid-iteration.
 
 ## Onboard a repo — `/init-loop`
 
