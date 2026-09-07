@@ -1624,28 +1624,20 @@ class VerdictFirstInvariantTests(unittest.TestCase):
 
 
 class RelayInvariantTests(unittest.TestCase):
-    """#115's Relay invariant reaches its sites by NAME, and the verbatim one by clause.
+    """#115's Relay invariant reaches its orchestrator-facing sites by NAME.
 
-    Deliberately modelled on ``VerdictFirstInvariantTests`` rather than invented:
-    both invariants have the same two-audience shape, so they have the same failure
-    modes and are pinned alike. **Deviations from that sibling include, declared
-    because an earlier draft asserted parity it did not have:** (1)
-    ``_normalize`` lowercases here and does not there -- the canonical quotes the
-    sentence mid-sentence (``*mark``) while the pasted prompt opens one (``Mark``), so
-    a case-sensitive compare could not pin both ends against one constant; the cost is
-    that a case change inside the pasted prompt is invisible. (2) The
-    self-satisfaction meta-test checks START anchors only, because ``_span`` returns
-    ``text[i:j]`` and so never includes the end anchor -- checking it would assert a
-    property the slice cannot have.
+    Modelled on ``VerdictFirstInvariantTests``. One declared deviation: ``_normalize``
+    lowercases here and does not there.
 
-    * **Orchestrator-facing recipes** name the invariant; the orchestrator resolves
-      it when composing a prompt.
-    * **Text handed to the agent verbatim** -- the AC-verifier's Part 1 ``Prompt:``
-      block -- reaches an agent that reads nothing else in the engine, so a bare name
-      there is inert. That site must carry the operative clause itself, and the
-      canonical definition quotes the same sentence so an editor has one string to
-      keep in step. Both ends are checked against ``_OPERATIVE``, so deleting it from
-      either fails.
+    Covers the **orchestrator-facing recipes**, which name the invariant and resolve it
+    when composing a prompt, plus the canonical definition's default-deny label.
+
+    **What it does NOT cover is the site that matters most, and that is a deliberate
+    deletion rather than an oversight -- see the stopping rule below.** The AC-verifier's
+    Part 1 ``Prompt:`` block is text handed to an agent verbatim; it reaches an agent
+    that reads nothing else in the engine, so the operative clause has to sit *inside*
+    the quoted block or the instruction never arrives. **Whether it does is review's to
+    check.** No assertion here looks at it.
 
     **What this asserts is a string coupling, never a meaning** -- the ceiling
     ``CLAUDE.md`` sets for a prose guard, and the reason the declines below are
@@ -1671,9 +1663,30 @@ class RelayInvariantTests(unittest.TestCase):
     (``ALLOWED_NON_BINDINGS``, ``_STOPWORDS``), neither of which an anchor table is.
     Every pointer site is now a region.
 
-    **Stopping rule, pre-committed before the first defeat** (the #122 lesson): if
-    this guard is defeated twice, it is DELETED and the property recorded here as
-    review's -- not rewritten a third time with a longer literal.
+    **The stopping rule was pre-committed before the first defeat and has now been
+    HONOURED** (the #122 lesson). It read: defeated twice => deleted, and the property
+    recorded here as review's, never rewritten a third time with a longer literal.
+
+    What it cost, recorded so nobody re-adds it by reflex:
+
+    * **Defeat 1** -- ``_VERBATIM`` ended at the paragraph *after* the prompt, so the
+      span meant "the neighbourhood of the prompt". Moving the clause out of the quoted
+      block into orchestrator prose below it left the clause verbatim and instructional,
+      never reaching the agent, with the suite green.
+    * **Defeat 2** -- re-anchoring to the prompt's closing *sentence* narrowed the hole
+      and did not close it. ``str.find`` takes the first occurrence after the start
+      anchor, so closing the quote early and leaving that sentence downstream re-widens
+      the span. Measured, not argued: ``_OPERATIVE`` inside the guard's span True,
+      inside the quotation marks False. The comment justifying that fix called the
+      anchor "a structural delimiter"; it was a sentence of the prompt, and the claim
+      was false when written.
+
+    A third anchor was available and verified to work. It was not taken: the rule
+    exists precisely for the moment when the next literal looks like it would hold, and
+    a guard whose author keeps judging his own stopping rule inapplicable has no
+    stopping rule. **Do not re-add a clause pin here without a mechanism that is not a
+    string anchor** -- a product fix that makes bad placement require *adding* an
+    exemption is the shape that would earn it.
     """
 
     _NAME = "Relay invariant"
@@ -1682,14 +1695,8 @@ class RelayInvariantTests(unittest.TestCase):
     # so both copies move together. Normalization lowercases (the canonical quotes it
     # mid-sentence, the prompt starts a sentence with it) and folds em dashes; it does
     # NOT paraphrase, so a reword fails until this constant is edited too.
-    _OPERATIVE = (
-        "mark each statement you return as reproduced -- you ran it, read it, or "
-        "compared it in the material given to you -- or inferred"
-    )
-
-    # _OPERATIVE is the AGENT-facing half. The ORCHESTRATOR-facing half -- what to do
-    # with an unmarked return -- was deletable with the suite green until this was
-    # added: the review round demonstrated that removing the whole Default-deny
+    # The ORCHESTRATOR-facing half of the invariant -- what to do with an unmarked
+    # return -- was deletable with the suite green until this was added: the review round demonstrated that removing the whole Default-deny
     # paragraph left every other assertion here intact. Pinned as a bolded LABEL,
     # which CLAUDE.md blesses ("arbitrary strings where any change is a real change"),
     # NOT as a polarity assertion: an author who rewords the label loses this check
@@ -1700,18 +1707,6 @@ class RelayInvariantTests(unittest.TestCase):
     _CANONICAL = (
         "**Relay invariant (a subagent's claim is not evidence",
         "**Convergence & the resting states.**",
-    )
-    # The end anchor is the CLOSING QUOTE of the prompt, not the paragraph after it.
-    # That boundary is the whole point: this span must denote "the text inside the
-    # quotation marks handed to the agent", never "the neighbourhood of the prompt".
-    # The Class B mutation pass defeated the wider span by moving the clause out of the
-    # quoted block into orchestrator prose just below it -- verbatim, instructional,
-    # and never reaching the agent, which is the exact failure the test below names.
-    # This is a change of SHAPE (presence -> position) against a structural delimiter,
-    # not a retuned literal.
-    _VERBATIM = (
-        '   Prompt: *"Run the commands above yourself against base',
-        '   Return a checklist + overall done/not-done."*',
     )
     # Recipe sites name the invariant only. Each start anchor must NOT contain the
     # name, or the subtest is unfalsifiable -- enforced below.
@@ -1765,9 +1760,6 @@ class RelayInvariantTests(unittest.TestCase):
             label: self._span(text, a, b, label)
             for label, (a, b) in self._REFERENCE_REGIONS.items()
         }
-        out["the AC-verifier Part 1 verbatim prompt"] = self._span(
-            text, *self._VERBATIM, "the AC-verifier Part 1 verbatim prompt"
-        )
         return out
 
     def test_the_span_anchors_actually_resolve(self) -> None:
@@ -1800,11 +1792,6 @@ class RelayInvariantTests(unittest.TestCase):
                     f"the start anchor for {label} contains the invariant's name, "
                     "so that subtest would pass on its own anchor.",
                 )
-        self.assertNotIn(
-            self._NAME.lower(), self._normalize(self._VERBATIM[0]),
-            "the verbatim region's start anchor contains the invariant's name, so "
-            "the clause and name checks over that region could pass on the anchor.",
-        )
 
     def test_each_located_site_names_the_invariant(self) -> None:
         """Per region, never a global count.
@@ -1824,12 +1811,11 @@ class RelayInvariantTests(unittest.TestCase):
                 )
 
     def test_the_canonical_carries_the_orchestrator_side_rule(self) -> None:
-        """``_OPERATIVE`` pins only what the AGENT is asked to do.
+        """What the ORCHESTRATOR does with an unmarked return.
 
-        What the ORCHESTRATOR does with an unmarked return is the other half, and the
-        review round demonstrated it was deletable with every other assertion here
-        still green. This pins its label -- a presence check on an arbitrary string,
-        not a polarity assertion; see the comment on the constant.
+        A review round demonstrated this paragraph was deletable with every other
+        assertion here still green. This pins its label -- a presence check on an
+        arbitrary string, not a polarity assertion; see the comment on the constant.
         """
         canonical = self._span(
             self._engine(), *self._CANONICAL, "the canonical definition"
@@ -1841,30 +1827,6 @@ class RelayInvariantTests(unittest.TestCase):
             "step 8's recipe delegates to; without it the invariant says what an "
             "agent should mark and never what to do when it did not.",
         )
-
-    def test_the_verbatim_prompt_carries_the_clause_not_only_the_name(self) -> None:
-        """The failure this pins: satisfy the invariant by writing its NAME into the
-        ``Prompt:`` block. The block is pasted to an agent that reads nothing else in
-        the engine, so the instruction would never reach the one agent it is for.
-        """
-        text = self._engine()
-        canonical = self._span(text, *self._CANONICAL, "the canonical definition")
-        verbatim = self._span(
-            text, *self._VERBATIM, "the AC-verifier Part 1 verbatim prompt"
-        )
-        for label, region in (
-            ("the canonical definition", canonical),
-            ("the AC-verifier Part 1 verbatim prompt", verbatim),
-        ):
-            with self.subTest(region=label):
-                self.assertIn(
-                    self._OPERATIVE, self._normalize(region),
-                    f"{label} no longer carries the operative clause. Both copies "
-                    "are checked against _OPERATIVE, so a deliberate reword must "
-                    "change both AND this constant -- which is the point: the "
-                    "reword should be reviewed, not absorbed.",
-                )
-
 
 class ResumeHandoffPointerTests(unittest.TestCase):
     """#32's Resume hands its recovery procedure off to Part 2 by NAME.
