@@ -1701,9 +1701,17 @@ class RelayInvariantTests(unittest.TestCase):
         "**Relay invariant (a subagent's claim is not evidence",
         "**Convergence & the resting states.**",
     )
+    # The end anchor is the CLOSING QUOTE of the prompt, not the paragraph after it.
+    # That boundary is the whole point: this span must denote "the text inside the
+    # quotation marks handed to the agent", never "the neighbourhood of the prompt".
+    # The Class B mutation pass defeated the wider span by moving the clause out of the
+    # quoted block into orchestrator prose just below it -- verbatim, instructional,
+    # and never reaching the agent, which is the exact failure the test below names.
+    # This is a change of SHAPE (presence -> position) against a structural delimiter,
+    # not a retuned literal.
     _VERBATIM = (
         '   Prompt: *"Run the commands above yourself against base',
-        "2. For behavior that needs runtime proof, also run",
+        '   Return a checklist + overall done/not-done."*',
     )
     # Recipe sites name the invariant only. Each start anchor must NOT contain the
     # name, or the subtest is unfalsifiable -- enforced below.
