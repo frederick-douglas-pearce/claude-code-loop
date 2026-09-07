@@ -530,7 +530,8 @@ has to be stated rather than left to judgement. It is **whether any test ran**:
   satisfy a block that never applied.
 
 **Authoring rule — every factual assertion you write, in any surface.** The rule binds wherever you
-assert something as fact: the **diff** (comments, docstrings, and — where the deliverable is itself
+assert something as fact — **any surface**, and these are the ones you write most: the **diff**
+(comments, docstrings, and — where the deliverable is itself
 prose an agent executes — any claim that prose makes about the tree), the **ledger** — every artifact
 under `LEDGER_ROOT`, the per-issue plan file included, not just the two you write most often — and
 your **report to the human**. The ledger half is deliberately not a file list: an enumeration here
@@ -576,7 +577,7 @@ git/PR state, the orphan scan catches an open PR the ledger omits, and the merge
 missing `- Editorial:` line as unknown and escalates. Those check **state and presence** against
 ground truth; none of them inspects whether an assertion you wrote in prose is true, which is what
 this rule governs. And the finder pass is **review, not a sandbox** — an agent reading under
-instruction, exactly as the trust model says. So: one surface is reviewed, none is enforced, and
+instruction, exactly as `README.md` → *How the limits are enforced* says. So: one surface is reviewed, none is enforced, and
 "unchecked" above means unchecked *for the truth of what you asserted*.
 
 **Before you leave this step, walk the acceptance criteria once and name a `file:line` for each.**
@@ -746,9 +747,8 @@ and the finding-class rule): **(1) Part 2's blockquote, verbatim** — the worke
 distinction operable; **(2) that it must not edit, break or execute anything to decide** — the
 prohibition on improvising a mutation does not otherwise reach a finder; and **(3) that it must say
 plainly when it cannot tell** — the rule making that a dirty answer lives here, where the finder
-cannot see it, so an unprompted finder hedges and the gate reads clean. These are the three the
-Class B limit-case re-checker's spawn prompt carries, for the same reasons; the fourth it already
-has. **Named by content, never by number** — that recipe's items are numbered in another section.
+cannot see it, so an unprompted finder hedges and the gate reads clean. The Class B limit-case
+re-checker's spawn prompt carries these for the same reasons. **Named by content, never by number** — that recipe's items are numbered in another section.
 What does **not** carry over is that recipe's antecedent: it is written for a re-check of an
 already-found gap, and this lens has no prior finding and no fix in hand. Its **differential** is
 fixed by construction — writing its question as its differential is sufficient, and no round need
@@ -1804,7 +1804,7 @@ unresolvable, self-contradictory, or misdescribes what it sits on.
 be both a wrong claim and a defect in the code, and where the deliverable is prose an agent executes
 it routinely is — the content floor says so in as many words (step 8). Two buckets would imply the
 findings split cleanly and sum to the round's total; they do not. **If you cannot tell whether a
-finding turned on a claim, count it** — the default every other enumeration in this section takes.
+finding turned on a claim, count it.**
 
 **You are not classifying findings.** The finding class is the finder's and stays the finder's (step
 8); this counts a property of findings already recorded, and it changes no class, no gate behaviour,
@@ -3156,8 +3156,8 @@ it: what it **reproduced** — ran, read, compared, *inside the material you gav
 claim, and it arrives at exactly the same authority on the page.
 
 **Default-deny: unmarked ⇒ unverified.** An output you cannot place in the first category is in the
-second. Before such a claim reaches any surface the authoring rule binds (step 6 — the diff, the
-ledger, your report to the human) or an issue or PR body, you **verify it yourself** —
+second. Before such a claim reaches any surface the authoring rule binds (step 6), you **verify it
+yourself** —
 or you relay it **explicitly marked unverified**. What you may never do is pass it on unmarked,
 because the reader cannot tell the two apart and will spend a decision on it.
 

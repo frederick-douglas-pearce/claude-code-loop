@@ -1628,8 +1628,8 @@ class RelayInvariantTests(unittest.TestCase):
 
     Deliberately modelled on ``VerdictFirstInvariantTests`` rather than invented:
     both invariants have the same two-audience shape, so they have the same failure
-    modes and are pinned the same way. **Two deliberate deviations from that sibling,
-    declared because an earlier draft asserted parity it did not have:** (1)
+    modes and are pinned alike. **Deviations from that sibling, declared because an
+    earlier draft asserted parity it did not have:** (1)
     ``_normalize`` lowercases here and does not there -- the canonical quotes the
     sentence mid-sentence (``*mark``) while the pasted prompt opens one (``Mark``), so
     a case-sensitive compare could not pin both ends against one constant; the cost is
@@ -1665,8 +1665,8 @@ class RelayInvariantTests(unittest.TestCase):
     **An earlier draft declined to pin the pointer sites at all**, on the reasoning
     that a region table is "the enumerable shape this repo keeps having to retract."
     That reasoning was wrong and the review round said so: ``VerdictFirstInvariantTests``
-    ships a seven-region table and ``DeltaScopedRoundNotationTests`` a four-region one,
-    so the region table is the shape this repo *endorses*. The enumerable-assertion
+    and ``DeltaScopedRoundNotationTests`` both ship region tables, so the region table
+    is the shape this repo *endorses*. The enumerable-assertion
     trap ``CLAUDE.md`` documents is about stale COUNTS and growable ALLOW-LISTS
     (``ALLOWED_NON_BINDINGS``, ``_STOPWORDS``), neither of which an anchor table is.
     Every pointer site is now a region.
@@ -1768,10 +1768,9 @@ class RelayInvariantTests(unittest.TestCase):
         The bound is the live half. ``assertTrue(region.strip())`` -- what an earlier
         draft used -- is tautological: ``_span`` returns ``text[i:j]`` with ``j > i``,
         so the slice always begins with the whole start anchor and can never be empty.
-        The sibling's ``> 80`` is what actually fires, because every start anchor here
-        is 53-73 characters: a region collapsed to just its anchor lands under the
-        bound. ``_span``'s own assertions (start uniqueness, end resolvable) carry the
-        rest.
+        The sibling's ``> 80`` is what actually fires: a region collapsed to just its
+        start anchor lands under the bound. ``_span``'s own assertions (start
+        uniqueness, end resolvable) carry the rest.
         """
         text = self._engine()
         canonical = self._span(text, *self._CANONICAL, "the canonical definition")
@@ -1830,7 +1829,7 @@ class RelayInvariantTests(unittest.TestCase):
         self.assertIn(
             self._DEFAULT_DENY_LABEL, self._normalize(canonical),
             "the canonical Relay invariant no longer carries its default-deny label. "
-            "That is the half the README promises the reader verbatim and the half "
+            "That is the half the README carries for the reader and the half "
             "step 8's recipe delegates to; without it the invariant says what an "
             "agent should mark and never what to do when it did not.",
         )
