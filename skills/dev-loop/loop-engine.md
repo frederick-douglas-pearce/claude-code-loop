@@ -529,17 +529,39 @@ has to be stated rather than left to judgement. It is **whether any test ran**:
   branch: it stops and asks a human, where guessing "dirty tier" would have you rewriting a test to
   satisfy a block that never applied.
 
-**Authoring rule — a claim that a protection exists must name it, and the name must resolve.** A
-comment — or, where the deliverable is itself prose an agent executes, any claim the prose makes
-about the tree — asserting that a test, guard, or invariant exists **elsewhere** must **name it** —
-the test name, `file:line`, or the invariant's own name where this document defines one — and you
-must **confirm the named thing exists and asserts what you claim** before writing the comment. An
+**Authoring rule — every factual assertion you write, in any surface.** The rule binds wherever you
+assert something as fact: the **diff** (comments, docstrings, and — where the deliverable is itself
+prose an agent executes — any claim that prose makes about the tree), the **ledger**
+(`progress.md`, `queue.md`), and your **report to the human**.
+
+**The ledger is the surface whose failure outlives the run.** It is what the next invocation resumes
+from, so a false claim there is not a documentation defect — it is state that a later iteration reads
+as the record of something that happened. A false claim in a report costs the human a wasted action;
+a false claim in the ledger costs every invocation after it.
+
+A claim that a test, guard, or invariant exists **elsewhere** must **name it** — the test name,
+`file:line`, or the invariant's own name where this document defines one — and you must **confirm the
+named thing exists and asserts what you claim** before you write it. An
 unnamed claim is worse than no comment: the next reader — human or agent — stops looking, so the
-comment *defeats* the reviewer rather than merely failing to help, and it does so most effectively
+claim *defeats* the reviewer rather than merely failing to help, and it does so most effectively
 when it sits directly on top of the gap. A **named** claim that does not resolve is worse still: it
-buys that credibility with a citation the reader is now less likely to check. A comment that
-misdescribes the code it sits on is the same defect without the citation — write neither. This is
-an authoring rule, not a binding; step 8's finders check the diff against it.
+buys that credibility with a citation the reader is now less likely to check. A claim that
+misdescribes what it sits on is the same defect without the citation — write neither.
+
+**This governs assertions written as fact, and changes no other ledger rule.** In particular it does
+not license "correcting" a `parked`/`blocked` row's Notes by inserting live evidence: those Notes
+record the durable curation DECISION precisely so a later re-check cannot destabilize them (Ledger
+format → queue.md). Truth discipline and mutability discipline are different rules over the same
+surface, and neither reads on the other.
+
+**What checks this — stated as the surface that IS checked, never as a list of the ones that are
+not.** The mechanical backstop reaches **the diff, and only the diff**: step 8's finders read a diff,
+and that is the whole of the enforcement. **Every other surface you write rests on this authoring
+discipline with no mechanical backstop at all** — the ledger and your report today, and anything else
+you may write later, with no edit to this rule needed to cover it. Saying so plainly is the honest
+record, and the polarity is deliberate: enumerating the *unchecked* surfaces would silently
+mis-cover the next one anybody adds, while enumerating the one checked surface leaves every unknown
+resolving to unchecked — which is the direction that costs you a re-read rather than a false belief.
 
 **Before you leave this step, walk the acceptance criteria once and name a `file:line` for each.**
 For every AC, point at the change that satisfies it. If you cannot point at anything, you have not
@@ -622,9 +644,18 @@ This is a property applied *within* whatever finders the surface warrants, **not
 own**, and is **never written into the `code-review=` lens parenthetical** (progress.md → the
 Budget line), which records angles only.
 
+**The diff scope here is a limit on the finder, not the extent of the rule.** A finder reads a diff,
+so a diff is all this check can reach; the authoring rule it enforces binds every surface you write
+(step 6). Do not read a clean round as evidence about the ledger or the report — nothing read them.
+
 **And give every finder the Verdict-first invariant** (Gates): findings on the whole diff first,
 depth on any one of them after. A finder that exhausts itself on the first thing it notices returns
 a partial reading of the change, which this gate cannot tell apart from a clean one.
+
+**And the Relay invariant** (Gates): a finder must mark what it reproduced against what it inferred,
+and you treat anything unmarked as unverified. A finder reasoning past the diff it was handed — about
+a config, a test, or a file it was never shown — is making a claim, not reporting a finding, and it
+reads identically on the page unless the prompt asked.
 
 **Pick finder angles from the diff's risk surface, not from a fixed list.** Distinct lenses —
 correctness; robustness/IO/network/filesystem; reuse/conventions/integration;
@@ -741,7 +772,8 @@ efficacy* class named in the finding-class list below), and it never reaches the
 gate-decision block (Ledger format → progress.md), on the same write-time discipline as this step's
 other per-round records — **when the round resolves, not at step 12**. Each entry carries the lens
 label, the differential you stated for it, and what it returned; the outcome is written per lens and
-is **never inferred** from which findings carry which ID, because those IDs are recorded for
+is **never inferred** from which findings carry which ID (the **Relay invariant**, Gates, applied to
+a lens's own return), because those IDs are recorded for
 EDITORIAL findings only (below), so a lens whose findings were all BLOCKING would read as having
 found nothing. **The label written here is the same string that round's finding IDs carry**, so the
 roster and the IDs join on it.
@@ -808,7 +840,9 @@ where a round re-armed from downstream reopens the question after the sweep has 
 **The finder emits the class; you never assign or reassign one.** Put it in the finder's prompt
 beside the acceptance criteria and the standing authoring check. Inference by the author is the
 judgment this gate exists to remove: an orchestrator under budget pressure will want to read a real
-finding as EDITORIAL, and the only structural defence is that the class arrives from outside. What
+finding as EDITORIAL, and the only structural defence is that the class arrives from outside (the
+**Relay invariant**, Gates, applied to a finder's return: what the finder established is evidence,
+what you would supply in its place is not). What
 you may do is **raise** it, by any floor below — **promotion only, never the reverse.**
 
 **Floor 1 — content.** EDITORIAL is the **affirmative claim the finder must establish**: this finding
@@ -1314,7 +1348,8 @@ all four are **yours**, because the agent cannot discharge them from inside its 
   you find it at all; that is the same duty reached by a different route, not a second one.)
 - **Never let its copy stand in for the change under review.** A file inside an isolated tree is not
   evidence of anything until you have applied it; cite `file:line` in the merge candidate, never in
-  a copy.
+  a copy. (The **Relay invariant**, Gates, applied to an agent's *artifacts* rather than its
+  sentences — the same rule about what an agent hands back.)
 - **Attribute the copy before you trust anything that came out of it.** Confirm the copy's own
   `git rev-parse --show-toplevel` **differs from yours**. This governs **every** scratch copy this
   engine directs — the acceptance gate's mutation copy is only the sharpest case, and a
@@ -1747,6 +1782,22 @@ only legal rendering asserts a scoped round is a template that pressures you to 
 
 Keep the range **off** the `- Budget:` line: that line is one physical line and its
 `code-review=<c>(…)` parenthetical records lenses only.
+
+**With each round's result, record what KIND of thing it found: `claims=<n>` and `code=<n>`.** A
+round's findings split into claims — a comment, docstring, or prose assertion that is false, stale,
+unresolvable, or misdescribes what it sits on, about code that is itself correct — and defects in the
+code. Both are real findings and both re-arm exactly as they do today; **this changes no gate
+behaviour and no class**, it records a distinction the count alone erases. Write it inside the
+result: `round 2 (a18061d..HEAD) — dirty, claims=3 code=0`. A round that found nothing writes
+`— clean`; the counts are for a round that found something.
+
+**Why this is worth two integers.** "Round 4 found 3 things" cannot distinguish a gate catching real
+defects from a gate spending a full round on prose about correct code — and those call for opposite
+responses. It also makes a standing question answerable from the corpus instead of from
+recollection: whether a scoped pass over the claims a fix commit writes would pay for itself, which
+is what this project has so far had to argue from another repo's ledger. **Record it even when the
+answer is boring** — `claims=0 code=2` is the observation that would retire the question, and a slot
+written only when it looks interesting measures nothing.
 
 The **`- Editorial:`** line records step 8's editorial sweep — what was applied **without
 re-review**, and to what. It exists for the reason `- Hermetic:` and `- Restore:` do: everything the
@@ -2208,7 +2259,11 @@ failing the other.
    reason to call a criterion unmet. Verify the diff actually does this; do not assume. Produce the
    complete verdict on EVERY criterion first, then deepen with whatever budget remains — never let
    deepening stop you returning a verdict; a shallow verdict is useful, no verdict is worthless
-   (the Verdict-first invariant). Return a checklist + overall done/not-done."*
+   (the Verdict-first invariant). Mark each statement you return as REPRODUCED — you ran it, read it,
+   or compared it in the material given to you — or INFERRED, for anything about an artifact you were
+   not given; if you did not check it, say so rather than stating it, and never present an inference
+   about a file you were not shown at the same weight as something you read (the Relay invariant).
+   Return a checklist + overall done/not-done."*
 2. For behavior that needs runtime proof, also run `VERIFY` (runs the app).
 3. `CODE_REVIEW` (step 8) provides the adversarial bug pass.
 Promote to a dedicated `ac-verifier` agent only if the composed approach proves too loose.
@@ -3069,6 +3124,44 @@ yet the engine itself contemplates it being bound to a skill instead (step 8), a
 invoked by name too. **Test the binding you actually have, not the parameter's name.** Where a gate
 turns out to be out of reach, that is a property of the binding, and it is never a reason to journal
 the gate as covered by this invariant — say so, as step 8 says so for its own fallback.
+
+**Relay invariant (a subagent's claim is not evidence until you have checked it).** Every agent you
+spawn returns two kinds of thing, and the difference is invisible in the output unless you ask for
+it: what it **reproduced** — ran, read, compared, *inside the material you gave it* — and what it
+**inferred or recommended** about anything outside that. The first is evidence. The second is a
+claim, and it arrives at exactly the same authority on the page.
+
+**Default-deny: unmarked ⇒ unverified.** An output you cannot place in the first category is in the
+second. Before such a claim reaches the human, the ledger, or an issue, you **verify it yourself** —
+or you relay it **explicitly marked unverified**. What you may never do is pass it on unmarked,
+because the reader cannot tell the two apart and will spend a decision on it.
+
+**Why this is a rule and not a caution about reading carefully.** A subagent's authority is bounded
+by what it was given, and nothing in its output records that boundary. An agent handed a brief and
+asked about a config it was never shown will answer about the config — accurately as to the brief,
+and speculatively as to the file — and the speculation reads exactly like the finding. The failure
+is therefore invisible from where you sit, which is why it belongs in the prompt and in this
+default rather than in your judgement about which parts of a return look solid.
+
+**This is the general rule; three sites in this document are instances of it.** The finding class
+**arrives from outside** and you may only ever raise it, never assign it (step 8). A lens's outcome
+is written per lens and is **never inferred** (step 8's roster). A file inside an isolated copy **is
+not evidence of anything** until you have applied it (Tool surface). Each of those is this invariant
+applied to one surface; read them that way rather than as separate rules that happen to rhyme.
+
+**Two kinds of site carry it, exactly as Verdict-first distinguishes them:**
+- **Text handed to the agent verbatim** — the AC-verifier's `Prompt:` block (Part 1) above all.
+  That text reaches an agent which reads nothing else in this file, so a reference by name is inert
+  there. Such sites carry **the sentence itself**, tagged with this invariant's name. The sentence
+  to carry: *mark each statement you return as REPRODUCED — you ran it, read it, or compared it in
+  the material given to you — or INFERRED, for anything about an artifact you were not given.*
+- **Orchestrator-facing recipes** — the lists telling *you* what a spawn prompt must carry. Those
+  name the invariant; you resolve it when you compose the prompt.
+
+**Incomplete coverage fails safe, and that is the point of the default rather than an excuse for
+it.** A prompt that never asks the question yields output you must treat as unverified — you
+over-escalate, and check something that was in fact reproduced. The opposite default would let a
+prompt nobody updated silently promote speculation to fact.
 
 **Convergence & the resting states.** When nothing is selectable, step 1 classifies the run
 into one of four outcomes (tested in order: hold → parked → complete → pending) and appends a

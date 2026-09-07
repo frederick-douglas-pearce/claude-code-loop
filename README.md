@@ -161,6 +161,26 @@ in most projects leaves it reaching very little. The practical effect is that
 this saves less than it may sound like it does, in the safe direction. **At the merge gate you are
 told the count**, and it is recorded in the ledger either way — including when it is zero.
 
+**The loop is held to what it asserts — and only one of the surfaces it writes is actually checked.**
+Every factual assertion it writes is a claim it has to be able to stand behind: a claim that a test
+or guard exists elsewhere must name it, and the named thing must exist and say what the claim says.
+That binds the diff, the ledger it keeps, and what it reports to you. **The mechanical backstop
+reaches the diff and only the diff** — code review reads a diff, and that is the whole of the
+enforcement. **Every other surface rests on authoring discipline with nothing checking it.** The
+ledger is the one where that matters most: it is what the next run reads to pick up where the last
+one stopped, so a false line there is not a stale document, it is something a later run treats as
+having happened. This is stated the honest way round on purpose — naming the checked surface rather
+than listing the unchecked ones, so a surface nobody has thought of yet counts as unchecked instead
+of quietly counting as covered.
+
+**A subagent's recommendation is not the same as its finding, and the loop is required to tell them
+apart.** The agents it spawns return two kinds of thing: what they actually ran, read, or compared in
+the material they were handed, and what they inferred about anything outside it. Those arrive at
+identical authority on the page, and the second has been wrong in practice — including about a config
+file the agent was never shown. So the loop asks its agents to mark which is which, and **anything
+unmarked counts as unverified**: it either checks the claim itself before that reaches you or the
+ledger, or passes it to you explicitly labelled unverified. What it may not do is relay it as fact.
+
 **A gate that did not run is never reported as one that passed.** For every gate the loop
 runs — plan, architect, your build commands, the offline tier, code review, security, acceptance,
 merge — it may record a pass only with that gate's own output as evidence: **no verdict means not

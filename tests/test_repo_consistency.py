@@ -1486,7 +1486,11 @@ class VerdictFirstInvariantTests(unittest.TestCase):
     )
     _CANONICAL = (
         "**Verdict-first invariant (a verdict before depth).**",
-        "**Convergence & the resting states.**",
+        # Re-anchored when the Relay invariant was inserted between this section and
+        # Convergence. The end anchor must be the NEXT thing after this invariant, or
+        # the span silently widens to swallow a neighbour and the containment check
+        # can be satisfied by someone else's text.
+        "**Relay invariant (a subagent's claim is not evidence",
     )
 
     @staticmethod
@@ -1616,6 +1620,168 @@ class VerdictFirstInvariantTests(unittest.TestCase):
                     "Both copies are checked against this constant, so deleting the "
                     "clause from either end fails. A deliberate reword must change "
                     "both copies AND _OPERATIVE.",
+                )
+
+
+class RelayInvariantTests(unittest.TestCase):
+    """#115's Relay invariant reaches its sites by NAME, and the verbatim one by clause.
+
+    Deliberately modelled on ``VerdictFirstInvariantTests`` rather than invented:
+    both invariants have the same two-audience shape, so they have the same failure
+    modes and should be pinned the same way.
+
+    * **Orchestrator-facing recipes** name the invariant; the orchestrator resolves
+      it when composing a prompt.
+    * **Text handed to the agent verbatim** -- the AC-verifier's Part 1 ``Prompt:``
+      block -- reaches an agent that reads nothing else in the engine, so a bare name
+      there is inert. That site must carry the operative clause itself, and the
+      canonical definition quotes the same sentence so an editor has one string to
+      keep in step. Both ends are checked against ``_OPERATIVE``, so deleting it from
+      either fails.
+
+    **What this asserts is a string coupling, never a meaning** -- the ceiling
+    ``CLAUDE.md`` sets for a prose guard, and the reason the declines below are
+    declines rather than gaps.
+
+    **Explicitly NOT asserted, and owned by review:**
+
+    * the invariant's **polarity** -- that unmarked output counts as *unverified*
+      rather than verified. Inverting that word leaves every string here intact. This
+      is the same class of property ``VerdictFirstInvariantTests`` assigns to review,
+      for the same reason: no regex over prose can reach it.
+    * whether a site's prose **instructs** the rule or exempts itself from it while
+      still naming it -- ``assertIn`` cannot tell those apart.
+    * whether the three sites the invariant generalizes (the roster's never-inferred
+      rule, the finding-class emission rule, copy-is-not-evidence) still point AT it.
+      Those tags are one line each; a pin over them would be a fourth region whose
+      only content is the name, which is the enumerable shape this repo keeps having
+      to retract. Their deletion is a review finding.
+
+    **Stopping rule, pre-committed before the first defeat** (the #122 lesson): if
+    this guard is defeated twice, it is DELETED and the property recorded here as
+    review's -- not rewritten a third time with a longer literal.
+    """
+
+    _NAME = "Relay invariant"
+
+    # The sentence the verbatim site must paste, quoted in the canonical definition
+    # so both copies move together. Normalization lowercases (the canonical quotes it
+    # mid-sentence, the prompt starts a sentence with it) and folds em dashes; it does
+    # NOT paraphrase, so a reword fails until this constant is edited too.
+    _OPERATIVE = (
+        "mark each statement you return as reproduced -- you ran it, read it, or "
+        "compared it in the material given to you -- or inferred"
+    )
+
+    _CANONICAL = (
+        "**Relay invariant (a subagent's claim is not evidence",
+        "**Convergence & the resting states.**",
+    )
+    _VERBATIM = (
+        '   Prompt: *"Run the commands above yourself against base',
+        "2. For behavior that needs runtime proof, also run",
+    )
+    # Recipe sites name the invariant only. Each start anchor must NOT contain the
+    # name, or the subtest is unfalsifiable -- enforced below.
+    _REFERENCE_REGIONS = {
+        "step 8 (the finder fan-out)": (
+            "**Give every finder the issue's acceptance criteria alongside the diff.**",
+            "**Pick finder angles from the diff's risk surface",
+        ),
+    }
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", text.replace("\u2014", "--")).lower()
+
+    def _engine(self) -> str:
+        return _ENGINE.read_text(encoding="utf-8")
+
+    def _span(self, text: str, start: str, end: str, label: str) -> str:
+        # A duplicated START anchor fails OPEN: `find` takes the first occurrence, so
+        # the span can widen past this region and satisfy the check on a neighbour's
+        # text. Assert uniqueness rather than bounding the width.
+        self.assertEqual(
+            text.count(start), 1,
+            f"the start anchor for the {label} region occurs {text.count(start)} "
+            f"times in loop-engine.md ({start!r}); it must occur exactly once.",
+        )
+        i = text.find(start)
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1,
+            f"cannot locate the end of the {label} region ({end!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it.",
+        )
+        return text[i:j]
+
+    def _regions(self):
+        text = self._engine()
+        out = {
+            label: self._span(text, a, b, label)
+            for label, (a, b) in self._REFERENCE_REGIONS.items()
+        }
+        out["the AC-verifier Part 1 verbatim prompt"] = self._span(
+            text, *self._VERBATIM, "the AC-verifier Part 1 verbatim prompt"
+        )
+        return out
+
+    def test_the_span_anchors_actually_resolve(self) -> None:
+        """A guard whose anchors have drifted passes by finding nothing to check."""
+        text = self._engine()
+        self._span(text, *self._CANONICAL, "the canonical definition")
+        for label, region in self._regions().items():
+            self.assertTrue(region.strip(), f"the {label} region resolved empty")
+
+    def test_no_region_is_satisfied_by_its_own_anchor(self) -> None:
+        """If a start anchor carried the name, that region's check could never fail."""
+        for label, (start, _end) in self._REFERENCE_REGIONS.items():
+            with self.subTest(region=label):
+                self.assertNotIn(
+                    self._NAME.lower(), self._normalize(start),
+                    f"the start anchor for {label} contains the invariant's name, "
+                    "so that subtest would pass on its own anchor.",
+                )
+        self.assertNotIn(self._NAME.lower(), self._normalize(self._VERBATIM[0]))
+
+    def test_each_located_site_names_the_invariant(self) -> None:
+        """Per region, never a global count.
+
+        A total passes when one site drops the name and another gains a spare
+        mention, and cannot say which site went dark -- the lesson
+        ``PlanGateFrozenBlockTests`` records.
+        """
+        for label, region in self._regions().items():
+            with self.subTest(region=label):
+                self.assertIn(
+                    self._NAME.lower(), self._normalize(region),
+                    f"the {label} region no longer names the {self._NAME}. Either "
+                    "the reference was dropped -- the orchestrator then stops "
+                    "passing it on, silently, because the surrounding prose still "
+                    "reads correctly -- or this test's anchors need re-pointing.",
+                )
+
+    def test_the_verbatim_prompt_carries_the_clause_not_only_the_name(self) -> None:
+        """The failure this pins: satisfy the invariant by writing its NAME into the
+        ``Prompt:`` block. The block is pasted to an agent that reads nothing else in
+        the engine, so the instruction would never reach the one agent it is for.
+        """
+        text = self._engine()
+        canonical = self._span(text, *self._CANONICAL, "the canonical definition")
+        verbatim = self._span(
+            text, *self._VERBATIM, "the AC-verifier Part 1 verbatim prompt"
+        )
+        for label, region in (
+            ("the canonical definition", canonical),
+            ("the AC-verifier Part 1 verbatim prompt", verbatim),
+        ):
+            with self.subTest(region=label):
+                self.assertIn(
+                    self._OPERATIVE, self._normalize(region),
+                    f"{label} no longer carries the operative clause. Both copies "
+                    "are checked against _OPERATIVE, so a deliberate reword must "
+                    "change both AND this constant -- which is the point: the "
+                    "reword should be reviewed, not absorbed.",
                 )
 
 
