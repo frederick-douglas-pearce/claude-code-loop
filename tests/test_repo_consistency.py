@@ -1628,7 +1628,15 @@ class RelayInvariantTests(unittest.TestCase):
 
     Deliberately modelled on ``VerdictFirstInvariantTests`` rather than invented:
     both invariants have the same two-audience shape, so they have the same failure
-    modes and should be pinned the same way.
+    modes and are pinned the same way. **Two deliberate deviations from that sibling,
+    declared because an earlier draft asserted parity it did not have:** (1)
+    ``_normalize`` lowercases here and does not there -- the canonical quotes the
+    sentence mid-sentence (``*mark``) while the pasted prompt opens one (``Mark``), so
+    a case-sensitive compare could not pin both ends against one constant; the cost is
+    that a case change inside the pasted prompt is invisible. (2) The
+    self-satisfaction meta-test checks START anchors only, because ``_span`` returns
+    ``text[i:j]`` and so never includes the end anchor -- checking it would assert a
+    property the slice cannot have.
 
     * **Orchestrator-facing recipes** name the invariant; the orchestrator resolves
       it when composing a prompt.
@@ -1651,11 +1659,17 @@ class RelayInvariantTests(unittest.TestCase):
       for the same reason: no regex over prose can reach it.
     * whether a site's prose **instructs** the rule or exempts itself from it while
       still naming it -- ``assertIn`` cannot tell those apart.
-    * whether the three sites the invariant generalizes (the roster's never-inferred
-      rule, the finding-class emission rule, copy-is-not-evidence) still point AT it.
-      Those tags are one line each; a pin over them would be a fourth region whose
-      only content is the name, which is the enumerable shape this repo keeps having
-      to retract. Their deletion is a review finding.
+    * whether a site's prose carries the rule in a form that would actually reach an
+      agent -- ``assertIn`` sees a name, not an instruction.
+
+    **An earlier draft declined to pin the pointer sites at all**, on the reasoning
+    that a region table is "the enumerable shape this repo keeps having to retract."
+    That reasoning was wrong and the review round said so: ``VerdictFirstInvariantTests``
+    ships a seven-region table and ``DeltaScopedRoundNotationTests`` a four-region one,
+    so the region table is the shape this repo *endorses*. The enumerable-assertion
+    trap ``CLAUDE.md`` documents is about stale COUNTS and growable ALLOW-LISTS
+    (``ALLOWED_NON_BINDINGS``, ``_STOPWORDS``), neither of which an anchor table is.
+    Every pointer site is now a region.
 
     **Stopping rule, pre-committed before the first defeat** (the #122 lesson): if
     this guard is defeated twice, it is DELETED and the property recorded here as
@@ -1673,6 +1687,16 @@ class RelayInvariantTests(unittest.TestCase):
         "compared it in the material given to you -- or inferred"
     )
 
+    # _OPERATIVE is the AGENT-facing half. The ORCHESTRATOR-facing half -- what to do
+    # with an unmarked return -- was deletable with the suite green until this was
+    # added: the review round demonstrated that removing the whole Default-deny
+    # paragraph left every other assertion here intact. Pinned as a bolded LABEL,
+    # which CLAUDE.md blesses ("arbitrary strings where any change is a real change"),
+    # NOT as a polarity assertion: an author who rewords the label loses this check
+    # and must edit the constant, which is the reviewable outcome. Inverting the rule
+    # while keeping the label reads as self-contradictory prose and is review's.
+    _DEFAULT_DENY_LABEL = "**default-deny: unmarked"
+
     _CANONICAL = (
         "**Relay invariant (a subagent's claim is not evidence",
         "**Convergence & the resting states.**",
@@ -1687,6 +1711,18 @@ class RelayInvariantTests(unittest.TestCase):
         "step 8 (the finder fan-out)": (
             "**Give every finder the issue's acceptance criteria alongside the diff.**",
             "**Pick finder angles from the diff's risk surface",
+        ),
+        "step 8 (the guard-efficacy lens prompt list)": (
+            "**What its prompt must carry**",
+            "**(1) Part 2's blockquote, verbatim**",
+        ),
+        "the Class B limit-case checker recipe": (
+            "**The spawn prompt must carry five things",
+            "**Why a read is a legitimate check here",
+        ),
+        "Tool surface (copy-is-not-evidence)": (
+            "**Never let its copy stand in for the change under review.**",
+            "**Attribute the copy before you trust anything that came out of it.**",
         ),
     }
 
@@ -1727,11 +1763,26 @@ class RelayInvariantTests(unittest.TestCase):
         return out
 
     def test_the_span_anchors_actually_resolve(self) -> None:
-        """A guard whose anchors have drifted passes by finding nothing to check."""
+        """A guard whose anchors have drifted passes by finding nothing to check.
+
+        The bound is the live half. ``assertTrue(region.strip())`` -- what an earlier
+        draft used -- is tautological: ``_span`` returns ``text[i:j]`` with ``j > i``,
+        so the slice always begins with the whole start anchor and can never be empty.
+        The sibling's ``> 80`` is what actually fires, because every start anchor here
+        is 53-73 characters: a region collapsed to just its anchor lands under the
+        bound. ``_span``'s own assertions (start uniqueness, end resolvable) carry the
+        rest.
+        """
         text = self._engine()
-        self._span(text, *self._CANONICAL, "the canonical definition")
-        for label, region in self._regions().items():
-            self.assertTrue(region.strip(), f"the {label} region resolved empty")
+        canonical = self._span(text, *self._CANONICAL, "the canonical definition")
+        regions = dict(self._regions(), **{"the canonical definition": canonical})
+        for label, region in regions.items():
+            self.assertGreater(
+                len(region), 80,
+                f"the {label} region resolved to {len(region)} characters, about the "
+                "size of its own start anchor -- the span has collapsed and this "
+                "guard is checking nothing. Re-anchor it.",
+            )
 
     def test_no_region_is_satisfied_by_its_own_anchor(self) -> None:
         """If a start anchor carried the name, that region's check could never fail."""
@@ -1742,7 +1793,11 @@ class RelayInvariantTests(unittest.TestCase):
                     f"the start anchor for {label} contains the invariant's name, "
                     "so that subtest would pass on its own anchor.",
                 )
-        self.assertNotIn(self._NAME.lower(), self._normalize(self._VERBATIM[0]))
+        self.assertNotIn(
+            self._NAME.lower(), self._normalize(self._VERBATIM[0]),
+            "the verbatim region's start anchor contains the invariant's name, so "
+            "the clause and name checks over that region could pass on the anchor.",
+        )
 
     def test_each_located_site_names_the_invariant(self) -> None:
         """Per region, never a global count.
@@ -1760,6 +1815,25 @@ class RelayInvariantTests(unittest.TestCase):
                     "passing it on, silently, because the surrounding prose still "
                     "reads correctly -- or this test's anchors need re-pointing.",
                 )
+
+    def test_the_canonical_carries_the_orchestrator_side_rule(self) -> None:
+        """``_OPERATIVE`` pins only what the AGENT is asked to do.
+
+        What the ORCHESTRATOR does with an unmarked return is the other half, and the
+        review round demonstrated it was deletable with every other assertion here
+        still green. This pins its label -- a presence check on an arbitrary string,
+        not a polarity assertion; see the comment on the constant.
+        """
+        canonical = self._span(
+            self._engine(), *self._CANONICAL, "the canonical definition"
+        )
+        self.assertIn(
+            self._DEFAULT_DENY_LABEL, self._normalize(canonical),
+            "the canonical Relay invariant no longer carries its default-deny label. "
+            "That is the half the README promises the reader verbatim and the half "
+            "step 8's recipe delegates to; without it the invariant says what an "
+            "agent should mark and never what to do when it did not.",
+        )
 
     def test_the_verbatim_prompt_carries_the_clause_not_only_the_name(self) -> None:
         """The failure this pins: satisfy the invariant by writing its NAME into the
