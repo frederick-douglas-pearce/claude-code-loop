@@ -577,7 +577,8 @@ git/PR state, the orphan scan catches an open PR the ledger omits, and the merge
 missing `- Editorial:` line as unknown and escalates. Those check **state and presence** against
 ground truth; none of them inspects whether an assertion you wrote in prose is true, which is what
 this rule governs. And the finder pass is **review, not a sandbox** — an agent reading under
-instruction, exactly as `README.md` → *How the limits are enforced* says. So: one surface is reviewed, none is enforced, and
+instruction, exactly as `README.md` → *How the limits are enforced*
+says. So: one surface is reviewed, none is enforced, and
 "unchecked" above means unchecked *for the truth of what you asserted*.
 
 **Before you leave this step, walk the acceptance criteria once and name a `file:line` for each.**
@@ -748,7 +749,8 @@ distinction operable; **(2) that it must not edit, break or execute anything to 
 prohibition on improvising a mutation does not otherwise reach a finder; and **(3) that it must say
 plainly when it cannot tell** — the rule making that a dirty answer lives here, where the finder
 cannot see it, so an unprompted finder hedges and the gate reads clean. The Class B limit-case
-re-checker's spawn prompt carries these for the same reasons. **Named by content, never by number** — that recipe's items are numbered in another section.
+re-checker's spawn prompt carries these for the same reasons. **Named by content, never by number**
+— that recipe's items are numbered in another section.
 What does **not** carry over is that recipe's antecedent: it is written for a re-check of an
 already-found gap, and this lens has no prior finding and no fix in hand. Its **differential** is
 fixed by construction — writing its question as its differential is sufficient, and no round need

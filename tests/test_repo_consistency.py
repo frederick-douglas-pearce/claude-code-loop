@@ -1628,8 +1628,8 @@ class RelayInvariantTests(unittest.TestCase):
 
     Deliberately modelled on ``VerdictFirstInvariantTests`` rather than invented:
     both invariants have the same two-audience shape, so they have the same failure
-    modes and are pinned alike. **Deviations from that sibling, declared because an
-    earlier draft asserted parity it did not have:** (1)
+    modes and are pinned alike. **Deviations from that sibling include, declared
+    because an earlier draft asserted parity it did not have:** (1)
     ``_normalize`` lowercases here and does not there -- the canonical quotes the
     sentence mid-sentence (``*mark``) while the pasted prompt opens one (``Mark``), so
     a case-sensitive compare could not pin both ends against one constant; the cost is

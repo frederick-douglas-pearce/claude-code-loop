@@ -164,7 +164,8 @@ told the count**, and it is recorded in the ledger either way — including when
 **The loop is held to what it asserts — and only one of the surfaces it writes gets read back.**
 Every factual assertion it writes is a claim it has to stand behind: a claim that a test or guard
 exists elsewhere must name it, and the named thing must exist and say what the claim says. That binds
-every surface it writes — the diff, the ledger it keeps, and what it reports to you among them. **Only the diff is read back, by code
+every surface it writes — the diff, the ledger it keeps, and what it reports to you
+among them. **Only the diff is read back, by code
 review.** Nothing reads the ledger or a report to you and asks whether an assertion in it is *true*,
 so treat both as resting on the loop's own discipline. (Other machinery does check the ledger's
 **state** against your repository — a row's stage against live git, a missing record at the merge
