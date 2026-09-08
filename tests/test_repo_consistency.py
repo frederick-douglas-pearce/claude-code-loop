@@ -1486,7 +1486,11 @@ class VerdictFirstInvariantTests(unittest.TestCase):
     )
     _CANONICAL = (
         "**Verdict-first invariant (a verdict before depth).**",
-        "**Convergence & the resting states.**",
+        # Re-anchored when the Relay invariant was inserted between this section and
+        # Convergence. The end anchor must be the NEXT thing after this invariant, or
+        # the span silently widens to swallow a neighbour and the containment check
+        # can be satisfied by someone else's text.
+        "**Relay invariant (a subagent's claim is not evidence",
     )
 
     @staticmethod
@@ -1618,6 +1622,211 @@ class VerdictFirstInvariantTests(unittest.TestCase):
                     "both copies AND _OPERATIVE.",
                 )
 
+
+class RelayInvariantTests(unittest.TestCase):
+    """#115's Relay invariant reaches its orchestrator-facing sites by NAME.
+
+    Modelled on ``VerdictFirstInvariantTests``. One declared deviation: ``_normalize``
+    lowercases here and does not there.
+
+    Covers the **orchestrator-facing recipes**, which name the invariant and resolve it
+    when composing a prompt, plus the canonical definition's default-deny label.
+
+    **What it does NOT cover is the site that matters most, and that is a deliberate
+    deletion rather than an oversight -- see the stopping rule below.** The AC-verifier's
+    Part 1 ``Prompt:`` block is text handed to an agent verbatim; it reaches an agent
+    that reads nothing else in the engine, so the operative clause has to sit *inside*
+    the quoted block or the instruction never arrives. **Whether it does is review's to
+    check.** No assertion here looks at it.
+
+    **What this asserts is a string coupling, never a meaning** -- the ceiling
+    ``CLAUDE.md`` sets for a prose guard, and the reason the declines below are
+    declines rather than gaps.
+
+    **Explicitly NOT asserted, and owned by review:**
+
+    * the invariant's **polarity** -- that unmarked output counts as *unverified*
+      rather than verified. Inverting that word leaves every string here intact. This
+      is the same class of property ``VerdictFirstInvariantTests`` assigns to review,
+      for the same reason: no regex over prose can reach it.
+    * whether a site's prose **instructs** the rule or exempts itself from it while
+      still naming it -- ``assertIn`` cannot tell those apart.
+    * whether a site's prose carries the rule in a form that would actually reach an
+      agent -- ``assertIn`` sees a name, not an instruction.
+
+    **An earlier draft declined to pin the pointer sites at all**, on the reasoning
+    that a region table is "the enumerable shape this repo keeps having to retract."
+    That reasoning was wrong and the review round said so: ``VerdictFirstInvariantTests``
+    and ``DeltaScopedRoundNotationTests`` both ship region tables, so the region table
+    is the shape this repo *endorses*. The enumerable-assertion
+    trap ``CLAUDE.md`` documents is about stale COUNTS and growable ALLOW-LISTS
+    (``ALLOWED_NON_BINDINGS``, ``_STOPWORDS``), neither of which an anchor table is.
+    Every pointer site is now a region.
+
+    **The stopping rule was pre-committed before the first defeat and has now been
+    HONOURED** (the #122 lesson). It read: defeated twice => deleted, and the property
+    recorded here as review's, never rewritten a third time with a longer literal.
+
+    What it cost, recorded so nobody re-adds it by reflex:
+
+    * **Defeat 1** -- ``_VERBATIM`` ended at the paragraph *after* the prompt, so the
+      span meant "the neighbourhood of the prompt". Moving the clause out of the quoted
+      block into orchestrator prose below it left the clause verbatim and instructional,
+      never reaching the agent, with the suite green.
+    * **Defeat 2** -- re-anchoring to the prompt's closing *sentence* narrowed the hole
+      and did not close it. ``str.find`` takes the first occurrence after the start
+      anchor, so closing the quote early and leaving that sentence downstream re-widens
+      the span. Measured, not argued: ``_OPERATIVE`` inside the guard's span True,
+      inside the quotation marks False. The comment justifying that fix called the
+      anchor "a structural delimiter"; it was a sentence of the prompt, and the claim
+      was false when written.
+
+    A third anchor was available and verified to work. It was not taken: the rule
+    exists precisely for the moment when the next literal looks like it would hold, and
+    a guard whose author keeps judging his own stopping rule inapplicable has no
+    stopping rule. **Do not re-add a clause pin here without a mechanism that is not a
+    string anchor** -- a product fix that makes bad placement require *adding* an
+    exemption is the shape that would earn it.
+    """
+
+    _NAME = "Relay invariant"
+
+    # The sentence the verbatim site must paste, quoted in the canonical definition
+    # so both copies move together. Normalization lowercases (the canonical quotes it
+    # mid-sentence, the prompt starts a sentence with it) and folds em dashes; it does
+    # NOT paraphrase, so a reword fails until this constant is edited too.
+    # The ORCHESTRATOR-facing half of the invariant -- what to do with an unmarked
+    # return -- was deletable with the suite green until this was added: the review round demonstrated that removing the whole Default-deny
+    # paragraph left every other assertion here intact. Pinned as a bolded LABEL,
+    # which CLAUDE.md blesses ("arbitrary strings where any change is a real change"),
+    # NOT as a polarity assertion: an author who rewords the label loses this check
+    # and must edit the constant, which is the reviewable outcome. Inverting the rule
+    # while keeping the label reads as self-contradictory prose and is review's.
+    _DEFAULT_DENY_LABEL = "**default-deny: unmarked"
+
+    _CANONICAL = (
+        "**Relay invariant (a subagent's claim is not evidence",
+        "**Convergence & the resting states.**",
+    )
+    # Recipe sites name the invariant only. Each start anchor must NOT contain the
+    # name, or the subtest is unfalsifiable -- enforced below.
+    _REFERENCE_REGIONS = {
+        "step 8 (the finder fan-out)": (
+            "**Give every finder the issue's acceptance criteria alongside the diff.**",
+            "**Pick finder angles from the diff's risk surface",
+        ),
+        "step 8 (the guard-efficacy lens prompt list)": (
+            "**What its prompt must carry**",
+            "**(1) Part 2's blockquote, verbatim**",
+        ),
+        "the Class B limit-case checker recipe": (
+            "**The spawn prompt must carry five things",
+            "**Why a read is a legitimate check here",
+        ),
+        "Tool surface (copy-is-not-evidence)": (
+            "**Never let its copy stand in for the change under review.**",
+            "**Attribute the copy before you trust anything that came out of it.**",
+        ),
+    }
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", text.replace("\u2014", "--")).lower()
+
+    def _engine(self) -> str:
+        return _ENGINE.read_text(encoding="utf-8")
+
+    def _span(self, text: str, start: str, end: str, label: str) -> str:
+        # A duplicated START anchor fails OPEN: `find` takes the first occurrence, so
+        # the span can widen past this region and satisfy the check on a neighbour's
+        # text. Assert uniqueness rather than bounding the width.
+        self.assertEqual(
+            text.count(start), 1,
+            f"the start anchor for the {label} region occurs {text.count(start)} "
+            f"times in loop-engine.md ({start!r}); it must occur exactly once.",
+        )
+        i = text.find(start)
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1,
+            f"cannot locate the end of the {label} region ({end!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it.",
+        )
+        return text[i:j]
+
+    def _regions(self):
+        text = self._engine()
+        out = {
+            label: self._span(text, a, b, label)
+            for label, (a, b) in self._REFERENCE_REGIONS.items()
+        }
+        return out
+
+    def test_the_span_anchors_actually_resolve(self) -> None:
+        """A guard whose anchors have drifted passes by finding nothing to check.
+
+        The bound is the live half. ``assertTrue(region.strip())`` -- what an earlier
+        draft used -- is tautological: ``_span`` returns ``text[i:j]`` with ``j > i``,
+        so the slice always begins with the whole start anchor and can never be empty.
+        The sibling's ``> 80`` is what actually fires: a region collapsed to just its
+        start anchor lands under the bound. ``_span``'s own assertions (start
+        uniqueness, end resolvable) carry the rest.
+        """
+        text = self._engine()
+        canonical = self._span(text, *self._CANONICAL, "the canonical definition")
+        regions = dict(self._regions(), **{"the canonical definition": canonical})
+        for label, region in regions.items():
+            self.assertGreater(
+                len(region), 80,
+                f"the {label} region resolved to {len(region)} characters, about the "
+                "size of its own start anchor -- the span has collapsed and this "
+                "guard is checking nothing. Re-anchor it.",
+            )
+
+    def test_no_region_is_satisfied_by_its_own_anchor(self) -> None:
+        """If a start anchor carried the name, that region's check could never fail."""
+        for label, (start, _end) in self._REFERENCE_REGIONS.items():
+            with self.subTest(region=label):
+                self.assertNotIn(
+                    self._NAME.lower(), self._normalize(start),
+                    f"the start anchor for {label} contains the invariant's name, "
+                    "so that subtest would pass on its own anchor.",
+                )
+
+    def test_each_located_site_names_the_invariant(self) -> None:
+        """Per region, never a global count.
+
+        A total passes when one site drops the name and another gains a spare
+        mention, and cannot say which site went dark -- the lesson
+        ``PlanGateFrozenBlockTests`` records.
+        """
+        for label, region in self._regions().items():
+            with self.subTest(region=label):
+                self.assertIn(
+                    self._NAME.lower(), self._normalize(region),
+                    f"the {label} region no longer names the {self._NAME}. Either "
+                    "the reference was dropped -- the orchestrator then stops "
+                    "passing it on, silently, because the surrounding prose still "
+                    "reads correctly -- or this test's anchors need re-pointing.",
+                )
+
+    def test_the_canonical_carries_the_orchestrator_side_rule(self) -> None:
+        """What the ORCHESTRATOR does with an unmarked return.
+
+        A review round demonstrated this paragraph was deletable with every other
+        assertion here still green. This pins its label -- a presence check on an
+        arbitrary string, not a polarity assertion; see the comment on the constant.
+        """
+        canonical = self._span(
+            self._engine(), *self._CANONICAL, "the canonical definition"
+        )
+        self.assertIn(
+            self._DEFAULT_DENY_LABEL, self._normalize(canonical),
+            "the canonical Relay invariant no longer carries its default-deny label. "
+            "That is the half the README carries for the reader and the half "
+            "step 8's recipe delegates to; without it the invariant says what an "
+            "agent should mark and never what to do when it did not.",
+        )
 
 class ResumeHandoffPointerTests(unittest.TestCase):
     """#32's Resume hands its recovery procedure off to Part 2 by NAME.

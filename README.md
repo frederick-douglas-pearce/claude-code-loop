@@ -161,6 +161,33 @@ in most projects leaves it reaching very little. The practical effect is that
 this saves less than it may sound like it does, in the safe direction. **At the merge gate you are
 told the count**, and it is recorded in the ledger either way — including when it is zero.
 
+**The loop is held to what it asserts — and only one of the surfaces it writes gets read back.**
+Every factual assertion it writes is a claim it has to stand behind: a claim that a test or guard
+exists elsewhere must name it, and the named thing must exist and say what the claim says. That binds
+every surface it writes — the diff, the ledger it keeps, and what it reports to you
+among them. **Only the diff is read back, by code
+review.** Nothing reads the ledger or a report to you and asks whether an assertion in it is *true*,
+so treat both as resting on the loop's own discipline. (Other machinery does check the ledger's
+**state** against your repository — a row's stage against live git, a missing record at the merge
+gate — but that is state, not the truth of a sentence.) And even the diff is **reviewed, not
+enforced**: the reviewer is an agent reading, which by the standard set out further down this section
+is instruction the loop is bound by, not a sandbox. The ledger is where this matters most — it is
+what the next run reads to pick up where the last one stopped, so a false line there is not a stale
+document, it is something a later run treats as having happened. Stated the honest way round on
+purpose: naming the one surface that is read, rather than listing the ones that are not, so a surface
+nobody has thought of yet counts as unchecked instead of quietly counting as covered.
+
+**A subagent's recommendation is not the same as its finding, and the loop is required to tell them
+apart.** The agents it spawns return two kinds of thing: what they actually ran, read, or compared in
+the material they were handed, and what they inferred about anything outside it. Those arrive at
+identical authority on the page. So the loop asks its agents to mark which is which, and **anything
+unmarked counts as unverified**: it either checks the claim itself before that reaches you or the
+ledger, or hands it to you explicitly labelled unverified. What it may not do is relay it as fact.
+**Coverage of this is partial today** — the rule is stated once and the individual prompts that carry
+it are being brought into line one at a time — and it is built so the gap is harmless: a prompt that
+never asks the question yields output the loop must treat as unverified. Incomplete coverage costs
+you an extra check, never a false fact.
+
 **A gate that did not run is never reported as one that passed.** For every gate the loop
 runs — plan, architect, your build commands, the offline tier, code review, security, acceptance,
 merge — it may record a pass only with that gate's own output as evidence: **no verdict means not
