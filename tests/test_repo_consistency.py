@@ -2868,5 +2868,83 @@ class LensDifferentialAgreementTests(unittest.TestCase):
             "to review.")
 
 
+class ScopeRulingAgreementTests(unittest.TestCase):
+    """#114: the scope-ruling line's ran-rendering must still carry ``asked:``.
+
+    Step 8 stops for the human whenever a BLOCKING finding raises a design question,
+    and consults ``DESIGN_AGENT`` for a ruling to attach to that stop. ``asked:`` is
+    the structural half of AC2: because the stop is unconditional the field *always*
+    has a legal value, so a rendering that still carries it cannot describe a ruling
+    that resolved without putting anything to the human. Drop the field and the line
+    can be written for a ruling that quietly concluded no decision was needed -- with
+    every word of the surrounding prose still reading correctly.
+
+    **Scope: this pins one literal inside one located region, and nothing else.**
+    The region is the *ran* bullet alone -- from its own opening to the next
+    rendering's -- not the whole ``- Scope-ruling:`` block. That tightening is the
+    point. An earlier version of this assertion matched the block, so deleting
+    ``asked:`` from the rendering passed as long as the token appeared anywhere else
+    in it.
+
+    **What this test does NOT check, recorded here rather than half-guarded:**
+
+    * **AC7's two-site agreement.** The round bound is stated at step 8 and again
+      under Gates, and both must carry the design-question escalation. That is prose
+      agreement across two regions written in different words; there is no equality
+      to extract, so per ``CLAUDE.md``'s ceiling a check over it would be fragile or
+      vacuous. **Review's.**
+    * **The trigger's polarity.** That the ruling may *never* conclude no human
+      decision is required is a proposition, not a coupling -- assert the token and
+      the negation is deleted; match the negation and the predicate is reworded.
+      ``CLAUDE.md`` documents this ceiling and assigns polarity to review. **Review's.**
+    * **Whether the fix set a ruling proposes is genuinely minimal.** A judgment, not
+      a string. **Review's.**
+
+    **Stopping rule, pre-committed before the fact.** This is the second version of
+    the ``asked:`` assertion; the first was defeated in review and this one changes
+    its *shape* (superset containment -> exact-rendering containment) rather than its
+    literal. **If it is defeated again by an edit or a deletion it is DELETED, and
+    the property recorded above as review's -- not rewritten a third time with a
+    longer literal.** An append-class defeat (a spare ``asked:`` added beside the real
+    one) does not count: ``CLAUDE.md`` assigns those to review, and no containment
+    check over prose can stop one.
+    """
+
+    _RAN_BULLET_START = "- **`- Scope-ruling: <n> findings"
+    _RAN_BULLET_END = "- **`- Scope-ruling: n/a:"
+    _FIELD = "asked:"
+
+    def _ran_rendering(self) -> str:
+        text = _ENGINE.read_text(encoding="utf-8")
+        i = text.find(self._RAN_BULLET_START)
+        self.assertNotEqual(
+            i, -1,
+            "cannot locate the `- Scope-ruling:` ran rendering "
+            f"({self._RAN_BULLET_START!r}) in loop-engine.md. Either the line was "
+            "removed -- which drops step 8's record of the design-question stop "
+            "entirely -- or it was respelled. Re-anchor this test before trusting it.",
+        )
+        j = text.find(self._RAN_BULLET_END, i + len(self._RAN_BULLET_START))
+        self.assertNotEqual(
+            j, -1,
+            "cannot locate the `n/a:` rendering that bounds the ran bullet. The "
+            "enumeration this test scopes itself with is gone; re-anchor rather than "
+            "widening the span back to the whole block.",
+        )
+        return text[i:j]
+
+    def test_ran_rendering_still_carries_the_asked_field(self):
+        rendering = self._ran_rendering()
+        self.assertIn(
+            self._FIELD, rendering,
+            "the `- Scope-ruling:` ran rendering no longer carries `asked:`.\n\n"
+            "That field is the structural form of the guarantee that the ruling is "
+            "presented WITH the escalation and never in place of it: the stop is "
+            "unconditional, so `asked:` always has a legal value, and a rendering "
+            "without it can describe a ruling that resolved while putting nothing to "
+            "the human. Restore the field rather than relaxing this span.",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

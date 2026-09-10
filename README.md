@@ -118,8 +118,8 @@ acceptance criteria, risk, agent disagreement, a value story that doesn't
 hold, or genuine uncertainty. The two settings are deliberately independent: relaxing how much of
 the planning you review never loosens what gets merged without you, and a ledger that doesn't
 mention the field at all is read as `always`. Neither setting reaches the loop's other mid-pipeline
-stops — such as the architect-rewrite stop below, or a blocking gate finding still there after one
-fresh re-check, which stop and ask you regardless of both.
+stops — such as the architect-rewrite stop below, the design-question stop after it, or a blocking
+gate finding still there after one fresh re-check, which stop and ask you regardless of both.
 
 **When its design reviewer rewrites the plan, you see the plan.** One mid-pipeline stop is
 unconditional — no mode setting, no `plan-gate:` value, and no route graduation can loosen it: if the architect review
@@ -128,6 +128,17 @@ code. A reviewer that decides is treated as a stronger reason to interrupt you t
 because the plan you would have approved is no longer the plan being built. The comparison is made
 against a copy of the approach frozen before the review ran, so the loop is reading a record rather
 than its own memory of what it had intended.
+
+**When a review finding raises a design question, you see it.** A second mid-pipeline stop is
+unconditional in the same way. If code review returns a **blocking** finding that raises a design
+question — whether the approach is right, whether a fix belongs in this change at all, whether
+several findings share one root cause — the loop consults its design reviewer for a scope ruling and
+**stops for you with that ruling attached**, under every mode and at whatever round the finding
+arose. The ruling can narrow the work; it can never conclude that no decision of yours is required,
+and it never clears the finding or passes the gate on your behalf. If the design-reviewer binding is
+missing or unset the loop **still stops** — it simply has no ruling to attach — because the stop
+belongs to the finding, not to the reviewer. Editorial findings, which the loop applies in one sweep
+without re-review, neither consult nor stop.
 
 **Code review asks whether your new guards would actually catch anything.** The loop picks review
 angles from what the change puts at risk, but one is a floor rather than a choice: on any change
