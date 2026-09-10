@@ -92,7 +92,8 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   everywhere else.)
 - **A BLOCKING review finding that raises a design question stops for the human.** It is its own
   gate, not a footnote to the one above: consult `DESIGN_AGENT` for a scope ruling **and** stop with
-  that ruling attached — under every mode, **on every route**, at whatever round the finding arises,
+  that ruling attached, **before any fix for it is applied** — under every mode, **on every route**,
+  at whatever round the finding arises,
   and **not** gated on the round cap. **No state of the binding excuses the stop**: unbound,
   `TODO`-valued or uninvocable means you stop with no ruling attached, never that you proceed. If
   you cannot tell whether a finding raises a design question, it does.

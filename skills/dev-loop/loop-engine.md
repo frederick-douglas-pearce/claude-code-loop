@@ -381,9 +381,8 @@ never be a reason to record less.**
   it happens long after this gate, rules on a *finding* rather than on the plan, and rewrites no
   `## Approach`, so it owes no freeze and never makes this condition due. A use a project's config
   adds is **plan-informing unless it plainly is not** — and **if you cannot tell, it is
-  plan-informing: freeze, and treat this condition as due.** Enumerating the exempt set instead
-  would be the safe-set enumeration this engine refuses everywhere else; unknown must land on the
-  over-gating side.
+  plan-informing: freeze, and treat this condition as due.** Unknown must land on the over-gating
+  side.
 
   **Do not word the exclusion "before the plan gate"**: this step *is* that gate and its own first
   consult happens here, so that phrasing would exclude the one architect call the freeze rule most
@@ -1007,7 +1006,9 @@ exactly the certification the placement above buys.
 
 **Implement viable BLOCKING findings** — **except one raising a design question, which stops for the
 human before any fix for it is applied (below); do not reach this instruction first on such a
-finding**. Decline others with a one-line rationale — **and record each decline,
+finding** — act on that stop before acting on this sentence. Decline any **other** finding you do
+not implement, with a one-line rationale; the exception above is a stop, never a decline — **and
+record each decline,
 with that rationale, in the gate-decision block where this round resolves** (Ledger format →
 progress.md), exactly as an architect decline is recorded in the plan text. A later round is
 *required* to receive the declines (Gates), and a decline is the one outcome that leaves **no trace
@@ -1063,8 +1064,8 @@ the escalation the human relies on is quietly conditional again.
   a decline** for every purpose the decline rule above fixes: record it in the round's gate-decision
   block with the ruling's reason as its rationale, so a later round receives it with the other
   declines. That rule exists because a decline is the one outcome leaving **no trace in the diff**,
-  and a deferral inherits exactly that property. The `- Scope-ruling:` line is an **additional**
-  record, never a substitute for it. Where a deferral outlives the iteration it is **surfaced to the
+  and a deferral inherits exactly that property. That gate-decision record is the only one owed;
+  there is no separate line to write it on. Where a deferral outlives the iteration it is **surfaced to the
   human at the stop, named, as work to file** — this engine gives the orchestrator no write path to
   `BACKLOG_SOURCE` and no issue-creation procedure, so do not read "file it" as an action you take.
 - **An EDITORIAL design-question finding raised before the sweep neither consults nor stops** — it
@@ -1079,20 +1080,29 @@ the escalation the human relies on is quietly conditional again.
   inline composition substitutes here, and that is scoped per *use*, not per binding:** the plan
   gate's inline architect composition (step 5) does not reach this consult, because an
   orchestrator composing its own scope ruling is precisely the self-assessment the ruling exists
-  to remove. This use therefore defines no fallback, which makes it *static with no fallback
-  defined* under the Gate-outcome invariant — write `- gate-error: scope-ruling — DESIGN_AGENT
-  <unbound | TODO-valued | uninvocable> — no-binding`, naming the state you actually found rather
-  than the first of the three. Keep it free of
-  volatile arguments so the repeat check still reads one signature. And **never `-
-  gate-fallback:`**, which Guardrails excludes from the repeat check and which would let a
-  `TODO(init-loop)` default read as handled on every fresh consumer forever.
+  to remove. This use therefore defines no fallback, which puts it on the Gate-outcome invariant's
+  **stopped-and-escalated** branch — true of every state below. Where the binding is
+  **static**ally unusable — unbound, `TODO`-valued, or naming something you may not invoke — write
+  `- gate-error: scope-ruling — DESIGN_AGENT <unbound | TODO-valued | uninvocable> — no-binding`,
+  naming the state you actually found rather than the first of the three. **Where the agent ran
+  and failed** — errored, returned nothing, or returned the one thing it may never return — the
+  failure is **dynamic** by the invariant's own discriminator, so write its general shape instead:
+  `- gate-error: scope-ruling — DESIGN_AGENT — <first line of the error>`, or `no-stderr` where
+  there was none. **Never `no-binding` for a binding that was fine**: Guardrails greps these
+  signatures across rows, so it would read as a standing config defect and send the human to
+  repair a healthy config. Keep it free of volatile arguments so the repeat check still reads one
+  signature. And **never `- gate-fallback:`**, which Guardrails excludes from the repeat check and
+  which would let a `TODO(init-loop)` default read as handled on every fresh consumer forever.
 
-**Journal this gate's disposition** on the `- Scope-ruling:` line (Ledger format → progress.md),
-written **here** when this gate reaches its disposition and not at step 12, **whose enumerated
-spellings include the case where no BLOCKING finding raised a design question**. That clause is the
-point: the line is owed by every iteration reaching this gate's rounds, not only by one the trigger
-fired on, so a clean close writes the not-due spelling rather than nothing. **The close record
-carries the line too**, as it carries `- Hermetic:` and `- Restore:`.
+**Record the ruling where this round resolves** — in the gate-decision block `progress.md` already
+takes per gate decision (Ledger format → progress.md), alongside the round's findings and its
+declines. It needs no line format of its own: what must survive is *that a ruling was taken, what it
+recommended, and what was put to the human*, and the gate-decision block is where the round's other
+outcomes already live. **There is deliberately no dedicated ledger line for this gate.** A rendering
+enumeration for one has to stay mutually exclusive and jointly exhaustive across the clean-close,
+cap-escalation, `- gate-fallback:` and `- gate-error:` paths, and every arrangement tried asserted
+something false on one of them — so the record lives where the round's other outcomes already do,
+rather than on a line whose not-due spelling is a claim in its own right.
 
 **The scope ruling is not a review round, and this is the canonical test for that.** Two conjuncts,
 **both** required:
@@ -1804,7 +1814,6 @@ by; omitting the record because there is no issue number is what would break it.
 - PR: #<pr> (chore scope). CI: green.
 - Code-review: round 1 (main...9f3c1ab) — 0 findings. Security: n/a (no deps added).
 - Editorial: 0 — no EDITORIAL finding returned.
-- Scope-ruling: n/a: no BLOCKING finding raised a design question.
 - Restore: n/a: no mutation applied.
 - AC-verify: Class A 3/3 acceptance criteria met. Class B: mutation pass not due (research route).
 - Budget: subagent-runs=3 · gate-rounds=architect=0,code-review=1(correctness,robustness),ac-verify=1 · ac-findings=0 · mutation-survivors=n/a: research route · wall-clock=18m · tokens=deferred
@@ -1969,55 +1978,6 @@ assert one:
 - **no `- Editorial:` line at all** — on an iteration whose step 8 closed, **unknown, and unknown is
   not "0".** Absence cannot distinguish an iteration that swept nothing from one that swept without
   recording it, and the second is the failure this line exists to catch.
-
-The **`- Scope-ruling:`** line records step 8's scope ruling on a BLOCKING design-question finding.
-Like `- Editorial:` it resolves several steps before the journal, so **write it at step 8, when that
-gate reaches its disposition — not at step 12.** **The close record carries the line too**, as it
-carries `- Hermetic:` and `- Restore:` — written at step 8 when the gate resolves, and repeated in
-the close record so one block holds the iteration's whole outcome.
-
-**Its ownership is its own; do NOT read it off `- Editorial:`.** It is owed by **every iteration that
-reaches step 8's review rounds**, whether that gate closes clean or escalates and stops. State the
-contrast, because the two lines behave **oppositely** on the path that matters: `- Editorial:` is
-owed by an iteration whose step 8 *closes*, and writes none where step 8 escalates — while the ruling
-runs *only* when a finding escalates, so escalate-and-stop is exactly where this line's primary
-rendering is due. Mirroring `- Editorial:` would suppress it on every path it is actually owed on.
-
-**`asked:` records the STOP, not the ruling — so wherever this gate was *due* and the iteration
-stopped, the rendering carries it.** The scoping matters: `n/a:` describes a stop on which the ruling
-was **never due**, so it carries no `asked:` and is not an exception to this.
-That split is deliberate and is what keeps the dangerous state unwritable: the stop is unconditional,
-so a rendering describing a stopped iteration *always* has a legal value for it, and the only way to
-record "the ruling resolved and nobody was asked" is to write something false rather than to fall out
-of a legal form. The **ruling's content** is the part that can be absent; the **stop** is not.
-
-- **`- Scope-ruling: <n> findings — fix <ids>; defer <ids> (<reason>); asked: <the yes/no put to the
-  human>`** — the ruling ran. Each `<id>` is the `r<round>.<lens>.<k>` the finding was recorded under
-  (step 8). **`defer` discharges nothing**: a deferred finding **is a decline** (step 8), so it is
-  recorded in the round's gate-decision block with the ruling's reason and handed to any later round
-  with the other declines; where it outlives the iteration it is **surfaced to the human at the stop,
-  named, as work to file**. This line references that decline; it never replaces it.
-- **`- Scope-ruling: no ruling — asked: <the yes/no put to the human>`** — the iteration **stopped**
-  and no usable ruling backs it. **Two states share this spelling deliberately**: the trigger fired
-  but nothing usable came back (unbound, `TODO`-valued or uninvocable binding; an agent that errored,
-  returned nothing, or returned the one thing it may never return); **or the round itself produced no
-  verdict, so whether a design-question finding existed is unknown**. Both are *not-clean and
-  not-not-due*, which is the one thing the record has to preserve. A `- gate-error:` carries why. **The
-  `asked:` is still owed** — something *was* put to the human, and a spelling that could not record
-  the stop would erase exactly what must survive on the path where no ruling backs it.
-  Never a count.
-- **`- Scope-ruling: n/a: <reason>`** — **the round returned a verdict and none of its findings
-  was a BLOCKING design question**, so no ruling was due. Written on the close path and on a stop
-  whose round returned a verdict (a plain cap escalation is one — it stops precisely *because* a
-  finding went unresolved, so "resolved" is the wrong test; "the round reached a verdict" is the
-  right one), never omitted: the not-due case is visible, as `- Restore:` requires of its own. The
-  reason is free-form and that set is deliberately **not** closed. **It is unavailable wherever
-  due-ness could not be determined** — a round that itself produced no verdict cannot know whether
-  a design-question finding existed, and asserting "no ruling was due" there enumerates a safe
-  state out of an unknown one. That case takes `no ruling` above.
-- **no `- Scope-ruling:` line at all** on an iteration that reached step 8's rounds — **unknown, and
-  unknown is not "not due".** Unlike `- Editorial:`, this line has **no writes-none path**: the only
-  state that legitimately leaves no line is a crash before the gate reached a disposition.
 
 The **`- Restore:`** line records that a mutation pass gave the tree back. It gets its own line for
 the same reason `- Hermetic:` does — everything else about the pass is *prevention*, and prevention
