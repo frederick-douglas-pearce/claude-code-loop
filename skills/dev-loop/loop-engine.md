@@ -1004,17 +1004,15 @@ unreviewed rests on containment inside *this step's* commit boundary, and that c
 once the pipeline has advanced past it — a sweep run then would sit downstream of step 9, which is
 exactly the certification the placement above buys.
 
-**Implement viable BLOCKING findings** — **except one raising a design question, which stops for the
-human before any fix for it is applied (below); do not reach this instruction first on such a
-finding** — act on that stop before acting on this sentence. Decline any **other** finding you do
+**Implement viable BLOCKING findings** — **except one raising a design question, which stops for
+the human before any fix for it is applied (below)** — act on that stop before acting on this
+sentence. Decline any **other** finding you do
 not implement, with a one-line rationale; the exception above is a stop, never a decline — **and
-record each decline,
-with that rationale, in the gate-decision block where this round resolves** (Ledger format →
-progress.md), exactly as an architect decline is recorded in the plan text. A later round is
-*required* to receive the declines (Gates), and a decline is the one outcome that leaves **no trace
-in the diff** for that round to recover it from: unrecorded, it is invisible to every subsequent
-fresh instance. Then **commit the
-BLOCKING fixes** and
+record each decline, with that rationale, in the gate-decision block where this round resolves**
+(Ledger format → progress.md), exactly as an architect decline is recorded in the plan text. A
+later round is *required* to receive the declines (Gates), and a decline is the one outcome that
+leaves **no trace in the diff** for that round to recover it from: unrecorded, it is invisible to
+every subsequent fresh instance. Then **commit the BLOCKING fixes** and
 **verify recs were applied — by a fresh checker, never by yourself.** If you *delegated* any fix,
 that agent wrote to its own copy: collect the diff, apply it, and **remove the copy before you
 commit** (Execution policy, Tool surface) — directing a fix is authorship, and it is also the one
@@ -1060,14 +1058,15 @@ the escalation the human relies on is quietly conditional again.
 - **What it may never return**, written into the same prompt: it may **narrow** the work and may
   **never** conclude that no human decision is required. It cannot clear a finding and it cannot
   certify the gate. The ruling is escalation *content*; the human still decides.
-- **A deferral is never silent, and it is not a new disposition.** A finding the ruling defers **is
-  a decline** for every purpose the decline rule above fixes: record it in the round's gate-decision
-  block with the ruling's reason as its rationale, so a later round receives it with the other
-  declines. That rule exists because a decline is the one outcome leaving **no trace in the diff**,
-  and a deferral inherits exactly that property. That gate-decision record is the only one owed;
-  there is no separate line to write it on. Where a deferral outlives the iteration it is **surfaced to the
-  human at the stop, named, as work to file** — this engine gives the orchestrator no write path to
-  `BACKLOG_SOURCE` and no issue-creation procedure, so do not read "file it" as an action you take.
+- **A deferral is never silent, and it is not a new disposition.** A finding the ruling defers
+  **is a decline** for every purpose the decline rule above fixes: record it in the round's
+  gate-decision block **as deferred by the ruling**, with the ruling's reason as its rationale, so
+  a later round receives it with the other declines. That rule exists because a decline is the one
+  outcome leaving **no trace in the diff**, and a deferral inherits exactly that property. That
+  gate-decision record is the only one owed; there is no separate line to write it on. Where a
+  deferral outlives the iteration it is **surfaced to the human at the stop, named, as work to
+  file** — this engine gives the orchestrator no write path to `BACKLOG_SOURCE` and no
+  issue-creation procedure, so do not read "file it" as an action you take.
 - **An EDITORIAL design-question finding raised before the sweep neither consults nor stops** — it
   joins that sweep like any other, per the class rules above. So the stop fires only where this gate
   already held something worth the human's attention.
@@ -1098,11 +1097,16 @@ the escalation the human relies on is quietly conditional again.
 takes per gate decision (Ledger format → progress.md), alongside the round's findings and its
 declines. It needs no line format of its own: what must survive is *that a ruling was taken, what it
 recommended, and what was put to the human*, and the gate-decision block is where the round's other
-outcomes already live. **There is deliberately no dedicated ledger line for this gate.** A rendering
-enumeration for one has to stay mutually exclusive and jointly exhaustive across the clean-close,
-cap-escalation, `- gate-fallback:` and `- gate-error:` paths, and every arrangement tried asserted
-something false on one of them — so the record lives where the round's other outcomes already do,
-rather than on a line whose not-due spelling is a claim in its own right.
+outcomes already live.
+
+**There is deliberately no dedicated `- Scope-ruling:` *disposition* line, and none is owed when this
+gate is not due** — the Gate-outcome invariant's not-run journalling does not reach this row, because
+a not-due spelling would be a claim in its own right and this gate has no path on which such a claim
+holds. Two consequences, and the second is the one that keeps it fail-safe. **The `- gate-error:`
+line above is untouched by this** — it is owed whenever the gate *was* due and no ruling came back,
+and "no disposition line" is never licence to skip it. And **absence of a ruling in a round's block
+carries no claim about due-ness**, which is why the trigger is default-deny: *if you cannot tell
+whether this gate was due, it was — consult and stop.*
 
 **The scope ruling is not a review round, and this is the canonical test for that.** Two conjuncts,
 **both** required:
