@@ -247,8 +247,13 @@ step 5 looks for it by name). That block
 is the **pre-image** step 5's materiality test diffs against — without it the test has nothing to
 compare and degrades to self-assessment, which is what it exists to replace. (The ledger is
 gitignored, so there is no git pre-image to recover instead.) The freeze is owed whenever you are
-about to consult `DESIGN_AGENT` — here, or at step 5 where that step first consults it; an architect
-pass that never happens can rewrite nothing.
+about to consult `DESIGN_AGENT` **to inform the plan** — here, or at step 5 where that step first
+consults it. An architect pass that never happens can rewrite nothing, and neither does a consult
+that does not inform the plan: step 8's scope ruling on a review finding is the one this engine
+defines, and it owes no freeze. **If you cannot tell whether a consult informs the plan, it does —
+freeze, and treat step 5's condition as due.** That default is not decoration: misjudging this one
+way costs a copied heading, and the other way removes the freeze *and* makes the condition not-due
+at once, which is the absent-pre-image stop the whole mechanism exists to force.
 
 **A freeze taken after the agent has returned is not a pre-image.** It copies the already-redirected
 text, so treat the block as **absent** — which step 5 reads as material. Never back-date one.
@@ -360,22 +365,37 @@ never be a reason to record less.**
   the architect was **skipped**, the block is legitimately absent and the condition is not due at
   all — the distinction is whether the gate ran, never whether the artifact is there.
 
-  **"Skipped" means no architect pass ran at all — not merely that step 4 skipped it, and not
-  merely that `DESIGN_AGENT` by that name was never invoked.** Two cases the narrow reading loses:
-  this step routes design questions to `DESIGN_AGENT` before escalating, so the agent can first run
-  *here*, after step 4 declined it; and where the binding is unrunnable, the inline composition you
-  run in its place (Gate-outcome invariant) **is** an architect pass in substance. **The freeze is
-  owed by either, at step 4 or at step 5**: freeze `## Approach` before consulting, and apply the
-  outcome to the plan text before deciding. A consultation at this step that redirects the plan is
-  material on the same terms — otherwise the one architect call the freeze rule forgot to name
-  becomes the path the whole condition is bypassed through, journalled `n/a: architect skipped`
-  while a pass was in fact run and did in fact redirect.
+  **"Skipped" means no *plan-informing* architect pass ran at all — not merely that step 4 skipped
+  it, and not merely that `DESIGN_AGENT` by that name was never invoked.** Two cases the narrow
+  reading loses: this step routes design questions to `DESIGN_AGENT` before escalating, so the
+  agent can first run *here*, after step 4 declined it; and where the binding is unrunnable, the
+  inline composition you run in its place (Gate-outcome invariant) **is** an architect pass in
+  substance. **The freeze is owed by either, at step 4 or at step 5**: freeze `## Approach` before
+  consulting, and apply the outcome to the plan text before deciding. A consultation at this step
+  that redirects the plan is material on the same terms — otherwise the one architect call the
+  freeze rule forgot to name becomes the path the whole condition is bypassed through, journalled
+  `n/a: architect skipped` while a pass was in fact run and did in fact redirect.
+
+  **What "plan-informing" excludes — and the set is open, not closed at one member.** The one
+  exclusion this engine defines is **step 8's scope ruling on a BLOCKING design-question finding**:
+  it happens long after this gate, rules on a *finding* rather than on the plan, and rewrites no
+  `## Approach`, so it owes no freeze and never makes this condition due. A use a project's config
+  adds is **plan-informing unless it plainly is not** — and **if you cannot tell, it is
+  plan-informing: freeze, and treat this condition as due.** Unknown must land on the over-gating
+  side.
+
+  **Do not word the exclusion "before the plan gate"**: this step *is* that gate and its own first
+  consult happens here, so that phrasing would exclude the one architect call the freeze rule most
+  needs to reach. Key it on **purpose** — plus the two facts that it rules on a finding and rewrites
+  no `## Approach`.
 
   **A consultation *after* this gate is out of scope here, deliberately.** The pipeline offers no
   path back to step 5 from `plan-approved`, and an approved plan later invalidated by a fresh
   consultation is the plan-currency problem (#89, in the same family as #33), not this
-  condition. Do not improvise a stop for it here: with no pre-image to diff, any rule stated at this step would be self-assessment — the very
-  thing this condition exists to replace.
+  condition. Step 8's scope ruling is such a consultation, and is additionally not plan-informing —
+  so it owes this condition nothing on either count. Do not improvise a stop for it here: with no
+  pre-image to diff, any rule stated at this step would be self-assessment — the very thing this
+  condition exists to replace.
 
   **Present the frozen-vs-final diff at the stop**, not a re-read of the whole plan. The cost of this
   condition is the human's attention, and a diff is what keeps it cheap.
@@ -984,13 +1004,15 @@ unreviewed rests on containment inside *this step's* commit boundary, and that c
 once the pipeline has advanced past it — a sweep run then would sit downstream of step 9, which is
 exactly the certification the placement above buys.
 
-**Implement viable BLOCKING findings**; decline others with a one-line rationale — **and record each decline,
-with that rationale, in the gate-decision block where this round resolves** (Ledger format →
-progress.md), exactly as an architect decline is recorded in the plan text. A later round is
-*required* to receive the declines (Gates), and a decline is the one outcome that leaves **no trace
-in the diff** for that round to recover it from: unrecorded, it is invisible to every subsequent
-fresh instance. Then **commit the
-BLOCKING fixes** and
+**Implement viable BLOCKING findings** — **except one raising a design question, which stops for
+the human before any fix for it is applied (below)** — act on that stop before acting on this
+sentence. Decline any **other** finding you do
+not implement, with a one-line rationale; the exception above is a stop, never a decline — **and
+record each decline, with that rationale, in the gate-decision block where this round resolves**
+(Ledger format → progress.md), exactly as an architect decline is recorded in the plan text. A
+later round is *required* to receive the declines (Gates), and a decline is the one outcome that
+leaves **no trace in the diff** for that round to recover it from: unrecorded, it is invisible to
+every subsequent fresh instance. Then **commit the BLOCKING fixes** and
 **verify recs were applied — by a fresh checker, never by yourself.** If you *delegated* any fix,
 that agent wrote to its own copy: collect the diff, apply it, and **remove the copy before you
 commit** (Execution policy, Tool surface) — directing a fix is authorship, and it is also the one
@@ -1010,6 +1032,98 @@ loop. **An EDITORIAL finding raised before the sweep has run does not re-arm and
 it joins that sweep. **A round that runs after the sweep has no sweep to join, so every finding it
 returns escalates whatever its class.** The classes change nothing else about this bound: not the
 cap, not what counts as a defect, and not the escalation for anything else.
+
+**A BLOCKING finding that raises a design question consults `DESIGN_AGENT` and carries its own
+stop.** Those are one trigger, not two. Decoupling them is how a nature-based trigger silently loses
+the guarantee the cap used to supply: the consult becomes reachable on a path that does not stop, and
+the escalation the human relies on is quietly conditional again.
+
+- **Trigger.** A **BLOCKING** finding raising a design question — whether the approach is right,
+  whether a fix belongs in this change at all, or whether several findings share one root cause.
+  **Default-deny: if you cannot tell whether a finding raises a design question, it does.**
+- **Effect, both halves together.** Consult `DESIGN_AGENT` for a **scope ruling** *and* **STOP for
+  the human with it**, under every `mode:` value, **on every route**, **at whatever round the finding
+  arises**. It is **not gated on the cap**: reaching the cap neither summons this stop nor excuses
+  it, and the stop fires whether or not a round remains. Route graduation does not reach it either —
+  `escalation-only` loosens the merge gate only.
+- **The moment is when the finding is returned** — *before* any fix for it is applied, before the
+  fix commit, and before the next round is spawned. **Read this against the implement-and-re-check
+  paragraph above rather than in file order:** that paragraph sequences fix → commit → fresh
+  re-check, and running it first on a design-question finding satisfies every word here while
+  defeating the point. The trigger above names *"whether a fix belongs in this change at all"* as a
+  design question, so a fix committed before the human is asked has answered their question for them.
+- **What the ruling returns**, verdict-first — state this at the invoke site, since `DESIGN_AGENT`
+  has no prompt template of its own: the findings classified by severity, a **minimal fix set** that
+  would clear the gate, and every deferral named with its reason.
+- **What it may never return**, written into the same prompt: it may **narrow** the work and may
+  **never** conclude that no human decision is required. It cannot clear a finding and it cannot
+  certify the gate. The ruling is escalation *content*; the human still decides.
+- **A deferral is never silent, and it is not a new disposition.** A finding the ruling defers
+  **is a decline** for every purpose the decline rule above fixes: record it in the round's
+  gate-decision block **as deferred by the ruling**, with the ruling's reason as its rationale, so
+  a later round receives it with the other declines. That rule exists because a decline is the one
+  outcome leaving **no trace in the diff**, and a deferral inherits exactly that property. That
+  gate-decision record is the only one owed; there is no separate line to write it on. Where a
+  deferral outlives the iteration it is **surfaced to the human at the stop, named, as work to
+  file** — this engine gives the orchestrator no write path to `BACKLOG_SOURCE` and no
+  issue-creation procedure, so do not read "file it" as an action you take.
+- **An EDITORIAL design-question finding raised before the sweep neither consults nor stops** — it
+  joins that sweep like any other, per the class rules above. So the stop fires only where this gate
+  already held something worth the human's attention.
+- **No state of the binding excuses the stop.** `DESIGN_AGENT` unbound, `TODO`-valued or
+  uninvocable are the named instances; **any state in which no usable ruling comes back** is
+  covered, including an agent that is invoked and errors, returns nothing, or returns the one
+  thing it may never return. The stop belongs to the **finding**, not to the agent, so the
+  iteration **still stops** — you escalate with no ruling attached rather than proceeding. Note
+  what this does and does not say: the *ruling* may indeed be skipped; the *stop* never is. **No
+  inline composition substitutes here, and that is scoped per *use*, not per binding:** the plan
+  gate's inline architect composition (step 5) does not reach this consult, because an
+  orchestrator composing its own scope ruling is precisely the self-assessment the ruling exists
+  to remove. This use therefore defines no fallback, which puts it on the Gate-outcome invariant's
+  **stopped-and-escalated** branch — true of every state below. Where the binding is
+  **static**ally unusable — unbound, `TODO`-valued, or naming something you may not invoke — write
+  `- gate-error: scope-ruling — DESIGN_AGENT <unbound | TODO-valued | uninvocable> — no-binding`,
+  naming the state you actually found rather than the first of the three. **Where the agent ran
+  and failed** — errored, returned nothing, or returned the one thing it may never return — the
+  failure is **dynamic** by the invariant's own discriminator, so write its general shape instead:
+  `- gate-error: scope-ruling — DESIGN_AGENT — <first line of the error>`, or `no-stderr` where
+  there was none. **Never `no-binding` for a binding that was fine**: Guardrails greps these
+  signatures across rows, so it would read as a standing config defect and send the human to
+  repair a healthy config. Keep it free of volatile arguments so the repeat check still reads one
+  signature. And **never `- gate-fallback:`**, which Guardrails excludes from the repeat check and
+  which would let a `TODO(init-loop)` default read as handled on every fresh consumer forever.
+
+**Record the ruling where this round resolves** — in the gate-decision block `progress.md` already
+takes per gate decision (Ledger format → progress.md), alongside the round's findings and its
+declines. It needs no line format of its own: what must survive is *that a ruling was taken, what it
+recommended, and what was put to the human*, and the gate-decision block is where the round's other
+outcomes already live.
+
+**There is deliberately no dedicated `- Scope-ruling:` *disposition* line, and none is owed when this
+gate is not due** — the Gate-outcome invariant's not-run journalling does not reach this row, because
+a not-due spelling would be a claim in its own right and this gate has no path on which such a claim
+holds. Two consequences, and the second is the one that keeps it fail-safe. **The `- gate-error:`
+line above is untouched by this** — it is owed whenever the gate *was* due and no ruling came back,
+and "no disposition line" is never licence to skip it. And **absence of a ruling in a round's block
+carries no claim about due-ness**, which is why the trigger is default-deny: *if you cannot tell
+whether this gate was due, it was — consult and stop.*
+
+**The scope ruling is not a review round, and this is the canonical test for that.** Two conjuncts,
+**both** required:
+1. **It certifies nothing.** A round returns a verdict on the change; this returns a recommendation.
+   **Default-deny: a pass that *can* conclude the gate may pass IS a round**, whatever it is called.
+2. **It reduces no review coverage.** Nothing a round would have read goes unread because it ran.
+   This ruling lands **no edit in the tree** — it is a recommendation presented with a stop — so
+   there is no edit for a later round to miss. Where a pass *does* edit the tree, its edits must land
+   inside a range some later gate or round reads, and discharging that is the edit-causing pass's own
+   obligation, never something this test grants it.
+
+**Cost and locus:** one `DESIGN_AGENT` invocation, here at step 8, counted in **`subagent-runs`
+only** and **never in `gate-rounds=architect=`**. That slot counts *rounds* and is the sole thrash
+signal, so a non-round recorded there injects false thrash, spuriously trips the `justification=`
+expectation, and lets a single close record carry `- Plan-gate: n/a: architect skipped` alongside
+`gate-rounds=architect=1`. Do not reason from the hermetic tier's precedent: that gate is
+not-a-round *structurally*, so its conclusion holds while its reason does not transfer.
 
 **Round 1 reads the whole change; every round after it reads only what has changed since the last
 round read.** What ***this gate's*** re-check requires is a fresh **instance** — it does not
@@ -1277,6 +1391,13 @@ failed twice —
 **and, always-on, when the architect *decides*: a material redirect of the plan escalates exactly as
 a punt does** (step 5). "Only when those disagree/punt" would read a decisive rewrite as a reason to
 proceed, which inverts the point of the gate.
+
+**And, always-on again, when a BLOCKING review finding raises a design question: consult
+`DESIGN_AGENT` for a scope ruling and STOP with it, at the moment the finding is returned** (step 8).
+The same inversion is available here and is easier to fall into: a finding that is *ruled on cleanly
+and then fixed in round 1* is neither "contested" nor "BLOCKING and unresolved", so reading the list
+above as the whole of when step 8 escalates points at fix-then-proceed — which is exactly the
+decoupling of the ruling from the stop that step 8's trigger exists to prevent.
 
 **This list is what "unsure" triggers; it is not the whole of when the plan gate stops.** Under
 `plan-gate: always` — the shipped default, and what an absent field reads as — step 5 stops on
@@ -1752,11 +1873,15 @@ enumerates a writes-none path.
   back immaterial. The parenthetical is the point: it is what distinguishes this from the line never
   being written.
 - **`- Plan-gate: material (pre-image absent, architect ran) → STOPPED`** — the block was missing on
-  a row where `DESIGN_AGENT` was consulted. There is nothing to name as "what changed" because the
+  a row where `DESIGN_AGENT` was consulted **to inform the plan**; step 8's scope ruling is not such
+  a consult and never makes this spelling due. There is nothing to name as "what changed" because the
   evidence is what is missing; that is a stop, never a pass.
-- **`- Plan-gate: n/a: architect skipped (<route/reason>)`** — **no architect pass ran at all**: not
-  at step 4, not at step 5, and not as the inline composition that substitutes for an unrunnable
-  binding. If any pass ran, by any actor, this spelling is unavailable.
+- **`- Plan-gate: n/a: architect skipped (<route/reason>)`** — **no *plan-informing* architect pass
+  ran at all**: not at step 4, not at step 5, and not as the inline composition that substitutes for
+  an unrunnable binding. If any *plan-informing* pass ran, by any actor, this spelling is
+  unavailable — step 8's scope ruling is not one, and a row carrying only that ruling still spells
+  it this way. The qualifier is load-bearing: these four spellings are a closed set and exactly one
+  must be written, so an unqualified reading leaves such a row with no legal spelling at all.
 
 **An absent or `TODO`-valued binding is never an `n/a: no offline/hermetic tier declared`** — that
 reason quotes a config that did not give one. On a row the trigger fires on it is unknown, unknown
@@ -2158,10 +2283,10 @@ Add a source-fidelity note if the rationale leans on any externally-cited source
 
 ## Approach as reviewed (frozen before the design gate) — write-once, do not edit
 <Verbatim copy of `## Approach` taken BEFORE the architect pass was consulted — at step 4, or at
-step 5 where that step first consults it. Omit this section ONLY if no architect pass ran at all
-(step 4 skipping it is not enough). It is the pre-image step 5 diffs the live
-`## Approach` against to decide whether the architect materially changed the plan. Never
-regenerated and never back-dated — see Resume.>
+step 5 where that step first consults it. Omit this section ONLY if no plan-informing architect pass
+ran at all (step 4 skipping it is not enough; step 8's scope ruling is not one). It is the pre-image
+step 5 diffs the live `## Approach` against to decide whether the architect materially changed the
+plan. Never regenerated and never back-dated — see Resume.>
 
 ## Architect triggers hit
 <which ARCHITECT_TRIGGERS fired, or "none">
@@ -2713,7 +2838,8 @@ Stages 4/9 need no distinct status because the surrounding statuses bracket them
 would otherwise bracket review, security, acceptance *and* merge — and a resume anywhere in that
 span would replay the whole code-review fan-out. `in-acceptance` is what stops that: a row resuming
 under it re-enters at acceptance, not at review.
-The architect pass (step 4, or step 5 where that step first consults `DESIGN_AGENT`) carries **two**
+The plan-informing architect pass (step 4, or step 5 where that step first consults `DESIGN_AGENT` —
+never step 8's scope ruling) carries **two**
 side effects, and on the resume of a `planning` row both
 are **write-once** — check for the artifact and skip the action if it is present. **Expect this
 resume to be common, not exceptional:** under `plan-gate: always` every issue stops at step 5 with
@@ -2819,6 +2945,11 @@ keys on a repeated error signature, not status re-entry — see Guardrails).
 | `docs` | skip architect + security; light review; `docs:` scope; **no mutation pass**, and no hermetic-tier run (`n/a: docs route`) |
 | `stub-defer` | do NOT implement; journal why; leave in backlog (Status `deferred`) |
 
+**The `architect` in the `docs` and `research` cells above is the *plan-informing* Architect gate
+only.** Step 8's scope ruling is a separate gate (Gates → gate table) whose due-ness this column does
+not reach: a BLOCKING design-question finding consults and stops **on every route**, `docs` included,
+which still takes a light review pass and can therefore raise one.
+
 `blocked` and `parked` are **Status overlays, not Routes**: a row keeps its semantic Route (`code`/
 `research`/`docs`) while resting on an unmet in-run dependency (`blocked`) or an external event
 (`parked`). Skip it; a `blocked` row returns to selection when its dependency closes (steps 1 /
@@ -2837,24 +2968,30 @@ Gate table:
 | Gate | Who | When | Output |
 |------|-----|------|--------|
 | Plan | orchestrator | every issue | `issue-<N>.plan.md` |
-| Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure | the agent's review, **recorded by you** wherever this project records architect decisions — issue comment, issue-body marker, or decision-log entry (Resume) |
+| Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure — the **plan-informing** use, at step 4 or step 5. Step 8's scope ruling is a **separate gate**, its own row below | the agent's review, **recorded by you** wherever this project records architect decisions — issue comment, issue-body marker, or decision-log entry (Resume) |
 | Human (plan) | user | **every issue under `plan-gate: always`** (the default under `calibration`; absent or unrecognized reads as `always`); under `plan-gate: conditional`, if uncertain/irreversible. Under **both**, **always** when the architect materially changed the plan (step 5's frozen-vs-live diff — decisiveness escalates exactly as a punt does, and neither `mode:`, `plan-gate:`, nor route graduation reaches this one) | approve/redirect |
 | Build commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`) | orchestrator | step 6, each per its own binding; `HERMETIC_TEST_CMD` additionally requires Route `code` **and** a change that adds or modifies a test, **whatever the binding says** — on such a row an absent or `TODO` binding is unknown, and unknown is due (the gate's four-state table) | **exit status per command**; non-zero blocks |
 | Code review | `CODE_REVIEW` (parallel finders you run — step 8); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes, each carrying a **finding class**: BLOCKING re-arms; EDITORIAL raised before step 8's sweep is swept there, and anything raised after that sweep escalates |
+| Scope ruling | `DESIGN_AGENT` | step 8, whenever a **BLOCKING** finding raises a design question — **on every route, `docs` included**, at whatever round it arises. **Its due-ness is fixed in this row alone and is NOT governed by the Routing table's per-route column**, which scopes the plan-informing Architect gate above and never reaches this one; nor by `mode:`, `plan-gate:`, or route graduation | the ruling, presented **with** the stop it carries — never a verdict on the change, and never a review *round* |
 | Security | `SECURITY_REVIEW` (local or label) | by route (step 9) | clean/findings |
 | AC-verify | fresh subagent (+`VERIFY`); **any re-check a fresh instance too** (Fresh-re-check invariant) | every issue with acceptance criteria (step 10 is unconditional; the **mutation pass within it** is scoped — Routing table). **Last gate before merge**, so it certifies the merge candidate and owns the commit boundary for its own fixes | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors); **either class blocks** |
 | Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI + security + acceptance green | `MERGE_METHOD` |
 
 **Gate-outcome invariant (evidence-bound pass).** Applies to every gate in the table above that
-returns a verdict, **on the rows that gate is due on** — due-ness is decided by the gate's **When**
-entry in the Gate table above and by the Routing table's per-route column, **both in this file**,
-and this invariant does not touch it. (The one gate whose due-ness is knowable only from its
-binding is `HERMETIC_TEST_CMD`; its carve-out below states that unknown reads as due.) A gate the
-route or its trigger condition never made due was never owed a verdict, so journal it as not run
-(`skipped` / `n/a`) with the reason; not-due is not a pass either. An explicit `—` **plus a
-reason** in the config is a deliberate "not applicable", journalled `n/a: <that reason>` — **not**
-an absent binding; it is the only way a config marks a gate not-due, and it is deliberately
-visible.
+returns a verdict **or a ruling** — the scope ruling returns the latter and certifies nothing, and
+it is inside this invariant for its journalling forms, never as a gate that may be recorded as
+passed — **on the rows that gate is due on** — due-ness is decided by the gate's **When** entry in
+the Gate table above and, where that column speaks to the gate at all, by the Routing table's
+per-route column, **both in this file**, and this invariant does not touch it. (**A gate row may
+fix its own due-ness outright, and must say so in the row where a reader would otherwise reach for
+the per-route column** — the Scope ruling row does exactly that, because that column scopes the
+plan-informing Architect gate and never reaches the ruling. The one gate whose due-ness is
+knowable only from its binding is `HERMETIC_TEST_CMD`; its carve-out below states that unknown
+reads as due.) A gate the route or its trigger condition never made due was never owed a verdict,
+so journal it as not run (`skipped` / `n/a`) with the reason; not-due is not a pass either. An
+explicit `—` **plus a reason** in the config is a deliberate "not applicable", journalled `n/a:
+<that reason>` — **not** an absent binding; it is the only way a config marks a gate not-due, and
+it is deliberately visible.
 
 **The Build commands row is in the table, so this invariant reaches step 6 by rule, not by
 analogy.** `LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD` are bindings that return a verdict —
@@ -3091,6 +3228,14 @@ after that sweep is the exception, and the rule runs the other way** — step 8'
 rule governs it, and every finding it returns escalates whatever its class. (Step 8 fixes the classes, the
 floors that may raise one, and that ordering rule.) **The acceptance gate has no finding class
 at all** — either of its two *result* classes is dirty, and neither may be swept.
+
+**One code-review escalation is not gated on this cap at all: a BLOCKING design-question finding
+escalates with its scope ruling at whatever round it arises** (step 8). The cap is unchanged by it —
+it opens no round 3 and renames no round — but a reader taking this paragraph as the whole of when
+step 8 escalates would miss it, which is exactly how a trigger and its stop drift apart across the
+two sites that state this bound. The scope is **code review only**: the acceptance gate's two
+*result* classes are not review findings and it runs no sweep, so there is nothing there for a
+design-question trigger to key on.
 
 **Reaching a cap is a handoff, never a terminal state.** The cap ends the *round* — not the run, not
 the issue. **STOP and put the decision to the human**, and do not proceed on your own judgement: an

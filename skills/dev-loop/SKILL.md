@@ -83,9 +83,20 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   have approved is now a different plan and nobody has seen it, so "the agents ruled cleanly" is the
   trigger, not a reason to proceed. The engine's test is a diff against the approach frozen before
   the architect ran; **if the architect ran and that frozen block is absent, treat the change as
-  material** rather than assuming it was not. (Only where **no architect pass ran at all** — not
-  merely skipped at step 4, and counting any inline substitute for an unrunnable binding — is there
-  nothing to compare and the condition not due.)
+  material** rather than assuming it was not. (Only where **no *plan-informing* architect pass ran at
+  all** — not merely skipped at step 4, and counting any inline substitute for an unrunnable
+  binding — is there nothing to compare and the condition not due. Step 8's scope ruling on a
+  BLOCKING design-question finding is **not** plan-informing: it rules on a finding, rewrites no
+  plan, and never makes this condition due. **If you cannot tell whether a consult informs the plan,
+  it does — freeze, and treat the condition as due**; unknown lands on the over-gating side here as
+  everywhere else.)
+- **A BLOCKING review finding that raises a design question stops for the human.** It is its own
+  gate, not a footnote to the one above: consult `DESIGN_AGENT` for a scope ruling **and** stop
+  with that ruling attached, **before any fix for it is applied** — under every mode, **on every
+  route**, at whatever round the finding arises, and **not** gated on the round cap. **No state of
+  the binding excuses the stop**: unbound, `TODO`-valued or uninvocable means you stop with no
+  ruling attached, never that you proceed. If you cannot tell whether a finding raises a design
+  question, it does.
 - **A gate that did not run is never recorded as one that passed.** Journal a gate as passed only
   with its own verdict as evidence — **no verdict ⇒ not passed.** An unbound, `TODO`-valued, or
   uninvocable binding is not permission to skip the gate: fall back to the engine's inline
