@@ -132,14 +132,15 @@ than its own memory of what it had intended.
 **When a review finding raises a design question, you see it.** A second mid-pipeline stop is
 unconditional in the same way. If code review returns a **blocking** finding that raises a design
 question — whether the approach is right, whether a fix belongs in this change at all, whether
-several findings share one root cause — the loop consults its design reviewer for a scope ruling and
-**stops for you with that ruling attached**, under every mode and at whatever round the finding
-arose. The ruling can narrow the work; it can never conclude that no decision of yours is required,
-and it never clears the finding or passes the gate on your behalf. If the design-reviewer binding is
-missing or unset the loop **still stops** — it simply has no ruling to attach — because the stop
-belongs to the finding, not to the reviewer. Editorial findings **raised before that sweep** — which
-the loop applies in one pass without re-review — neither consult nor stop; one raised after it
-escalates like any finding, because there is no second sweep for it to join.
+several findings share one root cause — the loop consults its design reviewer for a scope ruling
+and **stops for you with that ruling attached**, under every mode, **on every route**, and at
+whatever round the finding arose. The ruling can narrow the work; it can never conclude that no
+decision of yours is required, and it never clears the finding or passes the gate on your behalf.
+If the design-reviewer binding is missing or unset the loop **still stops** — it simply has no
+ruling to attach — because the stop belongs to the finding, not to the reviewer. Editorial
+findings raised before **the loop's single editorial sweep** — the one pass in which it applies
+them without re-review — neither consult nor stop; one raised after that sweep escalates like any
+finding, because there is no second sweep left for it to join.
 
 **Code review asks whether your new guards would actually catch anything.** The loop picks review
 angles from what the change puts at risk, but one is a floor rather than a choice: on any change

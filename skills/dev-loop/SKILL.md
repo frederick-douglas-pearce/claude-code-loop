@@ -89,9 +89,13 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   BLOCKING design-question finding is **not** plan-informing: it rules on a finding, rewrites no
   plan, and never makes this condition due. **If you cannot tell whether a consult informs the plan,
   it does — freeze, and treat the condition as due**; unknown lands on the over-gating side here as
-  everywhere else. It carries its own unconditional stop instead — a BLOCKING finding that raises a
-  design question consults `DESIGN_AGENT` **and** stops for the human with that ruling, under every
-  mode, on every route, at whatever round it arises, and no state of the binding excuses that stop.)
+  everywhere else.)
+- **A BLOCKING review finding that raises a design question stops for the human.** It is its own
+  gate, not a footnote to the one above: consult `DESIGN_AGENT` for a scope ruling **and** stop with
+  that ruling attached — under every mode, **on every route**, at whatever round the finding arises,
+  and **not** gated on the round cap. **No state of the binding excuses the stop**: unbound,
+  `TODO`-valued or uninvocable means you stop with no ruling attached, never that you proceed. If
+  you cannot tell whether a finding raises a design question, it does.
 - **A gate that did not run is never recorded as one that passed.** Journal a gate as passed only
   with its own verdict as evidence — **no verdict ⇒ not passed.** An unbound, `TODO`-valued, or
   uninvocable binding is not permission to skip the gate: fall back to the engine's inline

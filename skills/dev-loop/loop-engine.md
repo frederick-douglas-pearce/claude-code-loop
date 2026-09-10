@@ -1005,7 +1005,9 @@ unreviewed rests on containment inside *this step's* commit boundary, and that c
 once the pipeline has advanced past it — a sweep run then would sit downstream of step 9, which is
 exactly the certification the placement above buys.
 
-**Implement viable BLOCKING findings**; decline others with a one-line rationale — **and record each decline,
+**Implement viable BLOCKING findings** — **except one raising a design question, which stops for the
+human before any fix for it is applied (below); do not reach this instruction first on such a
+finding**. Decline others with a one-line rationale — **and record each decline,
 with that rationale, in the gate-decision block where this round resolves** (Ledger format →
 progress.md), exactly as an architect decline is recorded in the plan text. A later round is
 *required* to receive the declines (Gates), and a decline is the one outcome that leaves **no trace
@@ -1049,8 +1051,8 @@ the escalation the human relies on is quietly conditional again.
   fix commit, and before the next round is spawned. **Read this against the implement-and-re-check
   paragraph above rather than in file order:** that paragraph sequences fix → commit → fresh
   re-check, and running it first on a design-question finding satisfies every word here while
-  defeating the point. AC1 names *"whether a fix belongs in this change at all"* as a design
-  question, so a fix committed before the human is asked has answered their question for them.
+  defeating the point. The trigger above names *"whether a fix belongs in this change at all"* as a
+  design question, so a fix committed before the human is asked has answered their question for them.
 - **What the ruling returns**, verdict-first — state this at the invoke site, since `DESIGN_AGENT`
   has no prompt template of its own: the findings classified by severity, a **minimal fix set** that
   would clear the gate, and every deferral named with its reason.
@@ -1080,8 +1082,7 @@ the escalation the human relies on is quietly conditional again.
   to remove. This use therefore defines no fallback, which makes it *static with no fallback
   defined* under the Gate-outcome invariant — write `- gate-error: scope-ruling — DESIGN_AGENT
   <unbound | TODO-valued | uninvocable> — no-binding`, naming the state you actually found rather
-  than the first of the three — the hermetic precedent scopes its own literal to *unbound* for
-  exactly this reason, since the middle field is the thing the human must repair. Keep it free of
+  than the first of the three. Keep it free of
   volatile arguments so the repeat check still reads one signature. And **never `-
   gate-fallback:`**, which Guardrails excludes from the repeat check and which would let a
   `TODO(init-loop)` default read as handled on every fresh consumer forever.
@@ -1376,6 +1377,13 @@ failed twice —
 **and, always-on, when the architect *decides*: a material redirect of the plan escalates exactly as
 a punt does** (step 5). "Only when those disagree/punt" would read a decisive rewrite as a reason to
 proceed, which inverts the point of the gate.
+
+**And, always-on again, when a BLOCKING review finding raises a design question: consult
+`DESIGN_AGENT` for a scope ruling and STOP with it, at the moment the finding is returned** (step 8).
+The same inversion is available here and is easier to fall into: a finding that is *ruled on cleanly
+and then fixed in round 1* is neither "contested" nor "BLOCKING and unresolved", so reading the list
+above as the whole of when step 8 escalates points at fix-then-proceed — which is exactly the
+decoupling of the ruling from the stop that step 8's trigger exists to prevent.
 
 **This list is what "unsure" triggers; it is not the whole of when the plan gate stops.** Under
 `plan-gate: always` — the shipped default, and what an absent field reads as — step 5 stops on
@@ -1975,7 +1983,9 @@ owed by an iteration whose step 8 *closes*, and writes none where step 8 escalat
 runs *only* when a finding escalates, so escalate-and-stop is exactly where this line's primary
 rendering is due. Mirroring `- Editorial:` would suppress it on every path it is actually owed on.
 
-**`asked:` records the STOP, not the ruling — so it appears on every path the iteration stopped on.**
+**`asked:` records the STOP, not the ruling — so wherever this gate was *due* and the iteration
+stopped, the rendering carries it.** The scoping matters: `n/a:` describes a stop on which the ruling
+was **never due**, so it carries no `asked:` and is not an exception to this.
 That split is deliberate and is what keeps the dangerous state unwritable: the stop is unconditional,
 so a rendering describing a stopped iteration *always* has a legal value for it, and the only way to
 record "the ruling resolved and nobody was asked" is to write something false rather than to fall out
@@ -1993,16 +2003,18 @@ of a legal form. The **ruling's content** is the part that can be absent; the **
   returned nothing, or returned the one thing it may never return); **or the round itself produced no
   verdict, so whether a design-question finding existed is unknown**. Both are *not-clean and
   not-not-due*, which is the one thing the record has to preserve. A `- gate-error:` carries why. **The
-  `asked:` is still owed** — something *was* put to the human, and this is the path AC6 exists to
-  protect, so a spelling that could not record the stop would erase exactly what must survive here.
+  `asked:` is still owed** — something *was* put to the human, and a spelling that could not record
+  the stop would erase exactly what must survive on the path where no ruling backs it.
   Never a count.
-- **`- Scope-ruling: n/a: <reason>`** — **the round's findings resolved and none of them was a
-  BLOCKING design question**, so no ruling was due. Written on the close path and on a stop whose
-  findings resolved (a plain cap escalation is one), never omitted: the not-due case is visible, as
-  `- Restore:` requires of its own. The reason is free-form and that set is deliberately **not**
-  closed. **It is unavailable wherever due-ness could not be determined** — a round that itself
-  produced no verdict cannot know whether a design-question finding existed, and asserting "no ruling
-  was due" there enumerates a safe state out of an unknown one. That case takes `no ruling` above.
+- **`- Scope-ruling: n/a: <reason>`** — **the round returned a verdict and none of its findings
+  was a BLOCKING design question**, so no ruling was due. Written on the close path and on a stop
+  whose round returned a verdict (a plain cap escalation is one — it stops precisely *because* a
+  finding went unresolved, so "resolved" is the wrong test; "the round reached a verdict" is the
+  right one), never omitted: the not-due case is visible, as `- Restore:` requires of its own. The
+  reason is free-form and that set is deliberately **not** closed. **It is unavailable wherever
+  due-ness could not be determined** — a round that itself produced no verdict cannot know whether
+  a design-question finding existed, and asserting "no ruling was due" there enumerates a safe
+  state out of an unknown one. That case takes `no ruling` above.
 - **no `- Scope-ruling:` line at all** on an iteration that reached step 8's rounds — **unknown, and
   unknown is not "not due".** Unlike `- Editorial:`, this line has **no writes-none path**: the only
   state that legitimately leaves no line is a crash before the gate reached a disposition.
@@ -3002,15 +3014,20 @@ Gate table:
 | Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI + security + acceptance green | `MERGE_METHOD` |
 
 **Gate-outcome invariant (evidence-bound pass).** Applies to every gate in the table above that
-returns a verdict, **on the rows that gate is due on** — due-ness is decided by the gate's **When**
-entry in the Gate table above and by the Routing table's per-route column, **both in this file**,
-and this invariant does not touch it. (The one gate whose due-ness is knowable only from its
-binding is `HERMETIC_TEST_CMD`; its carve-out below states that unknown reads as due.) A gate the
-route or its trigger condition never made due was never owed a verdict, so journal it as not run
-(`skipped` / `n/a`) with the reason; not-due is not a pass either. An explicit `—` **plus a
-reason** in the config is a deliberate "not applicable", journalled `n/a: <that reason>` — **not**
-an absent binding; it is the only way a config marks a gate not-due, and it is deliberately
-visible.
+returns a verdict **or a ruling** — the scope ruling returns the latter and certifies nothing, and
+it is inside this invariant for its journalling forms, never as a gate that may be recorded as
+passed — **on the rows that gate is due on** — due-ness is decided by the gate's **When** entry in
+the Gate table above and, where that column speaks to the gate at all, by the Routing table's
+per-route column, **both in this file**, and this invariant does not touch it. (**A gate row may
+fix its own due-ness outright, and must say so in the row where a reader would otherwise reach for
+the per-route column** — the Scope ruling row does exactly that, because that column scopes the
+plan-informing Architect gate and never reaches the ruling. The one gate whose due-ness is
+knowable only from its binding is `HERMETIC_TEST_CMD`; its carve-out below states that unknown
+reads as due.) A gate the route or its trigger condition never made due was never owed a verdict,
+so journal it as not run (`skipped` / `n/a`) with the reason; not-due is not a pass either. An
+explicit `—` **plus a reason** in the config is a deliberate "not applicable", journalled `n/a:
+<that reason>` — **not** an absent binding; it is the only way a config marks a gate not-due, and
+it is deliberately visible.
 
 **The Build commands row is in the table, so this invariant reaches step 6 by rule, not by
 analogy.** `LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD` are bindings that return a verdict —
