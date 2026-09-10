@@ -87,9 +87,11 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   all** — not merely skipped at step 4, and counting any inline substitute for an unrunnable
   binding — is there nothing to compare and the condition not due. Step 8's scope ruling on a
   BLOCKING design-question finding is **not** plan-informing: it rules on a finding, rewrites no
-  plan, and never makes this condition due. It carries its own unconditional stop instead — a
-  BLOCKING finding that raises a design question consults `DESIGN_AGENT` **and** stops for the human
-  with that ruling, under every mode, at whatever round it arises.)
+  plan, and never makes this condition due. **If you cannot tell whether a consult informs the plan,
+  it does — freeze, and treat the condition as due**; unknown lands on the over-gating side here as
+  everywhere else. It carries its own unconditional stop instead — a BLOCKING finding that raises a
+  design question consults `DESIGN_AGENT` **and** stops for the human with that ruling, under every
+  mode, on every route, at whatever round it arises, and no state of the binding excuses that stop.)
 - **A gate that did not run is never recorded as one that passed.** Journal a gate as passed only
   with its own verdict as evidence — **no verdict ⇒ not passed.** An unbound, `TODO`-valued, or
   uninvocable binding is not permission to skip the gate: fall back to the engine's inline
