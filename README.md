@@ -127,7 +127,9 @@ unconditional — no mode setting, no `plan-gate:` value, and no route graduatio
 code. A reviewer that decides is treated as a stronger reason to interrupt you than one that hedges,
 because the plan you would have approved is no longer the plan being built. The comparison is made
 against a copy of the approach frozen before the review ran, so the loop is reading a record rather
-than its own memory of what it had intended.
+than its own memory of what it had intended. **This stop is about the *plan*.** The same design
+reviewer is also consulted later, during code review, when a finding raises a design question — that
+consultation rules on already-written code, takes no frozen copy, and is described further down.
 
 **Code review asks whether your new guards would actually catch anything.** The loop picks review
 angles from what the change puts at risk, but one is a floor rather than a choice: on any change
@@ -327,6 +329,15 @@ gate gets **one** re-check; if it comes back dirty the loop stops and asks you, 
 iterating on itself. At code review, "dirty" means a **blocking** finding — an editorial one raised
 before that pass has run joins it, and neither re-arms the round nor stops for you. Once the pass has
 run there is no second one, so a finding of either kind after that point stops and asks you.
+
+**When a review finding raises a design question, the loop asks its design reviewer before it asks
+you.** The reviewer classifies the findings, proposes the smallest fix set that would clear the gate,
+and names anything it would defer and why — and the loop hands you that alongside the stop. It
+changes *what you are asked*, never *whether* you are asked: the pass may narrow the work and may
+never decide that no decision of yours is needed, so it cannot clear a finding or pass a gate on its
+own. It is not an extra review round and does not raise the re-check limit above. What it recommends
+is recorded in the journal, including which findings it deferred, so a scope decision is something
+you can read back rather than infer from what later got fixed.
 
 **Hard limits the engine commits to:**
 

@@ -2868,5 +2868,110 @@ class LensDifferentialAgreementTests(unittest.TestCase):
             "to review.")
 
 
+class ScopeRulingAgreementTests(unittest.TestCase):
+    """#114's scope ruling is stated twice and recorded once; both must hold.
+
+    **Coupling 1 -- the ruling is named at both statements of the round bound.**
+    Step 8 defines it; the Fresh-re-check invariant restates the bound and has to
+    say what the escalation now carries. #114/AC7 is exactly this: the bound lives
+    in two places and whatever a change does to it must be done at both, in one
+    pass. The regions are extracted from the prose and compared **to each other**,
+    never to a copy pinned here -- the ``CurrencyExemptionAgreementTests`` shape.
+    Drop the ruling from one and the engine describes an escalation that arrives
+    with a proposal in one place and without one in the other, both passages still
+    reading correctly.
+
+    **Coupling 2 -- the ran-rendering carries ``asked:``.** This is not an audit
+    affordance and is not pinned for tidiness. It is the *structural* form of the
+    rule that the ruling may never conclude no human decision is required: a
+    ruling that so concluded has no value to write there, so it cannot render a
+    well-formed line. Pinning the slot pins the structure; the dangerous outcome
+    then requires **omitting a mandatory field** rather than **deleting a word**,
+    which is the trade ``CLAUDE.md`` prescribes when a polarity is load-bearing.
+
+    **What this does NOT guard, recorded rather than implied.** That the ruling's
+    fix set is genuinely *minimal*, and that a pass which cleared a finding would
+    be caught -- both are propositions about meaning, not couplings, and the #33
+    ceiling applies: three attempts at the polarity form in this repo were each
+    defeated by a one-word edit. Those are **review's**. Do not "complete" this
+    class by adding them; the ``asked:`` pin above is a different *shape*, not a
+    fourth attempt at the same one.
+
+    The trigger itself -- that it keys on a finding's nature and not on the round
+    count -- is likewise unpinned. A count-based trigger was falsified on corpus
+    (#155), and re-introducing one would be a semantic regression no regex sees.
+    """
+
+    _NAME = "scope ruling"
+    _ASKED = "asked:"
+
+    def _span(self, start: str, end: str, label: str) -> str:
+        text = _ENGINE.read_text(encoding="utf-8")
+        i = text.find(start)
+        self.assertNotEqual(
+            i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it.",
+        )
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
+            "loop-engine.md -- re-anchor this test before trusting it.",
+        )
+        return text[i:j]
+
+    def _bound_regions(self) -> dict:
+        return {
+            "step 8 (defines the ruling)": self._span(
+                " rounds (round 1 being the review",
+                "**Round 1 reads the whole change",
+                "step 8 scope-ruling",
+            ),
+            "Fresh-re-check invariant (restates the bound)": self._span(
+                "**The bound — one fresh re-check",
+                "**Reaching a cap is a handoff", "invariant scope-ruling",
+            ),
+        }
+
+    def test_the_extractor_finds_a_non_empty_region_on_both_sides(self) -> None:
+        """Guards the guard: two empty strings both 'contain' nothing equally."""
+        for label, body in self._bound_regions().items():
+            with self.subTest(region=label):
+                self.assertGreater(
+                    len(body.strip()), 200,
+                    f"{label} extracted a suspiciously short region. The checks "
+                    "below would pass vacuously on an empty span -- re-anchor "
+                    "before trusting this, do not shorten the assertion.")
+
+    def test_both_statements_of_the_bound_name_the_scope_ruling(self) -> None:
+        missing = [
+            label for label, body in self._bound_regions().items()
+            if self._NAME not in body.lower()
+        ]
+        self.assertEqual(
+            missing, [],
+            f"these statements of the round bound no longer name the {self._NAME!r}: "
+            f"{missing}.\n\nThe bound is written in two places and #114/AC7 requires "
+            "them to move together. One naming the ruling and the other not leaves "
+            "the engine describing an escalation that arrives with a proposal in one "
+            "passage and without one in the other -- with every word of both still "
+            "reading correctly. Restore it at the site that lost it; do not delete "
+            "the other to make this pass.")
+
+    def test_the_ran_rendering_carries_the_asked_slot(self) -> None:
+        ledger = self._span(
+            "The **`- Scope-ruling:`** line records",
+            "The **`- Restore:`** line records", "scope-ruling ledger block")
+        self.assertIn(
+            self._ASKED, ledger,
+            "the `- Scope-ruling:` ran-rendering no longer carries the "
+            f"{self._ASKED!r} slot.\n\nThat slot is the STRUCTURAL form of the rule "
+            "that the ruling may never conclude no human decision is required: with "
+            "it mandatory, such a ruling has nothing to write there and cannot "
+            "render a well-formed line at all. Removing it does not merely lose an "
+            "audit field -- it moves the property back into prose, where this "
+            "project has already had three guards defeated by a one-word edit. "
+            "Restore the slot rather than relaxing this test.")
+
+
 if __name__ == "__main__":
     unittest.main()
