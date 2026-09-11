@@ -201,3 +201,49 @@ of 74 runs in the corpus are k=2.
 **Standing stop rule for #128:** budget it at normal round caps and treat an overrun as a *park*
 signal. One extra gate round costs ~561–850k; the epic buys ~225k per run. **Each round overrun
 costs 2–4 runs of the saving it is buying.**
+
+---
+
+## D012 — 2026-09-11 — The release is `0.3.0`; milestone names shift to follow it
+
+**Context.** #161 chartered the bump as `v0.2.2` but flagged the number itself as an open maintainer
+decision: 115 commits past `be29a79`, **+7,236 lines**, `loop-engine.md` alone **+1,317** — and #114
+adds a **whole new gate** (the `DESIGN_AGENT` scope ruling, with its own row in the Gate table),
+confirmed absent from the installed 0.2.1 payload. The repo's own precedent is explicit: v0.2.0 "grew
+past a patch bump … which is why it was a minor bump" (`CLAUDE.md`), and that release was smaller
+than this one.
+
+**Decision.** **`0.3.0`.** A new always-on gate is a feature, and a patch number would have
+misdescribed the release to every consumer deciding whether to take it. Four milestone renames
+follow, so the tracker and the version agree:
+
+| was | now | what it is |
+|---|---|---|
+| `v0.3.0` | **`deferred-corpus`** | the corpus-gated deferral category — never a release |
+| `v0.2.2` | **`v0.3.0`** | this release |
+| `v0.2.3` | **`v0.3.1`** | the engine-sharding epic (#128), still a patch by D006's reasoning |
+| `v0.2.4` | **`v0.3.2`** | the next patch train |
+
+**What this supersedes, precisely.** D006 ratified `v0.2.3` for the sharding epic and declined
+`v0.3.0`, on the grounds that using the corpus category for effort-gated work would either dissolve
+its defining criterion or force relocating 24 issues. **That ratification stands** — the epic still
+gets a dedicated single-epic milestone, and its criterion is untouched; only its *name* changes,
+which is the one thing D006 was not deciding. What is superseded is D006's cost argument in its
+narrow form: it weighed the rename against a *milestone* choice, where the cheaper option was
+available and free. Here the trigger is the **version number**, where the alternative is not a
+cheaper name but an inaccurate one. **The category never should have been a version string** —
+`CLAUDE.md` had already been calling it "a category rather than a junk drawer" while numbering it
+like a release, and this collision is what that mismatch was always going to produce.
+
+**D008 re-labelled, not changed.** "The sharding baseline freezes against v0.2.2" means the release
+installed immediately before the sharding cut; that release is now **0.3.0**. Same object, same
+double-count hazard, new number.
+
+**Cost paid, stated plainly.** 48 issues across four milestones carry a renamed milestone. Every
+issue body, PR description, journal entry and ledger row written before 2026-09-11 uses the old
+names, and none of them is being rewritten — `CLAUDE.md`'s `deferred-corpus` paragraph carries the
+mapping, and that is the only copy.
+
+**What was NOT done, deliberately.** The ledger run directory `.claude/loop/v0.2.1/` keeps its name.
+It is a label, resume scans the ledger root, and renaming a live run directory is the larger risk —
+the same reasoning its own header already records for the v0.2.1→v0.2.2 move.

@@ -11,8 +11,9 @@
 > - **The gate changed.** Accept on **P1** and **P2c as `resident_turns / processed`** only.
 >   **P8 is deleted** (circular with P2c) and **P4 is deleted** (its instrument was retired carrying a
 >   payload bug — D010). **P9** (compaction count) is observed, never predicted.
-> - **The before-baseline freezes against v0.2.2, not v0.2.1** (D008): #135 lowers `resident/processed`
->   on its own by deleting early low-context turns.
+> - **The before-baseline freezes against v0.2.2 — the milestone released as `0.3.0`, D012 — not
+>   v0.2.1** (D008): #135 lowers `resident/processed` on its own by deleting early low-context
+>   turns.
 > - **The 53,693 P2 figure is retracted** — it came from a filter that counted heredoc writes as
 >   engine reads. Per-repo P2c baselines: `claude-code-loop` 18.0%, `us_presidential_vote_analysis`
 >   22.8%.
@@ -314,7 +315,14 @@ requires.
 
 ---
 
-## 7. Milestone — RATIFIED: `v0.2.3`
+## 7. Milestone — RATIFIED: `v0.2.3`, since **renamed `v0.3.1`**
+
+> **Names in this section are pre-2026-09-11 and are kept as the ratification record.** D012 took
+> `0.3.0` as the release version and shifted the milestones to follow: the corpus category
+> `v0.3.0` → **`deferred-corpus`**, the patch train `v0.2.2` → **`v0.3.0`**, and this epic's
+> milestone `v0.2.3` → **`v0.3.1`**. The ratification below is unchanged — a dedicated single-epic
+> milestone, semver-correct as a patch — and only its name moved. Read `v0.3.0` *in this section*
+> as the corpus category it meant when written, never as the release.
 
 **Decision, 2026-08-25: `v0.2.3`, a new dedicated single-epic milestone.** The options below are
 kept as the record of what was weighed; the decision is made and D006 logs it. `v0.3.0` was

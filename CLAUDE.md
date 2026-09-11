@@ -553,19 +553,21 @@ paragraph. (This is the same enumerable-assertion trap documented twice above; t
 where the number lives, not to restate the number.)
 
 **#1 closes when the last child does — and that is now known to be after the v0.2.0 release.** #30
-was deferred to `v0.3.0` at its plan gate on 2026-08-13, and #30 *is* epic **#15**'s third acceptance
-criterion verbatim, so **#15 and #1 both stay open past the bump.** Accepted deliberately: E4's
-load-bearing half (F2 — the plan gate, #28 + #29) shipped, and what deferred is the recommendation
-half. The epic rows are `deferred` in the ledger, so nothing blocks #36.
+was deferred to `deferred-corpus` at its plan gate on 2026-08-13, and #30 *is* epic **#15**'s third
+acceptance criterion verbatim, so **#15 and #1 both stay open past the bump.** Accepted
+deliberately: E4's load-bearing half (F2 — the plan gate, #28 + #29) shipped, and what deferred is
+the recommendation half. The epic rows are `deferred` in the ledger, so nothing blocks #36.
 
 **The batching convention was superseded 2026-07-28: batch the *release*, not the PRs.** One version
 bump and one consumer re-install, but multiple coherent PRs. The old "never cut per-finding PRs" rule
 existed to avoid re-installing per finding — a release cost, not a PR cost.
 
-**`v0.3.0` — the deferral milestone, and it is no longer the two-issue footnote this file described
-until 2026-08-13.** It opened as exactly that: `TEST_EFFICACY_AGENT` (#37) and `REVIEW_TIERS` (#38),
-"both wait on corpus, not on effort." It has since grown by an order of magnitude — **check the
-milestone for the count.** No number is stated here on purpose: the two previous drafts of this
+**`deferred-corpus` — the deferral milestone, and it is no longer the two-issue footnote this file
+described until 2026-08-13.** **It was named `v0.3.0` until the 2026-09-11 release took that
+number** (D012); issues, PRs and journal entries written before that date call it `v0.3.0`, and it
+is the same milestone. It opened as exactly that: `TEST_EFFICACY_AGENT` (#37) and `REVIEW_TIERS`
+(#38), "both wait on corpus, not on effort." It has since grown by an order of magnitude — **check
+the milestone for the count.** No number is stated here on purpose: the two previous drafts of this
 sentence each named one and each went stale within a fortnight, which is the enumerable-assertion
 trap this file documents three times above.
 
@@ -596,9 +598,9 @@ deferral.
 ### The scope brake, and why the milestone needed one (2026-08-15)
 
 **v0.2.0 was frozen on 2026-08-15 after a scope review.** The measured problem: in the 15-day
-execution window 7/31–8/15, **19 issues closed and 31 new ones were filed** — 12 into v0.2.0, 15 into
-v0.3.0, 4 left unmilestoned, with the rate showing no decay (four filed in the final two days). The
-milestone could not converge because it was also the intake queue.
+execution window 7/31–8/15, **19 issues closed and 31 new ones were filed** — 12 into v0.2.0, 15
+into `deferred-corpus`, 4 left unmilestoned, with the rate showing no decay (four filed in the final
+two days). The milestone could not converge because it was also the intake queue.
 
 **The generator is the loop's own gates, working correctly.** The adversarial review and mutation
 passes surface real couplings; that is what they are for. The defect was never the finding rate — it
@@ -615,12 +617,12 @@ and "scope committed." Three rules now sit in that gap:
    consumer impact and goes to `tech-debt`. This is the rule that caps `epic:release-safety`, which
    produced five of the seven issues cut from v0.2.0.
 
-**The `tech-debt` label exists so v0.3.0 keeps meaning something.** Work that waits on *effort*
-rather than *corpus* does not belong in the deferral milestone — putting it there would dissolve the
-one criterion that makes v0.3.0 a category instead of a junk drawer. #35, #62 and #76 carry the label
-and no milestone. Corpus- or evidence-gated work (#49, #61, #71) still goes to v0.3.0 proper. When
-deferring, pick the bucket by *what the work waits on*, and never widen v0.3.0's criterion to avoid
-the choice.
+**The `tech-debt` label exists so `deferred-corpus` keeps meaning something.** Work that waits on
+*effort* rather than *corpus* does not belong in the deferral milestone — putting it there would
+dissolve the one criterion that makes `deferred-corpus` a category instead of a junk drawer. #35,
+#62 and #76 carry the label and no milestone. Corpus- or evidence-gated work (#49, #61, #71) still
+goes to `deferred-corpus` proper. When deferring, pick the bucket by *what the work waits on*, and
+never widen `deferred-corpus`'s criterion to avoid the choice.
 
 **The v0.2.0 cut line, for the record:** ship #74 → #40 → #34 → #67 → #36, with #60 closing out as
 already-merged (PRs #79/#80) and #57's corrections absorbed into #36/AC3. **As of 2026-08-18 the
