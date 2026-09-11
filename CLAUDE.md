@@ -425,8 +425,11 @@ from `~/.claude/plugins/cache/claude-code-loop/dev-loop/<version>/`; edits to `s
 property** — a run cannot mutate the engine driving it — but it also means the loop keeps exhibiting
 the defects we are fixing until that re-install lands.
 
-**All three consumers moved 0.0.1 → 0.2.0 on 2026-08-21**, so the two instances below are now
-history. They are kept because the *shape* recurs at every release, and because reading a journal
+**All three consumers moved 0.0.1 → 0.2.0 on 2026-08-21**, which is what makes the two instances
+below history. **They have moved again since, and this sentence is not where to learn the current
+version** — `ls ~/.claude/plugins/cache/claude-code-loop/dev-loop/` is, and the highest version
+there is the engine that drove the most recent run. A version pinned in this file rots at every
+release; this one did, and it is the first thing you need when reading a journal. They are kept because the *shape* recurs at every release, and because reading a journal
 written before that date requires knowing which engine produced it: **#19/F15** (in the installed 0.0.1
 the AC-verifier is **step 7** and diffs `main...HEAD` *before* the step-8 commit, so an uncommitted
 branch certifies an empty diff — **fixed in-tree by #48; the fix reached every consumer at the
@@ -518,9 +521,16 @@ before this repo existed; those links in `README.md` are history, not the live b
 block (#2) and trust-model section (#5) landed, and the clean-machine install smoke test (#6)
 certified the public install path end-to-end. Kept here as history; nothing in it is live work.
 
-**`v0.2.0`** — the live milestone, and **not** the `v0.0.2` this file used to name. The batch grew
-past a patch bump: it renumbers the pipeline, adds an `in-acceptance` status, rewrites Resume, and
-reverses a multi-site invariant, so it is a minor bump.
+**`v0.2.0` shipped 2026-08-20** (`1e54d3c`). It grew past a patch bump — it renumbers the pipeline,
+adds an `in-acceptance` status, rewrites Resume, and reverses a multi-site invariant — which is why
+it was a minor bump and not the `v0.0.2` this file once named.
+
+**Which milestone is live is deliberately NOT stated here.** It lives in two places that cannot
+drift from the work: `loop.config.md`'s `BACKLOG_SOURCE` binding, and the milestone list itself.
+This paragraph used to name one — and went on naming `v0.2.0` through two later releases, including
+one where that milestone had already drained. That is the enumerable-assertion trap this file
+documents four times above, arriving on schedule in the paragraph least likely to be re-read. **Read
+the binding, not this file.**
 
 [#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1) is now the **findings
 index, not a work item** — "no PR should ever be opened for #1." Findings surfaced by real
