@@ -266,9 +266,9 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 ## 2. `ARCHITECT_TRIGGERS`
 
 **These triggers govern the plan-informing use only, and the list below does not bound
-`DESIGN_AGENT`.** The engine consults that agent for a scope ruling whenever a BLOCKING code-review finding
-raises a design question — on every route, and stopping with that ruling. Nothing in this file
-turns that off.
+`DESIGN_AGENT`.** The engine consults that agent for a scope ruling whenever a BLOCKING
+code-review finding raises a design question — on every route, and stopping with that ruling.
+Nothing in this file turns that off.
 
 <!-- TODO(init-loop): list this project's "needs design review" conditions. AgentFluent example: -->
 <!-- Fire DESIGN_AGENT when the plan touches shared models, changes a cross-module interface, adds -->
