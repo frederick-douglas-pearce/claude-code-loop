@@ -78,7 +78,8 @@ TODO(init-loop): <what to supply> — written bare, per Step 4's rule 4.
 | `BACKLOG_SOURCE` | GitHub milestone/label if a GitHub remote exists; else a local `TODO.md`; else TODO(init-loop) |
 | `PRIORITY_LABELS` | `gh label list` for `priority:*` labels (GitHub host); else CONTRIBUTING/CLAUDE.md; else TODO(init-loop) |
 | `RELEASE_SCHEME` | release-please / semantic-release config, `pyproject`/`package.json` version + publish; else "no release cycle" |
-| `SCOPE_AGENT` / `DESIGN_AGENT` | user-global subagents — cannot be inferred from the repo; default TODO(init-loop): name a scope/design subagent, or remove if none |
+| `SCOPE_AGENT` | user-global subagent — cannot be inferred from the repo; default TODO(init-loop): name a scope subagent, or remove if none |
+| `DESIGN_AGENT` | user-global subagent — cannot be inferred from the repo; default TODO(init-loop): name a design subagent. **Never remove this row** — emit `—` plus a reason where the project has none, per the skeleton's own note on it |
 
 > **Backticks in the "Look here" column are this table's notation, not part of any value.** Where a
 > row says to emit a `TODO(init-loop)`, write it into `CONFIG` **bare** — Step 4's rule 4, and the
@@ -116,8 +117,9 @@ placeholders. Keep all five sections. §1 is cross-ecosystem — fill it. §3 is
 (source layout) — fill what you can. **§2 and §4's routing rules are the project-specific porting
 surface** — emit them as stubs with the commented AgentFluent example so the human sees the shape.
 **§2 additionally opens with a live paragraph above that example: uncommented, mandatory prose
-stating that the triggers govern only the plan-informing use of `DESIGN_AGENT`. It is not a stub —
-never comment it out, never fold it into the example, and never drop it at generation time.**
+stating that the triggers govern only the plan-informing use of `DESIGN_AGENT`. It must be copied
+into the generated config as-is. It is not a stub — never comment it out, never fold it into the
+example, and never drop it at generation time.**
 **§4 additionally carries a live `### ⛔ Precondition` block: it is uncommented, mandatory prose that
 must be copied into the generated config as-is. It is not a stub — never comment it out, and never
 drop it at generation time.** It is git-specific, not host-specific, so it survives a non-GitHub host;
@@ -241,7 +243,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 |-----------|-------|-------|
 | `BACKLOG_SOURCE` | <inferred / TODO(init-loop)> | GitHub milestone/label, or a local `TODO.md` |
 | `SCOPE_AGENT` | <TODO(init-loop): user-global subagent, or remove if none> | answers scope/priority/requirements questions |
-| `DESIGN_AGENT` | <TODO(init-loop): user-global subagent, or `—` + a reason if this project has none> | reviews plans pre-implementation (the architect gate); also rules on scope — and stops for you with that ruling attached — when a BLOCKING code-review finding raises a design question, a separate scope-ruling gate the engine makes due rather than this file. The engine's Gate table is authoritative for every gate this binding staffs. **Never delete this row:** the stop fires whatever the binding's state, so an absent row costs you the ruling and leaves a `gate-error` in its place |
+| `DESIGN_AGENT` | <TODO(init-loop): user-global subagent, or `—` + a reason if this project has none> | reviews plans pre-implementation (the architect gate); also rules on scope — and stops for you with that ruling attached — when a BLOCKING code-review finding raises a design question, a separate scope-ruling gate the engine makes due rather than this file. The engine's Gate table is the authoritative **list** of every gate this binding staffs. **Never delete this row.** No value here switches the scope ruling off — absent, `—` or `TODO`, the stop still fires, with no ruling attached and a `gate-error` in its place. The row earns its keep at the architect gate, which does read a deliberate `—` as not-applicable |
 | `CODE_REVIEW` | parallel finder subagents over `git diff main...HEAD` **+ the issue's acceptance criteria**, angles chosen per the diff's risk surface (the code-review gate), then a pass confirming each finding | **`main...HEAD` is round 1's base only** — a round after the first reads the delta since the head the last round read, per the engine's code-review gate, which also fixes when such a round falls back to full. Do not restate a base here that contradicts it. The orchestrator runs this itself — the finder fan-out is the engine's inline default and the binding this repo keeps. A porting project may bind a different review procedure here, but only one the orchestrator can actually invoke: a skill marked `disable-model-invocation` is user-triggered only, so keep such skills as a human escalation, never a binding. A gate bound to something it cannot invoke is never journalled passed — the orchestrator falls back to the inline fan-out, records a `- gate-fallback:` line, and surfaces the misbinding to you (engine Gate-outcome invariant) |
 | `SECURITY_REVIEW` | <TODO(init-loop): local `/security-review` and/or a labeled workflow> | see §4 |
 | `VERIFY` | `/verify` (built-in) | runtime behavior check when an AC needs proof-by-running |
@@ -264,7 +266,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 ## 2. `ARCHITECT_TRIGGERS`
 
 **These triggers govern the plan-informing use only, and the list below does not bound
-`DESIGN_AGENT`.** The engine consults it for a scope ruling whenever a BLOCKING code-review finding
+`DESIGN_AGENT`.** The engine consults that agent for a scope ruling whenever a BLOCKING code-review finding
 raises a design question — on every route, and stopping with that ruling. Nothing in this file
 turns that off.
 
