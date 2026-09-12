@@ -29,7 +29,7 @@ All stdlib-only, all read Claude Code session transcripts from `~/.claude/projec
 | `rounds_vs_turns.py` | Do gate rounds predict parent turns and bill? (Finding 11) | `test_rounds_vs_turns.py` |
 | `calls_per_turn.py` | How many tool calls per turn, and how many turns could have been merged? (Finding 12) | `test_calls_per_turn.py` |
 | ~~`context_profile.py`~~ | **RETIRED 2026-08-26** → `deprecated/`. Kept only to reproduce Findings 6–9; its payload bug over-counts spilled reads by up to 13×, so **P4 and the "~50% of every byte" figure are withdrawn**. | — |
-| `budget_stats.py` | Ledger `- Budget:` aggregates by engine era. **`--era` resolves N eras and caps each repo at its installed version**, so a held-back control cannot read as treated. | `test_budget_stats.py` |
+| `budget_stats.py` | Ledger `- Budget:` aggregates by engine era. **`--era` resolves N eras and caps BOTH the date and marker columns at the repo's installed version**, so a held-back control cannot read as treated. An installed version missing from `ERAS` raises rather than silently dropping the cap. | `test_budget_stats.py` |
 | `tree_cost.py` | Parent **+ subagent** transcripts priced together — sizes the bill Finding 11 leaves unpriced. **Scouting only; output is not a finding.** | none |
 
 ```bash
@@ -119,7 +119,7 @@ which is the kind of prose that goes stale between releases:
 |---|---|---|
 | 0.2.0 | 2026-08-21 | **held deliberately** on `agentfluent`, `claude-code-sessions` — the untreated control |
 | 0.2.1 | 2026-08-26 | `claude-code-loop`, `us_presidential_vote_analysis` — **n=10 / n=13** admissible sessions |
-| **0.3.0** | **2026-09-12** | `claude-code-loop`, `us_presidential_vote_analysis`, `sportswear-esg-news-classifier` |
+| **0.3.0** | **2026-09-11** (local; `installed_plugins.json` stamps it `2026-09-12T00:39Z`) | `claude-code-loop`, `us_presidential_vote_analysis`, `sportswear-esg-news-classifier` |
 
 ⚠ **The v0.3.0 release grew the engine 50.8%** (177,529 → 267,647 bytes; always-loaded 45,937 →
 69,457 tokens). Two consequences, both of which bit the instruments before anyone measured anything:

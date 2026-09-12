@@ -113,9 +113,10 @@ def floor_for(version):
     return (engine_bytes(version) or _widest_known_engine()) / CHARS_PER_TOKEN
 
 
-# Retained so an explicit `--floor` and old callers still resolve. It is the
-# 0.2.0 floor and is NOT the default any more -- `profile(floor=None)` derives
-# the floor per session.
+# The 0.2.0 floor, retained ONLY so a caller that imported the name still
+# resolves. Nothing in this module consumes it: `--floor` parses its own value
+# and `main()` passes None so the floor is derived per session. Do not wire it
+# back into a default -- that is precisely the regression this comment records.
 DEFAULT_FLOOR = 177529 / CHARS_PER_TOKEN
 
 # Relative to one fresh input token.
@@ -147,37 +148,8 @@ def strip_heredocs(cmd):
     return " ".join(out)
 
 
-def classify(name, inp, target="loop-engine.md", spills=None):
-    """-> 'load' (plugin cache), 'tree' (working copy), or None.
-
-    `spills` maps a spill-file path to the kind of the read that produced it, so
-    the recovery reads inherit it.
-    """
-    spills = spills or {}
-    if not isinstance(inp, dict):
-        return None
-    if name == "Read":
-        path = str(inp.get("file_path", ""))
-    elif name in ("Grep", "Glob"):
-        path = str(inp.get("path", "")) + " " + str(inp.get("glob", ""))
-    elif name == "Bash":
-        path = strip_heredocs(str(inp.get("command", "")))
-        if _NOT_A_READ.search(path) or not any(v in path for v in _READ_VERB):
-            return None
-    else:
-        return None
-    for sp, kind in spills.items():
-        if sp and sp in path:
-            # A spill path carries no version, so it contributes no era evidence.
-            return kind
-    if target not in path:
-        return None
-    # `/dev-loop/` matches the working tree too; `/plugins/` is the discriminator.
-    return "load" if "/plugins/" in path else "tree"
-
-
 def tool_path(name, inp):
-    """The path string `classify` inspects, for callers that need the era too."""
+    """The path string `classify` inspects. The single extraction table."""
     if not isinstance(inp, dict):
         return ""
     if name == "Read":
@@ -193,6 +165,37 @@ def engine_version(name, inp):
     """Engine version this read loaded, from the installed path. None if absent."""
     m = VERSION_IN_PATH.search(tool_path(name, inp))
     return m.group(1) if m else None
+
+
+def classify(name, inp, target="loop-engine.md", spills=None):
+    """-> 'load' (plugin cache), 'tree' (working copy), or None.
+
+    `spills` maps a spill-file path to the kind of the read that produced it, so
+    the recovery reads inherit it.
+    """
+    spills = spills or {}
+    if not isinstance(inp, dict):
+        return None
+    if name not in ("Read", "Grep", "Glob", "Bash"):
+        return None
+    # One extraction table, shared with `engine_version` below. Two copies drift
+    # silently, and a drifted copy costs era detection -- which now sizes the
+    # admissibility floor, so the failure is a corpus-wide one.
+    path = tool_path(name, inp)
+    if name == "Bash":
+        if _NOT_A_READ.search(path) or not any(v in path for v in _READ_VERB):
+            return None
+    for sp, kind in spills.items():
+        if sp and sp in path:
+            # A spill path carries no version, so it contributes no era evidence.
+            return kind
+    if target not in path:
+        return None
+    # `/dev-loop/` matches the working tree too; `/plugins/` is the discriminator.
+    return "load" if "/plugins/" in path else "tree"
+
+
+
 
 
 def _spill_path(rec, block):
@@ -397,7 +400,14 @@ def render(p):
 def main(argv):
     args = [a for a in argv[1:] if not a.startswith("-")]
     kinds = ("load", "tree") if "--all-reads" in argv else ("load",)
-    floor = DEFAULT_FLOOR
+    # None => profile() derives the floor from the era each session actually ran.
+    # This read `DEFAULT_FLOOR` until 2026-09-12 and that made the per-session
+    # floor unreachable from the CLI -- the only documented way to run the tool --
+    # so the fix for the fail-open existed in the library and not in the product.
+    # It survived a mutation battery because every mutation targeted `floor_for`,
+    # and it survived a smoke test because that session was 0.2.1, where the old
+    # constant and the derived floor are the same number. Keep it None.
+    floor = None
     if "--floor" in argv:
         try:
             floor = float(argv[argv.index("--floor") + 1])

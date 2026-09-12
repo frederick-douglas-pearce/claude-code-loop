@@ -19,7 +19,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from engine_cost import (  # noqa: E402
-    classify, strip_heredocs, profile,
+    classify, strip_heredocs, profile, main,
     engine_version, engine_bytes, floor_for, KNOWN_ENGINE_BYTES,
 )
 
@@ -127,14 +127,18 @@ class AdmissibilityTests(unittest.TestCase):
     CLAUDE.md warns about. These pin the implementation.
     """
 
-    def test_a_session_below_one_engine_copy_is_inadmissible(self):
-        p = {"ingested": 6088, "floor": 50723}
-        self.assertLess(p["ingested"], p["floor"])
-
-    def test_default_floor_is_about_one_engine_copy(self):
-        from engine_cost import DEFAULT_FLOOR
-        self.assertGreater(DEFAULT_FLOOR, 45000)
-        self.assertLess(DEFAULT_FLOOR, 60000)
+    # REMOVED 2026-09-12, both deliberately, and worth saying why rather than
+    # leaving a gap someone helpfully refills:
+    #
+    #   test_a_session_below_one_engine_copy_is_inadmissible built two literals
+    #   ({"ingested": 6088, "floor": 50723}) and asserted 6088 < 50723. It called
+    #   no production code and would have passed against an empty module.
+    #
+    #   test_default_floor_is_about_one_engine_copy asserted 45000 < DEFAULT_FLOOR
+    #   < 60000 -- i.e. it actively CERTIFIED the 0.2.0 constant whose use in
+    #   main() was the fail-open. A test can hold a defect in place.
+    #
+    # What replaces them is CliFloorTests below, which runs main() end to end.
 
     def test_profile_reports_admissibility_on_a_real_shaped_transcript(self):
         import json as _json
@@ -206,11 +210,16 @@ class EraFloorTests(unittest.TestCase):
 
     def test_unknown_era_defaults_to_the_widest_engine_not_the_narrowest(self):
         """Default-deny. Sizing an unattributable session off the SMALLEST engine
-        would rebuild the fail-open this function replaced."""
-        widest = max(KNOWN_ENGINE_BYTES.values())
-        self.assertAlmostEqual(floor_for(None), widest / 3.5, places=6)
+        would rebuild the fail-open this function replaced.
+
+        Asserted as a RELATION, not against `max(KNOWN_ENGINE_BYTES)`: the
+        resolver also scans the live plugin cache, so an equality would fail on
+        the first machine to install a wider engine -- the single event this
+        module exists to survive.
+        """
         for v in KNOWN_ENGINE_BYTES:
             self.assertGreaterEqual(floor_for(None), floor_for(v))
+        self.assertGreater(floor_for(None), 0)
 
     def test_an_evicted_version_falls_back_to_the_table_not_to_zero(self):
         """A version no longer in the plugin cache must not size the floor at 0."""
@@ -219,6 +228,109 @@ class EraFloorTests(unittest.TestCase):
     def test_an_entirely_unknown_version_still_yields_a_usable_floor(self):
         self.assertIsNone(engine_bytes("9.9.9"))
         self.assertGreater(floor_for("9.9.9"), 0)
+
+
+class CliFloorTests(unittest.TestCase):
+    """`main()` must apply the PER-SESSION floor, not a constant.
+
+    REGRESSION, 2026-09-12, and the reason this class exists at all. The floor
+    was made version-aware in `floor_for`, a mutation battery killed 3/3 against
+    it -- and `main()` still opened with `floor = DEFAULT_FLOOR` and passed it
+    straight into `profile`. The fix lived in the library and not in the product,
+    and every mutation aimed one layer below the defect.
+
+    It also survived a manual smoke test, because that session was 0.2.1, where
+    the stale constant and the derived floor are the SAME NUMBER. So these cases
+    use a 0.3.0 fixture on purpose: the eras must disagree for the test to bite.
+    """
+
+    ENG = ("/home/u/.claude/plugins/cache/claude-code-loop/dev-loop/"
+           "%s/skills/dev-loop/loop-engine.md")
+
+    def _session(self, version, ingest_tokens):
+        """A transcript whose single engine read of `version` ingests exactly
+        `ingest_tokens`.
+
+        `profile` derives ingestion from the CONTEXT DELTA between turns, not
+        from payload size, so the fixture sets the delta directly: turn 1's
+        input is turn 0's input + turn 0's output + the tokens to ingest. That
+        makes the quantity under test the one the assertion names.
+        """
+        base_in, base_out = 10, 5
+        return [
+            {"type": "assistant", "message": {
+                "id": "m0",
+                "usage": {"input_tokens": base_in, "cache_read_input_tokens": 0,
+                          "cache_creation_input_tokens": 0,
+                          "output_tokens": base_out},
+                "content": [{"type": "tool_use", "id": "t0", "name": "Read",
+                             "input": {"file_path": self.ENG % version}}]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "t0",
+                 "content": "engine text"}]}},
+            {"type": "assistant", "message": {
+                "id": "m1",
+                "usage": {"input_tokens": base_in + base_out + ingest_tokens,
+                          "cache_read_input_tokens": 0,
+                          "cache_creation_input_tokens": 0,
+                          "output_tokens": base_out},
+                "content": [{"type": "text", "text": "done"}]}},
+        ]
+
+    def _run(self, recs):
+        import json as _json
+        import tempfile
+        import io
+        import contextlib
+        fh = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        for r in recs:
+            fh.write(_json.dumps(r) + "\n")
+        fh.close()
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                main(["engine_cost.py", fh.name])
+            return buf.getvalue()
+        finally:
+            os.unlink(fh.name)
+
+    def test_cli_detects_and_prints_the_era(self):
+        out = self._run(self._session("0.3.0", 100000))
+        self.assertIn("0.3.0", out)
+
+    def test_cli_refuses_a_partial_load_of_the_wider_engine(self):
+        """THE REGRESSION. Enough ingestion for a 0.2.0 copy, short of a 0.3.0
+        one. Against the stale constant this printed no INADMISSIBLE line."""
+        between = int(floor_for("0.2.0") * 1.02)   # clears 0.2.0, short of 0.3.0
+        self.assertGreater(between, floor_for("0.2.0"))
+        self.assertLess(between, floor_for("0.3.0"))
+        out = self._run(self._session("0.3.0", between))
+        self.assertIn("INADMISSIBLE", out)
+
+    def test_cli_admits_the_same_volume_when_the_era_is_narrower(self):
+        """Same bytes, older engine -> admissible. Proves the refusal above is
+        the ERA doing the work, not the payload being small."""
+        between = int(floor_for("0.2.0") * 1.02)
+        out = self._run(self._session("0.2.0", between))
+        self.assertNotIn("INADMISSIBLE", out)
+
+    def test_an_explicit_floor_flag_still_overrides(self):
+        between = int(floor_for("0.2.0") * 1.02)
+        import json as _json
+        import tempfile
+        import io
+        import contextlib
+        fh = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        for r in self._session("0.3.0", between):
+            fh.write(_json.dumps(r) + "\n")
+        fh.close()
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                main(["engine_cost.py", "--floor", "1", fh.name])
+            self.assertNotIn("INADMISSIBLE", buf.getvalue())
+        finally:
+            os.unlink(fh.name)
 
 
 if __name__ == "__main__":

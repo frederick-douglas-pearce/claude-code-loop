@@ -50,6 +50,16 @@ THREE THINGS THAT MAKE THIS EASY TO GET WRONG, all learned the hard way:
     every 0.2.1 row and from 2026-09-12 every 0.3.0 row attributed to "0.2.0".
     Adding a release means adding a row to `ERAS` -- if you are reading this
     after a release that is not listed, that is the bug.
+
+    WHY THE DATES ARE NOT DERIVED, since that is the obvious objection.
+    `engine_cost.py` derives engine SIZES from the plugin cache and keeps its
+    table only as a fallback for evicted versions. The same trick does not work
+    here: installed_plugins.json records each repo's CURRENT version and when it
+    last changed, not the history of installs, so the boundary dates for eras a
+    repo has already moved past are not recoverable from any live source. The
+    list is therefore hand-maintained by necessity -- which is why an installed
+    version missing from it RAISES rather than degrading quietly. That is the
+    one mechanical staleness signal available, so it is loud on purpose.
 """
 import glob
 import json
@@ -65,6 +75,7 @@ RUNS = re.compile(r"subagent-runs[=≈](\d+)")
 GATE = re.compile(r"(architect|code-review|ac-verify)=(\d+)")
 SURVIVORS = re.compile(r"post-gate-survivors=([~\d]+)")
 DATE = re.compile(r"(\d{4}-\d{2}-\d{2})")
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # Engine eras in release order: (version, first install date, first-appearing
 # vocabulary). A marker persists into later eras, so matching one means "this era
 # OR LATER" -- see the docstring. `None` means the release is not
@@ -78,14 +89,44 @@ ERAS = [
     ("0.2.1", "2026-08-26", None),
     # 0.3.0: #108's run-level inference record and #122's mandatory review lens.
     # Both are written to progress.md, which is what makes them usable here.
-    ("0.3.0", "2026-09-12", re.compile(r"Plan-gate-inferred|guard-efficacy")),
+    #
+    # NOTE THE DATE IS LOCAL, NOT THE UTC STAMP. installed_plugins.json records
+    # 2026-09-12T00:39Z for this install; the machine that ran it was at
+    # 2026-09-11 17:38 -0700, and ledger `## ` headers are written in local time.
+    # Dating the boundary from the UTC stamp put the first evening of 0.3.0 runs
+    # -- the first treated observations in the whole staggered-adoption design --
+    # into the 0.2.1 bucket. Take install dates from the LOCAL date of the
+    # install, and where a boundary day is genuinely ambiguous prefer the
+    # EARLIER era: under-treating biases a DiD toward the null, over-treating
+    # manufactures the effect.
+    ("0.3.0", "2026-09-11", re.compile(r"Plan-gate-inferred|guard-efficacy")),
 ]
+
+# `era_by_date` scans ERAS in order and breaks at the first future row, and the
+# cap compares list POSITIONS -- two independent ordering contracts that were
+# stated only in a comment. Append a backport row out of date order (the natural
+# edit when a release is found missing) and the scan breaks at it, silently
+# attributing every later row to the era before it. Checked on import instead.
+def check_era_order(eras):
+    """Raise unless `eras` satisfies both ordering contracts.
+
+    A function rather than a bare module-level assert so the failing case can be
+    exercised: an assert over data that is currently valid cannot be shown to
+    guard anything, since deleting it changes nothing until someone makes the
+    bad edit it exists to catch.
+    """
+    dates = [s for _, s, _ in eras if s]
+    if dates != sorted(dates):
+        raise ValueError(
+            "ERAS install dates are out of order -- era_by_date scans in list "
+            "order and breaks at the first future row")
+    return True
+
+
+check_era_order(ERAS)
 
 INSTALLED_PLUGINS = os.path.expanduser("~/.claude/plugins/installed_plugins.json")
 
-# Kept for callers that still import them; ERAS is the source of truth.
-MARKER = ERAS[1][2]
-REINSTALL = ERAS[1][1]
 
 
 def installed_version(ledger_root):
@@ -103,16 +144,38 @@ def installed_version(ledger_root):
         return None
     best = None
     for e in entries:
-        proj = e.get("projectPath") or ""
-        # The ledger lives under the project, so the project path is a prefix.
-        if proj and path.startswith(os.path.abspath(proj)):
+        proj = os.path.abspath(e.get("projectPath") or "")
+        if not proj:
+            continue
+        # The ledger lives under the project, so the project path is a prefix --
+        # but a RAW prefix test also matches a sibling that merely shares a name
+        # (`.../claude-code-loop-EXPERIMENT` inheriting `.../claude-code-loop`),
+        # silently capping an unregistered repo at another repo's version. The
+        # separator boundary is what makes it a path containment test.
+        if path == proj or path.startswith(proj.rstrip(os.sep) + os.sep):
             if best is None or len(proj) > len(best[0]):
                 best = (proj, e.get("version"))
     return best[1] if best else None
 
 
 def era_by_date(date, cap=None):
-    """Latest era whose install date has passed, capped at `cap` if given."""
+    """Latest era whose install date has passed, capped at `cap` if given.
+
+    Two default-deny rules, both of which were fail-open on the first cut:
+
+    * An unparseable date resolves to the EARLIEST era. `parse()` writes "?"
+      when a `## ` header carries no ISO date, and "?" is 0x3F -- above "2" --
+      so `"?" >= "2026-09-12"` is True and the sentinel resolved to the NEWEST
+      era. An undated entry was coded as fully treated, which is worse than the
+      boolean it replaced (that could only ever mis-file it as 0.2.0).
+    * A cap this table does not know is an ERROR, not an absent cap. Swallowing
+      it silently dropped the cap while `summarize_era` still printed that
+      capping was in effect -- so a repo held on an unlisted version read as
+      treated, the exact DiD inversion the cap exists to prevent. It is also
+      the one place staleness is mechanically detectable, so it must be loud.
+    """
+    if not _ISO_DATE.match(date or ""):
+        return ERAS[0][0]
     era = ERAS[0][0]
     for version, start, _ in ERAS:
         if start is None or date >= start:
@@ -121,12 +184,29 @@ def era_by_date(date, cap=None):
             break
     if cap:
         order = [v for v, _, _ in ERAS]
-        try:
-            if order.index(era) > order.index(cap):
-                era = cap
-        except ValueError:
-            pass
+        if cap not in order:
+            raise ValueError(
+                "installed version %r is not in ERAS -- add the release (see the "
+                "module docstring) rather than measuring with a stale table" % cap)
+        if order.index(era) > order.index(cap):
+            era = cap
     return era
+
+
+def cap_span(span, cap):
+    """Truncate a marker BOUND at the installed version.
+
+    The cap was applied to the date method only, so the marker column still
+    advertised eras a held-back control never installed -- inside the read-out
+    built to keep the control arm clean.
+    """
+    if not cap:
+        return span
+    order = [v for v, _, _ in ERAS]
+    if cap not in order:
+        return span
+    kept = [v for v in span.split("|") if v in order and order.index(v) <= order.index(cap)]
+    return "|".join(kept) if kept else cap
 
 
 def era_by_marker(block):
@@ -146,8 +226,10 @@ def era_by_marker(block):
             span.append(version)
         else:
             break
-    label = "|".join(span)
-    return label if idx or len(span) > 1 else ERAS[0][0]
+    # No conditional here: when idx == 0 and the span is a single entry, that
+    # entry IS ERAS[0][0], so the guard this replaced could never change the
+    # result -- it only made a future reader reason through a dead branch.
+    return "|".join(span)
 
 
 def parse(ledger_root):
@@ -180,7 +262,10 @@ def parse(ledger_root):
                 "gates": gates,
                 "rounds": sum(gates.values()) if gates else None,
                 "survivors": surv.group(1) if surv else "",
-                "marker": bool(MARKER.search(block)),
+                # `era_marker` replaced a `marker` boolean that matched 0.2.0
+                # vocabulary only, so it read False for a 0.3.0 entry. Nothing
+                # consumed it; a reader reaching for it as "is this a modern
+                # engine" would have got a silently 0.2.0-shaped answer.
                 "era_marker": era_by_marker(block),
             }
 
@@ -236,7 +321,7 @@ def summarize_era(label, rows):
     def bucket(method):
         out = {}
         for r in peak.values():
-            key = (r["era_marker"] if method == "marker"
+            key = (cap_span(r["era_marker"], cap) if method == "marker"
                    else era_by_date(r["date"], cap))
             out.setdefault(key, []).append(r)
         return out
@@ -251,10 +336,19 @@ def summarize_era(label, rows):
                   f"rounds median={statistics.median(rounds) if rounds else '-':<5} "
                   f"{dates[0]}..{dates[-1]}")
 
-    # A marker gives a lower bound, so it agrees with a date era whenever that
-    # era is inside the bound's span. Only a date era OUTSIDE the span disagrees.
-    split = [r for r in peak.values()
-             if era_by_date(r["date"], cap) not in r["era_marker"].split("|")]
+    # A marker is a LOWER BOUND, so only a date era EARLIER than the bound's
+    # floor is a disagreement. The first cut flagged any date era outside the
+    # span, which flags the consistent direction too: a 0.2.0 marker can never
+    # produce a span reaching 0.3.0 (the span stops at the next marker-bearing
+    # era), yet ">=0.2.0" is entirely satisfied by 0.3.0. That false direction
+    # grows with every 0.3.0 row whose journal happens to carry neither new
+    # marker, turning the banner into noise exactly as the corpus fills up.
+    order = [v for v, _, _ in ERAS]
+    split = []
+    for r in peak.values():
+        floor_era = cap_span(r["era_marker"], cap).split("|")[0]
+        if order.index(era_by_date(r["date"], cap)) < order.index(floor_era):
+            split.append(r)
     if split:
         print(f"  !! {len(split)}/{len(peak)} rows classified differently by the two "
               f"methods — see the module docstring before trusting either")

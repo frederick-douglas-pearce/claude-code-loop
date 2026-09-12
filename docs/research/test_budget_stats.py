@@ -27,7 +27,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from budget_stats import (  # noqa: E402
-    ERAS, era_by_date, era_by_marker, installed_version,
+    ERAS, era_by_date, era_by_marker, installed_version, cap_span,
+    check_era_order,
 )
 
 VERSIONS = [v for v, _, _ in ERAS]
@@ -74,9 +75,100 @@ class InstalledCapTests(unittest.TestCase):
         early = "1970-01-01"
         self.assertEqual(era_by_date(early, cap=ERAS[-1][0]), ERAS[0][0])
 
-    def test_an_unknown_cap_is_ignored_rather_than_crashing(self):
-        late = ERAS[-1][1]
-        self.assertEqual(era_by_date(late, cap="9.9.9"), era_by_date(late))
+    def test_an_unknown_cap_raises_rather_than_being_silently_dropped(self):
+        """INVERTED 2026-09-12. This case previously asserted the opposite, and
+        asserting the opposite is what made it a bug-preserving test.
+
+        A cap the table does not know is the ONE point where this module can
+        mechanically detect the staleness its own docstring warns about. Dropping
+        it silently left `summarize_era` printing "capped here" while no cap was
+        applied -- so a repo held on an unlisted version read as treated, which
+        is the DiD inversion the cap exists to prevent. Loud is the only safe
+        direction, and a released version missing from ERAS is a real defect.
+        """
+        with self.assertRaises(ValueError):
+            era_by_date(ERAS[-1][1], cap="9.9.9")
+
+    def test_an_unparseable_date_resolves_to_the_earliest_era(self):
+        """`parse()` writes "?" for a header with no ISO date. "?" is 0x3F, above
+        "2", so a naive `>=` put the sentinel in the NEWEST era -- coding an
+        undated entry as fully treated, worse than the boolean it replaced."""
+        for bad in ("?", "", "n/a", "2026-9-1"):
+            self.assertEqual(era_by_date(bad), ERAS[0][0])
+            self.assertEqual(era_by_date(bad, cap=ERAS[-1][0]), ERAS[0][0])
+
+
+class EraTableIntegrityTests(unittest.TestCase):
+    """`era_by_date` scans in list order and breaks at the first future row, so
+    a row appended out of date order silently mis-files every later entry. The
+    docstring tells maintainers to add a row at every release, so the edit that
+    triggers this is the one the module invites."""
+
+    def test_the_shipped_table_is_ordered(self):
+        self.assertTrue(check_era_order(ERAS))
+
+    def test_an_out_of_order_row_is_rejected(self):
+        scrambled = list(ERAS)
+        scrambled.insert(1, ("9.9.9", "2099-01-01", None))
+        with self.assertRaises(ValueError):
+            check_era_order(scrambled)
+
+    def test_a_backported_row_appended_at_the_end_is_rejected(self):
+        """The realistic edit: a release discovered missing and tacked on."""
+        with self.assertRaises(ValueError):
+            check_era_order(list(ERAS) + [("0.2.2", "2026-08-30", None)])
+
+    # NOT COVERED, and named here rather than left to be discovered: these cases
+    # exercise `check_era_order` as a function. Deleting its call at import is a
+    # surviving mutation -- nothing fails, because the shipped table is valid, so
+    # there is no bad data for the missing call to have caught. Pinning the call
+    # would mean asserting on module source, which is a worse test than none.
+    # The import-time invocation is belt-and-braces over the function above; the
+    # function is what these guard.
+
+
+class InstalledVersionPathTests(unittest.TestCase):
+    """`projectPath` matching needs a separator boundary, not a raw prefix."""
+
+    def test_a_sibling_sharing_a_path_prefix_does_not_inherit_the_cap(self):
+        """A repo absent from installed_plugins.json must resolve to None, not
+        to a neighbour's version -- which would cap it at an era it never ran
+        while the read-out reported that version as "installed now" for it."""
+        registered = "/home/fdpearce/Documents/Projects/git/claude-code-loop"
+        if installed_version(registered + "/.claude/loop") is None:
+            self.skipTest("fixture assumes this repo is registered")
+        self.assertIsNone(
+            installed_version(registered + "-EXPERIMENT/.claude/loop"))
+
+    def test_the_registered_repo_itself_still_resolves(self):
+        registered = "/home/fdpearce/Documents/Projects/git/claude-code-loop"
+        if installed_version(registered + "/.claude/loop") is None:
+            self.skipTest("fixture assumes this repo is registered")
+        self.assertIsNotNone(installed_version(registered + "/.claude/loop"))
+
+
+class CapSpanTests(unittest.TestCase):
+    """The cap must reach the marker column too, not only the date column."""
+
+    def test_a_span_is_truncated_at_the_installed_version(self):
+        span = "|".join(v for v, _, _ in ERAS[:3])
+        self.assertEqual(cap_span(span, ERAS[1][0]), "|".join(v for v, _, _ in ERAS[:2]))
+
+    def test_a_control_never_advertises_an_era_it_never_installed(self):
+        """The regression: the marker bucket ran uncapped, so a repo pinned to an
+        early release still displayed a span naming later ones."""
+        span = "|".join(v for v, _, _ in ERAS)
+        capped = cap_span(span, ERAS[1][0]).split("|")
+        for v, _, _ in ERAS[2:]:
+            self.assertNotIn(v, capped)
+
+    def test_no_cap_leaves_the_span_alone(self):
+        span = "|".join(v for v, _, _ in ERAS[:2])
+        self.assertEqual(cap_span(span, None), span)
+
+    def test_an_unknown_cap_leaves_the_span_rather_than_emptying_it(self):
+        span = "|".join(v for v, _, _ in ERAS[:2])
+        self.assertEqual(cap_span(span, "9.9.9"), span)
 
     def test_no_cap_means_no_capping(self):
         late = ERAS[-1][1]
