@@ -53,8 +53,71 @@ CTX = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
 # Default-deny: unknown ⇒ inadmissible, excluded loudly, never quietly averaged in.
 # Without this, a broken run reads as the cheapest run in the corpus, which is
 # exactly how a truncated load got written up as a finding once already.
-# 177,529 bytes at ~3.5 chars/token is the 0.2.0 engine; override with --floor.
-DEFAULT_FLOOR = 177529 / 3.5
+#
+# THE FLOOR IS PER-SESSION, because "one copy of the engine" is not one number.
+# It was `177529 / 3.5` -- one 0.2.0 copy -- from the first version of this file
+# until 2026-09-12, and the v0.3.0 release grew the engine 50.8% (177,529 ->
+# 267,647 bytes) and so turned that constant fail-OPEN: a 0.3.0 session that
+# ingested 50,722-76,469 tokens had loaded 66-99% of its engine and was scored
+# ADMISSIBLE. That is the precise failure this floor exists to refuse, arriving
+# silently and in the reassuring direction. A hardcoded size cannot survive a
+# release, so the size is now read off the era the session actually ran.
+CHARS_PER_TOKEN = 3.5
+
+# Fallback sizes for engines no longer in the plugin cache. The cache is the
+# primary source; this table is only consulted when a version has been evicted.
+# Add a row when a version is retired, never instead of reading the payload.
+KNOWN_ENGINE_BYTES = {"0.2.0": 177529, "0.2.1": 177529, "0.3.0": 267647}
+
+PLUGIN_CACHE = os.path.expanduser(
+    "~/.claude/plugins/cache/claude-code-loop/dev-loop")
+# The installed path carries its own version: .../dev-loop/<version>/skills/...
+# This is the same path `classify` already requires to contain `/plugins/`, so
+# era attribution costs no extra detection surface and inherits its correctness.
+VERSION_IN_PATH = re.compile(r"/dev-loop/(\d+\.\d+\.\d+)/")
+
+
+def engine_bytes(version):
+    """One engine copy in bytes for `version`, preferring the payload on disk."""
+    if not version:
+        return None
+    cached = os.path.join(PLUGIN_CACHE, version, "skills", "dev-loop",
+                          "loop-engine.md")
+    try:
+        return os.path.getsize(cached)
+    except OSError:
+        return KNOWN_ENGINE_BYTES.get(version)
+
+
+def _widest_known_engine():
+    """The largest engine we can see, for use when the era is unknown."""
+    sizes = list(KNOWN_ENGINE_BYTES.values())
+    try:
+        for v in os.listdir(PLUGIN_CACHE):
+            b = engine_bytes(v)
+            if b:
+                sizes.append(b)
+    except OSError:
+        pass
+    return max(sizes)
+
+
+def floor_for(version):
+    """Admissibility floor in tokens for a session that ran engine `version`.
+
+    Default-deny on an unknown era: fall back to the WIDEST engine known, so an
+    unattributable session must clear the strictest bar rather than the most
+    permissive one. Sizing an unknown era off the smallest engine would recreate
+    exactly the fail-open this function replaced.
+    """
+    return (engine_bytes(version) or _widest_known_engine()) / CHARS_PER_TOKEN
+
+
+# The 0.2.0 floor, retained ONLY so a caller that imported the name still
+# resolves. Nothing in this module consumes it: `--floor` parses its own value
+# and `main()` passes None so the floor is derived per session. Do not wire it
+# back into a default -- that is precisely the regression this comment records.
+DEFAULT_FLOOR = 177529 / CHARS_PER_TOKEN
 
 # Relative to one fresh input token.
 W_FRESH, W_CACHE_WRITE, W_CACHE_READ, W_OUTPUT = 1.0, 1.25, 0.1, 5.0
@@ -85,6 +148,25 @@ def strip_heredocs(cmd):
     return " ".join(out)
 
 
+def tool_path(name, inp):
+    """The path string `classify` inspects. The single extraction table."""
+    if not isinstance(inp, dict):
+        return ""
+    if name == "Read":
+        return str(inp.get("file_path", ""))
+    if name in ("Grep", "Glob"):
+        return str(inp.get("path", "")) + " " + str(inp.get("glob", ""))
+    if name == "Bash":
+        return strip_heredocs(str(inp.get("command", "")))
+    return ""
+
+
+def engine_version(name, inp):
+    """Engine version this read loaded, from the installed path. None if absent."""
+    m = VERSION_IN_PATH.search(tool_path(name, inp))
+    return m.group(1) if m else None
+
+
 def classify(name, inp, target="loop-engine.md", spills=None):
     """-> 'load' (plugin cache), 'tree' (working copy), or None.
 
@@ -94,23 +176,26 @@ def classify(name, inp, target="loop-engine.md", spills=None):
     spills = spills or {}
     if not isinstance(inp, dict):
         return None
-    if name == "Read":
-        path = str(inp.get("file_path", ""))
-    elif name in ("Grep", "Glob"):
-        path = str(inp.get("path", "")) + " " + str(inp.get("glob", ""))
-    elif name == "Bash":
-        path = strip_heredocs(str(inp.get("command", "")))
+    if name not in ("Read", "Grep", "Glob", "Bash"):
+        return None
+    # One extraction table, shared with `engine_version` below. Two copies drift
+    # silently, and a drifted copy costs era detection -- which now sizes the
+    # admissibility floor, so the failure is a corpus-wide one.
+    path = tool_path(name, inp)
+    if name == "Bash":
         if _NOT_A_READ.search(path) or not any(v in path for v in _READ_VERB):
             return None
-    else:
-        return None
     for sp, kind in spills.items():
         if sp and sp in path:
+            # A spill path carries no version, so it contributes no era evidence.
             return kind
     if target not in path:
         return None
     # `/dev-loop/` matches the working tree too; `/plugins/` is the discriminator.
     return "load" if "/plugins/" in path else "tree"
+
+
+
 
 
 def _spill_path(rec, block):
@@ -150,10 +235,13 @@ def blocks(rec):
     return c if isinstance(c, list) else []
 
 
-def profile(path, target="loop-engine.md", kinds=("load",), floor=DEFAULT_FLOOR):
+def profile(path, target="loop-engine.md", kinds=("load",), floor=None):
+    """`floor=None` derives the admissibility floor from the engine version this
+    session actually loaded. Pass a number to override (the `--floor` flag)."""
     turns, order, tools = {}, [], {}
     pending, arrivals = [], {}
     spills, kind_counts = {}, {}
+    versions = {}
     compactions = 0
 
     for rec in load(path):
@@ -185,6 +273,10 @@ def profile(path, target="loop-engine.md", kinds=("load",), floor=DEFAULT_FLOOR)
                 kind = classify(name, inp, target, spills)
                 if kind:
                     kind_counts[kind] = kind_counts.get(kind, 0) + 1
+                    if kind == "load":
+                        v = engine_version(name, inp)
+                        if v:
+                            versions[v] = versions.get(v, 0) + 1
                     sp = _spill_path(rec, b)
                     if sp:
                         spills[sp] = kind
@@ -244,8 +336,16 @@ def profile(path, target="loop-engine.md", kinds=("load",), floor=DEFAULT_FLOOR)
             resident_turns += resident
         models[model] = (resident_turns, billable, peak_share)
 
+    # An era mixed within one session (a re-install mid-run) is scored against
+    # the WIDEST engine seen, never the average: a session that straddles a
+    # release did not fully load either engine, and averaging would admit it.
+    era = max(versions, key=lambda v: (engine_bytes(v) or 0)) if versions else None
+    if floor is None:
+        floor = floor_for(era)
+
     return {
         "path": path, "turns": len(order), "compactions": compactions,
+        "era": era, "eras_seen": dict(versions),
         "floor": floor, "admissible": ingested >= floor,
         "reads": reads, "by_tool": by_tool, "kind_counts": kind_counts,
         "ingested": ingested, "calib": calib, "spills": len(spills),
@@ -257,8 +357,12 @@ def profile(path, target="loop-engine.md", kinds=("load",), floor=DEFAULT_FLOOR)
 
 def render(p):
     n, ing, proc = p["turns"], p["ingested"], p["processed"]
+    mixed = " MIXED:%s" % ",".join(sorted(p["eras_seen"])) if len(p["eras_seen"]) > 1 else ""
     print(f"\n=== {os.path.basename(p['path'])[:8]}   {n} parent turns, "
           f"{p['compactions']} compaction(s), {p['spills']} spill file(s)")
+    # Printed unconditionally: the directory's standing rule is that a before/after
+    # naming no engine version is not interpretable.
+    print(f"  engine era              {(p['era'] or 'UNKNOWN -- floor defaults to the widest known engine'):>12}{mixed}")
     print(f"  peak context            {p['peak_ctx']:>12,}")
     print(f"  no-cache input basis    {proc:>12,}")
     print(f"  billable-equiv          {p['billable_total']:>12,.0f}   "
@@ -296,7 +400,14 @@ def render(p):
 def main(argv):
     args = [a for a in argv[1:] if not a.startswith("-")]
     kinds = ("load", "tree") if "--all-reads" in argv else ("load",)
-    floor = DEFAULT_FLOOR
+    # None => profile() derives the floor from the era each session actually ran.
+    # This read `DEFAULT_FLOOR` until 2026-09-12 and that made the per-session
+    # floor unreachable from the CLI -- the only documented way to run the tool --
+    # so the fix for the fail-open existed in the library and not in the product.
+    # It survived a mutation battery because every mutation targeted `floor_for`,
+    # and it survived a smoke test because that session was 0.2.1, where the old
+    # constant and the derived floor are the same number. Keep it None.
+    floor = None
     if "--floor" in argv:
         try:
             floor = float(argv[argv.index("--floor") + 1])

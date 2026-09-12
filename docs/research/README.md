@@ -24,12 +24,12 @@ All stdlib-only, all read Claude Code session transcripts from `~/.claude/projec
 
 | script | answers | tests |
 |---|---|---|
-| `engine_cost.py` | What does carrying `loop-engine.md` cost across a whole run? (P2, P2c, P8/P9) | `test_engine_cost.py` |
+| `engine_cost.py` | What does carrying `loop-engine.md` cost across a whole run? (P2, P2c, P8/P9) **Admissibility floor is per-session, sized from the engine era in the read path** — never a constant. | `test_engine_cost.py` |
 | `plan_gate_cost.py` | What is the parent carrying when the plan is written, and where did all of it come from? Attributes **everything** before implementation starts — including the two buckets no delta-based instrument sees: the always-loaded baseline and the model's own output. Splits that output by block type (only some of it stays resident) and prices the **selection phase** in resident-turn tokens. | `test_plan_gate_cost.py` |
 | `rounds_vs_turns.py` | Do gate rounds predict parent turns and bill? (Finding 11) | `test_rounds_vs_turns.py` |
 | `calls_per_turn.py` | How many tool calls per turn, and how many turns could have been merged? (Finding 12) | `test_calls_per_turn.py` |
 | ~~`context_profile.py`~~ | **RETIRED 2026-08-26** → `deprecated/`. Kept only to reproduce Findings 6–9; its payload bug over-counts spilled reads by up to 13×, so **P4 and the "~50% of every byte" figure are withdrawn**. | — |
-| `budget_stats.py` | Ledger `- Budget:` aggregates by engine era. | none |
+| `budget_stats.py` | Ledger `- Budget:` aggregates by engine era. **`--era` resolves N eras and caps BOTH the date and marker columns at the repo's installed version**, so a held-back control cannot read as treated. An installed version missing from `ERAS` raises rather than silently dropping the cap. | `test_budget_stats.py` |
 | `tree_cost.py` | Parent **+ subagent** transcripts priced together — sizes the bill Finding 11 leaves unpriced. **Scouting only; output is not a finding.** | none |
 
 ```bash
@@ -109,9 +109,33 @@ Two defences, both cheap, and they are the only things that have worked:
 
 ## Status
 
-Findings 1–12 are recorded in the notebook. **All measured sessions are 0.2.0**; `claude-code-loop`
-and `us_presidential_vote_analysis` moved to 0.2.1 on 2026-08-26, so the next fresh session in either
-is the first post-fix reading. `claude-code-sessions` remains on 0.2.0 deliberately.
+Findings 1–12 are recorded in the notebook and were **all measured on 0.2.0**.
+
+**Three eras are now on disk, and the rollout is a staggered-adoption design with a live control.**
+Read the current split from `~/.claude/plugins/installed_plugins.json` — never from this paragraph,
+which is the kind of prose that goes stale between releases:
+
+| era | installed | repos |
+|---|---|---|
+| 0.2.0 | 2026-08-21 | **held deliberately** on `agentfluent`, `claude-code-sessions` — the untreated control |
+| 0.2.1 | 2026-08-26 | `claude-code-loop`, `us_presidential_vote_analysis` — **n=10 / n=13** admissible sessions |
+| **0.3.0** | **2026-09-11** (local; `installed_plugins.json` stamps it `2026-09-12T00:39Z`) | `claude-code-loop`, `us_presidential_vote_analysis`, `sportswear-esg-news-classifier` |
+
+⚠ **The v0.3.0 release grew the engine 50.8%** (177,529 → 267,647 bytes; always-loaded 45,937 →
+69,457 tokens). Two consequences, both of which bit the instruments before anyone measured anything:
+
+- `engine_cost.py`'s admissibility floor was a **hardcoded 0.2.0 constant** and so turned fail-open
+  the moment 0.3.0 installed — a session holding 66–99% of its engine scored `ADMISSIBLE`. The floor
+  is now derived **per session** from the era in the read path, and an unknown era defaults to the
+  widest known engine. Do not reintroduce a constant.
+- **Every frozen baseline in `baseline-2026-08-25.md` is against a 45,937-token engine.** P1's
+  ~30,000 target was a ~35% cut from that; the same cut against 69,457 lands near ~45,100. Anything
+  comparing across this boundary must say which engine each side ran.
+
+**`budget_stats.py --era` now resolves N eras, not two**, and caps the date-derived era at the
+version a repo actually has installed — without that cap a held-back control reads as treated, which
+does not make the DiD noisier, it inverts it. Note 0.2.1 writes no ledger vocabulary of its own, so
+marker attribution returns a **bound** (`0.2.0|0.2.1`) rather than a false exact era.
 
 The three levers this work ranks, in the same units:
 
