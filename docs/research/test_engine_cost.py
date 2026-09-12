@@ -18,7 +18,10 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from engine_cost import classify, strip_heredocs, profile  # noqa: E402
+from engine_cost import (  # noqa: E402
+    classify, strip_heredocs, profile,
+    engine_version, engine_bytes, floor_for, KNOWN_ENGINE_BYTES,
+)
 
 CACHE = "/home/u/.claude/plugins/cache/claude-code-loop/dev-loop/0.2.0/skills/dev-loop/loop-engine.md"
 TREE = "/home/u/Documents/Projects/git/claude-code-loop/skills/dev-loop/loop-engine.md"
@@ -154,6 +157,68 @@ class AdmissibilityTests(unittest.TestCase):
             self.assertFalse(p["admissible"])   # tiny fixture is far below the floor
         finally:
             os.unlink(fh.name)
+
+
+class EraFloorTests(unittest.TestCase):
+    """The admissibility floor must track the engine that actually ran.
+
+    REGRESSION, 2026-09-12. The floor was the constant `177529 / 3.5` -- one
+    0.2.0 engine -- and v0.3.0 grew the engine to 267,647 bytes. That turned a
+    default-DENY guard fail-OPEN: a 0.3.0 session holding 66-99% of its engine
+    cleared a 0.2.0-sized bar and was scored admissible. These cases pin the
+    mechanism (the floor is a function of the era) rather than the outcome (some
+    particular number), because a test asserting `floor == 76470` would pass for
+    an implementation that hardcoded 0.3.0 and go stale at the next release in
+    exactly the same way.
+    """
+
+    _ENG = "/home/u/.claude/plugins/cache/claude-code-loop/dev-loop/%s/skills/dev-loop/loop-engine.md"
+
+    def test_version_is_read_off_the_installed_path(self):
+        for v in ("0.2.0", "0.2.1", "0.3.0"):
+            self.assertEqual(engine_version("Read", {"file_path": self._ENG % v}), v)
+
+    def test_working_tree_read_carries_no_version(self):
+        """The in-tree copy has no version segment, so it yields no era."""
+        self.assertIsNone(
+            engine_version("Read", {"file_path": "/repo/skills/dev-loop/loop-engine.md"}))
+
+    def test_a_bash_slice_still_yields_its_version(self):
+        cmd = "sed -n '1,400p' " + self._ENG % "0.3.0"
+        self.assertEqual(engine_version("Bash", {"command": cmd}), "0.3.0")
+
+    def test_a_larger_engine_raises_the_floor(self):
+        """THE REGRESSION. A wider engine must demand more before admitting."""
+        self.assertGreater(floor_for("0.3.0"), floor_for("0.2.1"))
+
+    def test_floor_tracks_engine_size_rather_than_a_constant(self):
+        """Mechanism, not magnitude: floor is proportional to the era's bytes."""
+        for a, b in (("0.2.0", "0.3.0"), ("0.2.1", "0.3.0")):
+            ratio_bytes = engine_bytes(b) / engine_bytes(a)
+            ratio_floor = floor_for(b) / floor_for(a)
+            self.assertAlmostEqual(ratio_bytes, ratio_floor, places=6)
+
+    def test_a_partial_load_of_the_wider_engine_is_inadmissible(self):
+        """The exact false-admit: enough for a 0.2.0 copy, short of a 0.3.0 one."""
+        partial = engine_bytes("0.2.0") / 3.5        # a whole 0.2.0 engine
+        self.assertGreaterEqual(partial, floor_for("0.2.0"))   # fine as 0.2.0
+        self.assertLess(partial, floor_for("0.3.0"))           # short as 0.3.0
+
+    def test_unknown_era_defaults_to_the_widest_engine_not_the_narrowest(self):
+        """Default-deny. Sizing an unattributable session off the SMALLEST engine
+        would rebuild the fail-open this function replaced."""
+        widest = max(KNOWN_ENGINE_BYTES.values())
+        self.assertAlmostEqual(floor_for(None), widest / 3.5, places=6)
+        for v in KNOWN_ENGINE_BYTES:
+            self.assertGreaterEqual(floor_for(None), floor_for(v))
+
+    def test_an_evicted_version_falls_back_to_the_table_not_to_zero(self):
+        """A version no longer in the plugin cache must not size the floor at 0."""
+        self.assertEqual(engine_bytes("0.2.0"), KNOWN_ENGINE_BYTES["0.2.0"])
+
+    def test_an_entirely_unknown_version_still_yields_a_usable_floor(self):
+        self.assertIsNone(engine_bytes("9.9.9"))
+        self.assertGreater(floor_for("9.9.9"), 0)
 
 
 if __name__ == "__main__":
