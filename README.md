@@ -7,31 +7,43 @@ ran the v0.10.x / v0.11.0 releases). Install it once, drop a small per-project
 `loop.config.md` into a target repo, and run your backlog as a loop: one routed
 issue per invocation, with human gates on uncertainty and durable ledger state.
 
-> **Status — v0.2.1; not yet stable.** Four pieces ship: the
+> **Status — v0.3.0; not yet stable.** Four pieces ship: the
 > `dev-loop` skill (`SKILL.md` + `loop-engine.md`), the `/init-loop` onboarding
 > command, the append-only guard hook, and the mutation harness the acceptance gate
-> runs (`tools/mutate_verify.py`). **Four repos drive it**: the first external adoption
+> runs (`tools/mutate_verify.py`). **Five repos drive it**: the first external adoption
 > [us-presidential-vote-analysis](https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis),
 > the ongoing AgentFluent dogfood,
 > [claude-code-sessions](https://github.com/frederick-douglas-pearce/claude-code-sessions),
-> and (since 2026-07-28) this repo, which runs the loop it develops and is the source of
-> most of the findings below. All four moved onto v0.2.0 on 2026-08-21; **they now sit on
-> different versions deliberately** — this repo and `us-presidential-vote-analysis` on
-> v0.2.1 since 2026-08-26, AgentFluent and `claude-code-sessions` held back on v0.2.0 to
-> serve as an untreated control for the cost research in [`docs/research/`](docs/research/).
-> **14 issues had run on the loop as of the v0.2.1 cut** (2026-08-25), across all four
-> repos. That is enough to say the plugin/config seam holds and that the hardening works
-> under load; it is not enough to call it stable, and those runs surfaced the defect this
-> release fixes.
+> [sportswear-esg-news-classifier](https://github.com/frederick-douglas-pearce/sportswear-esg-news-classifier)
+> (since 2026-09-06), and (since 2026-07-28) this repo, which runs the loop it develops and
+> is the source of most of the findings below. **They sit on different engine versions
+> deliberately — and this list is not the authority on which.** Version pinning is
+> per-project; read it from `~/.claude/plugins/installed_plugins.json`, never from prose
+> here. As of the v0.3.0 cut (2026-09-11) three repos take this release — this one,
+> `us-presidential-vote-analysis` and `sportswear-esg-news-classifier` — while AgentFluent
+> and `claude-code-sessions` stay held on v0.2.0 as an untreated control for the cost
+> research in [`docs/research/`](docs/research/). **111 issues had been carried to `done` by
+> the loop as of that cut**, across all five repos. That is enough to say the plugin/config
+> seam holds and that the hardening works under load; it is not enough to call it stable.
 >
-> **v0.2.1 is a single-fix patch.** `loop-engine.md` is larger than the harness's shell
-> output cap, so `cat`-ing it returned a silently truncated fragment — the first fifth,
-> ending inside the pipeline with no gate table, ledger format, router, AC-verifier or
-> Resume — while spilling the rest to a file. Profiling six real loop sessions found
-> **all six truncated, all six recovered, and none required to**. `SKILL.md` now says
-> how to read the engine, and adds a fail-safe: an engine you cannot confirm you read in
-> full is one you have not loaded — re-read, or stop. See
-> [F105](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1#issuecomment-5408084091).
+> **v0.3.0 is a minor bump because it adds a gate.** When code review returns a **blocking**
+> finding that raises a design question — whether the approach is right, whether a fix
+> belongs in this change at all, whether several findings share one root cause — the loop
+> consults its design reviewer for a **scope ruling** and stops for you with that ruling
+> attached. It fires on every route, under every mode, at whatever round the finding arose,
+> and no config setting reaches it
+> ([#114](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/114)).
+> The rest of the release is the review gate getting cheaper without getting weaker:
+> findings sort into **blocking** and **editorial**, so a prose fix no longer costs a full
+> round (#121); the guard-efficacy lens becomes a floor rather than an option (#122); and
+> rounds after the first read only the delta since the last reviewed commit, defaulting back
+> to a full round whenever that anchor cannot be trusted (#120). Three verification fixes
+> ride along — an agent that returns **no verdict** is recorded as not passed rather than
+> passed (#119), the mutation harness refuses to break a tree it cannot tell apart from
+> yours (#111), and the loop must mark which of its claims it verified and which it merely
+> inferred (#115) — and a run whose ledger carries no `plan-gate:` field is now **told once per
+> run** that the loop inferred `always`, and what the one-line remedy is, instead of arriving
+> there in silence (#108).
 >
 > Findings from real runs are indexed in
 > [#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1) — read
@@ -41,7 +53,7 @@ issue per invocation, with human gates on uncertainty and durable ledger state.
 > defaults the plan gate to stopping on every issue under `calibration` — alongside
 > gate-currency expiry, an orphan-PR scan on resume, an offline-test tier, and a stop
 > on any ledger status the engine does not recognise. Expect rough edges in porting to
-> a repo unlike the four above; that is exactly what #1 collects.
+> a repo unlike the five above; that is exactly what #1 collects.
 >
 > **Issues for this plugin live in
 > [this repo's tracker](https://github.com/frederick-douglas-pearce/claude-code-loop/issues).**
@@ -86,14 +98,17 @@ claude-code-loop/
 
 ## What the loop can do to your repo
 
-**This section describes v0.2.0.** An installed v0.0.1 gates less at nearly every
-point below — among other things it has no `plan-gate:` field, no rule that a gate
-without its own verdict never counts as passed, no gate-currency expiry, no offline
-test tier, no mutation pass and no orphan-PR scan, and it runs the acceptance gate
-before review rather than last. **That list is not the set: assume nothing in this
-section is live on an installed 0.0.1 until you re-install.** If you are already
-running the loop, re-install before relying on any of this, and read "Upgrading with
-a live ledger" first.
+**This section describes v0.3.0.** Every older engine gates less at nearly every
+point below, and the lists here are illustrative, never the set — **assume nothing
+in this section is live until you have re-installed.** An installed **v0.2.0** has no
+design-question stop, no blocking/editorial split at code review, no guard-efficacy
+floor, no delta-scoped re-check, no refusal to mutate a tree it cannot tell apart
+from yours, and says nothing when it infers your plan-gate posture. An installed
+**v0.0.1** is further back again: no `plan-gate:` field, no rule that a gate without
+its own verdict never counts as passed, no gate-currency expiry, no offline test
+tier, no mutation pass and no orphan-PR scan, and it runs the acceptance gate before
+review rather than last. If you are already running the loop, re-install before
+relying on any of this, and read "Upgrading with a live ledger" first.
 
 Worth reading before you install. This plugin drives a real development workflow on
 your behalf: it creates branches, commits, opens pull requests, runs your project's
@@ -340,6 +355,17 @@ gate gets **one** re-check; if it comes back dirty the loop stops and asks you, 
 iterating on itself. At code review, "dirty" means a **blocking** finding — an editorial one raised
 before that pass has run joins it, and neither re-arms the round nor stops for you. Once the pass has
 run there is no second one, so a finding of either kind after that point stops and asks you.
+
+**A re-check reads what no round has read yet, not your whole pull request again.** The first round
+reads the entire change; a later one reads the range between the commit the previous round certified
+and the current head, together with that round's findings — including the ones it *declined* — and
+one narrowed question. Every commit on the branch is still read by whichever round's range contains
+it, so no verdict is carried onto code no round ran on, and the round still certifies the head rather
+than the range. Where the anchor is missing or cannot be trusted — a resumed iteration, a rebase or
+force-push that moved the ground under it, an empty delta, or a repository that has not declared
+which of its paths are security-sensitive — the round runs **full**. That is default-deny in the
+same direction as the rest: anything unknown about the range costs a round's saving, never a round's
+coverage.
 
 **Hard limits the engine commits to:**
 
