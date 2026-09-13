@@ -50,23 +50,61 @@ _SKILL = _REPO_ROOT / "skills" / "dev-loop" / "SKILL.md"
 _INIT_LOOP = _REPO_ROOT / "commands" / "init-loop.md"
 _README = _REPO_ROOT / "README.md"
 
-# The engine is being sharded into a lean core plus on-demand phase units (#128). This
-# directory does not exist yet -- #167 lands the seam BEFORE any unit is extracted, so
-# that an extraction re-points one definition instead of twelve call sites.
+# The engine is being sharded into a lean core plus on-demand units (#128). Neither
+# directory exists yet -- #167 lands the seam BEFORE any unit is extracted, so that an
+# extraction re-points one definition instead of twelve call sites.
+#
+# **Two unit families, not one.** ``.claude/specs/prd-engine-sharding.md`` charters S3
+# (#131) into ``reference/*.md``, and ``docs/research/draft-core.md`` maps ``reference``
+# to ledger-format, router, initialization and resume, beside four ``phases/*.md``
+# units. A seam globbing only ``phases/`` would cover four of the five families and
+# miss the one #131 targets -- silently, for the union scanners:
+# ``CapsVocabularyTests._engine_parameters`` is a set union, so losing a directory
+# narrows it with no symptom (#167/AC1, amended 2026-09-13).
 _PHASES = _REPO_ROOT / "skills" / "dev-loop" / "phases"
+_REFERENCE = _REPO_ROOT / "skills" / "dev-loop" / "reference"
+
+# The marker separating two engine sources in the concatenated corpus, and the join
+# built from it.
+#
+# **Non-whitespace on purpose, and that is a correctness requirement rather than a
+# style choice.** Every consumer of a resolved region normalizes with
+# ``re.sub(r"\s+", " ", ...)``, which would erase a whitespace-only separator before
+# ``_reject_cross_source_span`` could ever see it. The blank lines around it carry a
+# second property: ``MutationNaReasonTests`` reads the corpus paragraph-wise by
+# splitting on ``"\n\n"``, and a bare ``"\n"`` join would merge one source's last
+# paragraph into the next source's first.
+_SOURCE_BOUNDARY = "<!-- engine-source-boundary -->"
+_SOURCE_JOIN = "\n\n" + _SOURCE_BOUNDARY + "\n\n"
 
 
 def _engine_sources() -> list[Path]:
-    """The files the engine's prose lives in: core first, then each phase unit.
+    """The files the engine's prose lives in: core first, then the unit directories.
 
-    Sorted for a stable, reproducible order -- but note that is **filename** order,
-    not pipeline order, which matters to any caller that slices a region spanning
-    two of these files (see ``_engine_text``).
+    **The ordering rule, stated because ordering is a parameter and not an accident:**
+    core, then ``phases/`` sorted, then ``reference/`` sorted. Directory order is fixed
+    here and the sort is *per directory* -- deliberately not one sorted pass over both,
+    which would interleave the two families and make any one unit's position depend on
+    what the other directory happens to contain.
+
+    Two properties of that order a caller must not assume away:
+
+    * ``sorted()`` is **filename** order, not pipeline order. It puts ``accepting.md``
+      (step 10) before ``reviewing.md`` (step 8), inverting the pipeline, and it is
+      unstable under a later rename -- which reorders the corpus without touching a
+      single guard.
+    * ``glob("*.md")`` is **non-recursive and type-blind**: a unit in a subdirectory is
+      not picked up at all, and anything ending ``.md`` is, including a stray note left
+      in the directory.
 
     ``Path.glob`` on a missing directory yields nothing rather than raising, so with
-    ``phases/`` absent this is exactly ``[_ENGINE]``.
+    both directories absent this is exactly ``[_ENGINE]``.
     """
-    return [_ENGINE, *sorted(_PHASES.glob("*.md"))]
+    return [
+        _ENGINE,
+        *sorted(_PHASES.glob("*.md")),
+        *sorted(_REFERENCE.glob("*.md")),
+    ]
 
 
 def _engine_text() -> str:
@@ -79,24 +117,55 @@ def _engine_text() -> str:
 
     **Not for structure.** ``PipelineStepOrderTests._engine_steps`` deliberately reads
     ``_ENGINE`` directly and must stay that way: it is the source of the ``### N.``
-    heading run, and widening it would let a phase unit answer "does step N exist",
-    which is core's question (#167/AC2). Step numbering stays enumerated in core.
+    heading run, which is core's enumeration to answer (#167/AC2). Step numbering stays
+    enumerated in core.
 
-    With ``phases/`` absent this returns ``_ENGINE``'s bytes unchanged -- a
+    With both unit directories absent this returns ``_ENGINE``'s bytes unchanged -- a
     single-element ``join`` inserts no separator -- so the re-pointing is
     behavior-preserving by construction rather than by inspection (#167/AC3).
+    ``EngineSeamTests`` asserts that rather than leaving it to be read.
 
-    **One sharp edge, for whoever lands the first extraction.** Callers that locate a
-    region as ``text.find(start)`` then ``text.find(end, i + len(start))`` search
-    strictly *forward*. If an extraction leaves ``start`` in core while ``end`` moves
-    to a later-sorted unit, ``find`` still succeeds and returns an **oversized** span
-    -- core's tail, the join, and the unit's head -- which a containment assertion
-    will still pass. That is a guard asserting less while staying green, so an
-    extraction PR must mutate *inside* the seam-resolved region to prove the guard
-    did not silently widen. The converse case (``start`` moves, ``end`` stays behind)
-    fails loudly instead, which is the safe direction.
+    Sources are separated by ``_SOURCE_BOUNDARY``, which is what lets a region that ran
+    off the end of one source into the next be **detected** instead of silently
+    widening (``_reject_cross_source_span``). Extraction can introduce
+    anchor-duplication and span-widening hazards; verifying that a given extraction
+    kept every re-pointed guard's span correctly scoped is review's responsibility at
+    that PR, not a property this seam establishes.
     """
-    return "\n".join(path.read_text(encoding="utf-8") for path in _engine_sources())
+    return _SOURCE_JOIN.join(
+        path.read_text(encoding="utf-8") for path in _engine_sources()
+    )
+
+
+def _reject_cross_source_span(body: str, label: str) -> None:
+    """Fail if a resolved region ran out of one engine source and into the next.
+
+    Callers locate a region as ``text.find(start)`` then
+    ``text.find(end, i + len(start))``, which searches strictly **forward** -- across
+    the join. If an extraction leaves ``start`` in one source while ``end`` moves to a
+    later one, ``find`` still succeeds and returns an oversized span: the first
+    source's tail, the boundary, and the next source's head.
+
+    **Mutating inside the true region provably cannot detect that.** The containment
+    assertions built on these spans are *monotone in region size* -- widening can only
+    make a containment check pass more often -- so the discriminating mutation would
+    have to land in the swallowed text, outside the region the guard is about. The
+    boundary marker is what makes the widening observable directly instead.
+
+    A region crossing a source boundary is **always** runaway: no legitimate region
+    spans two files. That is what makes this bound available where bounding raw width
+    is not -- a long region and a runaway one are otherwise indistinguishable, which is
+    the standing objection this retires.
+    """
+    if _SOURCE_BOUNDARY in body:
+        raise AssertionError(
+            f"the {label} region spans an engine source boundary, so it swallowed the "
+            "tail of one file and the head of the next. `find` searches forward across "
+            "the join, so a start anchor left behind in one source and an end anchor "
+            "that moved to a later one resolve to an oversized span -- which every "
+            "containment check in this file would still pass. Re-anchor the region "
+            "within one source, or move both anchors together."
+        )
 
 
 def _load_hook() -> ModuleType:
@@ -108,6 +177,172 @@ def _load_hook() -> ModuleType:
 
 
 guard = _load_hook()
+
+
+class EngineSeamTests(unittest.TestCase):
+    """The seam's own behavior, asserted rather than assumed (#167/AC1, AC3, AC4).
+
+    With both unit directories absent, ``_engine_text()`` and a stub returning
+    ``_ENGINE.read_text()`` are **indistinguishable**. Core-first order, the
+    per-directory sort, the boundary marker and the glob are all unasserted on today's
+    corpus -- and a mutation battery over engine prose cannot reach them either, since
+    it exercises the guards against a tree on which seam and stub agree. So the seam is
+    pinned here against fixture directories instead.
+
+    Fixtures are ``tempfile`` directories patched over ``_PHASES``/``_REFERENCE``. No
+    real unit content is created anywhere in the repo, which is what keeps #167/AC5
+    true while this class exists.
+    """
+
+    # Chosen so the two candidate ordering rules DISAGREE on this input: per-directory
+    # sorting yields accepting, reviewing, ledger-format, router; one sorted pass over
+    # both would yield accepting, ledger-format, reviewing, router. A fixture set that
+    # sorted the same either way would leave the rule untested.
+    _PHASE_FIXTURES = {"reviewing.md": "REVIEWING-BODY", "accepting.md": "ACCEPTING-BODY"}
+    _REFERENCE_FIXTURES = {"router.md": "ROUTER-BODY", "ledger-format.md": "LEDGER-BODY"}
+
+    _EXPECTED_ORDER = [
+        "loop-engine.md",
+        "accepting.md",
+        "reviewing.md",
+        "ledger-format.md",
+        "router.md",
+    ]
+    _BODIES = ["ACCEPTING-BODY", "REVIEWING-BODY", "LEDGER-BODY", "ROUTER-BODY"]
+
+    def setUp(self) -> None:
+        self.phases = self._fixture_dir(self._PHASE_FIXTURES)
+        self.reference = self._fixture_dir(self._REFERENCE_FIXTURES)
+
+    def _fixture_dir(self, files: dict) -> Path:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        for name, body in files.items():
+            (root / name).write_text(f"{body}\n", encoding="utf-8")
+        return root
+
+    def _patch_units(self, phases: Path, reference: Path) -> None:
+        for target, value in (("_PHASES", phases), ("_REFERENCE", reference)):
+            patcher = mock.patch(f"{__name__}.{target}", value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_sources_are_core_first_then_each_directory_sorted(self) -> None:
+        self._patch_units(self.phases, self.reference)
+        self.assertEqual(
+            [path.name for path in _engine_sources()],
+            self._EXPECTED_ORDER,
+            "the seam's source order changed. It is core first, then `phases/` sorted, "
+            "then `reference/` sorted -- directory-major, with the sort applied per "
+            "directory. These fixture names are picked so that one sorted pass over "
+            "both directories produces a DIFFERENT list, which is what makes this "
+            "assertion discriminate the two rules rather than restate one of them.",
+        )
+
+    def test_the_joined_text_carries_every_source_in_that_order(self) -> None:
+        self._patch_units(self.phases, self.reference)
+        text = _engine_text()
+        positions = [text.find(body) for body in self._BODIES]
+        self.assertNotIn(-1, positions, f"a fixture body is missing from the seam: {positions}")
+        self.assertEqual(
+            positions,
+            sorted(positions),
+            "the units appear in the joined text in a different order from "
+            "`_engine_sources()`. Order is a safety parameter here: it decides which "
+            "way a region whose anchors straddle a boundary resolves.",
+        )
+        self.assertLess(
+            text.find("# Loop engine"),
+            min(positions),
+            "core no longer comes first in the joined text.",
+        )
+        self.assertEqual(
+            text.count(_SOURCE_BOUNDARY),
+            len(self._EXPECTED_ORDER) - 1,
+            "the seam did not place exactly one boundary marker between each pair of "
+            "adjacent sources, so a widened span could cross a join unmarked.",
+        )
+
+    def test_with_no_unit_directory_the_seam_is_core_byte_for_byte(self) -> None:
+        """#167/AC3, asserted rather than argued from `join`'s documented behavior."""
+        absent = self._fixture_dir({})
+        self._patch_units(absent / "no-phases", absent / "no-reference")
+        self.assertEqual(
+            _engine_text(),
+            _ENGINE.read_text(encoding="utf-8"),
+            "with both unit directories absent the seam must return core's bytes "
+            "unchanged -- a single-element join inserts no separator. If this fails, "
+            "the re-pointing stopped being behavior-preserving and every guard in this "
+            "file is now reading a corpus core does not contain.",
+        )
+
+    def test_the_boundary_survives_the_normalization_every_consumer_applies(self) -> None:
+        r"""Non-whitespace is a requirement, not a style choice.
+
+        Each region consumer normalizes with ``re.sub(r"\s+", " ", ...)`` before
+        asserting on the body. A whitespace-only separator would be erased by that,
+        leaving `_reject_cross_source_span` nothing to find at exactly the sites that
+        need it.
+        """
+        self.assertIn(
+            _SOURCE_BOUNDARY,
+            re.sub(r"\s+", " ", _SOURCE_JOIN),
+            "the source boundary does not survive whitespace normalization, so every "
+            "consumer that normalizes before checking would erase it.",
+        )
+
+    def test_the_join_keeps_adjacent_sources_in_separate_paragraphs(self) -> None:
+        r"""A bare ``"\n"`` join would merge one source's last paragraph into the next.
+
+        ``MutationNaReasonTests`` reads the corpus paragraph-wise, splitting on
+        ``"\n\n"``; a merged paragraph silently changes what that guard reads without
+        changing a word of the engine.
+        """
+        self._patch_units(self.phases, self.reference)
+        for paragraph in _engine_text().split("\n\n"):
+            present = [body for body in self._BODIES if body in paragraph]
+            self.assertLessEqual(
+                len(present),
+                1,
+                f"one paragraph carries content from more than one source: {present}. "
+                "The join must keep a blank line on each side of the boundary.",
+            )
+
+    def test_a_region_whose_end_anchor_moved_to_a_later_source_is_rejected(self) -> None:
+        """The widening hazard end-to-end, and both halves are asserted.
+
+        This is the shape measured at this PR's design check: the start anchor stays in
+        core while the end anchor moves into a later-sorted unit. Pre-seam the end
+        anchor was simply not found and the guard failed loudly; under a concatenated
+        corpus ``find`` searches forward across the join and succeeds on an oversized
+        span. The first assertion establishes that the widening really occurs -- without
+        it this test could pass while exercising nothing.
+        """
+        self._patch_units(self.phases, self.reference)
+        text = _engine_text()
+        start, end = "# Loop engine", "ACCEPTING-BODY"
+        i = text.find(start)
+        self.assertNotEqual(i, -1, "core's opening heading is missing from the seam")
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j,
+            -1,
+            "the forward `find` did not cross the join, so this test is not "
+            "exercising the hazard it exists for.",
+        )
+        body = text[i:j]
+        self.assertIn(_SOURCE_BOUNDARY, body, "the widened span did not swallow a boundary")
+        with self.assertRaises(AssertionError):
+            _reject_cross_source_span(body, "a region whose end anchor moved")
+
+    def test_a_region_inside_one_source_is_not_rejected(self) -> None:
+        """The control: a check that cannot report "fine" is not a discriminator."""
+        core = _ENGINE.read_text(encoding="utf-8")
+        i = core.find("### 8. Code review")
+        j = core.find("### 9. Security review", i + 1)
+        self.assertNotEqual(-1, min(i, j), "re-anchor this control on a region that exists")
+        _reject_cross_source_span(core[i:j], "a control region")
 
 
 class ExampleSidecarTests(unittest.TestCase):
@@ -657,12 +892,12 @@ class PipelineStepOrderTests(unittest.TestCase):
 
         **Reads ``_ENGINE`` directly, and must keep doing so** (#167/AC2). This is
         the source of the ``### N.`` heading run -- the enumeration everything else
-        resolves against -- so pointing it at ``_engine_text()`` would let a phase
-        unit containing ``### 8. Code review`` answer "does step 8 exist", which is
-        core's question. Step numbering stays enumerated in core. ``_step_references``
-        below *does* read the seam, and the asymmetry is deliberate: it only finds
-        references, which are then resolved against the headings found here, so
-        widening it adds obligations and can never satisfy one.
+        resolves against. An extraction moves a step's *body* and leaves its numbered
+        heading in core, so core is where the run stays complete; pointing this at
+        ``_engine_text()`` would count the run from wherever the headings ended up
+        rather than from the file that owns it. ``_step_references`` below *does* read
+        the seam, and the asymmetry is deliberate: it only finds references, which are
+        then resolved against the headings found here.
         """
         text = self._FENCED_BLOCK.sub("", _ENGINE.read_text(encoding="utf-8"))
         steps = []
@@ -741,12 +976,15 @@ class PipelineStepOrderTests(unittest.TestCase):
         cross-reference -- it ships into every plan file the loop writes.
 
         **Reads the seam, unlike ``_engine_steps`` above** (#167/AC2). A ``step N``
-        reference that moves into a phase unit must still resolve, and the numbers
-        it yields are checked against headings this module still takes from core
-        alone -- so widening the search adds sites to check and cannot let a unit
-        satisfy a check core is supposed to answer. This holds only while core
-        remains the complete step-number authority: an extraction may move a step's
-        *body*, never its numbered heading.
+        reference that moves into a unit must still resolve, and the numbers it yields
+        are checked against headings this module still takes from core alone. That
+        holds only while core remains the complete step-number authority: an extraction
+        may move a step's *body*, never its numbered heading.
+
+        **What widening this does NOT leave untouched**, since the resolution check is
+        not its only consumer: these references are also *supply* for the
+        ``_MIN_STEP_REFERENCES`` vacuity floor below, which counts them. A unit's
+        references count toward that floor exactly as core's do.
         """
         text = _engine_text()
         references = []
@@ -1344,7 +1582,9 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it."
         )
-        return text[i:j]
+        body = text[i:j]
+        _reject_cross_source_span(body, label)
+        return body
 
     def _plan_template_fence(self, text: str) -> str:
         # The plan template specifically -- NOT just any ```markdown fence. The engine
@@ -1586,7 +1826,9 @@ class VerdictFirstInvariantTests(unittest.TestCase):
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it."
         )
-        return text[i:j]
+        body = text[i:j]
+        _reject_cross_source_span(body, label)
+        return body
 
     def _regions(self):
         text = self._engine()
@@ -1621,8 +1863,11 @@ class VerdictFirstInvariantTests(unittest.TestCase):
     def test_the_span_anchors_actually_resolve(self) -> None:
         # Liveness: a span that silently collapsed would satisfy nothing and fail
         # loudly, but the anchors themselves could rot into a region that is not the
-        # paragraph intended. Bound the low end; the high end is covered by the
-        # unique-start-anchor assertion in _span, which is the real drift vector.
+        # paragraph intended. Bound the low end. The high end is NOT covered by the
+        # unique-start-anchor assertion -- widening is an *end*-anchor phenomenon, and
+        # a start anchor that occurs once says nothing about where the end resolved.
+        # Since the seam, _reject_cross_source_span covers the widening that crosses a
+        # source boundary, and nothing covers a widening inside one source.
         for label, body in self._regions().items():
             with self.subTest(region=label):
                 self.assertGreater(
@@ -1818,7 +2063,9 @@ class RelayInvariantTests(unittest.TestCase):
             f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it.",
         )
-        return text[i:j]
+        body = text[i:j]
+        _reject_cross_source_span(body, label)
+        return body
 
     def _regions(self):
         text = self._engine()
@@ -1835,8 +2082,13 @@ class RelayInvariantTests(unittest.TestCase):
         draft used -- is tautological: ``_span`` returns ``text[i:j]`` with ``j > i``,
         so the slice always begins with the whole start anchor and can never be empty.
         The sibling's ``> 80`` is what actually fires: a region collapsed to just its
-        start anchor lands under the bound. ``_span``'s own assertions (start
-        uniqueness, end resolvable) carry the rest.
+        start anchor lands under the bound.
+
+        ``_span``'s own assertions do **not** carry the rest. Start uniqueness bounds
+        the low end only, and "end resolvable" stopped implying "end correct" once the
+        corpus became a concatenation -- ``find`` resolves an end anchor that moved
+        into a later source just as readily. ``_reject_cross_source_span`` covers that
+        case; a widening *within* one source is covered by nothing here.
         """
         text = self._engine()
         canonical = self._span(text, *self._CANONICAL, "the canonical definition")
@@ -1939,7 +2191,9 @@ class ResumeHandoffPointerTests(unittest.TestCase):
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it.",
         )
-        return text[i:j]
+        body = text[i:j]
+        _reject_cross_source_span(body, label)
+        return body
 
     def _regions(self):
         return {
@@ -2107,7 +2361,9 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it.",
         )
-        return text[i:j]
+        body = text[i:j]
+        _reject_cross_source_span(body, label)
+        return body
 
     def _regions(self):
         text = self._engine()
@@ -2270,7 +2526,9 @@ class CurrencyExemptionAgreementTests(unittest.TestCase):
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it.",
         )
-        return text[i:j]
+        body = text[i:j]
+        _reject_cross_source_span(body, label)
+        return body
 
     def _exemptions(self) -> tuple:
         regions = {
@@ -2434,7 +2692,9 @@ class FindingClassAgreementTests(unittest.TestCase):
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it.",
         )
-        return text[i:j]
+        body = text[i:j]
+        _reject_cross_source_span(body, label)
+        return body
 
     # ---- coupling 1: the two statements of the round bound ----
 
@@ -2658,7 +2918,9 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it."
         )
-        return text[i:j]
+        body = text[i:j]
+        _reject_cross_source_span(body, label)
+        return body
 
     _OUTER = {
         "step 8": ("### 8. Code review", "### 9. Security review"),
@@ -2897,7 +3159,12 @@ class LensDifferentialAgreementTests(unittest.TestCase):
         j = text.find("### 9. Security review", i + 1)
         self.assertNotEqual(i, -1, "cannot locate step 8 in loop-engine.md")
         self.assertNotEqual(j, -1, "cannot locate step 9 in loop-engine.md")
-        return re.sub(r"\s+", " ", text[i:j])
+        body = text[i:j]
+        # Checked here rather than in `_span` below: that helper slices THIS body, and
+        # a sub-slice of a boundary-free region is boundary-free. The marker is
+        # non-whitespace, so it survives the normalization on the next line.
+        _reject_cross_source_span(body, "step 8")
+        return re.sub(r"\s+", " ", body)
 
     def _span(self, name: str, anchors: "tuple[str, str]") -> str:
         text = self._step8()
