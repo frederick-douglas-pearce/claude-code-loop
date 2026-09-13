@@ -54,28 +54,22 @@ _README = _REPO_ROOT / "README.md"
 # directory exists yet -- #167 lands the seam BEFORE any unit is extracted, so that an
 # extraction re-points one definition instead of twelve call sites.
 #
-# **Two unit families, not one.** ``.claude/specs/prd-engine-sharding.md`` charters S3
-# (#131) into ``reference/*.md``, and ``docs/research/draft-core.md`` maps ``reference``
-# to ledger-format, router, initialization and resume, beside four ``phases/*.md``
-# units. A seam globbing only ``phases/`` would cover four of the five families and
-# miss the one #131 targets -- silently, for the union scanners:
+# **Both unit directories the design defines are globbed, not just ``phases/``.**
+# ``.claude/specs/prd-engine-sharding.md`` charters S3 (#131) into ``reference/*.md``
+# beside the ``phases/*.md`` units in ``docs/research/draft-core.md``; read those two
+# documents for the unit inventory rather than a count restated here. Globbing only
+# ``phases/`` would miss the directory #131 targets -- silently, for the union scanners:
 # ``CapsVocabularyTests._engine_parameters`` is a set union, so losing a directory
 # narrows it with no symptom (#167/AC1, amended 2026-09-13).
 _PHASES = _REPO_ROOT / "skills" / "dev-loop" / "phases"
 _REFERENCE = _REPO_ROOT / "skills" / "dev-loop" / "reference"
 
-# The marker separating two engine sources in the concatenated corpus, and the join
-# built from it.
-#
-# **Non-whitespace on purpose, and that is a correctness requirement rather than a
-# style choice.** Every consumer of a resolved region normalizes with
-# ``re.sub(r"\s+", " ", ...)``, which would erase a whitespace-only separator before
-# ``_reject_cross_source_span`` could ever see it. The blank lines around it carry a
-# second property: ``MutationNaReasonTests`` reads the corpus paragraph-wise by
-# splitting on ``"\n\n"``, and a bare ``"\n"`` join would merge one source's last
-# paragraph into the next source's first.
-_SOURCE_BOUNDARY = "<!-- engine-source-boundary -->"
-_SOURCE_JOIN = "\n\n" + _SOURCE_BOUNDARY + "\n\n"
+# Sources are joined on a blank line so each one's first and last paragraphs stay
+# separate from its neighbours': ``MutationNaReasonTests`` reads the corpus
+# paragraph-wise by splitting on ``"\n\n"``. A source that does not end in a newline is
+# the case this defends -- under a bare ``"\n"`` join its last paragraph would merge
+# into the next source's first.
+_SOURCE_JOIN = "\n\n"
 
 
 def _engine_sources() -> list[Path]:
@@ -125,47 +119,18 @@ def _engine_text() -> str:
     behavior-preserving by construction rather than by inspection (#167/AC3).
     ``EngineSeamTests`` asserts that rather than leaving it to be read.
 
-    Sources are separated by ``_SOURCE_BOUNDARY``, which is what lets a region that ran
-    off the end of one source into the next be **detected** instead of silently
-    widening (``_reject_cross_source_span``). Extraction can introduce
-    anchor-duplication and span-widening hazards; verifying that a given extraction
-    kept every re-pointed guard's span correctly scoped is review's responsibility at
-    that PR, not a property this seam establishes.
+    **Nothing here bounds a region's width, and that is the standing gap.** Extraction
+    can introduce anchor-duplication and span-widening hazards -- a region whose start
+    anchor stays in one source while its end anchor moves to a later one resolves
+    forward across the join to an oversized span, which containment assertions, being
+    monotone in region size, still pass. Verifying that a given extraction kept every
+    re-pointed guard's span correctly scoped is **review's responsibility at that PR**,
+    not a property this seam establishes. Bounding it mechanically needs a second source
+    to be checkable against, so it is #130's (#167 scope ruling, 2026-09-13).
     """
     return _SOURCE_JOIN.join(
         path.read_text(encoding="utf-8") for path in _engine_sources()
     )
-
-
-def _reject_cross_source_span(body: str, label: str) -> None:
-    """Fail if a resolved region ran out of one engine source and into the next.
-
-    Callers locate a region as ``text.find(start)`` then
-    ``text.find(end, i + len(start))``, which searches strictly **forward** -- across
-    the join. If an extraction leaves ``start`` in one source while ``end`` moves to a
-    later one, ``find`` still succeeds and returns an oversized span: the first
-    source's tail, the boundary, and the next source's head.
-
-    **Mutating inside the true region provably cannot detect that.** The containment
-    assertions built on these spans are *monotone in region size* -- widening can only
-    make a containment check pass more often -- so the discriminating mutation would
-    have to land in the swallowed text, outside the region the guard is about. The
-    boundary marker is what makes the widening observable directly instead.
-
-    A region crossing a source boundary is **always** runaway: no legitimate region
-    spans two files. That is what makes this bound available where bounding raw width
-    is not -- a long region and a runaway one are otherwise indistinguishable, which is
-    the standing objection this retires.
-    """
-    if _SOURCE_BOUNDARY in body:
-        raise AssertionError(
-            f"the {label} region spans an engine source boundary, so it swallowed the "
-            "tail of one file and the head of the next. `find` searches forward across "
-            "the join, so a start anchor left behind in one source and an end anchor "
-            "that moved to a later one resolve to an oversized span -- which every "
-            "containment check in this file would still pass. Re-anchor the region "
-            "within one source, or move both anchors together."
-        )
 
 
 def _load_hook() -> ModuleType:
@@ -184,10 +149,10 @@ class EngineSeamTests(unittest.TestCase):
 
     With both unit directories absent, ``_engine_text()`` and a stub returning
     ``_ENGINE.read_text()`` are **indistinguishable**. Core-first order, the
-    per-directory sort, the boundary marker and the glob are all unasserted on today's
-    corpus -- and a mutation battery over engine prose cannot reach them either, since
-    it exercises the guards against a tree on which seam and stub agree. So the seam is
-    pinned here against fixture directories instead.
+    per-directory sort and the glob are all unasserted on today's corpus -- and a
+    mutation battery over engine prose cannot reach them either, since it exercises the
+    guards against a tree on which seam and stub agree. So the seam is pinned here
+    against fixture directories instead.
 
     Fixtures are ``tempfile`` directories patched over ``_PHASES``/``_REFERENCE``. No
     real unit content is created anywhere in the repo, which is what keeps #167/AC5
@@ -257,12 +222,6 @@ class EngineSeamTests(unittest.TestCase):
             min(positions),
             "core no longer comes first in the joined text.",
         )
-        self.assertEqual(
-            text.count(_SOURCE_BOUNDARY),
-            len(self._EXPECTED_ORDER) - 1,
-            "the seam did not place exactly one boundary marker between each pair of "
-            "adjacent sources, so a widened span could cross a join unmarked.",
-        )
 
     def test_with_no_unit_directory_the_seam_is_core_byte_for_byte(self) -> None:
         """#167/AC3, asserted rather than argued from `join`'s documented behavior."""
@@ -276,73 +235,6 @@ class EngineSeamTests(unittest.TestCase):
             "the re-pointing stopped being behavior-preserving and every guard in this "
             "file is now reading a corpus core does not contain.",
         )
-
-    def test_the_boundary_survives_the_normalization_every_consumer_applies(self) -> None:
-        r"""Non-whitespace is a requirement, not a style choice.
-
-        Each region consumer normalizes with ``re.sub(r"\s+", " ", ...)`` before
-        asserting on the body. A whitespace-only separator would be erased by that,
-        leaving `_reject_cross_source_span` nothing to find at exactly the sites that
-        need it.
-        """
-        self.assertIn(
-            _SOURCE_BOUNDARY,
-            re.sub(r"\s+", " ", _SOURCE_JOIN),
-            "the source boundary does not survive whitespace normalization, so every "
-            "consumer that normalizes before checking would erase it.",
-        )
-
-    def test_the_join_keeps_adjacent_sources_in_separate_paragraphs(self) -> None:
-        r"""A bare ``"\n"`` join would merge one source's last paragraph into the next.
-
-        ``MutationNaReasonTests`` reads the corpus paragraph-wise, splitting on
-        ``"\n\n"``; a merged paragraph silently changes what that guard reads without
-        changing a word of the engine.
-        """
-        self._patch_units(self.phases, self.reference)
-        for paragraph in _engine_text().split("\n\n"):
-            present = [body for body in self._BODIES if body in paragraph]
-            self.assertLessEqual(
-                len(present),
-                1,
-                f"one paragraph carries content from more than one source: {present}. "
-                "The join must keep a blank line on each side of the boundary.",
-            )
-
-    def test_a_region_whose_end_anchor_moved_to_a_later_source_is_rejected(self) -> None:
-        """The widening hazard end-to-end, and both halves are asserted.
-
-        This is the shape measured at this PR's design check: the start anchor stays in
-        core while the end anchor moves into a later-sorted unit. Pre-seam the end
-        anchor was simply not found and the guard failed loudly; under a concatenated
-        corpus ``find`` searches forward across the join and succeeds on an oversized
-        span. The first assertion establishes that the widening really occurs -- without
-        it this test could pass while exercising nothing.
-        """
-        self._patch_units(self.phases, self.reference)
-        text = _engine_text()
-        start, end = "# Loop engine", "ACCEPTING-BODY"
-        i = text.find(start)
-        self.assertNotEqual(i, -1, "core's opening heading is missing from the seam")
-        j = text.find(end, i + len(start))
-        self.assertNotEqual(
-            j,
-            -1,
-            "the forward `find` did not cross the join, so this test is not "
-            "exercising the hazard it exists for.",
-        )
-        body = text[i:j]
-        self.assertIn(_SOURCE_BOUNDARY, body, "the widened span did not swallow a boundary")
-        with self.assertRaises(AssertionError):
-            _reject_cross_source_span(body, "a region whose end anchor moved")
-
-    def test_a_region_inside_one_source_is_not_rejected(self) -> None:
-        """The control: a check that cannot report "fine" is not a discriminator."""
-        core = _ENGINE.read_text(encoding="utf-8")
-        i = core.find("### 8. Code review")
-        j = core.find("### 9. Security review", i + 1)
-        self.assertNotEqual(-1, min(i, j), "re-anchor this control on a region that exists")
-        _reject_cross_source_span(core[i:j], "a control region")
 
 
 class ExampleSidecarTests(unittest.TestCase):
@@ -1582,9 +1474,7 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it."
         )
-        body = text[i:j]
-        _reject_cross_source_span(body, label)
-        return body
+        return text[i:j]
 
     def _plan_template_fence(self, text: str) -> str:
         # The plan template specifically -- NOT just any ```markdown fence. The engine
@@ -1826,9 +1716,7 @@ class VerdictFirstInvariantTests(unittest.TestCase):
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it."
         )
-        body = text[i:j]
-        _reject_cross_source_span(body, label)
-        return body
+        return text[i:j]
 
     def _regions(self):
         text = self._engine()
@@ -1866,8 +1754,8 @@ class VerdictFirstInvariantTests(unittest.TestCase):
         # paragraph intended. Bound the low end. The high end is NOT covered by the
         # unique-start-anchor assertion -- widening is an *end*-anchor phenomenon, and
         # a start anchor that occurs once says nothing about where the end resolved.
-        # Since the seam, _reject_cross_source_span covers the widening that crosses a
-        # source boundary, and nothing covers a widening inside one source.
+        # Nothing here bounds the high end; once a region can span two engine sources
+        # that is review's at the extraction PR (see `_engine_text`).
         for label, body in self._regions().items():
             with self.subTest(region=label):
                 self.assertGreater(
@@ -2063,9 +1951,7 @@ class RelayInvariantTests(unittest.TestCase):
             f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it.",
         )
-        body = text[i:j]
-        _reject_cross_source_span(body, label)
-        return body
+        return text[i:j]
 
     def _regions(self):
         text = self._engine()
@@ -2086,9 +1972,10 @@ class RelayInvariantTests(unittest.TestCase):
 
         ``_span``'s own assertions do **not** carry the rest. Start uniqueness bounds
         the low end only, and "end resolvable" stopped implying "end correct" once the
-        corpus became a concatenation -- ``find`` resolves an end anchor that moved
-        into a later source just as readily. ``_reject_cross_source_span`` covers that
-        case; a widening *within* one source is covered by nothing here.
+        corpus became a concatenation -- ``find`` resolves an end anchor that moved into
+        a later source just as readily. Nothing here covers that, by design: bounding it
+        needs a second source to check against, so it is the extraction PR's (see
+        ``_engine_text``).
         """
         text = self._engine()
         canonical = self._span(text, *self._CANONICAL, "the canonical definition")
@@ -2191,9 +2078,7 @@ class ResumeHandoffPointerTests(unittest.TestCase):
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it.",
         )
-        body = text[i:j]
-        _reject_cross_source_span(body, label)
-        return body
+        return text[i:j]
 
     def _regions(self):
         return {
@@ -2361,9 +2246,7 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it.",
         )
-        body = text[i:j]
-        _reject_cross_source_span(body, label)
-        return body
+        return text[i:j]
 
     def _regions(self):
         text = self._engine()
@@ -2526,9 +2409,7 @@ class CurrencyExemptionAgreementTests(unittest.TestCase):
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it.",
         )
-        body = text[i:j]
-        _reject_cross_source_span(body, label)
-        return body
+        return text[i:j]
 
     def _exemptions(self) -> tuple:
         regions = {
@@ -2692,9 +2573,7 @@ class FindingClassAgreementTests(unittest.TestCase):
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it.",
         )
-        body = text[i:j]
-        _reject_cross_source_span(body, label)
-        return body
+        return text[i:j]
 
     # ---- coupling 1: the two statements of the round bound ----
 
@@ -2918,9 +2797,7 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
             "loop-engine.md -- re-anchor this test before trusting it."
         )
-        body = text[i:j]
-        _reject_cross_source_span(body, label)
-        return body
+        return text[i:j]
 
     _OUTER = {
         "step 8": ("### 8. Code review", "### 9. Security review"),
@@ -3159,12 +3036,7 @@ class LensDifferentialAgreementTests(unittest.TestCase):
         j = text.find("### 9. Security review", i + 1)
         self.assertNotEqual(i, -1, "cannot locate step 8 in loop-engine.md")
         self.assertNotEqual(j, -1, "cannot locate step 9 in loop-engine.md")
-        body = text[i:j]
-        # Checked here rather than in `_span` below: that helper slices THIS body, and
-        # a sub-slice of a boundary-free region is boundary-free. The marker is
-        # non-whitespace, so it survives the normalization on the next line.
-        _reject_cross_source_span(body, "step 8")
-        return re.sub(r"\s+", " ", body)
+        return re.sub(r"\s+", " ", text[i:j])
 
     def _span(self, name: str, anchors: "tuple[str, str]") -> str:
         text = self._step8()
