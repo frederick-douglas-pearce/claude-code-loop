@@ -50,6 +50,55 @@ _SKILL = _REPO_ROOT / "skills" / "dev-loop" / "SKILL.md"
 _INIT_LOOP = _REPO_ROOT / "commands" / "init-loop.md"
 _README = _REPO_ROOT / "README.md"
 
+# The engine is being sharded into a lean core plus on-demand phase units (#128). This
+# directory does not exist yet -- #167 lands the seam BEFORE any unit is extracted, so
+# that an extraction re-points one definition instead of twelve call sites.
+_PHASES = _REPO_ROOT / "skills" / "dev-loop" / "phases"
+
+
+def _engine_sources() -> list[Path]:
+    """The files the engine's prose lives in: core first, then each phase unit.
+
+    Sorted for a stable, reproducible order -- but note that is **filename** order,
+    not pipeline order, which matters to any caller that slices a region spanning
+    two of these files (see ``_engine_text``).
+
+    ``Path.glob`` on a missing directory yields nothing rather than raising, so with
+    ``phases/`` absent this is exactly ``[_ENGINE]``.
+    """
+    return [_ENGINE, *sorted(_PHASES.glob("*.md"))]
+
+
+def _engine_text() -> str:
+    """Every guard that scans engine **prose** reads through here.
+
+    The point of the seam is that extracting a slice of ``loop-engine.md`` into
+    ``phases/<unit>.md`` re-points this one definition rather than every call site,
+    and that a guard whose text moved keeps seeing it instead of quietly passing on
+    a corpus that no longer contains what it asserts.
+
+    **Not for structure.** ``PipelineStepOrderTests._engine_steps`` deliberately reads
+    ``_ENGINE`` directly and must stay that way: it is the source of the ``### N.``
+    heading run, and widening it would let a phase unit answer "does step N exist",
+    which is core's question (#167/AC2). Step numbering stays enumerated in core.
+
+    With ``phases/`` absent this returns ``_ENGINE``'s bytes unchanged -- a
+    single-element ``join`` inserts no separator -- so the re-pointing is
+    behavior-preserving by construction rather than by inspection (#167/AC3).
+
+    **One sharp edge, for whoever lands the first extraction.** Callers that locate a
+    region as ``text.find(start)`` then ``text.find(end, i + len(start))`` search
+    strictly *forward*. If an extraction leaves ``start`` in core while ``end`` moves
+    to a later-sorted unit, ``find`` still succeeds and returns an **oversized** span
+    -- core's tail, the join, and the unit's head -- which a containment assertion
+    will still pass. That is a guard asserting less while staying green, so an
+    extraction PR must mutate *inside* the seam-resolved region to prove the guard
+    did not silently widen. The converse case (``start`` moves, ``end`` stays behind)
+    fails loudly instead, which is the safe direction.
+    """
+    return "\n".join(path.read_text(encoding="utf-8") for path in _engine_sources())
+
+
 def _load_hook() -> ModuleType:
     spec = importlib.util.spec_from_file_location("guard_append_only", _HOOK_PATH)
     assert spec is not None and spec.loader is not None
@@ -208,7 +257,7 @@ class CapsVocabularyTests(unittest.TestCase):
         names: set[str] = set()
         # SKILL.md is scanned alongside loop-engine.md: it restates a subset of
         # the bindings, and a name introduced only there needs the skeleton too.
-        for path in (_ENGINE, _SKILL):
+        for path in (*_engine_sources(), _SKILL):
             text = path.read_text(encoding="utf-8")
             names.update(self._UNDERSCORED.findall(text))
             names.update(self._SINGLE_WORD.findall(text))
@@ -605,6 +654,15 @@ class PipelineStepOrderTests(unittest.TestCase):
         markdown headings), and the scan stops at the first unnumbered ``###``
         after the numbered run -- ``### Escalation rubric`` and the sections
         below it are not pipeline steps.
+
+        **Reads ``_ENGINE`` directly, and must keep doing so** (#167/AC2). This is
+        the source of the ``### N.`` heading run -- the enumeration everything else
+        resolves against -- so pointing it at ``_engine_text()`` would let a phase
+        unit containing ``### 8. Code review`` answer "does step 8 exist", which is
+        core's question. Step numbering stays enumerated in core. ``_step_references``
+        below *does* read the seam, and the asymmetry is deliberate: it only finds
+        references, which are then resolved against the headings found here, so
+        widening it adds obligations and can never satisfy one.
         """
         text = self._FENCED_BLOCK.sub("", _ENGINE.read_text(encoding="utf-8"))
         steps = []
@@ -681,8 +739,16 @@ class PipelineStepOrderTests(unittest.TestCase):
         ``issue-<N>.plan.md`` template contains markdown headings that are not
         pipeline steps, whereas the template's own "see step 3" IS a real
         cross-reference -- it ships into every plan file the loop writes.
+
+        **Reads the seam, unlike ``_engine_steps`` above** (#167/AC2). A ``step N``
+        reference that moves into a phase unit must still resolve, and the numbers
+        it yields are checked against headings this module still takes from core
+        alone -- so widening the search adds sites to check and cannot let a unit
+        satisfy a check core is supposed to answer. This holds only while core
+        remains the complete step-number authority: an extraction may move a step's
+        *body*, never its numbered heading.
         """
-        text = _ENGINE.read_text(encoding="utf-8")
+        text = _engine_text()
         references = []
         for run in self._STEP_REFERENCE.findall(text):
             for token in self._REFERENCE_SEPARATORS.split(run):
@@ -1088,7 +1154,7 @@ class MutationNaReasonTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.engine_text = _ENGINE.read_text(encoding="utf-8")
+        cls.engine_text = _engine_text()
 
     def _stated_counts(self) -> list[str]:
         found = []
@@ -1265,7 +1331,7 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
 
     def _engine(self) -> str:
-        return _ENGINE.read_text(encoding="utf-8")
+        return _engine_text()
 
     def _span(self, text: str, start: str, end: str, label: str) -> str:
         i = text.find(start)
@@ -1498,7 +1564,7 @@ class VerdictFirstInvariantTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
 
     def _engine(self) -> str:
-        return _ENGINE.read_text(encoding="utf-8")
+        return _engine_text()
 
     def _span(self, text: str, start: str, end: str, label: str) -> str:
         # A duplicated START anchor is the one drift that fails OPEN: `find` takes
@@ -1734,7 +1800,7 @@ class RelayInvariantTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text.replace("\u2014", "--")).lower()
 
     def _engine(self) -> str:
-        return _ENGINE.read_text(encoding="utf-8")
+        return _engine_text()
 
     def _span(self, text: str, start: str, end: str, label: str) -> str:
         # A duplicated START anchor fails OPEN: `find` takes the first occurrence, so
@@ -1862,7 +1928,7 @@ class ResumeHandoffPointerTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
 
     def _span(self, start: str, end: str, label: str) -> str:
-        text = _ENGINE.read_text(encoding="utf-8")
+        text = _engine_text()
         i = text.find(start)
         self.assertNotEqual(
             i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
@@ -2023,7 +2089,7 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
 
     def _engine(self) -> str:
-        return _ENGINE.read_text(encoding="utf-8")
+        return _engine_text()
 
     def _span(self, text: str, start: str, end: str, label: str) -> str:
         # A duplicated START anchor fails OPEN: `find` takes the first occurrence, so
@@ -2193,7 +2259,7 @@ class CurrencyExemptionAgreementTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text.replace("—", "--").replace("*", ""))
 
     def _span(self, start: str, end: str, label: str) -> str:
-        text = _ENGINE.read_text(encoding="utf-8")
+        text = _engine_text()
         i = text.find(start)
         self.assertNotEqual(
             i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
@@ -2357,7 +2423,7 @@ class FindingClassAgreementTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text).strip()
 
     def _span(self, start: str, end: str, label: str) -> str:
-        text = _ENGINE.read_text(encoding="utf-8")
+        text = _engine_text()
         i = text.find(start)
         self.assertNotEqual(
             i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
@@ -2574,7 +2640,7 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
 
     def _engine(self) -> str:
-        return _ENGINE.read_text(encoding="utf-8")
+        return _engine_text()
 
     def _span(self, text: str, start: str, end: str, label: str) -> str:
         # Same slicing as the sibling helpers in this file: the body INCLUDES the
@@ -2826,7 +2892,7 @@ class LensDifferentialAgreementTests(unittest.TestCase):
     _TERM = "differential"
 
     def _step8(self) -> str:
-        text = _ENGINE.read_text(encoding="utf-8")
+        text = _engine_text()
         i = text.find("### 8. Code review")
         j = text.find("### 9. Security review", i + 1)
         self.assertNotEqual(i, -1, "cannot locate step 8 in loop-engine.md")
