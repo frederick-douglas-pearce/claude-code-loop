@@ -83,10 +83,10 @@ def _engine_sources() -> list[Path]:
 
     Two properties of that order a caller must not assume away:
 
-    * ``sorted()`` is **filename** order, not pipeline order. It puts ``accepting.md``
-      (step 10) before ``reviewing.md`` (step 8), inverting the pipeline, and it is
-      unstable under a later rename -- which reorders the corpus without touching a
-      single guard.
+    * ``sorted()`` is **filename** order, not pipeline order: a unit whose filename
+      sorts earlier can own a later pipeline step, so corpus order does not track the
+      pipeline at all. It is also unstable under a later rename -- which reorders the
+      corpus without touching a single guard.
     * ``glob("*.md")`` is **non-recursive and type-blind**: a unit in a subdirectory is
       not picked up at all, and anything ending ``.md`` is, including a stray note left
       in the directory.
@@ -159,21 +159,23 @@ class EngineSeamTests(unittest.TestCase):
     true while this class exists.
     """
 
-    # Chosen so the two candidate ordering rules DISAGREE on this input: per-directory
-    # sorting yields accepting, reviewing, ledger-format, router; one sorted pass over
-    # both would yield accepting, ledger-format, reviewing, router. A fixture set that
-    # sorted the same either way would leave the rule untested.
-    _PHASE_FIXTURES = {"reviewing.md": "REVIEWING-BODY", "accepting.md": "ACCEPTING-BODY"}
-    _REFERENCE_FIXTURES = {"router.md": "ROUTER-BODY", "ledger-format.md": "LEDGER-BODY"}
+    # **Deliberately not real unit names** (#167/AC5 -- this change names no unit), and
+    # chosen so the two candidate ordering rules DISAGREE on this input: per-directory
+    # sorting yields alpha, gamma, beta, delta; one sorted pass over both would yield
+    # alpha, beta, delta, gamma. A fixture set that sorted the same either way would
+    # leave the rule untested, and real unit names would couple this class to an
+    # inventory that does not exist yet and may still be renamed.
+    _PHASE_FIXTURES = {"gamma.md": "GAMMA-BODY", "alpha.md": "ALPHA-BODY"}
+    _REFERENCE_FIXTURES = {"delta.md": "DELTA-BODY", "beta.md": "BETA-BODY"}
 
     _EXPECTED_ORDER = [
         "loop-engine.md",
-        "accepting.md",
-        "reviewing.md",
-        "ledger-format.md",
-        "router.md",
+        "alpha.md",
+        "gamma.md",
+        "beta.md",
+        "delta.md",
     ]
-    _BODIES = ["ACCEPTING-BODY", "REVIEWING-BODY", "LEDGER-BODY", "ROUTER-BODY"]
+    _BODIES = ["ALPHA-BODY", "GAMMA-BODY", "BETA-BODY", "DELTA-BODY"]
 
     def setUp(self) -> None:
         self.phases = self._fixture_dir(self._PHASE_FIXTURES)
