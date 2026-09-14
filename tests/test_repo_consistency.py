@@ -50,6 +50,95 @@ _SKILL = _REPO_ROOT / "skills" / "dev-loop" / "SKILL.md"
 _INIT_LOOP = _REPO_ROOT / "commands" / "init-loop.md"
 _README = _REPO_ROOT / "README.md"
 
+# The engine is being sharded into a lean core plus on-demand units (#128). Neither
+# directory exists yet -- #167 lands the seam BEFORE any unit is extracted, so that an
+# extraction re-points one definition instead of twelve call sites.
+#
+# **Both unit directories the design defines are globbed, not just ``phases/``.**
+# ``.claude/specs/prd-engine-sharding.md`` charters S3 (#131) into ``reference/*.md``
+# beside the ``phases/*.md`` units in ``docs/research/draft-core.md``; read those two
+# documents for the unit inventory rather than a count restated here. Globbing only
+# ``phases/`` would miss the directory #131 targets -- silently, for the union scanners:
+# ``CapsVocabularyTests._engine_parameters`` is a set union, so losing a directory
+# narrows it with no symptom (#167/AC1, amended 2026-09-13).
+_PHASES = _REPO_ROOT / "skills" / "dev-loop" / "phases"
+_REFERENCE = _REPO_ROOT / "skills" / "dev-loop" / "reference"
+
+# Sources are joined on a blank line so each one's first and last paragraphs stay
+# separate from its neighbours': ``MutationNaReasonTests`` reads the corpus
+# paragraph-wise by splitting on ``"\n\n"``. A source that does not end in a newline is
+# the case this defends -- under a bare ``"\n"`` join its last paragraph would merge
+# into the next source's first.
+#
+# **Nothing asserts this, and it is the second standing gap.** Mutating this constant to
+# ``"\n"`` -- or to ``""`` -- leaves every test in ``EngineSeamTests`` green: with no unit
+# directory ``join`` never inserts a separator at all, and the fixtures are written with
+# trailing newlines, so the paragraph break survives either way. It becomes checkable
+# only once a real source lacking a trailing newline exists; until then it is review's at
+# the extraction PR, like the high-end bound above.
+_SOURCE_JOIN = "\n\n"
+
+
+def _engine_sources() -> list[Path]:
+    """The files the engine's prose lives in: core first, then the unit directories.
+
+    **The ordering rule, stated because ordering is a parameter and not an accident:**
+    core, then ``phases/`` sorted, then ``reference/`` sorted. Directory order is fixed
+    here and the sort is *per directory* -- deliberately not one sorted pass over both,
+    which would interleave the two families and make any one unit's position depend on
+    what the other directory happens to contain.
+
+    Two properties of that order a caller must not assume away:
+
+    * ``sorted()`` is **filename** order, not pipeline order: a unit whose filename
+      sorts earlier can own a later pipeline step, so corpus order does not track the
+      pipeline at all. It is also unstable under a later rename -- which reorders the
+      corpus without touching a single guard.
+    * ``glob("*.md")`` is **non-recursive and type-blind**: a unit in a subdirectory is
+      not picked up at all, and anything ending ``.md`` is, including a stray note left
+      in the directory.
+
+    ``Path.glob`` on a missing directory yields nothing rather than raising, so with
+    both directories absent this is exactly ``[_ENGINE]``.
+    """
+    return [
+        _ENGINE,
+        *sorted(_PHASES.glob("*.md")),
+        *sorted(_REFERENCE.glob("*.md")),
+    ]
+
+
+def _engine_text() -> str:
+    """Every guard that scans engine **prose** reads through here.
+
+    The point of the seam is that extracting a slice of ``loop-engine.md`` into
+    ``phases/<unit>.md`` re-points this one definition rather than every call site,
+    and that a guard whose text moved keeps seeing it instead of quietly passing on
+    a corpus that no longer contains what it asserts.
+
+    **Not for structure.** ``PipelineStepOrderTests._engine_steps`` deliberately reads
+    ``_ENGINE`` directly and must stay that way: it is the source of the ``### N.``
+    heading run, which is core's enumeration to answer (#167/AC2). Step numbering stays
+    enumerated in core.
+
+    With both unit directories absent this returns ``_ENGINE``'s bytes unchanged -- a
+    single-element ``join`` inserts no separator -- so the re-pointing is
+    behavior-preserving by construction rather than by inspection (#167/AC3).
+    ``EngineSeamTests`` asserts that rather than leaving it to be read.
+
+    **Nothing here bounds a region's high end, and that is the standing gap.** Extraction
+    can introduce anchor-duplication and span-widening hazards -- a region whose start
+    anchor stays in one source while its end anchor moves to a later one resolves
+    forward across the join to an oversized span, which containment assertions, being
+    monotone in region size, still pass. Verifying that a given extraction kept every
+    re-pointed guard's span correctly scoped is **review's responsibility at that PR**,
+    not a property this seam establishes.
+    """
+    return _SOURCE_JOIN.join(
+        path.read_text(encoding="utf-8") for path in _engine_sources()
+    )
+
+
 def _load_hook() -> ModuleType:
     spec = importlib.util.spec_from_file_location("guard_append_only", _HOOK_PATH)
     assert spec is not None and spec.loader is not None
@@ -59,6 +148,107 @@ def _load_hook() -> ModuleType:
 
 
 guard = _load_hook()
+
+
+class EngineSeamTests(unittest.TestCase):
+    """The seam's own behavior, asserted rather than assumed (#167/AC1, AC3, AC4).
+
+    With both unit directories absent, ``_engine_text()`` and a stub returning
+    ``_ENGINE.read_text()`` are **indistinguishable**. Core-first order and the
+    per-directory sort are unasserted on today's corpus -- and a mutation battery over
+    engine prose cannot reach them either, since it exercises the guards against a tree
+    on which seam and stub agree. So they are pinned here against fixture directories
+    instead.
+
+    **The glob is only partly pinned, and the unpinned half is the one to know about.**
+    *Narrowing* its pattern is caught -- the fixtures stop being found and the ordering
+    tests go red. *Widening* it is not: every fixture is a flat ``.md`` file, so
+    ``glob("*")`` or ``rglob`` passes every test here. Those are exactly the two
+    properties ``_engine_sources`` warns a caller must not assume away.
+
+    Fixtures are ``tempfile`` directories patched over ``_PHASES``/``_REFERENCE``. No
+    real unit content is created anywhere in the repo, which is what keeps #167/AC5
+    true while this class exists.
+    """
+
+    # **Deliberately not real unit names** (#167/AC5 -- this change names no unit), and
+    # chosen so the two candidate ordering rules DISAGREE on this input: per-directory
+    # sorting yields alpha, gamma, beta, delta; one sorted pass over both would yield
+    # alpha, beta, delta, gamma. A fixture set that sorted the same either way would
+    # leave the rule untested, and real unit names would couple this class to an
+    # inventory that does not exist yet and may still be renamed.
+    _PHASE_FIXTURES = {"gamma.md": "GAMMA-BODY", "alpha.md": "ALPHA-BODY"}
+    _REFERENCE_FIXTURES = {"delta.md": "DELTA-BODY", "beta.md": "BETA-BODY"}
+
+    _EXPECTED_ORDER = [
+        "loop-engine.md",
+        "alpha.md",
+        "gamma.md",
+        "beta.md",
+        "delta.md",
+    ]
+    _BODIES = ["ALPHA-BODY", "GAMMA-BODY", "BETA-BODY", "DELTA-BODY"]
+
+    def setUp(self) -> None:
+        self.phases = self._fixture_dir(self._PHASE_FIXTURES)
+        self.reference = self._fixture_dir(self._REFERENCE_FIXTURES)
+
+    def _fixture_dir(self, files: dict) -> Path:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        for name, body in files.items():
+            (root / name).write_text(f"{body}\n", encoding="utf-8")
+        return root
+
+    def _patch_units(self, phases: Path, reference: Path) -> None:
+        for target, value in (("_PHASES", phases), ("_REFERENCE", reference)):
+            patcher = mock.patch(f"{__name__}.{target}", value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_sources_are_core_first_then_each_directory_sorted(self) -> None:
+        self._patch_units(self.phases, self.reference)
+        self.assertEqual(
+            [path.name for path in _engine_sources()],
+            self._EXPECTED_ORDER,
+            "the seam's source order changed. It is core first, then `phases/` sorted, "
+            "then `reference/` sorted -- directory-major, with the sort applied per "
+            "directory. These fixture names are picked so that one sorted pass over "
+            "both directories produces a DIFFERENT list, which is what makes this "
+            "assertion discriminate the two rules rather than restate one of them.",
+        )
+
+    def test_the_joined_text_carries_every_source_in_that_order(self) -> None:
+        self._patch_units(self.phases, self.reference)
+        text = _engine_text()
+        positions = [text.find(body) for body in self._BODIES]
+        self.assertNotIn(-1, positions, f"a fixture body is missing from the seam: {positions}")
+        self.assertEqual(
+            positions,
+            sorted(positions),
+            "the units appear in the joined text in a different order from "
+            "`_engine_sources()`. Order is a safety parameter here: it decides which "
+            "way a region whose anchors straddle a boundary resolves.",
+        )
+        self.assertLess(
+            text.find("# Loop engine"),
+            min(positions),
+            "core no longer comes first in the joined text.",
+        )
+
+    def test_with_no_unit_directory_the_seam_is_core_byte_for_byte(self) -> None:
+        """#167/AC3, asserted rather than argued from `join`'s documented behavior."""
+        absent = self._fixture_dir({})
+        self._patch_units(absent / "no-phases", absent / "no-reference")
+        self.assertEqual(
+            _engine_text(),
+            _ENGINE.read_text(encoding="utf-8"),
+            "with both unit directories absent the seam must return core's bytes "
+            "unchanged -- a single-element join inserts no separator. If this fails, "
+            "the re-pointing stopped being behavior-preserving and every guard in this "
+            "file is now reading a corpus core does not contain.",
+        )
 
 
 class ExampleSidecarTests(unittest.TestCase):
@@ -208,7 +398,7 @@ class CapsVocabularyTests(unittest.TestCase):
         names: set[str] = set()
         # SKILL.md is scanned alongside loop-engine.md: it restates a subset of
         # the bindings, and a name introduced only there needs the skeleton too.
-        for path in (_ENGINE, _SKILL):
+        for path in (*_engine_sources(), _SKILL):
             text = path.read_text(encoding="utf-8")
             names.update(self._UNDERSCORED.findall(text))
             names.update(self._SINGLE_WORD.findall(text))
@@ -605,6 +795,15 @@ class PipelineStepOrderTests(unittest.TestCase):
         markdown headings), and the scan stops at the first unnumbered ``###``
         after the numbered run -- ``### Escalation rubric`` and the sections
         below it are not pipeline steps.
+
+        **Reads ``_ENGINE`` directly, and must keep doing so** (#167/AC2). This is
+        the source of the ``### N.`` heading run -- the enumeration everything else
+        resolves against. An extraction moves a step's *body* and leaves its numbered
+        heading in core, so core is where the run stays complete; pointing this at
+        ``_engine_text()`` would count the run from wherever the headings ended up
+        rather than from the file that owns it. ``_step_references`` below *does* read
+        the seam, and the asymmetry is deliberate: it only finds references, which are
+        then resolved against the headings found here.
         """
         text = self._FENCED_BLOCK.sub("", _ENGINE.read_text(encoding="utf-8"))
         steps = []
@@ -681,8 +880,19 @@ class PipelineStepOrderTests(unittest.TestCase):
         ``issue-<N>.plan.md`` template contains markdown headings that are not
         pipeline steps, whereas the template's own "see step 3" IS a real
         cross-reference -- it ships into every plan file the loop writes.
+
+        **Reads the seam, unlike ``_engine_steps`` above** (#167/AC2). A ``step N``
+        reference that moves into a unit must still resolve, and the numbers it yields
+        are checked against headings this module still takes from core alone. That
+        holds only while core remains the complete step-number authority: an extraction
+        may move a step's *body*, never its numbered heading.
+
+        **What widening this does NOT leave untouched**, since the resolution check is
+        not its only consumer: these references are also *supply* for the
+        ``_MIN_STEP_REFERENCES`` vacuity floor below, which counts them. A unit's
+        references count toward that floor exactly as core's do.
         """
-        text = _ENGINE.read_text(encoding="utf-8")
+        text = _engine_text()
         references = []
         for run in self._STEP_REFERENCE.findall(text):
             for token in self._REFERENCE_SEPARATORS.split(run):
@@ -1088,7 +1298,7 @@ class MutationNaReasonTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.engine_text = _ENGINE.read_text(encoding="utf-8")
+        cls.engine_text = _engine_text()
 
     def _stated_counts(self) -> list[str]:
         found = []
@@ -1265,7 +1475,7 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
 
     def _engine(self) -> str:
-        return _ENGINE.read_text(encoding="utf-8")
+        return _engine_text()
 
     def _span(self, text: str, start: str, end: str, label: str) -> str:
         i = text.find(start)
@@ -1498,12 +1708,12 @@ class VerdictFirstInvariantTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
 
     def _engine(self) -> str:
-        return _ENGINE.read_text(encoding="utf-8")
+        return _engine_text()
 
     def _span(self, text: str, start: str, end: str, label: str) -> str:
-        # A duplicated START anchor is the one drift that fails OPEN: `find` takes
-        # the first occurrence, so the span can silently widen to swallow neighbouring
-        # regions and then satisfy the containment check on someone else's text.
+        # A duplicated START anchor fails OPEN: `find` takes the first occurrence, so
+        # the span can silently widen to swallow neighbouring regions and then satisfy
+        # the containment check on someone else's text.
         # Assert the property the anchor actually relies on rather than bounding the
         # resulting width, which cannot distinguish a legitimately long region from a
         # runaway one.
@@ -1555,8 +1765,11 @@ class VerdictFirstInvariantTests(unittest.TestCase):
     def test_the_span_anchors_actually_resolve(self) -> None:
         # Liveness: a span that silently collapsed would satisfy nothing and fail
         # loudly, but the anchors themselves could rot into a region that is not the
-        # paragraph intended. Bound the low end; the high end is covered by the
-        # unique-start-anchor assertion in _span, which is the real drift vector.
+        # paragraph intended. Bound the low end. The high end is NOT covered by the
+        # unique-start-anchor assertion -- widening is an *end*-anchor phenomenon, and
+        # a start anchor that occurs once says nothing about where the end resolved.
+        # Nothing here bounds the high end; once a region can span two engine sources
+        # that is review's at the extraction PR (see `_engine_text`).
         for label, body in self._regions().items():
             with self.subTest(region=label):
                 self.assertGreater(
@@ -1734,7 +1947,7 @@ class RelayInvariantTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text.replace("\u2014", "--")).lower()
 
     def _engine(self) -> str:
-        return _ENGINE.read_text(encoding="utf-8")
+        return _engine_text()
 
     def _span(self, text: str, start: str, end: str, label: str) -> str:
         # A duplicated START anchor fails OPEN: `find` takes the first occurrence, so
@@ -1769,8 +1982,12 @@ class RelayInvariantTests(unittest.TestCase):
         draft used -- is tautological: ``_span`` returns ``text[i:j]`` with ``j > i``,
         so the slice always begins with the whole start anchor and can never be empty.
         The sibling's ``> 80`` is what actually fires: a region collapsed to just its
-        start anchor lands under the bound. ``_span``'s own assertions (start
-        uniqueness, end resolvable) carry the rest.
+        start anchor lands under the bound.
+
+        ``_span``'s own assertions do **not** carry the rest. Start uniqueness bounds
+        the low end only, and "end resolvable" has never implied "end correct" --
+        ``find`` takes the first end anchor at or after the start, wherever it sits.
+        Nothing here covers that.
         """
         text = self._engine()
         canonical = self._span(text, *self._CANONICAL, "the canonical definition")
@@ -1862,7 +2079,7 @@ class ResumeHandoffPointerTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
 
     def _span(self, start: str, end: str, label: str) -> str:
-        text = _ENGINE.read_text(encoding="utf-8")
+        text = _engine_text()
         i = text.find(start)
         self.assertNotEqual(
             i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
@@ -2023,7 +2240,7 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
 
     def _engine(self) -> str:
-        return _ENGINE.read_text(encoding="utf-8")
+        return _engine_text()
 
     def _span(self, text: str, start: str, end: str, label: str) -> str:
         # A duplicated START anchor fails OPEN: `find` takes the first occurrence, so
@@ -2193,7 +2410,7 @@ class CurrencyExemptionAgreementTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text.replace("—", "--").replace("*", ""))
 
     def _span(self, start: str, end: str, label: str) -> str:
-        text = _ENGINE.read_text(encoding="utf-8")
+        text = _engine_text()
         i = text.find(start)
         self.assertNotEqual(
             i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
@@ -2357,7 +2574,7 @@ class FindingClassAgreementTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text).strip()
 
     def _span(self, start: str, end: str, label: str) -> str:
-        text = _ENGINE.read_text(encoding="utf-8")
+        text = _engine_text()
         i = text.find(start)
         self.assertNotEqual(
             i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
@@ -2574,7 +2791,7 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
         return re.sub(r"\s+", " ", text.replace("\u2014", "--"))
 
     def _engine(self) -> str:
-        return _ENGINE.read_text(encoding="utf-8")
+        return _engine_text()
 
     def _span(self, text: str, start: str, end: str, label: str) -> str:
         # Same slicing as the sibling helpers in this file: the body INCLUDES the
@@ -2826,7 +3043,7 @@ class LensDifferentialAgreementTests(unittest.TestCase):
     _TERM = "differential"
 
     def _step8(self) -> str:
-        text = _ENGINE.read_text(encoding="utf-8")
+        text = _engine_text()
         i = text.find("### 8. Code review")
         j = text.find("### 9. Security review", i + 1)
         self.assertNotEqual(i, -1, "cannot locate step 8 in loop-engine.md")
