@@ -69,6 +69,13 @@ _REFERENCE = _REPO_ROOT / "skills" / "dev-loop" / "reference"
 # paragraph-wise by splitting on ``"\n\n"``. A source that does not end in a newline is
 # the case this defends -- under a bare ``"\n"`` join its last paragraph would merge
 # into the next source's first.
+#
+# **Nothing asserts this, and it is the second standing gap.** Mutating this constant to
+# ``"\n"`` -- or to ``""`` -- leaves every test in ``EngineSeamTests`` green: with no unit
+# directory ``join`` never inserts a separator at all, and the fixtures are written with
+# trailing newlines, so the paragraph break survives either way. It becomes checkable
+# only once a real source lacking a trailing newline exists; until then it is review's at
+# the extraction PR, like the high-end bound above.
 _SOURCE_JOIN = "\n\n"
 
 
@@ -119,14 +126,13 @@ def _engine_text() -> str:
     behavior-preserving by construction rather than by inspection (#167/AC3).
     ``EngineSeamTests`` asserts that rather than leaving it to be read.
 
-    **Nothing here bounds a region's width, and that is the standing gap.** Extraction
+    **Nothing here bounds a region's high end, and that is the standing gap.** Extraction
     can introduce anchor-duplication and span-widening hazards -- a region whose start
     anchor stays in one source while its end anchor moves to a later one resolves
     forward across the join to an oversized span, which containment assertions, being
     monotone in region size, still pass. Verifying that a given extraction kept every
     re-pointed guard's span correctly scoped is **review's responsibility at that PR**,
-    not a property this seam establishes. Bounding it mechanically needs a second source
-    to be checkable against, so it is #130's (#167 scope ruling, 2026-09-13).
+    not a property this seam establishes.
     """
     return _SOURCE_JOIN.join(
         path.read_text(encoding="utf-8") for path in _engine_sources()
@@ -148,11 +154,17 @@ class EngineSeamTests(unittest.TestCase):
     """The seam's own behavior, asserted rather than assumed (#167/AC1, AC3, AC4).
 
     With both unit directories absent, ``_engine_text()`` and a stub returning
-    ``_ENGINE.read_text()`` are **indistinguishable**. Core-first order, the
-    per-directory sort and the glob are all unasserted on today's corpus -- and a
-    mutation battery over engine prose cannot reach them either, since it exercises the
-    guards against a tree on which seam and stub agree. So the seam is pinned here
-    against fixture directories instead.
+    ``_ENGINE.read_text()`` are **indistinguishable**. Core-first order and the
+    per-directory sort are unasserted on today's corpus -- and a mutation battery over
+    engine prose cannot reach them either, since it exercises the guards against a tree
+    on which seam and stub agree. So they are pinned here against fixture directories
+    instead.
+
+    **The glob is only partly pinned, and the unpinned half is the one to know about.**
+    *Narrowing* its pattern is caught -- the fixtures stop being found and the ordering
+    tests go red. *Widening* it is not: every fixture is a flat ``.md`` file, so
+    ``glob("*")`` or ``rglob`` passes every test here. Those are exactly the two
+    properties ``_engine_sources`` warns a caller must not assume away.
 
     Fixtures are ``tempfile`` directories patched over ``_PHASES``/``_REFERENCE``. No
     real unit content is created anywhere in the repo, which is what keeps #167/AC5
@@ -1699,9 +1711,9 @@ class VerdictFirstInvariantTests(unittest.TestCase):
         return _engine_text()
 
     def _span(self, text: str, start: str, end: str, label: str) -> str:
-        # A duplicated START anchor is the one drift that fails OPEN: `find` takes
-        # the first occurrence, so the span can silently widen to swallow neighbouring
-        # regions and then satisfy the containment check on someone else's text.
+        # A duplicated START anchor fails OPEN: `find` takes the first occurrence, so
+        # the span can silently widen to swallow neighbouring regions and then satisfy
+        # the containment check on someone else's text.
         # Assert the property the anchor actually relies on rather than bounding the
         # resulting width, which cannot distinguish a legitimately long region from a
         # runaway one.
@@ -1973,11 +1985,9 @@ class RelayInvariantTests(unittest.TestCase):
         start anchor lands under the bound.
 
         ``_span``'s own assertions do **not** carry the rest. Start uniqueness bounds
-        the low end only, and "end resolvable" stopped implying "end correct" once the
-        corpus became a concatenation -- ``find`` resolves an end anchor that moved into
-        a later source just as readily. Nothing here covers that, by design: bounding it
-        needs a second source to check against, so it is the extraction PR's (see
-        ``_engine_text``).
+        the low end only, and "end resolvable" has never implied "end correct" --
+        ``find`` takes the first end anchor at or after the start, wherever it sits.
+        Nothing here covers that.
         """
         text = self._engine()
         canonical = self._span(text, *self._CANONICAL, "the canonical definition")
