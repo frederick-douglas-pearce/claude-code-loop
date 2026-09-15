@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Behavior of the mutation harness (`tools/mutate_verify.py`).
+"""Behavior of the mutation harness (`plugins/dev-loop/tools/mutate_verify.py`).
 
 This module is the point of #60. The prose version of this apparatus could not converge because
 every review round re-derived its correctness by reading — there was nothing to execute. These
@@ -29,7 +29,9 @@ from pathlib import Path
 # Deliberately NOT `sys.path.insert`: `discover` runs all three modules in one process, so a
 # permanent entry would leave `tools/` on the path for the whole session and shadow any stdlib
 # module sharing a filename with something added there later.
-_MUTATE_VERIFY_PATH = Path(__file__).resolve().parents[1] / "tools" / "mutate_verify.py"
+_MUTATE_VERIFY_PATH = (
+    Path(__file__).resolve().parents[1] / "plugins" / "dev-loop" / "tools" / "mutate_verify.py"
+)
 _spec = importlib.util.spec_from_file_location("mutate_verify", _MUTATE_VERIFY_PATH)
 assert _spec and _spec.loader
 mutate_verify = importlib.util.module_from_spec(_spec)

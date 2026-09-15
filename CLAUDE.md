@@ -35,7 +35,8 @@ stdlib-only constraint was broken — fix the code, not the workflow.
 Three modules, and the split between them matters:
 
 - **`tests/test_guard_append_only.py`** — behavior of the guard hook.
-- **`tests/test_mutate_verify.py`** — behavior of `tools/mutate_verify.py`, the mutation harness.
+- **`tests/test_mutate_verify.py`** — behavior of `plugins/dev-loop/tools/mutate_verify.py`, the
+  mutation harness.
   Added by #60, and the reason it exists is worth keeping: the prose version of this apparatus could
   not converge because **every review round re-derived its correctness by reading** — there was
   nothing to execute. These tests are what make a green suite say something about it. They are
@@ -395,15 +396,48 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
 
 ## Repo conventions
 
-- `.claude-plugin/` holds **only** manifests (`plugin.json`, `marketplace.json`). Skills, hooks,
-  commands, and tools live at the repo root in their own directories.
-- `tools/` holds **executables meant to be run by path rather than wired to a tool event** —
-  currently just `mutate_verify.py`. The distinction from `hooks/` is what invokes them: a hook is
-  registered in `hooks/hooks.json` and fired by the harness; a tool is run by whoever needs it.
-  `loop-engine.md` (AC-verifier → Part 2) invokes it by path as
-  `${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py`, which is the whole reason the directory ships in
-  the plugin payload. Both directories are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both are
-  **stdlib-only**, for the same reason — they execute under bare `python3` in a consumer's
+- **The runtime tree lives under `plugins/dev-loop/`, and that directory IS the payload**
+  (#170). `.claude-plugin/marketplace.json` declares `"source": "./plugins/dev-loop"`, and Claude
+  Code copies that directory — and nothing outside it — into every consumer's plugin cache. There
+  is no payload-exclusion mechanism: no `files`/`exclude`/`ignore` manifest field and no
+  `.pluginignore`. The only filter is **positional**, which is why the source directory must hold
+  runtime only.
+
+  **`.gitignore` is not a payload-selection mechanism, and the precise form matters.** It cannot
+  keep a **tracked** file out of the payload — that is the defect this restructure fixes. It
+  *does* keep **untracked** droppings out, because the cache is copied from a clone and an ignored
+  file was never in the clone. Do not compress this into *"`.gitignore` has no effect on what is
+  cached"*: that is false, and `test_bytecode_droppings_cannot_be_committed` reasons from the
+  true version.
+
+  **The rule: a file ships iff a consumer needs it in the cache.** Stated with no list of the
+  qualifying kinds, deliberately — **if you cannot establish that a consumer needs it in the
+  cache, it does not ship.** Two earlier drafts of this rule enumerated instead, and each was
+  falsified by an entry the inventory already required: *"iff the engine reads it at runtime"* by
+  `LICENSE` and `README.md`, and the enumeration that replaced it by
+  `hooks/loop.append-guard.example.json`, a template a consumer copies that nothing reads. That is
+  the enumerable-assertion trap this file documents, so the fix is the default-deny posture rather
+  than a third list. **`PayloadContentsTests` pins the payload against a declared inventory** and
+  fails on any path outside it; it does not itself decide what belongs there.
+- `.claude-plugin/` holds **only** manifests — in **each** of its two locations, which is the part
+  that is easy to get wrong: `marketplace.json` sits at the repo root (it is the marketplace
+  index, and it does **not** ship), while `plugin.json` sits inside the payload at
+  `plugins/dev-loop/.claude-plugin/plugin.json` (it must, or the directory `source` names is not
+  an installable plugin). Skills, hooks, commands and the mutation harness live under
+  `plugins/dev-loop/` in their own directories; `tests/`, `docs/`, `.github/`, `.claude/`,
+  and `CLAUDE.md` stay at the repo root and stop shipping. The front-door `README.md` also stays
+  at the repo root, but its **content does ship**, as the byte-identical payload copy above.
+- **`plugins/dev-loop/tools/` holds executables meant to be run by path rather than wired to a
+  tool event** — currently `mutate_verify.py`, which ships because `loop-engine.md` (AC-verifier →
+  Part 2) invokes it at runtime as `${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py`. **The root
+  `tools/` holds only *inputs* to it** — currently `mutation-specs/self-check.json`, the hand-run
+  self-check that keeps #60's mutation numbers reproducible — and does **not** ship, because
+  nothing reads it at runtime. It holds no executables, so do not read this bullet as licensing a
+  new one there: an executable at the repo root would not ship. The distinction from
+  `plugins/dev-loop/hooks/` is what invokes them: a hook is registered in
+  `plugins/dev-loop/hooks/hooks.json` and fired by the harness; a tool is run by whoever needs
+  it. Both shipped directories are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both
+  are **stdlib-only**, for the same reason — they execute under bare `python3` in a consumer's
   environment.
 - `${CLAUDE_PLUGIN_ROOT}` (this installed plugin) and `${CLAUDE_PROJECT_DIR}` (the consuming repo)
   are not interchangeable — the engine and hook both depend on the distinction.
@@ -492,15 +526,25 @@ narrowly — the boundary is *what the file does*, not its extension:
 
 | Direct to `main` | Must go through a PR |
 |---|---|
-| `README.md`, `CLAUDE.md`, `LICENSE` | anything in `skills/`, `commands/`, `hooks/`, `.claude-plugin/`, `tests/`, `.github/`, `.claude/` |
-| typo / link / formatting fixes anywhere | any change to runtime behavior |
+| `CLAUDE.md`, the root `LICENSE` | **`README.md`** (see below), anything in `plugins/` (the whole payload — skills, commands, hooks, tools, `plugin.json`, **and the payload's own `README.md` and `LICENSE`**), `tests/`, `.github/`, `.claude/`, `.claude-plugin/` |
+| typo / link / formatting fixes anywhere **except** `README.md` and `plugins/` | any change to runtime behavior |
+
+**`README.md` is on the PR side while the payload mirrors it, and that is not a style rule.**
+`plugins/dev-loop/README.md` is a byte-identical copy (#170/AC6), pinned by
+`test_payload_readme_is_identical_to_the_front_door`, so **an edit to one file without the other
+fails the suite** — and CI runs on pushes to `main`, so taking the direct-push exception for a
+README typo red-lines `main`. Edit both copies in the same commit, on a branch, through a PR. When
+the slim consumer README lands the mirror goes away and this row can be revisited. This sentence
+exists because the duty was previously stated *only* in that test's failure message, which a
+maintainer reads after the breakage rather than before it.
 
 `.claude/loop.config.md` is on the PR side for the same reason the engine is: it binds the gates the
 loop runs in this repo, so editing it is a behavior change. Note the engine separately forbids the
 orchestrator from editing its own config mid-run — config changes are human work, landed outside a
 loop iteration.
 
-`skills/dev-loop/loop-engine.md`, `skills/dev-loop/SKILL.md`, and `commands/init-loop.md` are
+`plugins/dev-loop/skills/dev-loop/loop-engine.md`,
+`plugins/dev-loop/skills/dev-loop/SKILL.md`, and `plugins/dev-loop/commands/init-loop.md` are
 markdown, but they are **the product** — an agent executes them at runtime. Editing them is a
 behavior change and takes the PR path, however prose-like the diff looks. When unsure which side a
 change falls on, open the PR.
@@ -638,7 +682,7 @@ release can reach; and
 
 ### Standing convention: the README status block ships with the version bump
 
-**Any PR that bumps `.claude-plugin/plugin.json` must update the `README.md` status block in the
+**Any PR that bumps `plugins/dev-loop/.claude-plugin/plugin.json` must update the `README.md` status block in the
 same PR.** Not just the v0.2.0 release — every bump, permanently. The status block names the current
 version, what actually works, where the live backlog is, and which repos have adopted it; all four
 rot silently, and the recurring failure mode is that nobody notices until a reader does. Treat it as

@@ -27,7 +27,7 @@ from types import ModuleType
 from unittest import mock
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_HOOK_PATH = _REPO_ROOT / "hooks" / "guard_append_only.py"
+_HOOK_PATH = _REPO_ROOT / "plugins" / "dev-loop" / "hooks" / "guard_append_only.py"
 
 
 def _load_hook() -> ModuleType:

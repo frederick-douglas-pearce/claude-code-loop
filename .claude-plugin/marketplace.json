@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "dev-loop",
-      "source": "./",
+      "source": "./plugins/dev-loop",
       "description": "Supervised dev-loop engine -- one routed issue per invocation with human gates and a durable ledger."
     }
   ]
