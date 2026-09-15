@@ -69,7 +69,7 @@ Three modules, and the split between them matters:
   deciding to invoke the skill, so a behavior surface, not prose), and the engine's in-prose
   `step N` cross-references. (`loop-engine.md` ×2, `SKILL.md` ×2, `plugin.json` — which is why five
   restatements live in three files.) The naive grep
-  (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' skills/dev-loop/loop-engine.md | wc -l`) does
+  (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' plugins/dev-loop/skills/dev-loop/loop-engine.md | wc -l`) does
   **not** find them all: the rest are line-wrapped, which is exactly how they went unguarded until
   review caught it. **No site count is stated here, deliberately** — the figures this sentence used
   to carry went stale where they stood. The assertion is a deliberately loose floor
@@ -191,13 +191,14 @@ and none of this belongs in `loop-engine.md`, which consumers execute.
 The load-bearing design is a strict separation between **generic engine**, **per-project bindings**,
 and **thin entry point**:
 
-1. `skills/dev-loop/SKILL.md` — the entry point Claude loads when the skill is invoked. It is
-   deliberately thin: it names the two files to read, then restates a short set of **fail-safe
-   invariants** so that a *partial* load over-escalates (safe) rather than under-gates. Sibling
-   files are read on demand, not auto-injected, hence the explicit "read both first" instruction.
-2. `skills/dev-loop/loop-engine.md` — the whole operating procedure: pipeline steps 0–12, ledger
-   format, router, AC-verifier, initialization, resume, convergence/park/hold semantics, budget
-   caps. **Project-agnostic — contains no project-specific values, ever.**
+1. `plugins/dev-loop/skills/dev-loop/SKILL.md` — the entry point Claude loads when the skill is
+   invoked. It is deliberately thin: it names the two files to read, then restates a short set of
+   **fail-safe invariants** so that a *partial* load over-escalates (safe) rather than under-gates.
+   Sibling files are read on demand, not auto-injected, hence the explicit "read both first"
+   instruction.
+2. `plugins/dev-loop/skills/dev-loop/loop-engine.md` — the whole operating procedure: pipeline
+   steps 0–12, ledger format, router, AC-verifier, initialization, resume, convergence/park/hold
+   semantics, budget caps. **Project-agnostic — contains no project-specific values, ever.**
 3. `${CLAUDE_PROJECT_DIR}/.claude/loop.config.md` (lives in the *consuming* repo, not here) — the
    binding seam. Every `CAPS` name in the engine (`BACKLOG_SOURCE`, `SCOPE_AGENT`,
    `DESIGN_AGENT`, `LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`, `BRANCH_FMT`,
@@ -219,8 +220,9 @@ config values by `CAPS` name only; the config's section structure is free to cha
 project means editing only the config — never the engine. If a change to the engine would require
 knowing something project-specific, that is the signal to introduce a new `CAPS` parameter instead.
 
-A fourth file participates: `commands/init-loop.md` embeds a **skeleton of `loop.config.md`**. When
-you add or rename a `CAPS` parameter in `loop-engine.md`, the `/init-loop` skeleton (§1 binding
+A fourth file participates: `plugins/dev-loop/commands/init-loop.md` embeds a **skeleton of
+`loop.config.md`**. When you add or rename a `CAPS` parameter in `loop-engine.md`, the
+`/init-loop` skeleton (§1 binding
 table) and its inference map must be updated in the same change, or newly-onboarded repos will be
 missing the binding the engine now reads.
 
@@ -365,10 +367,11 @@ even though nothing will fail loudly:
 
 ## The append-only guard hook
 
-`hooks/guard_append_only.py` (wired by `hooks/hooks.json` as a `PreToolUse` matcher on `Write`)
-blocks full-file `Write`s that would drop entries from a registered append-only log. It is
-**config-driven and inert until the consuming project opts in** via
-`${CLAUDE_PROJECT_DIR}/.claude/loop.append-guard.json` (see `hooks/loop.append-guard.example.json`).
+`plugins/dev-loop/hooks/guard_append_only.py` (wired by `plugins/dev-loop/hooks/hooks.json` as a
+`PreToolUse` matcher on `Write`) blocks full-file `Write`s that would drop entries from a registered
+append-only log. It is **config-driven and inert until the consuming project opts in** via
+`${CLAUDE_PROJECT_DIR}/.claude/loop.append-guard.json` (see
+`plugins/dev-loop/hooks/loop.append-guard.example.json`).
 
 The **fail posture is a deliberate asymmetry** — preserve it in any change:
 
@@ -388,9 +391,9 @@ bounds and the trust level of `id_pattern` (repo-local committed config, not att
 also stated in `README.md` → "What the loop can do to your repo" — change both together.
 
 **Tightening `load_registry`'s validation can invalidate the shipped example.**
-`hooks/loop.append-guard.example.json` is the template every consuming project copies, and the
-loader fails *open* — so a rule that rejects the example produces no error here, just consuming
-projects whose guard silently protects nothing. `ExampleSidecarTests` loads the real file through
+`plugins/dev-loop/hooks/loop.append-guard.example.json` is the template every consuming project
+copies, and the loader fails *open* — so a rule that rejects the example produces no error here,
+just consuming projects whose guard silently protects nothing. `ExampleSidecarTests` loads the real file through
 the real loader and asserts **zero stderr warnings**, which is the assertion that catches this;
 "one entry loaded" alone would not.
 
@@ -454,9 +457,9 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
 that arrangement are easy to forget mid-run and change what the evidence means:
 
 **The loop executes the *installed* plugin, not the working tree.** The engine driving a run comes
-from `~/.claude/plugins/cache/claude-code-loop/dev-loop/<version>/`; edits to `skills/` and
-`commands/` here do not take effect until the next release's re-install. This is a **safety
-property** — a run cannot mutate the engine driving it — but it also means the loop keeps exhibiting
+from `~/.claude/plugins/cache/claude-code-loop/dev-loop/<version>/`; edits to `plugins/dev-loop/`
+here do not take effect until the next release's re-install. This is a **safety property** — a run
+cannot mutate the engine driving it — but it also means the loop keeps exhibiting
 the defects we are fixing until that re-install lands.
 
 **All three consumers moved 0.0.1 → 0.2.0 on 2026-08-21**, which is what makes the two instances
@@ -627,8 +630,9 @@ save it. Its AC3 would have written the new wording into the `/init-loop` **skel
 into consumer `loop.config.md` files that **no later release touches** — so unvalidated wording there
 is *stranded*, not corrected by the next bump. That asymmetry is a general rule: **the evidence bar
 for anything landing in the skeleton is higher than for the same wording landing in the engine**,
-because the engine's copy is reachable and the skeleton's copy is not. `commands/init-loop.md`'s
-maintainer note states the step-number case of it where it bites, above the skeleton it governs.
+because the engine's copy is reachable and the skeleton's copy is not.
+`plugins/dev-loop/commands/init-loop.md`'s maintainer note states the step-number case of it where
+it bites, above the skeleton it governs.
 
 **A deferral needs a capture mechanism or it is just a delay.** "If it matters it will recur" is only
 true if something records recurrences. Nothing did for F9 — the second instance surfaced solely
@@ -678,7 +682,8 @@ accidentally correct hides a round trip that the ledger and #35's own comments c
 Two ordering constraints are load-bearing and not arbitrary: **#74 must precede #36**, because #36/AC5 as written propagates a
 correction to a *phantom* defect (F7's invocability half is false) into consumer configs no later
 release can reach; and
-**#74 must precede #40**, or they collide on `commands/init-loop.md`, which #40 rewrites broadly.
+**#74 must precede #40**, or they collide on `plugins/dev-loop/commands/init-loop.md`, which #40
+rewrites broadly.
 
 ### Standing convention: the README status block ships with the version bump
 
