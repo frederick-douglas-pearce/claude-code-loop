@@ -398,11 +398,24 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
 
 - **The runtime tree lives under `plugins/dev-loop/`, and that directory IS the payload**
   (#170). `.claude-plugin/marketplace.json` declares `"source": "./plugins/dev-loop"`, and Claude
-  Code copies that directory — and nothing above it — into every consumer's plugin cache. There is
-  no payload-exclusion mechanism: no `files`/`exclude`/`ignore` manifest field, no
-  `.pluginignore`, and **`.gitignore` has no effect on what is cached**. The only filter is
-  positional, which is why the rule is *a file ships iff the engine reads it at runtime* and why
-  the source directory must hold runtime only. `PayloadContentsTests` enforces it.
+  Code copies that directory — and nothing outside it — into every consumer's plugin cache. There
+  is no payload-exclusion mechanism: no `files`/`exclude`/`ignore` manifest field and no
+  `.pluginignore`. The only filter is **positional**, which is why the source directory must hold
+  runtime only.
+
+  **`.gitignore` is not a payload-selection mechanism, and the precise form matters.** It cannot
+  keep a **tracked** file out of the payload — that is the defect this restructure fixes. It
+  *does* keep **untracked** droppings out, because the cache is copied from a clone and an ignored
+  file was never in the clone. Do not compress this into *"`.gitignore` has no effect on what is
+  cached"*: that is false, and `test_bytecode_droppings_cannot_be_committed` reasons from the
+  true version.
+
+  **The rule: a file ships iff a consumer needs it in the cache** — the engine reads it at
+  runtime, or it is the minimal front matter a package carries (`plugin.json`, `LICENSE`,
+  `README.md`). **`PayloadContentsTests` pins the payload against a declared inventory** and
+  fails on any path outside it; it does not itself decide what belongs there. Note what that
+  means for the two front-matter entries: nothing reads them at runtime, so an *"iff the engine
+  reads it"* phrasing would forbid files the inventory requires.
 - `.claude-plugin/` holds **only** manifests — in **each** of its two locations, which is the part
   that is easy to get wrong: `marketplace.json` sits at the repo root (it is the marketplace
   index, and it does **not** ship), while `plugin.json` sits inside the payload at
@@ -410,14 +423,16 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
   an installable plugin). Skills, hooks, commands and the mutation harness live under
   `plugins/dev-loop/` in their own directories; `tests/`, `docs/`, `.github/`, `.claude/`,
   `CLAUDE.md` and the front-door `README.md` stay at the repo root and stop shipping.
-- `tools/` holds **executables meant to be run by path rather than wired to a tool event**. It now
-  exists in **two places, deliberately**: `plugins/dev-loop/tools/mutate_verify.py` ships, because
-  `loop-engine.md` (AC-verifier → Part 2) invokes it at runtime as
-  `${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py`; `tools/mutation-specs/` stays at the repo root
-  and does **not** ship, because nothing reads it at runtime — it is the hand-run self-check that
-  keeps #60's mutation numbers reproducible. The distinction from `hooks/` is what invokes them: a
-  hook is registered in `hooks/hooks.json` and fired by the harness; a tool is run by whoever
-  needs it. Both shipped directories are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both
+- **`plugins/dev-loop/tools/` holds executables meant to be run by path rather than wired to a
+  tool event** — currently `mutate_verify.py`, which ships because `loop-engine.md` (AC-verifier →
+  Part 2) invokes it at runtime as `${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py`. **The root
+  `tools/` holds only *inputs* to it** — currently `mutation-specs/self-check.json`, the hand-run
+  self-check that keeps #60's mutation numbers reproducible — and does **not** ship, because
+  nothing reads it at runtime. It holds no executables, so do not read this bullet as licensing a
+  new one there: an executable at the repo root would not ship. The distinction from
+  `plugins/dev-loop/hooks/` is what invokes them: a hook is registered in
+  `plugins/dev-loop/hooks/hooks.json` and fired by the harness; a tool is run by whoever needs
+  it. Both shipped directories are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both
   are **stdlib-only**, for the same reason — they execute under bare `python3` in a consumer's
   environment.
 - `${CLAUDE_PLUGIN_ROOT}` (this installed plugin) and `${CLAUDE_PROJECT_DIR}` (the consuming repo)
@@ -507,7 +522,7 @@ narrowly — the boundary is *what the file does*, not its extension:
 
 | Direct to `main` | Must go through a PR |
 |---|---|
-| `README.md`, `CLAUDE.md`, `LICENSE` | anything in `skills/`, `commands/`, `hooks/`, `.claude-plugin/`, `tests/`, `.github/`, `.claude/` |
+| `README.md`, `CLAUDE.md`, `LICENSE` | anything in `plugins/` (the whole payload — skills, commands, hooks, tools, `plugin.json`), `tests/`, `.github/`, `.claude/`, `.claude-plugin/` |
 | typo / link / formatting fixes anywhere | any change to runtime behavior |
 
 `.claude/loop.config.md` is on the PR side for the same reason the engine is: it binds the gates the
@@ -515,7 +530,8 @@ loop runs in this repo, so editing it is a behavior change. Note the engine sepa
 orchestrator from editing its own config mid-run — config changes are human work, landed outside a
 loop iteration.
 
-`skills/dev-loop/loop-engine.md`, `skills/dev-loop/SKILL.md`, and `commands/init-loop.md` are
+`plugins/dev-loop/skills/dev-loop/loop-engine.md`,
+`plugins/dev-loop/skills/dev-loop/SKILL.md`, and `plugins/dev-loop/commands/init-loop.md` are
 markdown, but they are **the product** — an agent executes them at runtime. Editing them is a
 behavior change and takes the PR path, however prose-like the diff looks. When unsure which side a
 change falls on, open the PR.
@@ -653,7 +669,7 @@ release can reach; and
 
 ### Standing convention: the README status block ships with the version bump
 
-**Any PR that bumps `.claude-plugin/plugin.json` must update the `README.md` status block in the
+**Any PR that bumps `plugins/dev-loop/.claude-plugin/plugin.json` must update the `README.md` status block in the
 same PR.** Not just the v0.2.0 release — every bump, permanently. The status block names the current
 version, what actually works, where the live backlog is, and which repos have adopted it; all four
 rot silently, and the recurring failure mode is that nobody notices until a reader does. Treat it as

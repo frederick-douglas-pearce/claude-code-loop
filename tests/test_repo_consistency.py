@@ -358,10 +358,17 @@ class PayloadContentsTests(unittest.TestCase):
 
     ``marketplace.json``'s ``source`` names the one directory Claude Code copies into every
     consumer's plugin cache. There is **no payload-exclusion mechanism** -- no ``files`` /
-    ``exclude`` / ``ignore`` manifest field, no ``.pluginignore``, and ``.gitignore`` has no
-    effect on what is *cached*; every non-symlink file under ``source`` is copied. The only
-    filter is therefore positional, which is what makes "the source directory contains
-    runtime only" the whole invariant rather than one way of achieving it.
+    ``exclude`` / ``ignore`` manifest field and no ``.pluginignore``. The only filter is
+    positional, which is what makes "the source directory contains runtime only" the whole
+    invariant rather than one way of achieving it.
+
+    **``.gitignore`` is not a payload-selection mechanism, and the distinction is load-bearing
+    here.** It cannot keep a *tracked* file out of the payload -- the defect this guard exists
+    to catch. It *does* keep *untracked* droppings out, because the cache is copied from a
+    clone and an ignored file was never in the clone; that is what lets ``_payload_files``
+    skip ``__pycache__``. An earlier draft of this docstring said ``.gitignore`` "has no
+    effect on what is cached", which is false and contradicted the very test below that
+    depends on it.
 
     An explicit inventory is legitimate here because this guards **structure**, not prose.
     Every entry is a path, so any change to the set is a real change -- unlike the prose
@@ -404,15 +411,17 @@ class PayloadContentsTests(unittest.TestCase):
             unexpected,
             [],
             "unrecognised path(s) inside the plugin payload -- these would be copied into "
-            "every consumer's cache. Add them to _PAYLOAD_INVENTORY only if the engine "
-            f"reads them at runtime; otherwise move them out of {_PAYLOAD_ROOT.name}/: "
-            f"{unexpected}",
+            "every consumer's cache. Add to _PAYLOAD_INVENTORY only what a consumer needs in "
+            "the cache: something the engine reads at runtime, or the minimal front matter a "
+            "package carries (plugin.json, LICENSE, README.md). Otherwise move it out of "
+            f"{_PAYLOAD_ROOT.relative_to(_REPO_ROOT).as_posix()}/: {unexpected}",
         )
         self.assertEqual(
             missing,
             [],
-            f"declared payload file(s) absent from {_PAYLOAD_ROOT.name}/ -- the payload has "
-            f"stopped shipping something the inventory says it ships: {missing}",
+            "declared payload file(s) absent from "
+            f"{_PAYLOAD_ROOT.relative_to(_REPO_ROOT).as_posix()}/ -- the payload has stopped "
+            f"shipping something the inventory says it ships: {missing}",
         )
 
     def test_no_maintainer_path_appears_in_the_payload(self) -> None:
@@ -429,9 +438,14 @@ class PayloadContentsTests(unittest.TestCase):
         This is the assertion the other two cannot make. Re-point ``source`` back to
         ``"./"`` and the payload silently becomes the whole repository again **while the
         inventory and known-bad checks above still pass** -- the directory is still clean,
-        it is simply no longer what ships. That regression fails here, on two independent
-        clauses: ``source`` no longer resolves to the payload, and the repo root no longer
-        carries a ``plugin.json`` for it to have pointed at.
+        it is simply no longer what ships.
+
+        Each assertion catches a different regression: the first, a re-pointed ``source``;
+        the second, a payload that has lost its manifest; the third, the converse -- a root
+        ``plugin.json`` restored beside it, i.e. an incomplete move. **They are sequential,
+        so only the first to fail is reported**; an earlier draft claimed the ``source: "./"``
+        case failed "on two independent clauses", which it does not -- the third assertion
+        describes the healthy state and would still pass.
         """
         marketplace = json.loads(_MARKETPLACE_MANIFEST.read_text(encoding="utf-8"))
         entries = [e for e in marketplace["plugins"] if e.get("name") == "dev-loop"]
@@ -455,6 +469,29 @@ class PayloadContentsTests(unittest.TestCase):
             "moved -- the root manifest is what `source: \"./\"` used to point at",
         )
 
+    def test_payload_readme_is_identical_to_the_front_door(self) -> None:
+        """The payload README is a copy, so pin it as one (#170/AC6).
+
+        Shipping the front-door README into the payload is an explicit interim decision, and
+        it creates a duplicate that nothing else keeps in step. This is what makes the
+        duplication safe to state: every other check in this file that reads ``_README``
+        transitively covers the shipped copy, which is why they were not each widened to
+        iterate both. If the two ever diverge, that reasoning breaks here rather than
+        silently somewhere else.
+
+        When the slim consumer README lands, delete this test with it -- at that point the
+        files are *meant* to differ, and the checks that rely on this identity have to be
+        widened in the same change.
+        """
+        self.assertEqual(
+            _PLUGIN_README.read_bytes(),
+            _README.read_bytes(),
+            "plugins/dev-loop/README.md has drifted from the front-door README.md. They are "
+            "byte-identical copies by decision (#170/AC6): re-copy the root file into the "
+            "payload, or -- if the split is being done deliberately -- widen every check in "
+            "this file that reads _README and delete this test in the same change.",
+        )
+
     def test_bytecode_droppings_cannot_be_committed(self) -> None:
         """Pins the premise that lets ``_payload_files`` skip ``__pycache__``.
 
@@ -462,6 +499,16 @@ class PayloadContentsTests(unittest.TestCase):
         marketplace clone -- so a dropping cannot reach one. That argument depends on the
         ignore rules actually being there, which is what this asserts. Without it the skip
         above would be an unjustified hole rather than a justified one.
+
+        **What this does NOT establish, stated rather than left to be discovered.** It is a
+        *proxy*: it checks that two tokens appear in ``.gitignore``, not that no bytecode is
+        tracked under the payload. Three states pass it while the property is false -- a
+        force-added ``.pyc`` (``git add -f``), a later negation line re-admitting the
+        pattern, and the rule deleted while any comment in the file still contains the bare
+        token, since the whitespace split cannot tell a rule from a comment. Closing that
+        needs the inventory compared against ``git ls-files`` -- the set the clone and hence
+        the cache actually contain. **That is deferred as a strengthening, and until it lands
+        those three cases are review's, not this test's.**
         """
         ignore = (_REPO_ROOT / ".gitignore").read_text(encoding="utf-8").split()
         for pattern in ("__pycache__/", "*.py[cod]"):
@@ -510,7 +557,7 @@ class PluginIdentifierTests(unittest.TestCase):
         )
         # Both files are user-facing entry points: init-loop.md writes the key
         # into settings.json, README.md is the documented install command.
-        for path in (_INIT_LOOP, _README, _PLUGIN_README):
+        for path in (_INIT_LOOP, _README):
             with self.subTest(call_site=path.name):
                 self.assertIn(
                     identifier,

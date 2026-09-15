@@ -74,8 +74,8 @@ kind of well-instrumented loop that "graph engineering" treats as a single node.
 ## Layout
 
 **`plugins/dev-loop/` is the plugin payload** — the directory `marketplace.json` points
-`source` at, and the only thing copied into a consumer's plugin cache. Everything above it
-is maintainer-side and does not ship.
+`source` at, and the only thing copied into a consumer's plugin cache. Everything **outside**
+it is maintainer-side and does not ship.
 
 ```
 claude-code-loop/
@@ -96,30 +96,48 @@ claude-code-loop/
 │   │   └── init-loop.md         # /init-loop onboarding scaffolder
 │   ├── tools/
 │   │   └── mutate_verify.py     # mutation harness the acceptance gate runs by path
-│   ├── README.md            # short consumer-facing README (see below)
+│   ├── README.md            # a copy of the front-door README -- see below
 │   └── LICENSE              # duplicated, not symlinked -- see below
-├── tests/                   # stdlib unittest suite (no pytest, no dependencies)
+├── tests/                   # stdlib unittest suite; does NOT ship
 ├── tools/mutation-specs/    # hand-run harness self-check; does NOT ship
 ├── docs/research/           # the research notebook; does NOT ship
-├── .github/workflows/       # CI: the suite on Python 3.9-3.13
-├── .claude/                 # this repo's own dogfood config; does NOT ship
+├── .github/workflows/       # CI: the suite on Python 3.9-3.13; does NOT ship
+├── .claude/                 # this repo's dogfood config + internal specs; does NOT ship
 ├── CLAUDE.md                # maintainer instructions for THIS repo; does NOT ship
-├── LICENSE
+├── .gitignore               # does NOT ship
+├── LICENSE                  # does NOT ship (the payload carries its own copy)
 └── README.md                # this file: the GitHub front door
 ```
 
 **Why the tree is shaped this way.** There is no payload-exclusion mechanism for a Claude
-Code plugin — no `files`/`exclude`/`ignore` manifest field, no `.pluginignore`, and
-`.gitignore` has no effect on what is *cached*; every non-symlink file under `source` is
-copied. The only available filter is **positional**, so a file is excluded by sitting
-outside the source directory. That is why the runtime tree moved rather than the rest being
-filtered out. `PayloadContentsTests` fails if a non-runtime path appears inside the payload.
+Code plugin — no `files`/`exclude`/`ignore` manifest field and no `.pluginignore`. The only
+available filter is **positional**: a file is excluded by sitting outside the source
+directory. That is why the runtime tree moved rather than the rest being filtered out.
 
-**Two READMEs, deliberately.** This one is the front door and the marketplace homepage
-target: full status block, architecture, config reference, trust model. `plugins/dev-loop/README.md`
-is a short consumer-facing copy that ships — what the plugin is, how to install it, and a
-**pointer** to the trust-model section below. It deliberately does not restate the gating
-posture, so there is no second copy to go stale inside your plugin cache.
+**`.gitignore` is not a payload-selection mechanism** — it cannot keep a **tracked** file out
+of the payload, which is the whole reason this restructure was needed. It does keep
+*untracked* droppings out, because the cache is copied from a clone of this repo and an
+ignored file was never in the clone. Those are two different stages, and collapsing them into
+"`.gitignore` has no effect on the cache" is wrong in a way that matters: it is what
+`test_bytecode_droppings_cannot_be_committed` relies on.
+
+**A file ships iff a consumer needs it in the cache** — the engine reads it at runtime, or it
+is the minimal front matter a package carries (`plugin.json`, `LICENSE`, `README.md`).
+`PayloadContentsTests` pins the payload against a **declared inventory** and fails on any path
+outside it; it does not itself decide what belongs there.
+
+**The payload README is a copy of this file, and that is an explicit interim decision.** The
+root README is the GitHub front door and the marketplace homepage target;
+`plugins/dev-loop/README.md` is a byte-identical copy of it, kept in step by
+`test_payload_readme_is_identical_to_the_front_door`. **Neither file silently became both** —
+the duplication is stated here and mechanically pinned.
+
+A slimmer consumer-facing README is the better end state, and it is deliberately **deferred to
+the release that ships this layout** rather than taken here. Shipping a short README now would
+strand two things the engine cross-references inside a consumer's cache — *How the limits are
+enforced* and *Upgrading with a live ledger*, both of which live only in this file — and
+repairing those references means editing `loop-engine.md`, whose bytes the sharding release
+measures. Copying this file keeps every such reference resolving with no engine edit at all.
 
 **`LICENSE` is duplicated into the payload rather than symlinked.** A symlink whose target
 sits outside the plugin directory is *silently skipped* when the plugin is copied into the
@@ -607,8 +625,10 @@ Three modules, covering deliberately different things:
   the example sidecar still loads through the real loader, that the
   `dev-loop@claude-code-loop` identifier still matches the manifests it is
   composed from, that every `CAPS` parameter the engine reads is offered by
-  the `/init-loop` skeleton, and that the pipeline's step order still agrees
-  everywhere it is restated.
+  the `/init-loop` skeleton, that the pipeline's step order still agrees
+  everywhere it is restated, and that the payload under `plugins/dev-loop/`
+  holds only its declared inventory with `marketplace.json`'s `source` still
+  pointing at it.
 
 What the suite does **not** test is whether the prompt artifacts say the *right*
 thing. The engine is a long document of instructions an agent executes at
