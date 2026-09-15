@@ -876,7 +876,7 @@ class PipelineStepOrderTests(unittest.TestCase):
     # It counts across the WHOLE file, which is what let the skeleton-position
     # check go: skeleton is a subset of file, so file == 0 already proves
     # skeleton == 0. That removed the `~~~markdown` span matcher with it -- the
-    # instrument CLAUDE.md calls fragile, defeated four times on #39's PR.
+    # instrument plugins/CLAUDE.md calls fragile, defeated four times on #39's PR.
     #
     # A pin, not a floor: at zero nothing can drift up unnoticed. Zero cannot
     # detect a dead matcher, though -- a broken regex and a clean file both
@@ -1659,9 +1659,9 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
     now has to treat as material.
 
     This is one mechanically-checkable part of an invariant restated across many sites
-    (``CLAUDE.md`` enumerates them). The rest is
+    (``plugins/CLAUDE.md`` enumerates them). The rest is
     prose agreement, which a check would guard only fragilely or vacuously (the #76
-    ``~~~markdown`` span problem) -- see ``CLAUDE.md``. What is asserted here is a
+    ``~~~markdown`` span problem) -- see ``plugins/CLAUDE.md``. What is asserted here is a
     *string* coupling, not a meaning, which is why it is neither.
 
     **Anchored per region, not counted globally, and the distinction is the whole
