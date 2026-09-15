@@ -38,17 +38,32 @@ from types import ModuleType
 from unittest import mock
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_HOOK_PATH = _REPO_ROOT / "hooks" / "guard_append_only.py"
 
-_EXAMPLE_SIDECAR = _REPO_ROOT / "hooks" / "loop.append-guard.example.json"
-_PLUGIN_MANIFEST = _REPO_ROOT / ".claude-plugin" / "plugin.json"
+# What actually ships. ``marketplace.json``'s ``source`` points here, and Claude Code copies
+# this directory -- and nothing above it -- into every consumer's plugin cache, so
+# ``${CLAUDE_PLUGIN_ROOT}`` resolves to the installed copy of *this* path (#170). Anything
+# resolved against ``_REPO_ROOT`` instead is a maintainer-side file that does not ship:
+# the marketplace manifest, the front-door README, the suite, the CI workflow.
+_PAYLOAD_ROOT = _REPO_ROOT / "plugins" / "dev-loop"
+
+_HOOK_PATH = _PAYLOAD_ROOT / "hooks" / "guard_append_only.py"
+
+_EXAMPLE_SIDECAR = _PAYLOAD_ROOT / "hooks" / "loop.append-guard.example.json"
+_PLUGIN_MANIFEST = _PAYLOAD_ROOT / ".claude-plugin" / "plugin.json"
+# Stays root-relative: the marketplace index lives at the marketplace root and does not
+# ship inside the payload (#170).
 _MARKETPLACE_MANIFEST = _REPO_ROOT / ".claude-plugin" / "marketplace.json"
-_HOOKS_MANIFEST = _REPO_ROOT / "hooks" / "hooks.json"
+_HOOKS_MANIFEST = _PAYLOAD_ROOT / "hooks" / "hooks.json"
 
-_ENGINE = _REPO_ROOT / "skills" / "dev-loop" / "loop-engine.md"
-_SKILL = _REPO_ROOT / "skills" / "dev-loop" / "SKILL.md"
-_INIT_LOOP = _REPO_ROOT / "commands" / "init-loop.md"
+_ENGINE = _PAYLOAD_ROOT / "skills" / "dev-loop" / "loop-engine.md"
+_SKILL = _PAYLOAD_ROOT / "skills" / "dev-loop" / "SKILL.md"
+_INIT_LOOP = _PAYLOAD_ROOT / "commands" / "init-loop.md"
+# Two READMEs, deliberately (#170/AC6): the root one is the GitHub front door and the
+# marketplace homepage target; the payload one is the short consumer-facing copy that
+# ships. Both carry the install command, so both are checked -- see
+# ``test_composed_identifier_appears_at_every_call_site``.
 _README = _REPO_ROOT / "README.md"
+_PLUGIN_README = _PAYLOAD_ROOT / "README.md"
 
 # The engine is being sharded into a lean core plus on-demand units (#128). Neither
 # directory exists yet -- #167 lands the seam BEFORE any unit is extracted, so that an
@@ -61,8 +76,8 @@ _README = _REPO_ROOT / "README.md"
 # ``phases/`` would miss the directory #131 targets -- silently, for the union scanners:
 # ``CapsVocabularyTests._engine_parameters`` is a set union, so losing a directory
 # narrows it with no symptom (#167/AC1, amended 2026-09-13).
-_PHASES = _REPO_ROOT / "skills" / "dev-loop" / "phases"
-_REFERENCE = _REPO_ROOT / "skills" / "dev-loop" / "reference"
+_PHASES = _PAYLOAD_ROOT / "skills" / "dev-loop" / "phases"
+_REFERENCE = _PAYLOAD_ROOT / "skills" / "dev-loop" / "reference"
 
 # Sources are joined on a blank line so each one's first and last paragraphs stay
 # separate from its neighbours': ``MutationNaReasonTests`` reads the corpus
@@ -307,6 +322,158 @@ class ExampleSidecarTests(unittest.TestCase):
         self.assertEqual(registry[0][1].groups, 1)
 
 
+# What the plugin payload is allowed to contain (#170). File-exact and default-deny:
+# see ``PayloadContentsTests`` for why an explicit inventory is legitimate here and for
+# what each extraction PR behind #130 is expected to do to it.
+_PAYLOAD_INVENTORY = frozenset({
+    ".claude-plugin/plugin.json",
+    "LICENSE",
+    "README.md",
+    "commands/init-loop.md",
+    "hooks/guard_append_only.py",
+    "hooks/hooks.json",
+    "hooks/loop.append-guard.example.json",
+    "skills/dev-loop/SKILL.md",
+    "skills/dev-loop/loop-engine.md",
+    "tools/mutate_verify.py",
+})
+
+# Maintainer-side paths that must never appear inside the payload. Partly redundant with
+# the inventory above, and kept deliberately: this is the assertion that still fails if the
+# inventory itself is widened to admit one of them, which is the one edit the inventory
+# cannot object to.
+_PAYLOAD_MUST_NOT_CONTAIN = (
+    "tests",
+    "docs",
+    ".github",
+    ".claude",
+    "CLAUDE.md",
+    ".gitignore",
+    ".claude-plugin/marketplace.json",
+)
+
+
+class PayloadContentsTests(unittest.TestCase):
+    """The payload ships runtime only (#170).
+
+    ``marketplace.json``'s ``source`` names the one directory Claude Code copies into every
+    consumer's plugin cache. There is **no payload-exclusion mechanism** -- no ``files`` /
+    ``exclude`` / ``ignore`` manifest field, no ``.pluginignore``, and ``.gitignore`` has no
+    effect on what is *cached*; every non-symlink file under ``source`` is copied. The only
+    filter is therefore positional, which is what makes "the source directory contains
+    runtime only" the whole invariant rather than one way of achieving it.
+
+    An explicit inventory is legitimate here because this guards **structure**, not prose.
+    Every entry is a path, so any change to the set is a real change -- unlike the prose
+    guards ``CLAUDE.md`` documents a ceiling for, where a literal can be reworded around.
+
+    The inventory is **file-exact and default-deny**, which is what AC4's "loudly on
+    addition" asks for. One consequence, stated so it does not read as a spurious break:
+    the engine is being sharded (#128), so #130 and #131 add ``skills/dev-loop/phases/*.md``
+    and ``skills/dev-loop/reference/*.md`` to the payload. **Each of those PRs will fail
+    this test until it extends the inventory, and that deliberate edit is the point.**
+    """
+
+    @staticmethod
+    def _payload_files() -> set:
+        """Every file under the payload, as ``/``-joined relative paths.
+
+        ``__pycache__`` and ``*.pyc`` are skipped, and that hole is not an assumption:
+        ``test_bytecode_droppings_cannot_be_committed`` below pins the ``.gitignore``
+        coverage that makes it safe. A consumer's cache is copied from the marketplace
+        *clone*, which contains tracked files only, so an ignored dropping in a
+        maintainer's working tree can never reach one.
+        """
+        found = set()
+        for path in _PAYLOAD_ROOT.rglob("*"):
+            if not path.is_file():
+                continue
+            if "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}:
+                continue
+            found.add(path.relative_to(_PAYLOAD_ROOT).as_posix())
+        return found
+
+    def test_payload_holds_exactly_the_declared_inventory(self) -> None:
+        found = self._payload_files()
+        unexpected = sorted(found - _PAYLOAD_INVENTORY)
+        missing = sorted(_PAYLOAD_INVENTORY - found)
+        # Reported separately: the two directions are different defects. An unexpected
+        # file ships something a consumer should not receive; a missing one means the
+        # payload stopped shipping something the engine reads at runtime.
+        self.assertEqual(
+            unexpected,
+            [],
+            "unrecognised path(s) inside the plugin payload -- these would be copied into "
+            "every consumer's cache. Add them to _PAYLOAD_INVENTORY only if the engine "
+            f"reads them at runtime; otherwise move them out of {_PAYLOAD_ROOT.name}/: "
+            f"{unexpected}",
+        )
+        self.assertEqual(
+            missing,
+            [],
+            f"declared payload file(s) absent from {_PAYLOAD_ROOT.name}/ -- the payload has "
+            f"stopped shipping something the inventory says it ships: {missing}",
+        )
+
+    def test_no_maintainer_path_appears_in_the_payload(self) -> None:
+        for rel in _PAYLOAD_MUST_NOT_CONTAIN:
+            with self.subTest(path=rel):
+                self.assertFalse(
+                    (_PAYLOAD_ROOT / rel).exists(),
+                    f"{rel} exists inside the payload and would ship to every consumer",
+                )
+
+    def test_source_resolves_to_the_payload_and_carries_the_manifest(self) -> None:
+        """The mechanism, not just the directory.
+
+        This is the assertion the other two cannot make. Re-point ``source`` back to
+        ``"./"`` and the payload silently becomes the whole repository again **while the
+        inventory and known-bad checks above still pass** -- the directory is still clean,
+        it is simply no longer what ships. That regression fails here, on two independent
+        clauses: ``source`` no longer resolves to the payload, and the repo root no longer
+        carries a ``plugin.json`` for it to have pointed at.
+        """
+        marketplace = json.loads(_MARKETPLACE_MANIFEST.read_text(encoding="utf-8"))
+        entries = [e for e in marketplace["plugins"] if e.get("name") == "dev-loop"]
+        self.assertEqual(len(entries), 1, "expected exactly one dev-loop marketplace entry")
+        source = entries[0]["source"]
+
+        self.assertEqual(
+            (_REPO_ROOT / source).resolve(),
+            _PAYLOAD_ROOT.resolve(),
+            f"marketplace source {source!r} does not resolve to the payload directory; "
+            "whatever it names is what ships",
+        )
+        self.assertTrue(
+            (_PAYLOAD_ROOT / ".claude-plugin" / "plugin.json").is_file(),
+            "the payload carries no .claude-plugin/plugin.json, so the directory "
+            "marketplace.json points at is not an installable plugin",
+        )
+        self.assertFalse(
+            (_REPO_ROOT / ".claude-plugin" / "plugin.json").exists(),
+            "a second plugin.json at the repo root means the runtime tree was not fully "
+            "moved -- the root manifest is what `source: \"./\"` used to point at",
+        )
+
+    def test_bytecode_droppings_cannot_be_committed(self) -> None:
+        """Pins the premise that lets ``_payload_files`` skip ``__pycache__``.
+
+        Ignored files are absent from a clone, and a consumer's cache is copied from the
+        marketplace clone -- so a dropping cannot reach one. That argument depends on the
+        ignore rules actually being there, which is what this asserts. Without it the skip
+        above would be an unjustified hole rather than a justified one.
+        """
+        ignore = (_REPO_ROOT / ".gitignore").read_text(encoding="utf-8").split()
+        for pattern in ("__pycache__/", "*.py[cod]"):
+            with self.subTest(pattern=pattern):
+                self.assertIn(
+                    pattern,
+                    ignore,
+                    f".gitignore no longer covers {pattern}, so bytecode could be "
+                    "committed into the payload and would then ship",
+                )
+
+
 class PluginIdentifierTests(unittest.TestCase):
     """``dev-loop@claude-code-loop`` is composed, then hand-written elsewhere.
 
@@ -343,7 +510,7 @@ class PluginIdentifierTests(unittest.TestCase):
         )
         # Both files are user-facing entry points: init-loop.md writes the key
         # into settings.json, README.md is the documented install command.
-        for path in (_INIT_LOOP, _README):
+        for path in (_INIT_LOOP, _README, _PLUGIN_README):
             with self.subTest(call_site=path.name):
                 self.assertIn(
                     identifier,
@@ -358,8 +525,8 @@ class PluginIdentifierTests(unittest.TestCase):
         for rel in re.findall(r"\$\{CLAUDE_PLUGIN_ROOT\}/([\w./-]+)", raw):
             with self.subTest(script=rel):
                 self.assertTrue(
-                    (_REPO_ROOT / rel).is_file(),
-                    f"hooks.json references {rel}, which does not exist in the repo",
+                    (_PAYLOAD_ROOT / rel).is_file(),
+                    f"hooks.json references {rel}, which does not exist in the payload",
                 )
 
 
@@ -1396,10 +1563,10 @@ class MutationNaReasonTests(unittest.TestCase):
         mutation pass while still leaving the procedure to be improvised -- which is
         the one thing every version of this text has forbidden.
         """
-        harness = _REPO_ROOT / "tools" / "mutate_verify.py"
+        harness = _PAYLOAD_ROOT / "tools" / "mutate_verify.py"
         self.assertTrue(
             harness.is_file(),
-            "tools/mutate_verify.py is missing, but loop-engine.md tells the "
+            "plugins/dev-loop/tools/mutate_verify.py is missing, but loop-engine.md tells the "
             "orchestrator to run it.",
         )
         roots = self._HARNESS_REFERENCE.findall(self.engine_text)

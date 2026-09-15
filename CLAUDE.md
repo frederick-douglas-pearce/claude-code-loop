@@ -35,7 +35,8 @@ stdlib-only constraint was broken — fix the code, not the workflow.
 Three modules, and the split between them matters:
 
 - **`tests/test_guard_append_only.py`** — behavior of the guard hook.
-- **`tests/test_mutate_verify.py`** — behavior of `tools/mutate_verify.py`, the mutation harness.
+- **`tests/test_mutate_verify.py`** — behavior of `plugins/dev-loop/tools/mutate_verify.py`, the
+  mutation harness.
   Added by #60, and the reason it exists is worth keeping: the prose version of this apparatus could
   not converge because **every review round re-derived its correctness by reading** — there was
   nothing to execute. These tests are what make a green suite say something about it. They are
@@ -395,15 +396,29 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
 
 ## Repo conventions
 
-- `.claude-plugin/` holds **only** manifests (`plugin.json`, `marketplace.json`). Skills, hooks,
-  commands, and tools live at the repo root in their own directories.
-- `tools/` holds **executables meant to be run by path rather than wired to a tool event** —
-  currently just `mutate_verify.py`. The distinction from `hooks/` is what invokes them: a hook is
-  registered in `hooks/hooks.json` and fired by the harness; a tool is run by whoever needs it.
-  `loop-engine.md` (AC-verifier → Part 2) invokes it by path as
-  `${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py`, which is the whole reason the directory ships in
-  the plugin payload. Both directories are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both are
-  **stdlib-only**, for the same reason — they execute under bare `python3` in a consumer's
+- **The runtime tree lives under `plugins/dev-loop/`, and that directory IS the payload**
+  (#170). `.claude-plugin/marketplace.json` declares `"source": "./plugins/dev-loop"`, and Claude
+  Code copies that directory — and nothing above it — into every consumer's plugin cache. There is
+  no payload-exclusion mechanism: no `files`/`exclude`/`ignore` manifest field, no
+  `.pluginignore`, and **`.gitignore` has no effect on what is cached**. The only filter is
+  positional, which is why the rule is *a file ships iff the engine reads it at runtime* and why
+  the source directory must hold runtime only. `PayloadContentsTests` enforces it.
+- `.claude-plugin/` holds **only** manifests — in **each** of its two locations, which is the part
+  that is easy to get wrong: `marketplace.json` sits at the repo root (it is the marketplace
+  index, and it does **not** ship), while `plugin.json` sits inside the payload at
+  `plugins/dev-loop/.claude-plugin/plugin.json` (it must, or the directory `source` names is not
+  an installable plugin). Skills, hooks, commands and the mutation harness live under
+  `plugins/dev-loop/` in their own directories; `tests/`, `docs/`, `.github/`, `.claude/`,
+  `CLAUDE.md` and the front-door `README.md` stay at the repo root and stop shipping.
+- `tools/` holds **executables meant to be run by path rather than wired to a tool event**. It now
+  exists in **two places, deliberately**: `plugins/dev-loop/tools/mutate_verify.py` ships, because
+  `loop-engine.md` (AC-verifier → Part 2) invokes it at runtime as
+  `${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py`; `tools/mutation-specs/` stays at the repo root
+  and does **not** ship, because nothing reads it at runtime — it is the hand-run self-check that
+  keeps #60's mutation numbers reproducible. The distinction from `hooks/` is what invokes them: a
+  hook is registered in `hooks/hooks.json` and fired by the harness; a tool is run by whoever
+  needs it. Both shipped directories are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both
+  are **stdlib-only**, for the same reason — they execute under bare `python3` in a consumer's
   environment.
 - `${CLAUDE_PLUGIN_ROOT}` (this installed plugin) and `${CLAUDE_PROJECT_DIR}` (the consuming repo)
   are not interchangeable — the engine and hook both depend on the distinction.

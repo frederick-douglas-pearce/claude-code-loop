@@ -10,7 +10,7 @@ issue per invocation, with human gates on uncertainty and durable ledger state.
 > **Status — v0.3.0; not yet stable.** Four pieces ship: the
 > `dev-loop` skill (`SKILL.md` + `loop-engine.md`), the `/init-loop` onboarding
 > command, the append-only guard hook, and the mutation harness the acceptance gate
-> runs (`tools/mutate_verify.py`). **Five repos drive it**: the first external adoption
+> runs (`plugins/dev-loop/tools/mutate_verify.py`). **Five repos drive it**: the first external adoption
 > [us-presidential-vote-analysis](https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis),
 > the ongoing AgentFluent dogfood,
 > [claude-code-sessions](https://github.com/frederick-douglas-pearce/claude-code-sessions),
@@ -73,28 +73,57 @@ kind of well-instrumented loop that "graph engineering" treats as a single node.
 
 ## Layout
 
+**`plugins/dev-loop/` is the plugin payload** — the directory `marketplace.json` points
+`source` at, and the only thing copied into a consumer's plugin cache. Everything above it
+is maintainer-side and does not ship.
+
 ```
 claude-code-loop/
 ├── .claude-plugin/
-│   ├── plugin.json          # the plugin manifest (this dir holds ONLY manifests)
-│   └── marketplace.json     # makes the plugin installable
-├── skills/
-│   └── dev-loop/
-│       ├── SKILL.md         # thin orchestrator entry point (reads the two below)
-│       └── loop-engine.md   # the generic engine: pipeline + all semantics
-├── hooks/
-│   ├── hooks.json           # wires the PreToolUse guard via ${CLAUDE_PLUGIN_ROOT}
-│   ├── guard_append_only.py # append-only guard (config-driven; stdlib only)
-│   └── loop.append-guard.example.json  # sample per-project protection registry
-├── commands/
-│   └── init-loop.md         # /init-loop onboarding scaffolder
-├── tools/
-│   └── mutate_verify.py     # mutation harness the acceptance gate runs by path (stdlib only)
+│   └── marketplace.json     # the marketplace index; repo root; does NOT ship
+├── plugins/dev-loop/        # <- THE PAYLOAD. `source` points here; this is all that ships
+│   ├── .claude-plugin/
+│   │   └── plugin.json      # the plugin manifest (each .claude-plugin/ holds ONLY manifests)
+│   ├── skills/
+│   │   └── dev-loop/
+│   │       ├── SKILL.md         # thin orchestrator entry point (reads the one below)
+│   │       └── loop-engine.md   # the generic engine: pipeline + all semantics
+│   ├── hooks/
+│   │   ├── hooks.json           # wires the PreToolUse guard via ${CLAUDE_PLUGIN_ROOT}
+│   │   ├── guard_append_only.py # append-only guard (config-driven; stdlib only)
+│   │   └── loop.append-guard.example.json  # sample per-project protection registry
+│   ├── commands/
+│   │   └── init-loop.md         # /init-loop onboarding scaffolder
+│   ├── tools/
+│   │   └── mutate_verify.py     # mutation harness the acceptance gate runs by path
+│   ├── README.md            # short consumer-facing README (see below)
+│   └── LICENSE              # duplicated, not symlinked -- see below
 ├── tests/                   # stdlib unittest suite (no pytest, no dependencies)
+├── tools/mutation-specs/    # hand-run harness self-check; does NOT ship
+├── docs/research/           # the research notebook; does NOT ship
 ├── .github/workflows/       # CI: the suite on Python 3.9-3.13
+├── .claude/                 # this repo's own dogfood config; does NOT ship
+├── CLAUDE.md                # maintainer instructions for THIS repo; does NOT ship
 ├── LICENSE
-└── README.md
+└── README.md                # this file: the GitHub front door
 ```
+
+**Why the tree is shaped this way.** There is no payload-exclusion mechanism for a Claude
+Code plugin — no `files`/`exclude`/`ignore` manifest field, no `.pluginignore`, and
+`.gitignore` has no effect on what is *cached*; every non-symlink file under `source` is
+copied. The only available filter is **positional**, so a file is excluded by sitting
+outside the source directory. That is why the runtime tree moved rather than the rest being
+filtered out. `PayloadContentsTests` fails if a non-runtime path appears inside the payload.
+
+**Two READMEs, deliberately.** This one is the front door and the marketplace homepage
+target: full status block, architecture, config reference, trust model. `plugins/dev-loop/README.md`
+is a short consumer-facing copy that ships — what the plugin is, how to install it, and a
+**pointer** to the trust-model section below. It deliberately does not restate the gating
+posture, so there is no second copy to go stale inside your plugin cache.
+
+**`LICENSE` is duplicated into the payload rather than symlinked.** A symlink whose target
+sits outside the plugin directory is *silently skipped* when the plugin is copied into the
+cache — not rejected — so a symlinked licence would simply be absent, with nothing saying so.
 
 ## What the loop can do to your repo
 
@@ -571,7 +600,7 @@ Three modules, covering deliberately different things:
 
 - `test_guard_append_only.py` — behavior of the guard hook: drop detection, the
   suffix matcher, the config loader, and each direction of the fail posture.
-- `test_mutate_verify.py` — behavior of `tools/mutate_verify.py`, the mutation
+- `test_mutate_verify.py` — behavior of `plugins/dev-loop/tools/mutate_verify.py`, the mutation
   harness the acceptance gate runs: what it does to a tree, and what it refuses
   to do. It is the only executable evidence behind a gate that edits source code.
 - `test_repo_consistency.py` — mechanical checks on the shipped artifacts: that
