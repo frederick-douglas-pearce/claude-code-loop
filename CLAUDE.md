@@ -410,19 +410,23 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
   cached"*: that is false, and `test_bytecode_droppings_cannot_be_committed` reasons from the
   true version.
 
-  **The rule: a file ships iff a consumer needs it in the cache** — the engine reads it at
-  runtime, or it is the minimal front matter a package carries (`plugin.json`, `LICENSE`,
-  `README.md`). **`PayloadContentsTests` pins the payload against a declared inventory** and
-  fails on any path outside it; it does not itself decide what belongs there. Note what that
-  means for the two front-matter entries: nothing reads them at runtime, so an *"iff the engine
-  reads it"* phrasing would forbid files the inventory requires.
+  **The rule: a file ships iff a consumer needs it in the cache.** Stated with no list of the
+  qualifying kinds, deliberately — **if you cannot establish that a consumer needs it in the
+  cache, it does not ship.** Two earlier drafts of this rule enumerated instead, and each was
+  falsified by an entry the inventory already required: *"iff the engine reads it at runtime"* by
+  `LICENSE` and `README.md`, and the enumeration that replaced it by
+  `hooks/loop.append-guard.example.json`, a template a consumer copies that nothing reads. That is
+  the enumerable-assertion trap this file documents, so the fix is the default-deny posture rather
+  than a third list. **`PayloadContentsTests` pins the payload against a declared inventory** and
+  fails on any path outside it; it does not itself decide what belongs there.
 - `.claude-plugin/` holds **only** manifests — in **each** of its two locations, which is the part
   that is easy to get wrong: `marketplace.json` sits at the repo root (it is the marketplace
   index, and it does **not** ship), while `plugin.json` sits inside the payload at
   `plugins/dev-loop/.claude-plugin/plugin.json` (it must, or the directory `source` names is not
   an installable plugin). Skills, hooks, commands and the mutation harness live under
   `plugins/dev-loop/` in their own directories; `tests/`, `docs/`, `.github/`, `.claude/`,
-  `CLAUDE.md` and the front-door `README.md` stay at the repo root and stop shipping.
+  and `CLAUDE.md` stay at the repo root and stop shipping. The front-door `README.md` also stays
+  at the repo root, but its **content does ship**, as the byte-identical payload copy above.
 - **`plugins/dev-loop/tools/` holds executables meant to be run by path rather than wired to a
   tool event** — currently `mutate_verify.py`, which ships because `loop-engine.md` (AC-verifier →
   Part 2) invokes it at runtime as `${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py`. **The root
@@ -522,8 +526,17 @@ narrowly — the boundary is *what the file does*, not its extension:
 
 | Direct to `main` | Must go through a PR |
 |---|---|
-| `README.md`, `CLAUDE.md`, `LICENSE` | anything in `plugins/` (the whole payload — skills, commands, hooks, tools, `plugin.json`), `tests/`, `.github/`, `.claude/`, `.claude-plugin/` |
-| typo / link / formatting fixes anywhere | any change to runtime behavior |
+| `CLAUDE.md`, the root `LICENSE` | **`README.md`** (see below), anything in `plugins/` (the whole payload — skills, commands, hooks, tools, `plugin.json`, **and the payload's own `README.md` and `LICENSE`**), `tests/`, `.github/`, `.claude/`, `.claude-plugin/` |
+| typo / link / formatting fixes anywhere **except** `README.md` and `plugins/` | any change to runtime behavior |
+
+**`README.md` is on the PR side while the payload mirrors it, and that is not a style rule.**
+`plugins/dev-loop/README.md` is a byte-identical copy (#170/AC6), pinned by
+`test_payload_readme_is_identical_to_the_front_door`, so **an edit to one file without the other
+fails the suite** — and CI runs on pushes to `main`, so taking the direct-push exception for a
+README typo red-lines `main`. Edit both copies in the same commit, on a branch, through a PR. When
+the slim consumer README lands the mirror goes away and this row can be revisited. This sentence
+exists because the duty was previously stated *only* in that test's failure message, which a
+maintainer reads after the breakage rather than before it.
 
 `.claude/loop.config.md` is on the PR side for the same reason the engine is: it binds the gates the
 loop runs in this repo, so editing it is a behavior change. Note the engine separately forbids the

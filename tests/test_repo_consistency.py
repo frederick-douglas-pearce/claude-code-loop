@@ -40,7 +40,7 @@ from unittest import mock
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # What actually ships. ``marketplace.json``'s ``source`` points here, and Claude Code copies
-# this directory -- and nothing above it -- into every consumer's plugin cache, so
+# this directory -- and nothing outside it -- into every consumer's plugin cache, so
 # ``${CLAUDE_PLUGIN_ROOT}`` resolves to the installed copy of *this* path (#170). Anything
 # resolved against ``_REPO_ROOT`` instead is a maintainer-side file that does not ship:
 # the marketplace manifest, the front-door README, the suite, the CI workflow.
@@ -412,8 +412,8 @@ class PayloadContentsTests(unittest.TestCase):
             [],
             "unrecognised path(s) inside the plugin payload -- these would be copied into "
             "every consumer's cache. Add to _PAYLOAD_INVENTORY only what a consumer needs in "
-            "the cache: something the engine reads at runtime, or the minimal front matter a "
-            "package carries (plugin.json, LICENSE, README.md). Otherwise move it out of "
+            "the cache -- and if you cannot establish that, it does not ship. Otherwise move "
+            "it out of "
             f"{_PAYLOAD_ROOT.relative_to(_REPO_ROOT).as_posix()}/: {unexpected}",
         )
         self.assertEqual(

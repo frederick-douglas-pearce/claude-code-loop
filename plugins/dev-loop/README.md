@@ -106,7 +106,7 @@ claude-code-loop/
 ├── CLAUDE.md                # maintainer instructions for THIS repo; does NOT ship
 ├── .gitignore               # does NOT ship
 ├── LICENSE                  # does NOT ship (the payload carries its own copy)
-└── README.md                # this file: the GitHub front door
+└── README.md                # this file: the GitHub front door; a copy ships in the payload
 ```
 
 **Why the tree is shaped this way.** There is no payload-exclusion mechanism for a Claude
@@ -121,10 +121,10 @@ ignored file was never in the clone. Those are two different stages, and collaps
 "`.gitignore` has no effect on the cache" is wrong in a way that matters: it is what
 `test_bytecode_droppings_cannot_be_committed` relies on.
 
-**A file ships iff a consumer needs it in the cache** — the engine reads it at runtime, or it
-is the minimal front matter a package carries (`plugin.json`, `LICENSE`, `README.md`).
-`PayloadContentsTests` pins the payload against a **declared inventory** and fails on any path
-outside it; it does not itself decide what belongs there.
+**A file ships iff a consumer needs it in the cache** — and deliberately with no list of the
+qualifying kinds: **if you cannot establish that a consumer needs it in the cache, it does not
+ship.** `PayloadContentsTests` pins the payload against a **declared inventory** and fails on any
+path outside it; it does not itself decide what belongs there.
 
 **The payload README is a copy of this file, and that is an explicit interim decision.** The
 root README is the GitHub front door and the marketplace homepage target;
