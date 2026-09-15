@@ -13,7 +13,7 @@ See `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/loop-engine.md` for the operating pro
 
 > 🐕 **This repo is a dogfood consumer of the plugin it develops.** The loop runs the *installed*
 > engine (`~/.claude/plugins/cache/claude-code-loop/dev-loop/<version>/`), **not this working
-> tree** — edits to `skills/` and `commands/` here take effect only at the next re-install. That is
+> tree** — edits to `plugins/dev-loop/` here take effect only at the next re-install. That is
 > a safety property (a run cannot mutate the engine driving it) and a hazard (the loop keeps
 > exhibiting what we have already fixed). Version-specific postmortems and the window between an
 > in-tree fix and a consumer re-install live in `CLAUDE.md` → Dogfooding this repo.
@@ -47,7 +47,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `APPEND_ONLY_FILES` | `TODO(init-loop)` — **this repo currently protects none**; no sidecar written | no decision-log / changelog with repeated `## <ID>` headings exists. ⚠ **Candidate:** the loop's own `LEDGER_ROOT/<run>/progress.md` is append-only by design and the loop is its only writer — tracked as [#64](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/64). |
 | `PERMISSION_POSTURE` | subagents are **read-only/validate-only**; the parent thread performs every mutation (Write/Edit/commit/merge) | ⚠ the engine names this parameter but never reads it — [#27](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/27) ("wire `PERMISSION_POSTURE`, or retire it"). Recorded so #27 has a concrete binding to wire or retire. |
 | `LEDGER_ROOT` | `.claude/loop/` | **gitignored** — local working state, never committed. |
-| `RELEASE_SCHEME` | semver in `.claude-plugin/plugin.json` (`version`), bumped by hand; release milestones are named for their version, and `deferred-corpus` and the `tech-debt` label are categories rather than releases. No package registry, no tags automation. **No milestone enumeration here on purpose** — it went stale at D012's renames within a day of being written, and `v0.3.0` means two different things either side of 2026-09-11. Read the milestone list. | merge gate reads "≤ patch bump or no bump". **Every bump must update the `README.md` status block in the same PR** (`CLAUDE.md` → standing convention); a `plugin.json` bump makes a change **minor**, i.e. never auto-merge-eligible. |
+| `RELEASE_SCHEME` | semver in `plugins/dev-loop/.claude-plugin/plugin.json` (`version`), bumped by hand; release milestones are named for their version, and `deferred-corpus` and the `tech-debt` label are categories rather than releases. No package registry, no tags automation. **No milestone enumeration here on purpose** — it went stale at D012's renames within a day of being written, and `v0.3.0` means two different things either side of 2026-09-11. Read the milestone list. | merge gate reads "≤ patch bump or no bump". **Every bump must update the `README.md` status block in the same PR** (`CLAUDE.md` → standing convention); a `plugin.json` bump makes a change **minor**, i.e. never auto-merge-eligible. |
 
 ---
 
@@ -68,13 +68,15 @@ wrong. Skip for pure `README.md`/`LICENSE` edits.
   stop). Any change that must land in every restatement at once is an architect trigger — a partial
   edit leaves the engine self-contradictory, and a *partially loaded* engine then under-gates.
 - **A `CAPS` parameter is added, renamed, or removed.** The three-layer contract binds
-  `loop-engine.md` ↔ `commands/init-loop.md` §1 skeleton ↔ the inference map. `CapsVocabularyTests`
-  catches only engine→skeleton; the inference map and Notes column are unenforced.
+  `loop-engine.md` ↔ `plugins/dev-loop/commands/init-loop.md` §1 skeleton ↔ the inference map.
+  `CapsVocabularyTests` catches only engine→skeleton; the inference map and Notes column are
+  unenforced.
 - **The pipeline step numbering changes** (#31 and anything downstream of it) — four artifacts carry
-  the order, one of them the *published* marketplace description in `.claude-plugin/plugin.json`.
-- **The guard hook's fail posture changes** (`hooks/guard_append_only.py`). The fail-open/fail-closed
-  asymmetry is deliberate and load-bearing; "tightening" validation can silently invalidate the
-  shipped example sidecar and leave consuming projects protecting nothing.
+  the order, one of them the *published* marketplace description in
+  `plugins/dev-loop/.claude-plugin/plugin.json`.
+- **The guard hook's fail posture changes** (`plugins/dev-loop/hooks/guard_append_only.py`). The
+  fail-open/fail-closed asymmetry is deliberate and load-bearing; "tightening" validation can
+  silently invalidate the shipped example sidecar and leave consuming projects protecting nothing.
 - **A stated invariant is reversed.** A reversal must update the README trust-model section in the
   same change.
 - **A change would require the engine to know something project-specific.** That is the signal to
@@ -91,17 +93,27 @@ wrong. Skip for pure `README.md`/`LICENSE` edits.
 > light review*. Applying that here would route a behavior change through the weakest gate set.
 > `CLAUDE.md` already states the human-facing version of this rule; the override below is binding.
 
-- **Package layout:** there is **no package**. `skills/dev-loop/` (engine + entry point),
-  `commands/` (slash commands), `hooks/` (the one Python file + its JSON wiring),
-  `.claude-plugin/` (manifests **only**), `tests/` (stdlib `unittest`). No build, no dependency
-  manifest, no `src/`.
+- **Package layout:** there is **no package**, and since #170 the runtime tree *is* the payload.
+  `plugins/dev-loop/` holds `skills/dev-loop/` (engine + entry point), `commands/` (slash
+  commands), `hooks/` (the one Python file + its JSON wiring), `tools/` (`mutate_verify.py`, which
+  the engine runs by path at runtime), and `.claude-plugin/plugin.json` — Claude Code copies that
+  directory and nothing outside it. `tests/`, the root `.claude-plugin/marketplace.json`, and the
+  root `tools/` (inputs to the harness, no executables) stay at the repo root and do not ship. No
+  build, no dependency manifest, no `src/`.
 
 - **⛔ Route override — "markdown that is product."** A change to any of
-  `skills/dev-loop/loop-engine.md`, `skills/dev-loop/SKILL.md`, or `commands/init-loop.md` is a
-  **`code` route**, never `docs`, however prose-like the diff looks. Same for `hooks/`, `tests/`,
-  `.claude-plugin/`, and `.github/`. These are executed or enforced at runtime.
+  `plugins/dev-loop/skills/dev-loop/loop-engine.md`,
+  `plugins/dev-loop/skills/dev-loop/SKILL.md`, or `plugins/dev-loop/commands/init-loop.md` is a
+  **`code` route**, never `docs`, however prose-like the diff looks. Same for
+  `plugins/dev-loop/hooks/`, `plugins/dev-loop/tools/`, `plugins/dev-loop/.claude-plugin/`,
+  `tests/`, the root `.claude-plugin/`, and `.github/`. These are executed or enforced at runtime.
+  **A path under `plugins/dev-loop/` that the `docs` line below does not name routes `code`** —
+  the payload is the runtime tree, so an unclassified path there is product until shown
+  otherwise.
 
-- **`docs` route — genuinely inert prose only:** `README.md`, `CLAUDE.md`, `LICENSE`, and
+- **`docs` route — genuinely inert prose only:** `README.md` **and its byte-identical payload
+  copy `plugins/dev-loop/README.md`**, which must change in the same commit (`CLAUDE.md` →
+  Branching & PR flow); `CLAUDE.md`; `LICENSE` and `plugins/dev-loop/LICENSE`; and
   typo/link/formatting fixes anywhere. Mirrors `CLAUDE.md` → Branching & PR flow.
   **Note:** `CLAUDE.md`'s "direct to `main`" exception is for *ad-hoc human* edits and does **not**
   apply to the loop — a `docs`-routed issue still goes commit → PR → light review. The loop never
@@ -155,11 +167,14 @@ local path is the whole story.
 `/security-review` is model-invocable, so it needs no inline fan-out (unlike `CODE_REVIEW`, whose
 fan-out is a design choice — §1).
 
-- **Run the local `/security-review`** when the diff touches `hooks/` — `guard_append_only.py` parses
-  untrusted-shaped input (a hook event on stdin) and compiles regexes from a config file. That is the
-  repo's only executable attack surface.
-- **Skip** for changes confined to `skills/`, `commands/`, `tests/`, `.claude-plugin/`, `README.md`,
-  or `CLAUDE.md` — no runtime surface. Journal the skip and why.
+- **Run the local `/security-review`** when the diff touches `plugins/dev-loop/hooks/` —
+  `guard_append_only.py` parses untrusted-shaped input (a hook event on stdin) and compiles
+  regexes from a config file, and it ships to every consumer.
+- **Skip only** when the change is confined to `plugins/dev-loop/skills/`,
+  `plugins/dev-loop/commands/`, `plugins/dev-loop/.claude-plugin/`, the root `.claude-plugin/`,
+  `tests/`, `README.md` (either copy), or `CLAUDE.md` — no runtime surface. **Anything this list
+  does not name runs the review, including a path it does not recognise; if you cannot tell, run
+  it.** Journal the skip and why.
 - **Trust level of `id_pattern` is repo-local committed config, not attacker input.** This bound is
   stated in `README.md` → "What the loop can do to your repo"; a change to it updates both.
 - ⚠ A change to the *engine's own gating posture* is not a security-surface change in the
