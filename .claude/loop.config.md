@@ -97,9 +97,10 @@ wrong. Skip for pure `README.md`/`LICENSE` edits.
   `plugins/dev-loop/` holds `skills/dev-loop/` (engine + entry point), `commands/` (slash
   commands), `hooks/` (the one Python file + its JSON wiring), `tools/` (`mutate_verify.py`, which
   the engine runs by path at runtime), and `.claude-plugin/plugin.json` — Claude Code copies that
-  directory and nothing outside it. `tests/`, the root `.claude-plugin/marketplace.json`, and the
-  root `tools/` (inputs to the harness, no executables) stay at the repo root and do not ship. No
-  build, no dependency manifest, no `src/`.
+  directory and nothing outside it. `tests/`, the root `.claude-plugin/marketplace.json`, the
+  root `tools/` (inputs to the harness, no executables), and `plugins/CLAUDE.md` — maintainer
+  notes deliberately one level *above* the payload — stay outside it and do not ship. No build,
+  no dependency manifest, no `src/`.
 
 - **⛔ Route override — "markdown that is product."** A change to any of
   `plugins/dev-loop/skills/dev-loop/loop-engine.md`,
@@ -113,7 +114,8 @@ wrong. Skip for pure `README.md`/`LICENSE` edits.
 
 - **`docs` route — genuinely inert prose only:** `README.md` **and its byte-identical payload
   copy `plugins/dev-loop/README.md`**, which must change in the same commit (`CLAUDE.md` →
-  Branching & PR flow); `CLAUDE.md`; `LICENSE` and `plugins/dev-loop/LICENSE`; and
+  Branching & PR flow); the three maintainer `CLAUDE.md` files — the root one, `tests/CLAUDE.md`
+  and `plugins/CLAUDE.md`, none of which ships; `LICENSE` and `plugins/dev-loop/LICENSE`; and
   typo/link/formatting fixes anywhere. Mirrors `CLAUDE.md` → Branching & PR flow.
   **Note:** `CLAUDE.md`'s "direct to `main`" exception is for *ad-hoc human* edits and does **not**
   apply to the loop — a `docs`-routed issue still goes commit → PR → light review. The loop never
@@ -172,7 +174,8 @@ fan-out is a design choice — §1).
   regexes from a config file, and it ships to every consumer.
 - **Skip only** when the change is confined to `plugins/dev-loop/skills/`,
   `plugins/dev-loop/commands/`, `plugins/dev-loop/.claude-plugin/`, the root `.claude-plugin/`,
-  `tests/`, `README.md` (either copy), or `CLAUDE.md` — no runtime surface. **Anything this list
+  `tests/`, `README.md` (either copy), or any of the three maintainer `CLAUDE.md` files — no
+  runtime surface. **Anything this list
   does not name runs the review, including a path it does not recognise; if you cannot tell, run
   it.** Journal the skip and why.
 - **Trust level of `id_pattern` is repo-local committed config, not attacker input.** This bound is

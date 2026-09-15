@@ -81,24 +81,26 @@ it is maintainer-side and does not ship.
 claude-code-loop/
 ├── .claude-plugin/
 │   └── marketplace.json     # the marketplace index; repo root; does NOT ship
-├── plugins/dev-loop/        # <- THE PAYLOAD. `source` points here; this is all that ships
-│   ├── .claude-plugin/
-│   │   └── plugin.json      # the plugin manifest (each .claude-plugin/ holds ONLY manifests)
-│   ├── skills/
-│   │   └── dev-loop/
-│   │       ├── SKILL.md         # thin orchestrator entry point (reads the one below)
-│   │       └── loop-engine.md   # the generic engine: pipeline + all semantics
-│   ├── hooks/
-│   │   ├── hooks.json           # wires the PreToolUse guard via ${CLAUDE_PLUGIN_ROOT}
-│   │   ├── guard_append_only.py # append-only guard (config-driven; stdlib only)
-│   │   └── loop.append-guard.example.json  # sample per-project protection registry
-│   ├── commands/
-│   │   └── init-loop.md         # /init-loop onboarding scaffolder
-│   ├── tools/
-│   │   └── mutate_verify.py     # mutation harness the acceptance gate runs by path
-│   ├── README.md            # a copy of the front-door README -- see below
-│   └── LICENSE              # duplicated, not symlinked -- see below
-├── tests/                   # stdlib unittest suite; does NOT ship
+├── plugins/
+│   ├── CLAUDE.md            # engine-editing notes; OUTSIDE the payload, so does NOT ship
+│   └── dev-loop/            # <- THE PAYLOAD. `source` points here; this is all that ships
+│       ├── .claude-plugin/
+│       │   └── plugin.json      # the plugin manifest (each .claude-plugin/ holds ONLY manifests)
+│       ├── skills/
+│       │   └── dev-loop/
+│       │       ├── SKILL.md         # thin orchestrator entry point (reads the one below)
+│       │       └── loop-engine.md   # the generic engine: pipeline + all semantics
+│       ├── hooks/
+│       │   ├── hooks.json           # wires the PreToolUse guard via ${CLAUDE_PLUGIN_ROOT}
+│       │   ├── guard_append_only.py # append-only guard (config-driven; stdlib only)
+│       │   └── loop.append-guard.example.json  # sample per-project protection registry
+│       ├── commands/
+│       │   └── init-loop.md         # /init-loop onboarding scaffolder
+│       ├── tools/
+│       │   └── mutate_verify.py     # mutation harness the acceptance gate runs by path
+│       ├── README.md            # a copy of the front-door README -- see below
+│       └── LICENSE              # duplicated, not symlinked -- see below
+├── tests/                   # stdlib unittest suite + its own CLAUDE.md; does NOT ship
 ├── tools/mutation-specs/    # hand-run harness self-check; does NOT ship
 ├── docs/research/           # the research notebook; does NOT ship
 ├── .github/workflows/       # CI: the suite on Python 3.9-3.13; does NOT ship
