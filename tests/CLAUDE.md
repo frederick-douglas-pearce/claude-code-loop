@@ -6,9 +6,21 @@ guard, and the ceiling on what a test over prose can ever assert. Run it with
 
 ## What is and isn't covered
 
-Three modules, and the split between them matters:
+Four modules, and the split between them matters:
 
 - **`tests/test_guard_append_only.py`** — behavior of the guard hook.
+- **`tests/test_posts_frontmatter.py`** — the frontmatter contract for `posts/`, the blog
+  series sources (`posts/README.md` states it in prose; this makes it a rule). Structural only:
+  field presence, value shape, one string equalling another — never whether a post is any good,
+  reads human, or is true. Those three are **attested by a frontmatter field** rather than
+  checked, which is the same move `CLAUDE.md` prescribes when a claim's truth is beyond a guard's
+  reach. Two things about it are load-bearing. The field set is an **exact-set** comparison, not a
+  containment check, so a typo'd key (`claims_verifed`) fails instead of silently replacing the
+  field it shadows. And `CheckerBatteryTests` exists because **every other assertion in the module
+  passes vacuously while `posts/` is empty** — it runs the checker against synthetic posts each
+  wrong in one way and asserts the complaint *names that thing*, so a rule that stops firing fails
+  there rather than being covered for by a neighbour. Deleting that battery leaves a check that
+  cannot fail, which is the defect two entries in this repo's own blog corpus are about.
 - **`tests/test_mutate_verify.py`** — behavior of `plugins/dev-loop/tools/mutate_verify.py`, the
   mutation harness.
   Added by #60, and the reason it exists is worth keeping: the prose version of this apparatus could
