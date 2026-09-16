@@ -345,6 +345,7 @@ _PAYLOAD_INVENTORY = frozenset({
 _PAYLOAD_MUST_NOT_CONTAIN = (
     "tests",
     "docs",
+    "posts",
     ".github",
     ".claude",
     "CLAUDE.md",

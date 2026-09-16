@@ -190,6 +190,16 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
   it. Both shipped directories are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both
   are **stdlib-only**, for the same reason — they execute under bare `python3` in a consumer's
   environment.
+- **`posts/` holds the blog series sources and does not ship.** Markdown for the
+  `claude-code-loop` series, published to the Pages site that two sibling repos already publish
+  into. The boundary with `social/` is what matters: `social/` is **gitignored working state** —
+  the candidate ledger, the scout, the series outline, drafts — while `posts/` is committed
+  deliverable. A file crosses over when it is ready to be reviewed as publishable.
+  `posts/README.md` is the frontmatter contract and `tests/test_posts_frontmatter.py` enforces it,
+  so a post is gated by the same CI run as the plugin. Three frontmatter fields attest to manual
+  steps (Claude Code version verified, humanizer pass, claims verified); each guard checks that an
+  attestation was **made**, never that the work behind it was done well — the distinction
+  `CLAUDE.md` draws everywhere else between a coupling's identity and a proposition's truth.
 - `${CLAUDE_PLUGIN_ROOT}` (this installed plugin) and `${CLAUDE_PROJECT_DIR}` (the consuming repo)
   are not interchangeable — the engine and hook both depend on the distinction.
 - The loop ledger (`queue.md`, `progress.md`, `issue-<N>.plan.md`) lives under the *consuming*
@@ -277,7 +287,7 @@ narrowly — the boundary is *what the file does*, not its extension:
 
 | Direct to `main` | Must go through a PR |
 |---|---|
-| the three maintainer `CLAUDE.md` files (root, `tests/`, `plugins/`), the root `LICENSE` | **`README.md`** (see below), anything in `plugins/dev-loop/` (the whole payload — skills, commands, hooks, tools, `plugin.json`, **and the payload's own `README.md` and `LICENSE`**), `tests/` (its code, not its `CLAUDE.md`), `.github/`, `.claude/`, `.claude-plugin/` |
+| the three maintainer `CLAUDE.md` files (root, `tests/`, `plugins/`), the root `LICENSE` | **`README.md`** (see below), anything in `plugins/dev-loop/` (the whole payload — skills, commands, hooks, tools, `plugin.json`, **and the payload's own `README.md` and `LICENSE`**), `tests/` (its code, not its `CLAUDE.md`), `posts/`, `.github/`, `.claude/`, `.claude-plugin/` |
 | typo / link / formatting fixes anywhere **except** `README.md` and `plugins/dev-loop/` | any change to runtime behavior |
 
 **The maintainer notes are split across three files and none of them ships.** The root `CLAUDE.md`
