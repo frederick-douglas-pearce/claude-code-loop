@@ -193,8 +193,11 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
 - **`posts/` holds the blog series sources and does not ship.** Markdown for the
   `claude-code-loop` series, published to the Pages site that two sibling repos already publish
   into. The boundary with `social/` is what matters: `social/` is **gitignored working state** —
-  the candidate ledger, the scout, the series outline, drafts — while `posts/` is committed
-  deliverable. A file crosses over when it is ready to be reviewed as publishable.
+  the candidate ledger, the scout, the series outline, the research evidence base, drafts — while
+  `posts/` is committed deliverable. A file crosses over when it is ready to be reviewed as
+  publishable. **`social/README.md` indexes that working state, and it is the thing to read first
+  when picking the series back up**: gitignored files leave no trace in git history, so nothing
+  else will tell you they exist or which one is authoritative for what.
   `posts/README.md` is the frontmatter contract and `tests/test_posts_frontmatter.py` enforces it,
   so a post is gated by the same CI run as the plugin. Three frontmatter fields attest to manual
   steps (Claude Code version verified, humanizer pass, claims verified); each guard checks that an
