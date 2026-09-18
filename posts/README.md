@@ -1,7 +1,7 @@
 # posts/
 
-Markdown sources for the **claude-code-loop** blog series — working title *"The Team You
-Didn't Hire."* Modelled on [`claude-code-sessions/posts/`](https://github.com/frederick-douglas-pearce/claude-code-sessions/tree/main/posts),
+Markdown sources for the **claude-code-loop** blog series, *"A Cross-Functional Team of
+One."* Modelled on [`claude-code-sessions/posts/`](https://github.com/frederick-douglas-pearce/claude-code-sessions/tree/main/posts),
 which publishes into the same Pages `_posts/` namespace.
 
 **These are sources, not drafts.** Work in progress lives in `social/` (gitignored). A file
