@@ -342,6 +342,22 @@ _PAYLOAD_INVENTORY = frozenset({
 # the inventory above, and kept deliberately: this is the assertion that still fails if the
 # inventory itself is widened to admit one of them, which is the one edit the inventory
 # cannot object to.
+#
+# **The membership criterion is "confusable *into* shipping", NOT "does not ship."** The
+# default-deny inventory above is already the whole guard for everything that does not ship --
+# it is file-exact and fails on any unlisted path. What it cannot catch is the *coordinated*
+# wrong edit: a file copied into the payload AND added to ``_PAYLOAD_INVENTORY`` in one go.
+# So a path earns a place here only when a maintainer could plausibly talk themselves into
+# making that edit for it.
+#
+# This tuple is therefore curated rather than exhaustive: most paths that do not ship are
+# absent from it, and that is correct. **Do not "complete" it by adding every non-shipping
+# root file** -- the entry below is the worked example of what does and does not qualify. That
+# would
+# redefine membership as "non-shipping root file", which is an enumeration of the unsafe set:
+# it must then grow forever, and it fails open the first time someone forgets to extend it.
+# ``CLAUDE.md`` -> "Writing product prose: default-deny, never enumeration" is the same trap
+# one level up.
 _PAYLOAD_MUST_NOT_CONTAIN = (
     "tests",
     "docs",
@@ -351,6 +367,14 @@ _PAYLOAD_MUST_NOT_CONTAIN = (
     "CLAUDE.md",
     ".gitignore",
     ".claude-plugin/marketplace.json",
+    # Confusable into shipping, by the criterion above: ``LICENSE`` IS a legitimate inventory
+    # entry (the payload's own MIT copy), so this sits one token from something that ships and
+    # "licences belong with the thing they license" is an argument someone could reach for.
+    # It is CC-BY and covers ``posts/`` only, which ships nowhere. Its companion
+    # ``AI-DISCLOSURE.md`` is deliberately NOT listed: nothing in the inventory resembles it,
+    # so the default-deny inventory is already the whole guard for it. That asymmetry is the
+    # criterion working, not an oversight.
+    "LICENSE-prose.md",
 )
 
 
