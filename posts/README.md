@@ -9,6 +9,17 @@ lands here when it is ready to be reviewed as a publishable post, and it is comm
 any other deliverable. The series plan — running order, seats, receipts per post — is
 `social/series-outline.md`.
 
+## Licence and AI disclosure
+
+**Prose in this directory is CC-BY-4.0** — see [`LICENSE-prose.md`](../LICENSE-prose.md). That
+grant is closed at `posts/`: it does not reach this README, the rest of the repository's prose, or
+any code. Code stays MIT under [`LICENSE`](../LICENSE).
+
+**[`AI-DISCLOSURE.md`](../AI-DISCLOSURE.md)** states how these posts are produced — drafted by the
+`marketer` agent, edited by a human, and gated by the attestation fields below — and who stands
+behind every published claim. It names the tool and the model family; it deliberately pins no
+version, because the per-post `claude_code_version_verified` field is where a version belongs.
+
 ## Frontmatter convention
 
 Every post requires this block. **Every field is required and must be non-empty**;
@@ -115,5 +126,3 @@ Stated plainly so nobody assumes a pipeline exists:
   that the `og_card_source` path stays inside the repo. **It does not check that the file
   exists**, because the card is rendered into `social/`, which is gitignored. A post can
   therefore pass CI and still fail a future sync.
-- **No prose licence or AI-disclosure file.** The sessions repo carries `LICENSE-prose.md` and
-  `AI-DISCLOSURE.md`; this repo's `LICENSE` covers code. Decide before the first post ships.
