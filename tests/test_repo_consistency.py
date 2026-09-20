@@ -342,6 +342,15 @@ _PAYLOAD_INVENTORY = frozenset({
 # the inventory above, and kept deliberately: this is the assertion that still fails if the
 # inventory itself is widened to admit one of them, which is the one edit the inventory
 # cannot object to.
+#
+# The membership criterion is **"confusable into shipping"**, not "does not ship" -- the
+# default-deny ``_PAYLOAD_INVENTORY`` above already guards the latter, and completing this
+# tuple with every non-shipping root file would turn a curated backstop into an enumeration
+# of the unsafe set. ``LICENSE-prose.md`` qualifies on adjacency: ``LICENSE`` *does* ship, the
+# two sit side by side at the root under near-identical names, and the payload's own
+# ``LICENSE`` is deliberately the *unscoped* MIT text (D013) -- so "keep the licences in step"
+# is exactly the helpful edit that would carry a CC-BY grant into a directory holding no
+# ``posts/``. ``AI-DISCLOSURE.md`` has no such adjacency and is deliberately absent.
 _PAYLOAD_MUST_NOT_CONTAIN = (
     "tests",
     "docs",
@@ -349,6 +358,7 @@ _PAYLOAD_MUST_NOT_CONTAIN = (
     ".github",
     ".claude",
     "CLAUDE.md",
+    "LICENSE-prose.md",
     ".gitignore",
     ".claude-plugin/marketplace.json",
 )

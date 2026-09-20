@@ -247,3 +247,88 @@ mapping, and that is the only copy.
 **What was NOT done, deliberately.** The ledger run directory `.claude/loop/v0.2.1/` keeps its name.
 It is a label, resume scans the ledger root, and renaming a live run directory is the larger risk —
 the same reasoning its own header already records for the v0.2.1→v0.2.2 move.
+
+---
+
+## D013 — 2026-09-20 — The prose licence binds at the `posts/` directory, and the two `LICENSE` files diverge deliberately
+
+**Context.** #189 is the fourth attempt at a CC-BY-4.0 licence for `posts/`; three prior drafts were
+rejected on PR #188, each fixing the previous round's defects and producing new ones of the same
+class — an inversion applied to some sentences and not others. The issue named two decisions that
+had to be settled *before* drafting, because both prior attempts drafted first. They are settled
+here.
+
+### 1. The scope clause goes in the root `LICENSE`, and the GitHub label changes
+
+**Measured first, not assumed.** GitHub's licence detection reads the root `LICENSE` and matches it
+against templates under a confidence threshold, so any operative scoping text drops it below:
+
+| repo | root `LICENSE` | `gh api repos/.../license` |
+|---|---|---|
+| `claude-code-loop` (before this change) | pristine MIT | `mit` / MIT License |
+| `claude-code-sessions` | MIT + trailing `**Scope:**` block | `other` / NOASSERTION |
+| `us-presidential-vote-analysis` | MIT + trailing `**Scope:**` block | `other` / NOASSERTION |
+
+**Decision: accept it.** The root `LICENSE` carries the scope clause and this repository's sidebar
+label becomes **`Other`/`NOASSERTION`**, knowingly.
+
+**Why the alternative under-protects, which is the whole of the argument.** Leaving `LICENSE`
+pristine does not merely state the boundary less prominently — it leaves the MIT grant *covering*
+`posts/`. MIT grants unrestricted rights over "the Software and associated documentation files", so
+a recipient of a post could take the MIT grant and owe **no attribution at all**; a CC-BY file
+elsewhere adds a second, *more permissive* escape rather than removing the first. Attribution is the
+instrument's only purpose, so the alternative makes it optional. Binding requires the MIT grant
+itself to exclude `posts/`, and that is the edit that costs the label.
+
+**The cost, stated plainly.** `Other`/`NOASSERTION` is sidebar metadata. The files are unchanged in
+force either way, `LICENSE` still reads as standard MIT to a human, and the change is **reversible**
+— delete the clause and the label returns. The considered counter-argument is that this repo is a
+plugin marketplace front door and an adopter may read `Other` as licensing risk; it was weighed and
+the binding grant was judged worth more. Both sibling repos already sit at `Other` **without having
+chosen it**, which is worth telling them regardless.
+
+### 2. All of `posts/` is covered, with no exception — on the PATH axis, token `posts/`
+
+**Decision: the CC-BY grant covers everything in the `posts/` directory, whatever its format,
+including `posts/README.md`. There is no exception.**
+
+**The boundary token is fixed here so downstream wording cannot drift from it.** The MIT carve-out
+and the CC-BY grant both cut on the **path axis at the literal token `posts/`** — "everything in the
+`posts/` directory" against "everything except the `posts/` directory". **No sentence in either file
+describes the boundary by content type** — not "prose", not "essays", not "the blog series". That is
+what makes the partition provable by reading the two files against each other instead of asserted in
+either one, and it is exactly how attempt 3 died: `LICENSE` carved out *"the blog-series **prose**
+under `posts/`"* while `LICENSE-prose.md` granted *"everything committed under `posts/`, whatever its
+format"*. #180 will put og-cards and images under `posts/`, so a content-type cut leaks immediately.
+
+**Why no exception, and note that decision 1 forces it.** Both prior attempts excluded
+`posts/README.md` and neither could say it operatively; round 2 then found that *"everything under
+`posts/` except `posts/README.md`"* is a sweeping grant minus an exclusion, which rots when a second
+non-series file lands there. **The exception is the defect.** And under decision 1 the root MIT is
+itself scoped to *"everything except `posts/`"* — so an exception on the CC-BY side would leave
+`posts/README.md` assigned to **neither licence**, an outright partition gap rather than merely rot.
+
+**The honest cost:** this is *over*-inclusion, and the attempt-1 architect ruling held that
+over-inclusion is the dangerous direction for a grant because CC-BY-ing MIT material is hard to claw
+back. It does not bite here for reasons specific to this file rather than general:
+`posts/README.md` is licensor-authored, is not code, never ships, and CC-BY over it costs a copier
+one attribution line. Scoping by filename convention (`posts/YYYY-MM-DD-*.md`) was considered and
+rejected — also exception-free, but keyed to `.md`, so it under-covers the assets #180 introduces.
+
+### 3. `plugin.json` stays `MIT`, and that is a conclusion rather than an omission
+
+`plugins/dev-loop/.claude-plugin/plugin.json`'s `"license": "MIT"` is **unchanged, deliberately**:
+the payload is `plugins/dev-loop/`, which contains no `posts/` directory, so the payload is
+genuinely all-MIT. `.claude-plugin/marketplace.json` carries no `license` field. Recorded because
+the point of this exercise is that no licence assertion goes unexamined.
+
+### 4. Two forward notes
+
+- **When the slim consumer README lands** and `plugins/dev-loop/README.md` stops mirroring the front
+  door, the payload copy must **not** inherit the root's `posts/` scope prose. The payload has no
+  `posts/` to scope.
+- **E2's future guard must never be written as byte-identity.** Nothing pins the two `LICENSE` files
+  today (verified: `"LICENSE"` appears in `tests/` only inside `_PAYLOAD_INVENTORY`), so this
+  divergence breaks nothing now. If such a guard is ever added it has to encode a **relationship** —
+  payload `LICENSE` == root `LICENSE` minus the `posts/` scope clause — because equality is now
+  false by design.

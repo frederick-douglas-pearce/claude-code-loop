@@ -19,3 +19,14 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+**Scope:** This MIT licence applies to everything in this repository **except** the `posts/`
+directory, which is licensed under CC BY 4.0 instead; see [LICENSE-prose.md](LICENSE-prose.md). The
+two grants cut at the same directory, so no file in this repository is left unassigned and none is
+covered by both.
+
+The plugin payload carries its own MIT licence file at `plugins/dev-loop/LICENSE`. That file is
+pristine MIT with no scope clause, deliberately: the payload is `plugins/dev-loop/`, which contains
+no `posts/` directory, so nothing a consumer receives is CC-BY-licensed.

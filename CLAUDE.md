@@ -290,7 +290,7 @@ narrowly — the boundary is *what the file does*, not its extension:
 
 | Direct to `main` | Must go through a PR |
 |---|---|
-| the three maintainer `CLAUDE.md` files (root, `tests/`, `plugins/`), the root `LICENSE` | **`README.md`** (see below), anything in `plugins/dev-loop/` (the whole payload — skills, commands, hooks, tools, `plugin.json`, **and the payload's own `README.md` and `LICENSE`**), `tests/` (its code, not its `CLAUDE.md`), `posts/`, `.github/`, `.claude/`, `.claude-plugin/` |
+| the three maintainer `CLAUDE.md` files (root, `tests/`, `plugins/`) | **`README.md`** (see below), anything in `plugins/dev-loop/` (the whole payload — skills, commands, hooks, tools, `plugin.json`, **and the payload's own `README.md` and `LICENSE`**), `tests/` (its code, not its `CLAUDE.md`), `posts/`, `.github/`, `.claude/`, `.claude-plugin/`, **the root `LICENSE` and `LICENSE-prose.md`** |
 | typo / link / formatting fixes anywhere **except** `README.md` and `plugins/dev-loop/` | any change to runtime behavior |
 
 **The maintainer notes are split across three files and none of them ships.** The root `CLAUDE.md`
