@@ -57,8 +57,7 @@ What the check can do is make an omission visible before merge instead of after 
 ## What that means per surface
 
 **[`posts/`](posts/)** — blog-series prose. Drafted with the `marketer` agent against a brief,
-edited by me, and gated by the frontmatter attestations described above. Licensed CC-BY-4.0; see
-[LICENSE-prose.md](LICENSE-prose.md).
+edited by me, and gated by the frontmatter attestations described above.
 
 **[`plugins/dev-loop/`](plugins/dev-loop/)** — the plugin payload, and the only directory that ships
 to a consumer. Most of it is markdown an agent executes, which means its correctness properties are

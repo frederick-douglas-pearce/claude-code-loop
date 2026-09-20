@@ -9,13 +9,7 @@ lands here when it is ready to be reviewed as a publishable post, and it is comm
 any other deliverable. The series plan — running order, seats, receipts per post — is
 `social/series-outline.md`.
 
-## Licence and AI disclosure
-
-**Posts in this directory are CC-BY-4.0** — see [`LICENSE-prose.md`](../LICENSE-prose.md). The
-grant covers everything committed here whatever its format, with one exception written into the
-grant itself: **this README is not covered**, because it is the frontmatter contract rather than
-series prose. Everything outside `posts/`, and this README, stays MIT under
-[`LICENSE`](../LICENSE), whose scope clause draws the same line from the other side.
+## AI disclosure
 
 **[`AI-DISCLOSURE.md`](../AI-DISCLOSURE.md)** states how these posts are produced — drafted by the
 `marketer` agent, edited by a human, and gated by the attestation fields below — and who stands
@@ -122,6 +116,10 @@ Stated plainly so nobody assumes a pipeline exists:
 
 - **No publisher.** The sessions repo syncs to Pages via `tooling/publish-to-pages.py` and a
   `pages-sync.yml` workflow. Nothing here does. Publishing is manual until that is ported.
+- **No prose licence.** Everything here is MIT under [`LICENSE`](../LICENSE), which is a software
+  licence and says nothing sensible about an essay. A CC-BY-4.0 grant scoped to `posts/` is
+  tracked on [#183](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/183) and
+  must land before the first post ships.
 - **`og_image` / `og_card_source` are checked for shape, not resolvability.** The sessions
   guard reuses the publisher's own validator so it cannot drift from what publish enforces.
   With no publisher here, this guard checks that the fields are present and well-formed and
