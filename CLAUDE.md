@@ -293,6 +293,13 @@ narrowly — the boundary is *what the file does*, not its extension:
 | the three maintainer `CLAUDE.md` files (root, `tests/`, `plugins/`) | **`README.md`** (see below), anything in `plugins/dev-loop/` (the whole payload — skills, commands, hooks, tools, `plugin.json`, **and the payload's own `README.md` and `LICENSE`**), `tests/` (its code, not its `CLAUDE.md`), `posts/`, `.github/`, `.claude/`, `.claude-plugin/`, **the root `LICENSE` and `LICENSE-prose.md`** |
 | typo / link / formatting fixes anywhere **except** `README.md` and `plugins/dev-loop/` | any change to runtime behavior |
 
+**Row 1 wins wherever it names a path, and that is stated here once rather than re-listed in row
+2.** The second row's *"anywhere"* is bounded by the first: a path in the right-hand column goes
+through a PR whatever the edit looks like, typo and formatting fixes included. This is not a carve-out
+for the licence files — it is equally true of `posts/`, `.github/`, `.claude/` and `tests/`, which
+row 2 does not name either. Re-listing them there would be the enumerable-assertion trap this file
+documents, one directory behind the tree every time.
+
 **The maintainer notes are split across three files and none of them ships.** The root `CLAUDE.md`
 is the orientation every session loads; `tests/CLAUDE.md` covers what the suite guards and the
 ceiling on any test over prose; `plugins/CLAUDE.md` carries the engine's invariants and sits one

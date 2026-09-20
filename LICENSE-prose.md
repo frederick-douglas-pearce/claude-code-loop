@@ -1,7 +1,8 @@
-# Prose licence: CC BY 4.0 for everything in `posts/`
+# Prose licence: CC BY 4.0 for everything under `posts/`
 
-**This licence applies to everything in the `posts/` directory of this repository, whatever its
-format. It applies to nothing outside that directory.**
+**This licence applies to everything in the top-level `posts/` directory of this repository and
+everything under it, at any depth, whatever its format. It applies to nothing outside that
+directory.**
 
 Copyright © 2026 Frederick Douglas Pearce.
 
@@ -31,9 +32,10 @@ This summary is not a substitute for the licence. The full legal text is at
 
 ## Scope
 
-**The boundary is a directory, and there are no exceptions to it.** Everything in `posts/` is
-covered from the moment it lands — a post, an image, a diagram, a data file, and this repository's
-`posts/README.md` alike. A file added to `posts/` later needs no amendment here to be covered.
+**The boundary is a directory, and there are no exceptions to it.** Everything under `posts/` is
+covered from the moment it lands — a post, an image, a diagram, a data file, anything in a
+subdirectory at any depth, and this repository's `posts/README.md` alike. A file added under
+`posts/` later needs no amendment here to be covered.
 Nothing outside `posts/` is covered, whatever it is made of. A licence written for *"the prose in
 this repository"* would reach `docs/research/` and the three `CLAUDE.md` files; this one is not
 written that way and does not reach them.
@@ -46,13 +48,13 @@ checked by looking at a path.
 ## Everything else
 
 Everything in this repository outside the `posts/` directory is licensed under the MIT licence; see
-[LICENSE](LICENSE), whose scope clause cuts at the same directory from the other side. The two
-grants meet exactly at `posts/`, so no file in this repository is left unassigned and none is
+[LICENSE](LICENSE), whose scope clause defines *"the Software"* to exclude that same directory. The
+two grants meet exactly at `posts/`, so no file in this repository is left unassigned and none is
 covered by both.
 
-The plugin payload carries its own copy of the MIT licence at `plugins/dev-loop/LICENSE`, and that
-copy is pristine MIT with no scope clause — deliberately. The payload is `plugins/dev-loop/`, which
-contains no `posts/` directory, so nothing a consumer receives is licensed under this file.
+The plugin payload carries its own MIT licence file at `plugins/dev-loop/LICENSE`, governing
+`plugins/dev-loop/` and nothing outside it. That file is pristine MIT with no scope clause, because
+that directory contains no `posts/` — so nothing a consumer receives is licensed under this file.
 
 ## AI use
 

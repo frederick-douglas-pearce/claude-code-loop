@@ -322,13 +322,20 @@ the payload is `plugins/dev-loop/`, which contains no `posts/` directory, so the
 genuinely all-MIT. `.claude-plugin/marketplace.json` carries no `license` field. Recorded because
 the point of this exercise is that no licence assertion goes unexamined.
 
-### 4. Two forward notes
+### 4. Forward notes
 
 - **When the slim consumer README lands** and `plugins/dev-loop/README.md` stops mirroring the front
   door, the payload copy must **not** inherit the root's `posts/` scope prose. The payload has no
   `posts/` to scope.
+- **After merge, re-run `gh api repos/frederick-douglas-pearce/claude-code-loop/license` and record
+  the result here.** This is AC5's second half and it is unobservable before merge, since detection
+  reads the default branch. **If it still reports `mit`, then `README.md`'s licence-detection
+  paragraph and its byte-identical payload copy are false and must be corrected** — and #190's F1
+  reasoning weakens with it, because a narrowing GitHub still reads as pristine MIT is the weakest
+  position the clause can be in. Written here rather than left to recollection: #189 closes on
+  merge, and a deferral without a capture mechanism is just a delay.
 - **E2's future guard must never be written as byte-identity.** Nothing pins the two `LICENSE` files
-  today (verified: `"LICENSE"` appears in `tests/` only inside `_PAYLOAD_INVENTORY`), so this
+  today, so this
   divergence breaks nothing now. If such a guard is ever added it has to encode a **relationship** —
   payload `LICENSE` == root `LICENSE` minus the `posts/` scope clause — because equality is now
   false by design.

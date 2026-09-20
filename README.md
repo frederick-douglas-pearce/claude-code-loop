@@ -150,7 +150,7 @@ target sits outside the plugin directory is *silently skipped* when the plugin i
 the cache — not rejected — so a symlinked licence would simply be absent, with nothing saying
 so. And it is **pristine MIT where the root one is scoped**: the root `LICENSE` excludes the
 `posts/` directory, which is licensed CC BY 4.0 instead, but the payload is `plugins/dev-loop/`
-and contains no `posts/` — so the payload's copy has nothing to scope, and nothing a consumer
+and contains no `posts/` — so the payload's file has nothing to scope, and nothing a consumer
 receives is CC-BY-licensed. **The two files diverge deliberately and are not out of sync.**
 
 ## What the loop can do to your repo
@@ -649,19 +649,21 @@ semantics.
 
 ## License
 
-**Two licences, cutting at one directory.** Everything in the `posts/` directory is licensed
-**CC BY 4.0** — see [LICENSE-prose.md](LICENSE-prose.md). Everything else is **MIT** © 2026
-Frederick Douglas Pearce — see [LICENSE](LICENSE). The two grants meet exactly at `posts/`, so no
-file in this repository is left unassigned and none is covered by both.
+**Two licences, cutting at one directory.** Everything under the top-level `posts/` directory is
+licensed **CC BY 4.0** — see [LICENSE-prose.md](LICENSE-prose.md). Everything else is **MIT** © 2026
+Frederick Douglas Pearce — see [LICENSE](LICENSE), whose scope clause defines *"the Software"* to
+exclude that directory. The two grants meet exactly at `posts/`, so no file in this repository is
+left unassigned and none is covered by both.
 
-The payload carries its own MIT licence file at `plugins/dev-loop/LICENSE`, because a licence
-outside that directory would not travel into a consumer's plugin cache. That file is pristine MIT
-with no scope clause: `posts/` is not part of the payload, so **nothing a consumer receives is
-CC-BY-licensed.**
+The payload carries its own MIT licence file at `plugins/dev-loop/LICENSE`, governing
+`plugins/dev-loop/` and nothing outside it — a licence outside that directory would not travel into
+a consumer's plugin cache. That file is pristine MIT with no scope clause: `posts/` is not part of
+the payload, so **nothing a consumer receives is CC-BY-licensed.**
 
-GitHub's licence detection reads the root `LICENSE` and does not recognise a scoped one, so this
-repository's sidebar reads **Other** rather than MIT. That is expected rather than a mistake — the
-scope clause is what makes the boundary above bind.
+GitHub's licence detection matches the root `LICENSE` against known licence texts and does not
+recognise a scoped one, so a repository whose `LICENSE` carries a scope clause shows **Other** in
+the sidebar rather than the licence it actually grants. That is the cost of making the boundary
+above bind, and it was accepted deliberately.
 
 [AI-DISCLOSURE.md](AI-DISCLOSURE.md) states how this repository's content was produced — the loop
 drafts and gates its own development, the `marketer` agent drafts the posts, and a human owns every
