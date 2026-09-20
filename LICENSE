@@ -19,3 +19,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+**Scope:** This MIT licence applies to everything in this repository **except** the blog-series
+prose under `posts/`, which is licensed CC-BY-4.0; see LICENSE-prose.md. `posts/README.md` is the
+frontmatter contract rather than series prose and stays under this licence.
+
+The plugin payload carries its own copy of this licence at `plugins/dev-loop/LICENSE`. That copy
+needs no scope clause: `posts/` is not part of the payload, so nothing a consumer receives is
+CC-BY-licensed.

@@ -21,10 +21,12 @@ role of AI in the creation process.
 Three things are true at once here, and the third is the one that matters:
 
 - **The loop drafts and gates its own development.** Work on this repository runs through the
-  pipeline in [`plugins/dev-loop/`](plugins/dev-loop/): an issue is planned, reviewed by an
-  architect pass, implemented, reviewed again by adversarial finder passes, security-reviewed,
-  verified against its acceptance criteria — including a mutation pass that breaks the code to check
-  the tests notice — and merged. The loop is both the tool and the subject.
+  pipeline in [`plugins/dev-loop/`](plugins/dev-loop/): every issue is planned, implemented,
+  reviewed by adversarial finder passes, and verified against its acceptance criteria before a
+  human approves the merge. Three further gates — an architect pass, a security review, and a
+  mutation pass that breaks the code to check the tests notice — are applied **per change by the
+  engine's route and trigger rules**, not uniformly, so a given change may be due none of them.
+  The loop is both the tool and the subject.
 - **The `marketer` agent drafts the posts.** Series prose starts as an agent draft against a brief,
   and is edited rather than published as written.
 - **A human owns every published claim.** Neither of the above is a substitute for that, and the
@@ -42,9 +44,9 @@ independently of the thing it describes.
 Where a version actually matters — a post asserting how Claude Code behaves — it is recorded
 **per post**, in that post's frontmatter, under the contract in
 [`posts/README.md`](posts/README.md) and enforced on every CI run by
-[`tests/test_posts_frontmatter.py`](tests/test_posts_frontmatter.py). That file is the single source
-for which attestations a post carries; this one deliberately does not restate the list, because a
-second copy would rot exactly the way a pinned version would.
+[`tests/test_posts_frontmatter.py`](tests/test_posts_frontmatter.py), which enforces them as an
+exact set. `posts/README.md` is where the attestations are stated; this file deliberately does not
+restate the list, because a third copy would rot exactly the way a pinned version would.
 
 **What those attestations do and do not claim** is worth stating here, because it is easy to read
 them as stronger than they are: each records that a manual, judgment-heavy step was *performed*.
@@ -62,13 +64,14 @@ edited by me, and gated by the frontmatter attestations described above. License
 to a consumer. Most of it is markdown an agent executes, which means its correctness properties are
 precision of wording, internal consistency, and fail-safe posture rather than anything a type
 checker would catch. Changes land through pull requests driven by the loop itself, with the gates
-named above. The one Python file that ships to every consumer — the append-only guard hook — and the
-mutation harness beside it are stdlib-only and covered by the suite.
+named above. The Python that ships to every consumer — the append-only guard hook — and the
+mutation harness beside it — two files in all — are stdlib-only and covered by the suite.
 
-**[`tests/`](tests/)** — a stdlib `unittest` suite, no dependencies. It guards **couplings between
-files** — that a parameter the engine reads is one the scaffolder offers, that the payload holds
-exactly its declared inventory — and not semantics. What it cannot guard is stated in
-`tests/CLAUDE.md` rather than assumed.
+**[`tests/`](tests/)** — a stdlib `unittest` suite, no dependencies. It covers the behaviour of the
+two Python files that ship, and it guards **couplings between files** — that a parameter the engine
+reads is one the scaffolder offers, that the payload holds exactly its declared inventory. What it
+does **not** guard is the semantics of the prose that makes up most of the payload, and
+`tests/CLAUDE.md` states that ceiling rather than leaving it assumed.
 
 **[`docs/research/`](docs/research/)** — measurements of the loop's own behaviour, taken from real
 session data rather than from a model's recollection. Findings carry their evidence base, and claims
@@ -81,8 +84,8 @@ including the loop's ledger, is gitignored and never committed.
 
 What the series claims, what the engine's invariants should be, what is safe to publish, and what
 ships in a release are mine. Claude Code drafts, reviews, proposes, measures, and implements. It
-does not decide what ships — and on this repository specifically, it is forbidden from editing the
-configuration that binds its own gates.
+does not decide what ships — and it is forbidden from editing the configuration that binds its own
+gates, which is a hard limit the engine places on every project that runs it, not a local rule.
 
 ## Errors
 

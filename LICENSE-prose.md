@@ -1,10 +1,8 @@
 # Prose licence: CC-BY-4.0
 
-**This licence applies to `posts/`, and nothing else.**
-
-The blog-series prose under [`posts/`](posts/) — markdown text, and any images or diagrams
-committed alongside it — is licensed under the
-[Creative Commons Attribution 4.0 International License (CC-BY-4.0)](https://creativecommons.org/licenses/by/4.0/).
+**This licence applies to everything committed under `posts/`, whatever its format, except
+`posts/README.md` — which is the frontmatter contract rather than series prose and stays under
+MIT. It applies to nothing else in this repository.**
 
 Copyright © 2026 Frederick Douglas Pearce.
 
@@ -18,9 +16,9 @@ You are free to:
 Under the following terms:
 
 - **Attribution** — give appropriate credit to Frederick Douglas Pearce, link to
-  https://github.com/frederick-douglas-pearce/claude-code-loop, and indicate if changes were made.
-  You may do so in any reasonable manner, but not in any way that suggests the licensor endorses
-  you or your use.
+  https://github.com/frederick-douglas-pearce/claude-code-loop, link to this licence
+  (https://creativecommons.org/licenses/by/4.0/), and indicate if changes were made. You may do so
+  in any reasonable manner, but not in any way that suggests the licensor endorses you or your use.
 - **No additional restrictions** — you may not apply legal terms or technological measures that
   legally restrict others from doing anything the licence permits.
 
@@ -28,28 +26,25 @@ Full legal text: https://creativecommons.org/licenses/by/4.0/legalcode
 
 ## Scope
 
-The grant above is **closed**: it reaches `posts/` and stops there. A file this repository gains
-later is **not** covered unless this licence is amended to say so.
+The sentence at the top is the whole of it. A file committed under `posts/` after today is covered
+from the moment it lands, and needs no amendment here.
 
-That direction is deliberate. A licence is a *grant*, so the two ways of getting it wrong are not
-symmetric: granting too much is hard to take back, while granting too little simply leaves a file
-where it already was. So this file names what is licensed rather than listing exceptions to a
-sweeping claim — an exceptions list goes stale in the direction that gives away more than intended.
-
-For orientation only, and **not an exhaustive list** — this licence does **not** cover, for example,
-`docs/research/`, the three maintainer `CLAUDE.md` files, `posts/README.md` (which is the
-frontmatter contract, not series prose), the root `README.md`, or anything under
-`plugins/dev-loop/`. Nothing turns on this paragraph being complete; the grant is the sentence at
-the top.
+It is written as a closed grant with its one exception **inside** it, deliberately. A licence is a
+grant, so its two failure directions are not symmetric: granting too much is hard to take back,
+while granting too little leaves a file exactly where it already was. A list of exclusions kept
+*beside* a grant rots in the dangerous direction — the next thing nobody updated it for gets swept
+in — so this file does not keep one.
 
 ## Everything else
 
-Code and all other content in this repository — including the `plugins/dev-loop/` payload, `tests/`,
-`tools/`, and the CI workflows — is licensed under the MIT licence; see [LICENSE](LICENSE).
+Everything in this repository that this licence does not cover is licensed under the MIT licence;
+see [LICENSE](LICENSE), whose own scope clause draws the same boundary from the other side. The two
+together leave nothing unassigned and nothing doubly assigned.
 
-The plugin payload carries **its own copy** of that MIT licence at `plugins/dev-loop/LICENSE`,
-because the payload is what gets copied into a consumer's plugin cache and a licence outside that
-directory would not travel with it. This file does not ship, and no CC-BY-licensed prose ships.
+The plugin payload carries its own copy of the MIT licence at `plugins/dev-loop/LICENSE`, because
+the payload is what gets copied into a consumer's plugin cache and a licence outside that directory
+would not travel with it. Neither this file nor any CC-BY-licensed material ships: `posts/` is not
+part of the payload.
 
 ## AI use
 

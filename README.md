@@ -108,7 +108,7 @@ claude-code-loop/
 ├── .claude/                 # this repo's dogfood config + internal specs; does NOT ship
 ├── CLAUDE.md                # maintainer instructions for THIS repo; does NOT ship
 ├── .gitignore               # does NOT ship
-├── LICENSE                  # MIT, code; does NOT ship (the payload carries its own copy)
+├── LICENSE                  # MIT + scope clause; does NOT ship (payload carries its own copy)
 ├── LICENSE-prose.md         # CC-BY-4.0, posts/ only; does NOT ship
 ├── AI-DISCLOSURE.md         # how this repo's content was produced; does NOT ship
 └── README.md                # this file: the GitHub front door; a copy ships in the payload
@@ -649,10 +649,10 @@ Dual-licensed, split by directory:
 - **Code, and everything that ships** — MIT © 2026 Frederick Douglas Pearce; see
   [LICENSE](LICENSE). The payload carries its own copy at `plugins/dev-loop/LICENSE`, because a
   licence outside that directory would not travel into a consumer's plugin cache.
-- **Blog-series prose in [`posts/`](posts/)** — CC-BY-4.0; see
-  [LICENSE-prose.md](LICENSE-prose.md). That grant is **closed at `posts/`** and reaches nothing
-  else: not `docs/research/`, not the maintainer `CLAUDE.md` files, not this README. Neither the
-  prose licence nor any CC-BY-licensed prose ships.
+- **Blog-series prose under [`posts/`](posts/)** — CC-BY-4.0; see
+  [LICENSE-prose.md](LICENSE-prose.md). The grant is **closed**: it covers everything committed
+  under `posts/` whatever its format, except `posts/README.md`, and reaches nothing else in the
+  repository. Neither the prose licence nor any CC-BY-licensed material ships.
 
 [AI-DISCLOSURE.md](AI-DISCLOSURE.md) states how this repository's content was produced — the loop
 drafts and gates its own development, the `marketer` agent drafts the posts, and a human owns every

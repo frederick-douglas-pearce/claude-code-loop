@@ -11,9 +11,11 @@ any other deliverable. The series plan — running order, seats, receipts per po
 
 ## Licence and AI disclosure
 
-**Prose in this directory is CC-BY-4.0** — see [`LICENSE-prose.md`](../LICENSE-prose.md). That
-grant is closed at `posts/`: it does not reach this README, the rest of the repository's prose, or
-any code. Code stays MIT under [`LICENSE`](../LICENSE).
+**Posts in this directory are CC-BY-4.0** — see [`LICENSE-prose.md`](../LICENSE-prose.md). The
+grant covers everything committed here whatever its format, with one exception written into the
+grant itself: **this README is not covered**, because it is the frontmatter contract rather than
+series prose. Everything outside `posts/`, and this README, stays MIT under
+[`LICENSE`](../LICENSE), whose scope clause draws the same line from the other side.
 
 **[`AI-DISCLOSURE.md`](../AI-DISCLOSURE.md)** states how these posts are produced — drafted by the
 `marketer` agent, edited by a human, and gated by the attestation fields below — and who stands

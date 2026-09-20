@@ -345,17 +345,18 @@ _PAYLOAD_INVENTORY = frozenset({
 #
 # **The membership criterion is "confusable *into* shipping", NOT "does not ship."** The
 # default-deny inventory above is already the whole guard for everything that does not ship --
-# it is file-exact and fails on any unlisted path. What it cannot catch is the *coordinated*
+# it is file-exact and fails on any unlisted path it looks at (``_payload_files`` skips bytecode;
+# see its docstring). What it cannot catch is the *coordinated*
 # wrong edit: a file copied into the payload AND added to ``_PAYLOAD_INVENTORY`` in one go.
 # So a path earns a place here only when a maintainer could plausibly talk themselves into
 # making that edit for it.
 #
 # This tuple is therefore curated rather than exhaustive: most paths that do not ship are
 # absent from it, and that is correct. **Do not "complete" it by adding every non-shipping
-# root file** -- the entry below is the worked example of what does and does not qualify. That
-# would
-# redefine membership as "non-shipping root file", which is an enumeration of the unsafe set:
-# it must then grow forever, and it fails open the first time someone forgets to extend it.
+# root file** -- the entry below is the worked example of what does and does not qualify.
+# That would redefine membership as "non-shipping root file", which is an enumeration of the
+# unsafe set: it must then grow forever, and it fails open the first time someone forgets to
+# extend it.
 # ``CLAUDE.md`` -> "Writing product prose: default-deny, never enumeration" is the same trap
 # one level up.
 _PAYLOAD_MUST_NOT_CONTAIN = (
