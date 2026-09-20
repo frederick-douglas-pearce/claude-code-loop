@@ -109,6 +109,7 @@ claude-code-loop/
 ├── CLAUDE.md                # maintainer instructions for THIS repo; does NOT ship
 ├── .gitignore               # does NOT ship
 ├── LICENSE                  # does NOT ship (the payload carries its own copy)
+├── AI-DISCLOSURE.md         # how this repo's content was produced; does NOT ship
 └── README.md                # this file: the GitHub front door; a copy ships in the payload
 ```
 
@@ -642,4 +643,14 @@ semantics.
 
 ## License
 
-MIT © 2026 Frederick Douglas Pearce
+MIT © 2026 Frederick Douglas Pearce; see [LICENSE](LICENSE). The payload carries its own copy at
+`plugins/dev-loop/LICENSE`, because a licence outside that directory would not travel into a
+consumer's plugin cache.
+
+**A separate licence for the prose under `posts/` is not in place yet** — tracked on
+[#183](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/183). Until it lands,
+`LICENSE` is the only licence this repository carries.
+
+[AI-DISCLOSURE.md](AI-DISCLOSURE.md) states how this repository's content was produced — the loop
+drafts and gates its own development, the `marketer` agent drafts the posts, and a human owns every
+published claim.

@@ -9,6 +9,13 @@ lands here when it is ready to be reviewed as a publishable post, and it is comm
 any other deliverable. The series plan — running order, seats, receipts per post — is
 `social/series-outline.md`.
 
+## AI disclosure
+
+**[`AI-DISCLOSURE.md`](../AI-DISCLOSURE.md)** states how these posts are produced — drafted by the
+`marketer` agent, edited by a human, and gated by the attestation fields below — and who stands
+behind every published claim. It names the tool and the model family; it deliberately pins no
+version, because the per-post `claude_code_version_verified` field is where a version belongs.
+
 ## Frontmatter convention
 
 Every post requires this block. **Every field is required and must be non-empty**;
@@ -109,11 +116,13 @@ Stated plainly so nobody assumes a pipeline exists:
 
 - **No publisher.** The sessions repo syncs to Pages via `tooling/publish-to-pages.py` and a
   `pages-sync.yml` workflow. Nothing here does. Publishing is manual until that is ported.
+- **No prose licence.** Everything here is MIT under [`LICENSE`](../LICENSE), which is a software
+  licence and says nothing sensible about an essay. A CC-BY-4.0 grant scoped to `posts/` is
+  tracked on [#183](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/183) and
+  must land before the first post ships.
 - **`og_image` / `og_card_source` are checked for shape, not resolvability.** The sessions
   guard reuses the publisher's own validator so it cannot drift from what publish enforces.
   With no publisher here, this guard checks that the fields are present and well-formed and
   that the `og_card_source` path stays inside the repo. **It does not check that the file
   exists**, because the card is rendered into `social/`, which is gitignored. A post can
   therefore pass CI and still fail a future sync.
-- **No prose licence or AI-disclosure file.** The sessions repo carries `LICENSE-prose.md` and
-  `AI-DISCLOSURE.md`; this repo's `LICENSE` covers code. Decide before the first post ships.
