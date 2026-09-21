@@ -279,10 +279,10 @@ reservation sitting alongside the grant. That is what makes it narrow the grant 
 on it: MIT permits dealing "in the Software", so redefining that term is the only edit that reaches
 the permission. **The table above does not evidence this placement** — both sibling repos carry
 *trailing* `**Scope:**` blocks — so the leading preamble was measured separately, on the branch:
-`gh api repos/.../license?ref=docs/prose-licence-for-posts` returns `other`/`NOASSERTION` against
-blob `e208f69`, this branch's `LICENSE` byte for byte, while the same call against `main` still
-returns `mit`. A leading preamble costs the label exactly as a trailing block does. **Measured, not
-inferred** — and see §4 on why it was measurable at all.
+`gh api repos/.../license?ref=docs/prose-licence-for-posts` returns `other`/`NOASSERTION`, while the
+same call against `main` still returns `mit`. A leading preamble costs the label exactly as a
+trailing block does. **Measured, not inferred** — and see §4 both on why it was measurable at all
+and on what the measurement is bound to.
 
 **Why the alternative under-protects, which is the whole of the argument.** Leaving `LICENSE`
 pristine does not merely state the boundary less prominently — it leaves the MIT grant *covering*
@@ -363,10 +363,16 @@ the point of this exercise is that no licence assertion goes unexamined.
   premise.** This bullet previously read *"unobservable before merge, since detection reads the
   default branch"* and deferred the check past the merge gate. **That is wrong**: the endpoint takes
   a `?ref=`, so `gh api repos/frederick-douglas-pearce/claude-code-loop/license?ref=<branch>` reads
-  any ref. Measured on `docs/prose-licence-for-posts` at `1657538`: `other` / `NOASSERTION`, `path`
-  `LICENSE`, `sha` `e208f69` — which `git rev-parse HEAD:LICENSE` confirms is this branch's file byte
-  for byte — against `mit` on `main`. So the check was run rather than assumed, before merge rather
-  than after, and `README.md`'s licence-detection paragraph and its payload copy are **true**.
+  any ref. Measured on `docs/prose-licence-for-posts` at `3f747ac`: `other` / `NOASSERTION`, `path`
+  `LICENSE`, `sha` `009d5505b1d3053a905ffef28248c9f2374e1778`, which `git rev-parse HEAD:LICENSE`
+  matches byte for byte; `main` returns `mit`. So the check was run rather than assumed, before merge
+  rather than after, and `README.md`'s licence-detection paragraph and its payload copy are **true**.
+  **The measurement is bound to that blob, not to the branch.** An earlier draft of this bullet cited
+  blob `e208f69` — and the very commit that wrote the citation also edited `LICENSE`, so the sentence
+  was false the moment it was written, and the acceptance gate caught it. A recorded measurement
+  naming a hash the same change can move is a falsifier discharged against the wrong object. If
+  `LICENSE` is edited again before merge, re-run the call; the result is expected to hold, because
+  what costs the label is the presence of a scope preamble rather than its wording.
   **The lesson generalises past this entry**: the deferral was not created by a limit of the tool, it
   was created by not reading the tool's parameters. A capture mechanism is the right response to
   something genuinely unobservable now; reaching for one first is how an observable fact becomes a
