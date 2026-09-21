@@ -1,0 +1,60 @@
+name: Prettier (posts)
+
+# Pre-merge gate so posts/ is Prettier-clean BEFORE it reaches main and gets
+# synced to the Pages site. The site runs its own `prettier . --check` on every
+# push to its main, so a dirty post turns the SITE red — and keeps it red,
+# because an external cron pushes to that repo daily (~14:01 UTC), re-running
+# the same check on the same file every morning until someone fixes it.
+#
+# This has now bitten the same publishing path twice, and this repo is about to
+# become the third publisher into the site's shared _posts/ namespace:
+#
+#   - claude-code-sessions, 2026-06-08 — which is why that repo has this gate.
+#   - us-presidential-vote-analysis, post 1, 2026-08-12 — because its issue #132
+#     ported the publisher WITHOUT porting the gate that makes it safe.
+#
+# That is why this lands before the publisher (#179) rather than after it.
+# Porting the publisher first would be the third occurrence, on a path where the
+# failure mode is already documented twice over.
+#
+# The concrete trap, both times: Prettier normalizes markdown emphasis to
+# _underscores_, and *asterisks* are not a configurable style. Nothing about a
+# draft reveals this before the site goes red.
+#
+# Scoped to posts/ via .prettierignore — the rest of the repo (the plugin
+# payload, tests, docs, .claude/ and the maintainer CLAUDE.md files) is authored
+# to other conventions and is deliberately unformatted. See posts/README.md.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  prettier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Install from the lockfile, and pin the formatter to the EXACT versions
+      # the Pages site pins (prettier 3.9.6, @shopify/prettier-plugin-liquid
+      # 1.11.0 as of 2026-09-21). Caret ranges would let this gate drift a minor
+      # version ahead of or behind the site, which is the one way it can pass
+      # here and still fail there — the failure mode it exists to prevent.
+      #
+      # Note the pin is the SITE's, not the sibling ports': both
+      # us-presidential-vote-analysis and claude-code-sessions sit on 3.9.5
+      # while the site has moved to 3.9.6, which is this drift happening live.
+      # When the site bumps its pin, bump this to match — that is the whole
+      # maintenance contract of this file.
+      - run: npm ci
+
+      - run: npm run format:check

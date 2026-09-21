@@ -1,7 +1,7 @@
 # posts/
 
-Markdown sources for the **claude-code-loop** blog series, *"A Cross-Functional Team of
-One."* Modelled on [`claude-code-sessions/posts/`](https://github.com/frederick-douglas-pearce/claude-code-sessions/tree/main/posts),
+Markdown sources for the **claude-code-loop** blog series, _"A Cross-Functional Team of
+One."_ Modelled on [`claude-code-sessions/posts/`](https://github.com/frederick-douglas-pearce/claude-code-sessions/tree/main/posts),
 which publishes into the same Pages `_posts/` namespace.
 
 **These are sources, not drafts.** Work in progress lives in `social/` (gitignored). A file
@@ -20,9 +20,36 @@ version, because the per-post `claude_code_version_verified` field is where a ve
 
 **[`LICENSE-prose.md`](../LICENSE-prose.md)** places everything in this directory and everything
 under it, at any depth, under **CC BY 4.0** — every file here, whatever its format, this README
-included. The root [`LICENSE`](../LICENSE) is MIT and defines *"the Software"* to exclude the
+included. The root [`LICENSE`](../LICENSE) is MIT and defines _"the Software"_ to exclude the
 top-level `posts/` directory and everything under it, so the two grants cut at the same boundary:
 nothing here is left unassigned and nothing is covered by both.
+
+## Formatting
+
+**Everything in this directory is checked by Prettier, and nothing else in the repo is.**
+[`.github/workflows/prettier.yml`](../.github/workflows/prettier.yml) runs `prettier . --check`
+on every PR and every push to `main`, pinned to the **exact** formatter version the Pages site
+pins. The rest of the repo — the plugin payload, `tests/`, `docs/`, `.claude/`, the maintainer
+`CLAUDE.md` files — is authored to other conventions and is deliberately left alone
+([`.prettierignore`](../.prettierignore)).
+
+The reason the gate exists is that these bytes are published to the Pages site, which runs its
+own `prettier . --check`. While this repo's pin and `.prettierrc` match the site's, a file that
+is clean here is clean there; a file that is dirty turns the _site_ red, and keeps it red,
+because an external cron pushes to that repo daily. Nothing enforces that match — keeping the
+two in step is a manual contract, and it is the thing to re-check when the site upgrades. That has
+happened twice on this publishing path — `claude-code-sessions` on 2026-06-08 and
+`us-presidential-vote-analysis` on 2026-08-12.
+
+**The trap that caused both: Prettier rewrites `*emphasis*` to `_emphasis_`, and that is not a
+configurable style.** Write `_emphasis_`. Nothing about a draft reveals this before CI runs, so:
+
+```bash
+npm ci               # once
+npm run format:write # before you open the PR
+```
+
+Run those **from the repo root**. `npm run format:check` is what CI runs.
 
 ## Frontmatter convention
 
@@ -55,7 +82,7 @@ filename.
 judgment-heavy step was performed. **Each guard enforces that an attestation was made — never
 that the underlying work was done well.** That distinction is deliberate and is the reason
 these are frontmatter fields rather than lints: a pattern-matcher cannot judge whether prose
-reads human, and it certainly cannot re-verify a claim against an issue thread. What it *can*
+reads human, and it certainly cannot re-verify a claim against an issue thread. What it _can_
 do is make an omission visible before merge instead of after publication.
 
 Each accepts `none`, which records a step deliberately declined for that post. `none` keeps
@@ -68,7 +95,7 @@ closed set invites someone to widen it later.
 **`claims_verified` is the one field this series adds beyond the sessions contract**, and it
 exists because `social/README.md` and `social/scout.config.md` both name claim verification as
 "the one gate here with real teeth" while nothing anywhere specified it. Every post in
-`social/series-outline.md` carries a *receipts to verify* list naming the issue comments,
+`social/series-outline.md` carries a _receipts to verify_ list naming the issue comments,
 commits and research files each claim traces to. `claims_verified` is the date that list was
 walked. The series is a catalogue of this project publishing things that turned out to be
 false — PR #136 retracted three already-published claims — so an unattested post is the one
