@@ -8,8 +8,17 @@ A **Claude Code plugin** (`dev-loop`, distributed via the `claude-code-loop` mar
 packages a supervised dev-loop engine originally built and hardened in
 [AgentFluent](https://github.com/frederick-douglas-pearce/agentfluent). The deliverable is almost
 entirely **prompt artifacts** (markdown read by an agent at runtime) plus **one Python hook**. There
-is no build, no package, and no dependency manifest. CI is a single GitHub Actions workflow that
-runs the stdlib test suite — nothing is installed, and nothing should need to be.
+is no build and no package. **The deliverable carries no dependency manifest and the payload ships
+none** — and note what that invariant is about: what a *consumer's* environment must provide, never
+this repo's file list. The guard hook runs under bare `python3` there, so the stdlib suite must too;
+`test.yml` installs nothing and nothing should need it to.
+
+Two workflows run here, and the second is the exception that proves the scoping. `test.yml` runs
+that suite. `prettier.yml` (#178) is a **maintainer-side** gate over `posts/` only, pinned to the
+Pages site's exact formatter through a root `package.json` — it ships to no consumer, the hook and
+the suite never touch it, and it is **not** licence to add a dependency anywhere else. Anything
+that would reach a consumer's environment, or that the suite would need, still falls under the
+stdlib-only rule below.
 
 Consequence: most "code" here is instructions a future agent will execute. Precision of wording,
 internal consistency of cross-references, and the fail-safe posture of each instruction *are* the

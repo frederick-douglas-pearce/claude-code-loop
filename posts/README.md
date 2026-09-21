@@ -1,7 +1,7 @@
 # posts/
 
-Markdown sources for the **claude-code-loop** blog series, *"A Cross-Functional Team of
-One."* Modelled on [`claude-code-sessions/posts/`](https://github.com/frederick-douglas-pearce/claude-code-sessions/tree/main/posts),
+Markdown sources for the **claude-code-loop** blog series, _"A Cross-Functional Team of
+One."_ Modelled on [`claude-code-sessions/posts/`](https://github.com/frederick-douglas-pearce/claude-code-sessions/tree/main/posts),
 which publishes into the same Pages `_posts/` namespace.
 
 **These are sources, not drafts.** Work in progress lives in `social/` (gitignored). A file
@@ -20,7 +20,7 @@ version, because the per-post `claude_code_version_verified` field is where a ve
 
 **[`LICENSE-prose.md`](../LICENSE-prose.md)** places everything in this directory and everything
 under it, at any depth, under **CC BY 4.0** — every file here, whatever its format, this README
-included. The root [`LICENSE`](../LICENSE) is MIT and defines *"the Software"* to exclude the
+included. The root [`LICENSE`](../LICENSE) is MIT and defines _"the Software"_ to exclude the
 top-level `posts/` directory and everything under it, so the two grants cut at the same boundary:
 nothing here is left unassigned and nothing is covered by both.
 
@@ -55,7 +55,7 @@ filename.
 judgment-heavy step was performed. **Each guard enforces that an attestation was made — never
 that the underlying work was done well.** That distinction is deliberate and is the reason
 these are frontmatter fields rather than lints: a pattern-matcher cannot judge whether prose
-reads human, and it certainly cannot re-verify a claim against an issue thread. What it *can*
+reads human, and it certainly cannot re-verify a claim against an issue thread. What it _can_
 do is make an omission visible before merge instead of after publication.
 
 Each accepts `none`, which records a step deliberately declined for that post. `none` keeps
@@ -68,7 +68,7 @@ closed set invites someone to widen it later.
 **`claims_verified` is the one field this series adds beyond the sessions contract**, and it
 exists because `social/README.md` and `social/scout.config.md` both name claim verification as
 "the one gate here with real teeth" while nothing anywhere specified it. Every post in
-`social/series-outline.md` carries a *receipts to verify* list naming the issue comments,
+`social/series-outline.md` carries a _receipts to verify_ list naming the issue comments,
 commits and research files each claim traces to. `claims_verified` is the date that list was
 walked. The series is a catalogue of this project publishing things that turned out to be
 false — PR #136 retracted three already-published claims — so an unattested post is the one

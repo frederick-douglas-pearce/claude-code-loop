@@ -1,0 +1,18 @@
+# The Prettier gate is scoped to posts/ — the only directory whose bytes are
+# published to the Jekyll Pages site. Everything else in this repo is authored
+# to other conventions and is intentionally NOT formatted by this gate: the
+# payload under plugins/ (markdown an agent executes at runtime), tests/,
+# tools/, docs/, .claude/ specs and bindings, social/ drafts, and the three
+# maintainer CLAUDE.md files. Whole-repo formatting is a separate effort and is
+# not implied by this file.
+#
+# This file is the SINGLE SOURCE of that scope: ignore everything, then unignore
+# posts/. The npm scripts and CI run a bare `prettier .`, so this guard is what
+# keeps them — and any ad-hoc `prettier .` a developer types — from reformatting
+# unscoped files. (`/*` already covers node_modules/, so no separate entry.)
+#
+# Do NOT invert this into a list of directories to skip. An exclusion list goes
+# stale the moment a directory is added, which is the enumerable-assertion trap
+# CLAUDE.md documents; ignore-everything-then-unignore fails closed instead.
+/*
+!/posts/

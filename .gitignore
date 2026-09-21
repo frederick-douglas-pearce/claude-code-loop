@@ -19,3 +19,6 @@ __pycache__/
 
 # social/marketing drafts (local working state, never committed)
 social/
+
+# Node (the Prettier gate on posts/ -- root package.json, CI-only, never shipped)
+node_modules/
