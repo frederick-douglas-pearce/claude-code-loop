@@ -108,8 +108,8 @@ claude-code-loop/
 ├── .claude/                 # this repo's dogfood config + internal specs; does NOT ship
 ├── CLAUDE.md                # maintainer instructions for THIS repo; does NOT ship
 ├── .gitignore               # does NOT ship
-├── LICENSE                  # MIT, scoped to exclude posts/; does NOT ship
-├── LICENSE-prose.md         # CC BY 4.0, covering posts/; does NOT ship
+├── LICENSE                  # MIT, scoped to exclude the posts/ tree; does NOT ship
+├── LICENSE-prose.md         # CC BY 4.0, covering the posts/ tree; does NOT ship
 ├── AI-DISCLOSURE.md         # how this repo's content was produced; does NOT ship
 └── README.md                # this file: the GitHub front door; a copy ships in the payload
 ```

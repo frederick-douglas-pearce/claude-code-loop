@@ -2,8 +2,8 @@ SCOPE OF THIS LICENCE
 
 For the purposes of this licence, "the Software" -- defined below as "this software and
 associated documentation files" -- comprises everything in this repository EXCEPT the
-top-level posts/ directory and everything under it. That directory is licensed under
-CC BY 4.0 instead; see LICENSE-prose.md, beside this file at the repository root.
+top-level posts/ directory and everything under it. What is excepted here is licensed
+under CC BY 4.0 instead; see LICENSE-prose.md, beside this file at the repository root.
 
 The two grants cut at the same directory, so no file in this repository is left
 unassigned and none is covered by both.

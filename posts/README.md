@@ -18,8 +18,8 @@ version, because the per-post `claude_code_version_verified` field is where a ve
 
 ## Licence
 
-**[`LICENSE-prose.md`](../LICENSE-prose.md)** places everything in this directory and every
-subdirectory of it under **CC BY 4.0** — every file here, whatever its format, this README
+**[`LICENSE-prose.md`](../LICENSE-prose.md)** places everything in this directory and everything
+under it, at any depth, under **CC BY 4.0** — every file here, whatever its format, this README
 included. The root [`LICENSE`](../LICENSE) is MIT and defines *"the Software"* to exclude the
 top-level `posts/` directory and everything under it, so the two grants cut at the same boundary:
 nothing here is left unassigned and nothing is covered by both.
