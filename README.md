@@ -150,7 +150,7 @@ target sits outside the plugin directory is *silently skipped* when the plugin i
 the cache — not rejected — so a symlinked licence would simply be absent, with nothing saying
 so. And it is **pristine MIT where the root one is scoped**: the root `LICENSE` excludes the
 top-level `posts/` directory and everything under it, which is licensed CC BY 4.0 instead, but the
-payload is `plugins/dev-loop/` and contains no `posts/` — so the payload's file has nothing to
+payload is `plugins/dev-loop/`, which is no part of that tree — so the payload's file has nothing to
 scope, and nothing a consumer receives is CC-BY-licensed. **The two files diverge deliberately and
 are not out of sync.**
 
@@ -658,8 +658,8 @@ boundary, so no file in this repository is left unassigned and none is covered b
 
 The payload carries its own MIT licence file at `plugins/dev-loop/LICENSE`, governing
 `plugins/dev-loop/` and nothing outside it — a licence outside that directory would not travel into
-a consumer's plugin cache. That file is pristine MIT with no scope clause: `posts/` is not part of
-the payload, so **nothing a consumer receives is CC-BY-licensed.**
+a consumer's plugin cache. That file is pristine MIT with no scope clause: `plugins/dev-loop/` is no
+part of the top-level `posts/` tree, so **nothing a consumer receives is CC-BY-licensed.**
 
 GitHub's licence detection matches the root `LICENSE` against known licence texts and does not
 recognise a scoped one, so a repository whose `LICENSE` carries a scope clause shows **Other** in

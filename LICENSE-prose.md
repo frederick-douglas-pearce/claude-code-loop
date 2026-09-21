@@ -13,8 +13,11 @@ The Licensed Material is licensed under the
 
 You are free to:
 
-- **Share** — copy and redistribute the material in any medium or format
+- **Share** — copy and redistribute the material in any medium or format for any purpose, even
+  commercially
 - **Adapt** — remix, transform, and build upon the material for any purpose, even commercially
+
+The licensor cannot revoke these freedoms as long as you follow the licence terms.
 
 Under the following terms:
 
@@ -32,12 +35,6 @@ for CC BY 4.0. The full legal text is at <https://creativecommons.org/licenses/b
 and it governs.
 
 ## Scope
-
-**The extent of the Licensed Material is stated once, in the grant above, and nothing below restates
-it.** Every sentence in this file that needs to refer to the covered set uses the term rather than
-describing the boundary again — which is what stops one sentence from drawing the line in a slightly
-different place from another. This file is where that discipline is cheapest to keep, because it is
-the instrument itself.
 
 **The boundary is a directory, and there are no exceptions to it.** The Licensed Material is covered
 from the moment it lands — a post, an image, a diagram, a data file, anything in a subdirectory at

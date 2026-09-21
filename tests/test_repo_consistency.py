@@ -349,8 +349,8 @@ _PAYLOAD_INVENTORY = frozenset({
 # of the unsafe set. ``LICENSE-prose.md`` qualifies on adjacency: ``LICENSE`` *does* ship, the
 # two sit side by side at the root under near-identical names, and the payload's own
 # ``LICENSE`` is deliberately the *unscoped* MIT text (D013) -- so "keep the licences in step"
-# is exactly the helpful edit that would carry a CC-BY grant into a directory holding no
-# ``posts/``. ``AI-DISCLOSURE.md`` has no such adjacency and is deliberately absent.
+# is exactly the helpful edit that would carry a CC-BY grant into the payload, which is no
+# part of the top-level ``posts/`` tree and needs no scope clause at all. ``AI-DISCLOSURE.md`` has no such adjacency and is deliberately absent.
 _PAYLOAD_MUST_NOT_CONTAIN = (
     "tests",
     "docs",

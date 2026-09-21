@@ -350,7 +350,7 @@ rejected — also exception-free, but keyed to `.md`, so it under-covers the ass
 ### 3. `plugin.json` stays `MIT`, and that is a conclusion rather than an omission
 
 `plugins/dev-loop/.claude-plugin/plugin.json`'s `"license": "MIT"` is **unchanged, deliberately**:
-the payload is `plugins/dev-loop/`, which contains no `posts/` directory, so the payload is
+the payload is `plugins/dev-loop/`, which is no part of the top-level `posts/` tree, so it is
 genuinely all-MIT. `.claude-plugin/marketplace.json` carries no `license` field. Recorded because
 the point of this exercise is that no licence assertion goes unexamined.
 
