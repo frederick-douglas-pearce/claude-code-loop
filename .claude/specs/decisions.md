@@ -316,9 +316,10 @@ format"*. #180 will put og-cards and images under `posts/`, so a content-type cu
 **The rule: each instrument states its extent once and refers to it by name thereafter.** Stated as
 a rule for whoever edits these files next, not as a claim about what they currently say — a rule
 survives being violated, where a claim about current state is simply false the moment someone adds a
-sentence. `LICENSE-prose.md` defines **the Licensed Material** in its opening grant (CC BY 4.0's own
-§1(j) term) and every later sentence uses that term; root `LICENSE` does the same in the other
-direction with `"the Software"`. **A sentence that does not restate the extent cannot misstate it.**
+sentence. The term in `LICENSE-prose.md` is **the Licensed Material**, defined in its opening grant
+and taken from CC BY 4.0's own §1(f); in root `LICENSE` it is `"the Software"`, defined in the scope
+preamble and used by the MIT permission clause below it. **A sentence that does not restate the
+extent cannot misstate it.**
 
 **Why a rule and not a fixed literal, which is what this entry said first.** The first attempt at
 this paragraph mandated one string — *"the top-level `posts/` directory and everything under it"* —
