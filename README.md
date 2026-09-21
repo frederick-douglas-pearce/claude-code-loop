@@ -105,9 +105,13 @@ claude-code-loop/
 ├── tools/mutation-specs/    # hand-run harness self-check; does NOT ship
 ├── docs/research/           # the research notebook; does NOT ship
 ├── posts/                   # blog series sources + frontmatter contract; does NOT ship
-├── .github/workflows/       # CI: the suite on Python 3.9-3.13; does NOT ship
+├── .github/workflows/       # CI: the suite on Python 3.9-3.13 + the posts/ Prettier gate; does NOT ship
 ├── .claude/                 # this repo's dogfood config + internal specs; does NOT ship
 ├── CLAUDE.md                # maintainer instructions for THIS repo; does NOT ship
+├── package.json             # Prettier pin for the posts/ gate, maintainer-side; does NOT ship
+├── package-lock.json        # its lockfile, what `npm ci` installs in CI; does NOT ship
+├── .prettierrc              # the site's formatter options, mirrored; does NOT ship
+├── .prettierignore          # ignore-everything-then-unignore posts/; does NOT ship
 ├── .gitignore               # does NOT ship
 ├── LICENSE                  # MIT, scoped to exclude the posts/ tree; does NOT ship
 ├── LICENSE-prose.md         # CC BY 4.0, covering the posts/ tree; does NOT ship
