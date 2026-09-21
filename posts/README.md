@@ -24,6 +24,31 @@ included. The root [`LICENSE`](../LICENSE) is MIT and defines _"the Software"_ t
 top-level `posts/` directory and everything under it, so the two grants cut at the same boundary:
 nothing here is left unassigned and nothing is covered by both.
 
+## Formatting
+
+**Everything in this directory is checked by Prettier, and nothing else in the repo is.**
+[`.github/workflows/prettier.yml`](../.github/workflows/prettier.yml) runs `prettier . --check`
+on every PR and every push to `main`, pinned to the **exact** formatter version the Pages site
+pins. The rest of the repo — the plugin payload, `tests/`, `docs/`, `.claude/`, the maintainer
+`CLAUDE.md` files — is authored to other conventions and is deliberately left alone
+([`.prettierignore`](../.prettierignore)).
+
+The reason the gate exists is that these bytes are published to the Pages site, which runs its
+own `prettier . --check`. A file that is clean here is clean there; a file that is dirty turns
+the _site_ red, and keeps it red, because an external cron pushes to that repo daily. That has
+happened twice on this publishing path — `claude-code-sessions` on 2026-06-08 and
+`us-presidential-vote-analysis` on 2026-08-12.
+
+**The trap that caused both: Prettier rewrites `*emphasis*` to `_emphasis_`, and that is not a
+configurable style.** Write `_emphasis_`. Nothing about a draft reveals this before CI runs, so:
+
+```bash
+npm ci               # once
+npm run format:write # before you open the PR
+```
+
+Run those **from the repo root**. `npm run format:check` is what CI runs.
+
 ## Frontmatter convention
 
 Every post requires this block. **Every field is required and must be non-empty**;
