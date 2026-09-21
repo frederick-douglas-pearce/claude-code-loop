@@ -30,13 +30,13 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `SCOPE_AGENT` | the **`pm`** subagent | user-global; scope/priority/requirements. |
 | `DESIGN_AGENT` | the **`architect`** subagent | user-global; reviews plans pre-implementation (the architect gate, §2) — **and also rules on scope, stopping with that ruling attached, when a BLOCKING code-review finding raises a design question** (#114, shipped 0.3.0). That second gate is made due by the engine, not by this file: `ARCHITECT_TRIGGERS` does not bound it, and no value here switches it off — absent, `—` or `TODO`, the stop still fires, with no ruling attached and a `gate-error` in its place. The engine's Gate table is the authoritative list of every gate this binding staffs. **Never delete this row.** |
 | `CODE_REVIEW` | parallel finder subagents over `git diff main...HEAD` (**round 1's base; later rounds are the engine's to scope**) **+ the issue's acceptance criteria**, angles chosen per the diff's risk surface (the code-review gate), then a pass confirming each finding | **The orchestrator runs this itself — a design choice, not a constraint.** `/code-review <effort>` **is** model-invocable and could be bound here (F7's invocability claim withdrawn, [#74](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/74)); only `ultra` is user-triggered, and it degrades silently rather than refusing. **The ground:** this repo is [#38](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/38)'s corpus generator, and per-lens `- Budget:` data is the instrument #38 needs — the skill reports a flat finding list with no angle attribution, so binding it starves that experiment. **n=0 in both directions** on whether fan-out beats one high-effort invocation, and cost differs by roughly an order of magnitude; the argument belongs on #38, and the binding is open to revisit after [#71](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/71). |
-| `SECURITY_REVIEW` | the **`/security-review`** skill (local, model-invocable), scoped per §4 | no labeled workflow exists — `.github/workflows/` contains only `test.yml`. Local path only; see §4. |
+| `SECURITY_REVIEW` | the **`/security-review`** skill (local, model-invocable), scoped per §4 | **no workflow in this repo is label-triggered**, so the engine's labeled security path has nothing to dispatch to. Local path only; see §4. No listing of `.github/workflows/` here on purpose: the local path applies until you have established that a workflow fires on a *label*, and if you cannot tell, run it. |
 | `VERIFY` | `—` (no runnable app) | the deliverable is prompt artifacts + one hook; there is nothing to launch. Runtime proof for the hook comes from `TEST_CMD`. |
 | `PRIORITY_LABELS` | **no `priority:*` labels exist.** Selection order is the explicit `**Delivery order:** PR <n>` line in each issue body, then `Depends on:`, tiebreak issue-number ascending | ⚠ **vocabulary gap** — the engine's selection step assumes a *label* ordering; this repo encodes priority in the issue body. `PRIORITY_LABELS` needs a body-derived form ([#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1)). |
 | `ARCHITECT_TRIGGERS` | see §2 | **project-specific — edit when porting** |
 | `SOURCE_LAYOUT` | see §3 | router uses this; **edit when porting**. ⚠ This repo is the hard case — see §3. |
 | `TEST_CMD` | `python3 -m unittest discover -s tests` | **Stdlib only — never add pytest or any dependency.** |
-| `LINT_CMD` | `—` (none configured) | no ruff/flake8/eslint config exists, deliberately: the repo is stdlib-only with no dependency manifest. **Not a blank to fill.** |
+| `LINT_CMD` | `—` (no linter is bound, on any route) | **Kept `—` deliberately; re-decided 2026-09-21 after #178, not inherited.** The reason is deliberately **unscoped by route**, because the engine runs `LINT_CMD` on every row whatever its route — a reason that named one route would be non-responsive on the others, and would journal as one. Two halves: (a) no ruff/flake8/eslint config exists for the Python surface, which is stdlib-only — the payload ships no dependency manifest and the suite needs none; (b) the one formatter that does exist — `prettier`, pinned in the root `package.json` and scoped to `posts/` by `.prettierignore` — is **enforced in CI** by `prettier.yml` on every PR, which this loop already blocks on at step 7 via `CI_STATUS_CMD`. Binding `npm run format:check` here would duplicate a gate that already blocks, and run a markdown formatter on every row including those that touch no markdown. **Not a blank to fill.** |
 | `TYPE_CMD` | `—` (none configured) | no mypy/pyright config; same rationale. **Not a blank to fill.** |
 | `HERMETIC_TEST_CMD` | `—` — **stdlib `unittest` suite, no network use; no offline/hermetic tier declared** | **A deliberate not-applicable, not an unfilled blank.** The engine reads `—` **plus a reason** as `n/a: <that reason>`, and a *bare* `—` as a blank that escalates on a row the trigger fired on. Discharged by running the check, not by asserting it (2026-08-10): no tier is declared anywhere in the repo, no tier infrastructure exists (no tox/pytest/`pyproject.toml`/`Makefile`/`conftest.py`), and the suite reaches the network by neither import nor subprocess. ⚠ **Never delete this row, and never reduce the value to a bare `—`.** An absent row reads as *unknown, and unknown is due*. |
 | `CI_STATUS_CMD` | `gh pr checks <PR>` | GitHub host. The required check is the aggregate **`test-suite`** job, not the per-version matrix jobs. |
@@ -100,7 +100,12 @@ wrong.
   directory and nothing outside it. `tests/`, the root `.claude-plugin/marketplace.json`, the
   root `tools/` (inputs to the harness, no executables), and `plugins/CLAUDE.md` — maintainer
   notes deliberately one level *above* the payload — stay outside it and do not ship. No build,
-  no dependency manifest, no `src/`.
+  no `src/`, and **no dependency manifest in anything that ships or that `TEST_CMD` runs** — the
+  payload carries none and the stdlib suite needs none. The root `package.json` /
+  `package-lock.json` (#178) are maintainer-side CI tooling for the `posts/` Prettier gate: outside
+  the payload and outside the suite. **Not inert to the loop, though** — `prettier.yml` runs
+  `npm ci` from that lockfile, so a desync there surfaces as a red check at step 7's CI wait
+  (`CI_STATUS_CMD`), never in `TEST_CMD`.
 
 - **⛔ Route override — "markdown that is product."** A change to any of
   `plugins/dev-loop/skills/dev-loop/loop-engine.md`,
@@ -146,9 +151,11 @@ wrong.
 
 ## 4. Security routing
 
-The host is GitHub. There is **no labeled security workflow** in this repo (`.github/workflows/`
-contains only `test.yml`), so the labeled path from the engine's security gate does not exist here and the
-local path is the whole story.
+The host is GitHub. **No workflow in this repo is label-triggered**, so the labeled path from the
+engine's security gate has nothing to dispatch to and the local path is the whole story. That is a
+property of the workflows, not a listing of `.github/workflows/`: adding a workflow does not
+falsify it — only adding one that fires on a *label* would — and until you have established that
+one does, the local path still applies. If you cannot tell, run it.
 
 > ### ⛔ Precondition — `origin/HEAD` must be set, or this gate dies before it runs
 >
