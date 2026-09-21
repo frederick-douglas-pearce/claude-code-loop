@@ -36,7 +36,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `ARCHITECT_TRIGGERS` | see §2 | **project-specific — edit when porting** |
 | `SOURCE_LAYOUT` | see §3 | router uses this; **edit when porting**. ⚠ This repo is the hard case — see §3. |
 | `TEST_CMD` | `python3 -m unittest discover -s tests` | **Stdlib only — never add pytest or any dependency.** |
-| `LINT_CMD` | `—` (nothing to run on the code-routed path) | **Kept `—` deliberately; re-decided 2026-09-21 after #178, not inherited.** No ruff/flake8/eslint config exists, because everything `LINT_CMD` would run on is stdlib-only Python: the payload ships no dependency manifest and the suite needs none. The root `package.json` added by #178 does not change that: it pins a formatter for the **`posts/`-scoped** Prettier gate (`.prettierignore` ignores everything, then unignores `/posts/`), it is maintainer-side CI tooling outside the payload and outside `TEST_CMD`, and `posts/` is already gated in CI. Binding `npm run format:check` here would run a prose formatter on every `code`-routed row — the wrong gate for that route. **Not a blank to fill.** |
+| `LINT_CMD` | `—` (no linter is bound, on any route) | **Kept `—` deliberately; re-decided 2026-09-21 after #178, not inherited.** The reason is deliberately **unscoped by route**, because the engine runs `LINT_CMD` on every row whatever its route — a reason that named one route would be non-responsive on the others, and would journal as one. Two halves: (a) no ruff/flake8/eslint config exists for the Python surface, which is stdlib-only — the payload ships no dependency manifest and the suite needs none; (b) the one formatter that does exist — `prettier`, pinned in the root `package.json` and scoped to `posts/` by `.prettierignore` — is **enforced in CI** by `prettier.yml` on every PR, which this loop already blocks on at step 7 via `CI_STATUS_CMD`. Binding `npm run format:check` here would duplicate a gate that already blocks, and run a markdown formatter on every row including those that touch no markdown. **Not a blank to fill.** |
 | `TYPE_CMD` | `—` (none configured) | no mypy/pyright config; same rationale. **Not a blank to fill.** |
 | `HERMETIC_TEST_CMD` | `—` — **stdlib `unittest` suite, no network use; no offline/hermetic tier declared** | **A deliberate not-applicable, not an unfilled blank.** The engine reads `—` **plus a reason** as `n/a: <that reason>`, and a *bare* `—` as a blank that escalates on a row the trigger fired on. Discharged by running the check, not by asserting it (2026-08-10): no tier is declared anywhere in the repo, no tier infrastructure exists (no tox/pytest/`pyproject.toml`/`Makefile`/`conftest.py`), and the suite reaches the network by neither import nor subprocess. ⚠ **Never delete this row, and never reduce the value to a bare `—`.** An absent row reads as *unknown, and unknown is due*. |
 | `CI_STATUS_CMD` | `gh pr checks <PR>` | GitHub host. The required check is the aggregate **`test-suite`** job, not the per-version matrix jobs. |
@@ -103,7 +103,9 @@ wrong.
   no `src/`, and **no dependency manifest in anything that ships or that `TEST_CMD` runs** — the
   payload carries none and the stdlib suite needs none. The root `package.json` /
   `package-lock.json` (#178) are maintainer-side CI tooling for the `posts/` Prettier gate: outside
-  the payload, outside the suite, and read by nothing the engine runs.
+  the payload and outside the suite. **Not inert to the loop, though** — `prettier.yml` runs
+  `npm ci` from that lockfile, so a desync there surfaces as a red check at step 7's CI wait
+  (`CI_STATUS_CMD`), never in `TEST_CMD`.
 
 - **⛔ Route override — "markdown that is product."** A change to any of
   `plugins/dev-loop/skills/dev-loop/loop-engine.md`,
