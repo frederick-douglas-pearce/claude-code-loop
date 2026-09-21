@@ -192,13 +192,39 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
   Part 2) invokes it at runtime as `${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py`. **The root
   `tools/` holds only *inputs* to it** — currently `mutation-specs/self-check.json`, the hand-run
   self-check that keeps #60's mutation numbers reproducible — and does **not** ship, because
-  nothing reads it at runtime. It holds no executables, so do not read this bullet as licensing a
-  new one there: an executable at the repo root would not ship. The distinction from
+  nothing reads it at runtime. It holds no executables; a root executable belongs in `tooling/`,
+  the next bullet. The distinction from
   `plugins/dev-loop/hooks/` is what invokes them: a hook is registered in
   `plugins/dev-loop/hooks/hooks.json` and fired by the harness; a tool is run by whoever needs
   it. Both shipped directories are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both
   are **stdlib-only**, for the same reason — they execute under bare `python3` in a consumer's
   environment.
+- **`tooling/` is maintainer-side tooling at the repo root, and it is a category rather than a
+  directory.** A maintainer-side tool serves *this repo's* upkeep and reaches no consumer, so
+  whether it ships is already settled by the payload rule above — a file ships iff a consumer
+  needs it in the cache, enforced positionally — and this bullet deliberately **does not restate
+  a ship test**. It also deliberately **does not enumerate which root executables are allowed**;
+  that list would be the enumerable-assertion trap one directory behind the tree, exactly as the
+  payload rule's own two failed drafts were.
+
+  Two members today, on the same footing: `tooling/publish-to-pages.py` (#179), the blog
+  publisher the `pages-sync.yml` Action runs; and #178's root `package.json` /
+  `package-lock.json` / `.prettierrc` / `.prettierignore`, the Prettier gate's pinned toolchain.
+  Neither is in the payload, neither is read by `TEST_CMD`, and the stdlib-only rule still binds
+  **`tooling/`** because `tests/test_publish_to_pages.py` imports the publisher and the suite runs
+  on bare `python3` 3.9–3.13. (#178's npm pin is the standing exception the preamble already
+  carves out, and it is maintainer-side CI only.)
+
+  **`tooling/` and `tools/` differ by one character and carry opposite rules**, which is the one
+  thing worth memorising here: `tooling/` holds root **executables**, `tools/` holds only
+  **inputs** to the shipped harness. The names are inherited — both sibling publishers use
+  `tooling/` — and the publisher's `REPO_ROOT = Path(__file__).resolve().parent.parent` requires
+  its script to sit **exactly one directory below the repo root**, so the depth is forced even
+  though the name is not. Do not "tidy" the two together.
+
+  Anything later that lands here inherits the same terms — #181's OG-card renderer is the next
+  candidate, and if it takes a rendering dependency that dependency stays maintainer-side, out of
+  the payload and out of the suite's import path.
 - **`posts/` holds the blog series sources and does not ship.** Markdown for the
   `claude-code-loop` series, published to the Pages site that two sibling repos already publish
   into. The boundary with `social/` is what matters: `social/` is **gitignored working state** —
