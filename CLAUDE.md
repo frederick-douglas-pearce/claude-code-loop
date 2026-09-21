@@ -13,7 +13,7 @@ none** — and note what that invariant is about: what a *consumer's* environmen
 this repo's file list. The guard hook runs under bare `python3` there, so the stdlib suite must too;
 `test.yml` installs nothing and nothing should need it to.
 
-Two workflows run here, and the second is the exception that proves the scoping. `test.yml` runs
+Two workflows run here, and the second is deliberately out of scope for the rule above. `test.yml` runs
 that suite. `prettier.yml` (#178) is a **maintainer-side** gate over `posts/` only, pinned to the
 Pages site's exact formatter through a root `package.json` — it ships to no consumer, the hook and
 the suite never touch it, and it is **not** licence to add a dependency anywhere else. Anything
