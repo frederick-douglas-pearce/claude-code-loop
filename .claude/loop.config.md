@@ -61,7 +61,7 @@ that ruling. Nothing in this file turns that off.
 Fire `DESIGN_AGENT` (the `architect` subagent) when a plan hits any of these, **or** when the
 orchestrator is unsure. Bias toward calling it — in this repo the "design" under review is usually
 a *wording* decision with multi-site consequences, which is cheap to review and expensive to get
-wrong. Skip for pure `README.md`/`LICENSE` edits.
+wrong.
 
 - **A multi-site invariant changes.** The engine restates several invariants in 3–6 places
   (mode/gate semantics, the pipeline step order, the plan-gate posture and the always-on plan-gate
@@ -112,11 +112,17 @@ wrong. Skip for pure `README.md`/`LICENSE` edits.
   the payload is the runtime tree, so an unclassified path there is product until shown
   otherwise.
 
+- **⛔ Route override — "prose that is operative."** The root `LICENSE` and `LICENSE-prose.md`
+  are a **`code` route**, never `docs`. Neither is executed, but the first carries a clause
+  scoping what MIT covers and the second grants CC BY 4.0 over `posts/` — wording with legal
+  effect rather than wording that describes. `plugins/dev-loop/LICENSE` is not covered by this and
+  the `docs` line below names it: pristine MIT, no scope clause.
+
 - **`docs` route — genuinely inert prose only:** `README.md` **and its byte-identical payload
   copy `plugins/dev-loop/README.md`**, which must change in the same commit (`CLAUDE.md` →
   Branching & PR flow); the three maintainer `CLAUDE.md` files — the root one, `tests/CLAUDE.md`
-  and `plugins/CLAUDE.md`, none of which ships; `LICENSE` and `plugins/dev-loop/LICENSE`; and
-  typo/link/formatting fixes anywhere. Mirrors `CLAUDE.md` → Branching & PR flow.
+  and `plugins/CLAUDE.md`, none of which ships; `plugins/dev-loop/LICENSE`; and
+  typo/link/formatting fixes anywhere.
   **Note:** `CLAUDE.md`'s "direct to `main`" exception is for *ad-hoc human* edits and does **not**
   apply to the loop — a `docs`-routed issue still goes commit → PR → light review. The loop never
   bypasses its own gates.
