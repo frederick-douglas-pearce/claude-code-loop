@@ -36,9 +36,9 @@ This summary is not a substitute for the licence. The full legal text is at
 covered from the moment it lands — a post, an image, a diagram, a data file, anything in a
 subdirectory at any depth, and this repository's `posts/README.md` alike. A file added under
 `posts/` later needs no amendment here to be covered.
-Nothing outside `posts/` is covered, whatever it is made of. A licence written for *"the prose in
-this repository"* would reach `docs/research/` and the three `CLAUDE.md` files; this one is not
-written that way and does not reach them.
+Nothing outside the top-level `posts/` directory and everything under it is covered, whatever it is
+made of. A licence written for *"the prose in this repository"* would reach `docs/research/` and
+the three `CLAUDE.md` files; this one is not written that way and does not reach them.
 
 **A directory, and deliberately not a kind of file.** A boundary drawn around what a file *is* —
 prose, an essay, the blog series — leaves anything under `posts/` that is none of those between the
@@ -47,10 +47,10 @@ checked by looking at a path.
 
 ## Everything else
 
-Everything in this repository outside the `posts/` directory is licensed under the MIT licence; see
-[LICENSE](LICENSE), whose scope clause defines *"the Software"* to exclude that same directory. The
-two grants meet exactly at `posts/`, so no file in this repository is left unassigned and none is
-covered by both.
+Everything in this repository outside the top-level `posts/` directory and everything under it is
+licensed under the MIT licence; see [LICENSE](LICENSE), whose scope clause defines *"the Software"*
+to exclude exactly that. The two grants meet at that boundary, so no file in this repository is left
+unassigned and none is covered by both.
 
 The plugin payload carries its own MIT licence file at `plugins/dev-loop/LICENSE`, governing
 `plugins/dev-loop/` and nothing outside it. That file is pristine MIT with no scope clause, because

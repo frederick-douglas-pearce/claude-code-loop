@@ -272,6 +272,16 @@ against templates under a confidence threshold, so any operative scoping text dr
 **Decision: accept it.** The root `LICENSE` carries the scope clause and this repository's sidebar
 label becomes **`Other`/`NOASSERTION`**, knowingly.
 
+**Where the clause sits and how it is worded, recorded because both are load-bearing.** It is a
+**preamble preceding the MIT text**, headed `SCOPE OF THIS LICENCE`, and it is worded as a
+**definition of the term `"the Software"`** that the MIT grant below then uses — not as a separate
+reservation sitting alongside the grant. That is what makes it narrow the grant rather than comment
+on it: MIT permits dealing "in the Software", so redefining that term is the only edit that reaches
+the permission. **The measured table above does not evidence this placement** — both sibling repos
+carry *trailing* `**Scope:**` blocks, so the table shows that a trailing block costs the label, and
+the inference that a leading preamble costs it too is a prediction the post-merge check in §4
+settles.
+
 **Why the alternative under-protects, which is the whole of the argument.** Leaving `LICENSE`
 pristine does not merely state the boundary less prominently — it leaves the MIT grant *covering*
 `posts/`. MIT grants unrestricted rights over "the Software and associated documentation files", so
@@ -294,12 +304,22 @@ including `posts/README.md`. There is no exception.**
 
 **The boundary token is fixed here so downstream wording cannot drift from it.** The MIT carve-out
 and the CC-BY grant both cut on the **path axis at the literal token `posts/`** — "everything in the
-`posts/` directory" against "everything except the `posts/` directory". **No sentence in either file
-describes the boundary by content type** — not "prose", not "essays", not "the blog series". That is
-what makes the partition provable by reading the two files against each other instead of asserted in
-either one, and it is exactly how attempt 3 died: `LICENSE` carved out *"the blog-series **prose**
+top-level `posts/` directory and everything under it" against "everything except" the same. **No
+sentence in either file describes the boundary by content type** — not "prose", not "essays", not
+"the blog series". That is what makes the partition provable by reading the two files against each
+other instead of asserted in either one, and it is exactly how attempt 3 died: `LICENSE` carved out *"the blog-series **prose**
 under `posts/`"* while `LICENSE-prose.md` granted *"everything committed under `posts/`, whatever its
 format"*. #180 will put og-cards and images under `posts/`, so a content-type cut leaks immediately.
+
+**The literal is fixed too, and this is where it lives.** Every sentence in either file that names
+the boundary — the granting side and the complement side alike — uses one string: **the top-level
+`posts/` directory and everything under it**. Anchored (`top-level`, so a nested `posts/` elsewhere
+in the tree is not swept in), recursive (`and everything under it`, so a subdirectory at any depth is
+inside), path-based (no content-type word). PR #190 spent both review rounds on this one property,
+because each round fixed the *granting*-side sentences and left a complement-side one — *"nothing
+outside `posts/`"*, *"to exclude that same directory"* — asserting a narrower boundary than the grant
+it was describing. **The remedy is the fixed literal, not more careful reading**: one string makes
+the cross-file check a `grep`, which is the only form of this check that has not failed here.
 
 **Why no exception, and note that decision 1 forces it.** Both prior attempts excluded
 `posts/README.md` and neither could say it operatively; round 2 then found that *"everything under
@@ -335,7 +355,6 @@ the point of this exercise is that no licence assertion goes unexamined.
   position the clause can be in. Written here rather than left to recollection: #189 closes on
   merge, and a deferral without a capture mechanism is just a delay.
 - **E2's future guard must never be written as byte-identity.** Nothing pins the two `LICENSE` files
-  today, so this
-  divergence breaks nothing now. If such a guard is ever added it has to encode a **relationship** —
-  payload `LICENSE` == root `LICENSE` minus the `posts/` scope clause — because equality is now
-  false by design.
+  today, so this divergence breaks nothing now. If such a guard is ever added it has to encode a
+  **relationship** — payload `LICENSE` == root `LICENSE` minus the scope preamble — because equality
+  is now false by design.

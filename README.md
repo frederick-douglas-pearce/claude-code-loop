@@ -149,9 +149,10 @@ separate reasons, and both hold. It is a **file rather than a symlink** because 
 target sits outside the plugin directory is *silently skipped* when the plugin is copied into
 the cache — not rejected — so a symlinked licence would simply be absent, with nothing saying
 so. And it is **pristine MIT where the root one is scoped**: the root `LICENSE` excludes the
-`posts/` directory, which is licensed CC BY 4.0 instead, but the payload is `plugins/dev-loop/`
-and contains no `posts/` — so the payload's file has nothing to scope, and nothing a consumer
-receives is CC-BY-licensed. **The two files diverge deliberately and are not out of sync.**
+top-level `posts/` directory and everything under it, which is licensed CC BY 4.0 instead, but the
+payload is `plugins/dev-loop/` and contains no `posts/` — so the payload's file has nothing to
+scope, and nothing a consumer receives is CC-BY-licensed. **The two files diverge deliberately and
+are not out of sync.**
 
 ## What the loop can do to your repo
 
@@ -649,11 +650,11 @@ semantics.
 
 ## License
 
-**Two licences, cutting at one directory.** Everything under the top-level `posts/` directory is
-licensed **CC BY 4.0** — see [LICENSE-prose.md](LICENSE-prose.md). Everything else is **MIT** © 2026
-Frederick Douglas Pearce — see [LICENSE](LICENSE), whose scope clause defines *"the Software"* to
-exclude that directory. The two grants meet exactly at `posts/`, so no file in this repository is
-left unassigned and none is covered by both.
+**Two licences, cutting at one directory.** The top-level `posts/` directory and everything under it
+is licensed **CC BY 4.0** — see [LICENSE-prose.md](LICENSE-prose.md). Everything else is **MIT** ©
+2026 Frederick Douglas Pearce — see [LICENSE](LICENSE), whose scope clause defines *"the Software"*
+to exclude the top-level `posts/` directory and everything under it. The two grants meet at that
+boundary, so no file in this repository is left unassigned and none is covered by both.
 
 The payload carries its own MIT licence file at `plugins/dev-loop/LICENSE`, governing
 `plugins/dev-loop/` and nothing outside it — a licence outside that directory would not travel into
