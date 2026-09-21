@@ -34,8 +34,10 @@ pins. The rest of the repo — the plugin payload, `tests/`, `docs/`, `.claude/`
 ([`.prettierignore`](../.prettierignore)).
 
 The reason the gate exists is that these bytes are published to the Pages site, which runs its
-own `prettier . --check`. A file that is clean here is clean there; a file that is dirty turns
-the _site_ red, and keeps it red, because an external cron pushes to that repo daily. That has
+own `prettier . --check`. While this repo's pin and `.prettierrc` match the site's, a file that
+is clean here is clean there; a file that is dirty turns the _site_ red, and keeps it red,
+because an external cron pushes to that repo daily. Nothing enforces that match — keeping the
+two in step is a manual contract, and it is the thing to re-check when the site upgrades. That has
 happened twice on this publishing path — `claude-code-sessions` on 2026-06-08 and
 `us-presidential-vote-analysis` on 2026-08-12.
 
