@@ -1,3 +1,20 @@
+SCOPE OF THIS LICENCE
+
+For the purposes of this licence, "the Software" -- defined below as "this software and
+associated documentation files" -- comprises everything in this repository EXCEPT the
+top-level posts/ directory and everything under it. What is excepted here is licensed
+under CC BY 4.0 instead; see LICENSE-prose.md, beside this file at the repository root.
+
+The two grants cut at the same directory, so no file in this repository is left
+unassigned and none is covered by both.
+
+The plugin payload carries its own MIT licence file at plugins/dev-loop/LICENSE,
+governing plugins/dev-loop/ and nothing outside it. That file is pristine MIT with no
+scope clause, because the payload is no part of what is excepted above -- so nothing
+a consumer receives is CC-BY-licensed.
+
+----------------------------------------------------------------------
+
 MIT License
 
 Copyright (c) 2026 Frederick Douglas Pearce

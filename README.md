@@ -99,7 +99,7 @@ claude-code-loop/
 │       ├── tools/
 │       │   └── mutate_verify.py     # mutation harness the acceptance gate runs by path
 │       ├── README.md            # a copy of the front-door README -- see below
-│       └── LICENSE              # duplicated, not symlinked -- see below
+│       └── LICENSE              # pristine MIT, unlike the root -- see below
 ├── tests/                   # stdlib unittest suite + its own CLAUDE.md; does NOT ship
 ├── tools/mutation-specs/    # hand-run harness self-check; does NOT ship
 ├── docs/research/           # the research notebook; does NOT ship
@@ -108,7 +108,8 @@ claude-code-loop/
 ├── .claude/                 # this repo's dogfood config + internal specs; does NOT ship
 ├── CLAUDE.md                # maintainer instructions for THIS repo; does NOT ship
 ├── .gitignore               # does NOT ship
-├── LICENSE                  # does NOT ship (the payload carries its own copy)
+├── LICENSE                  # MIT, scoped to exclude the posts/ tree; does NOT ship
+├── LICENSE-prose.md         # CC BY 4.0, covering the posts/ tree; does NOT ship
 ├── AI-DISCLOSURE.md         # how this repo's content was produced; does NOT ship
 └── README.md                # this file: the GitHub front door; a copy ships in the payload
 ```
@@ -143,9 +144,15 @@ enforced* and *Upgrading with a live ledger*, both of which live only in this fi
 repairing those references means editing `loop-engine.md`, whose bytes the sharding release
 measures. Copying this file keeps every such reference resolving with no engine edit at all.
 
-**`LICENSE` is duplicated into the payload rather than symlinked.** A symlink whose target
-sits outside the plugin directory is *silently skipped* when the plugin is copied into the
-cache — not rejected — so a symlinked licence would simply be absent, with nothing saying so.
+**The payload carries its own `LICENSE`, and it is not a copy of the root one.** Two
+separate reasons, and both hold. It is a **file rather than a symlink** because a symlink whose
+target sits outside the plugin directory is *silently skipped* when the plugin is copied into
+the cache — not rejected — so a symlinked licence would simply be absent, with nothing saying
+so. And it is **pristine MIT where the root one is scoped**: the root `LICENSE` excludes the
+top-level `posts/` directory and everything under it, which is licensed CC BY 4.0 instead, but the
+payload is `plugins/dev-loop/`, which is no part of that tree — so the payload's file has nothing to
+scope, and nothing a consumer receives is CC-BY-licensed. **The two files diverge deliberately and
+are not out of sync.**
 
 ## What the loop can do to your repo
 
@@ -643,13 +650,21 @@ semantics.
 
 ## License
 
-MIT © 2026 Frederick Douglas Pearce; see [LICENSE](LICENSE). The payload carries its own copy at
-`plugins/dev-loop/LICENSE`, because a licence outside that directory would not travel into a
-consumer's plugin cache.
+**Two licences, cutting at one directory.** The top-level `posts/` directory and everything under it
+is licensed **CC BY 4.0** — see [LICENSE-prose.md](LICENSE-prose.md). Everything else is **MIT** ©
+2026 Frederick Douglas Pearce — see [LICENSE](LICENSE), whose scope clause defines *"the Software"*
+to exclude the top-level `posts/` directory and everything under it. The two grants meet at that
+boundary, so no file in this repository is left unassigned and none is covered by both.
 
-**A separate licence for the prose under `posts/` is not in place yet** — tracked on
-[#183](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/183). Until it lands,
-`LICENSE` is the only licence this repository carries.
+The payload carries its own MIT licence file at `plugins/dev-loop/LICENSE`, governing
+`plugins/dev-loop/` and nothing outside it — a licence outside that directory would not travel into
+a consumer's plugin cache. That file is pristine MIT with no scope clause: `plugins/dev-loop/` is no
+part of the top-level `posts/` tree, so **nothing a consumer receives is CC-BY-licensed.**
+
+GitHub's licence detection matches the root `LICENSE` against known licence texts and does not
+recognise a scoped one, so a repository whose `LICENSE` carries a scope clause shows **Other** in
+the sidebar rather than the licence it actually grants. That is the cost of making the boundary
+above bind, and it was accepted deliberately.
 
 [AI-DISCLOSURE.md](AI-DISCLOSURE.md) states how this repository's content was produced — the loop
 drafts and gates its own development, the `marketer` agent drafts the posts, and a human owns every

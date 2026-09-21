@@ -247,3 +247,139 @@ mapping, and that is the only copy.
 **What was NOT done, deliberately.** The ledger run directory `.claude/loop/v0.2.1/` keeps its name.
 It is a label, resume scans the ledger root, and renaming a live run directory is the larger risk —
 the same reasoning its own header already records for the v0.2.1→v0.2.2 move.
+
+---
+
+## D013 — 2026-09-20 — The prose licence binds at the `posts/` directory, and the two `LICENSE` files diverge deliberately
+
+**Context.** #189 is the fourth attempt at a CC-BY-4.0 licence for `posts/`; three prior drafts were
+rejected on PR #188, each fixing the previous round's defects and producing new ones of the same
+class — an inversion applied to some sentences and not others. The issue named two decisions that
+had to be settled *before* drafting, because both prior attempts drafted first. They are settled
+here.
+
+### 1. The scope clause goes in the root `LICENSE`, and the GitHub label changes
+
+**Measured first, not assumed.** GitHub's licence detection reads the root `LICENSE` and matches it
+against templates under a confidence threshold, so any operative scoping text drops it below:
+
+| repo | root `LICENSE` | `gh api repos/.../license` |
+|---|---|---|
+| `claude-code-loop` (before this change) | pristine MIT | `mit` / MIT License |
+| `claude-code-sessions` | MIT + trailing `**Scope:**` block | `other` / NOASSERTION |
+| `us-presidential-vote-analysis` | MIT + trailing `**Scope:**` block | `other` / NOASSERTION |
+
+**Decision: accept it.** The root `LICENSE` carries the scope clause and this repository's sidebar
+label becomes **`Other`/`NOASSERTION`**, knowingly.
+
+**Where the clause sits and how it is worded, recorded because both are load-bearing.** It is a
+**preamble preceding the MIT text**, headed `SCOPE OF THIS LICENCE`, and it is worded as a
+**definition of the term `"the Software"`** that the MIT grant below then uses — not as a separate
+reservation sitting alongside the grant. That is what makes it narrow the grant rather than comment
+on it: MIT permits dealing "in the Software", so redefining that term is the only edit that reaches
+the permission. **The table above does not evidence this placement** — both sibling repos carry
+*trailing* `**Scope:**` blocks — so the leading preamble was measured separately, on the branch:
+`gh api repos/.../license?ref=docs/prose-licence-for-posts` returns `other`/`NOASSERTION`, while the
+same call against `main` still returns `mit`. A leading preamble costs the label exactly as a
+trailing block does. **Measured, not inferred** — and see §4 both on why it was measurable at all
+and on what the measurement is bound to.
+
+**Why the alternative under-protects, which is the whole of the argument.** Leaving `LICENSE`
+pristine does not merely state the boundary less prominently — it leaves the MIT grant *covering*
+`posts/`. MIT grants unrestricted rights over "the Software and associated documentation files", so
+a recipient of a post could take the MIT grant and owe **no attribution at all**; a CC-BY file
+elsewhere adds a second, *more permissive* escape rather than removing the first. Attribution is the
+instrument's only purpose, so the alternative makes it optional. Binding requires the MIT grant
+itself to exclude `posts/`, and that is the edit that costs the label.
+
+**The cost, stated plainly.** `Other`/`NOASSERTION` is sidebar metadata. The files are unchanged in
+force either way, `LICENSE` still reads as standard MIT to a human, and the change is **reversible**
+— delete the clause and the label returns. The considered counter-argument is that this repo is a
+plugin marketplace front door and an adopter may read `Other` as licensing risk; it was weighed and
+the binding grant was judged worth more. Both sibling repos already sit at `Other` **without having
+chosen it**, which is worth telling them regardless.
+
+### 2. All of `posts/` is covered, with no exception — on the PATH axis, token `posts/`
+
+**Decision: the CC-BY grant covers everything in the `posts/` directory, whatever its format,
+including `posts/README.md`. There is no exception.**
+
+**The boundary token is fixed here so downstream wording cannot drift from it.** The MIT carve-out
+and the CC-BY grant both cut on the **path axis at the literal token `posts/`** — "everything in the
+top-level `posts/` directory and everything under it" against "everything except" the same. **No
+sentence in either file describes the boundary by content type** — not "prose", not "essays", not
+"the blog series". That is what makes the partition provable by reading the two files against each
+other instead of asserted in either one, and it is exactly how attempt 3 died: `LICENSE` carved out *"the blog-series **prose**
+under `posts/`"* while `LICENSE-prose.md` granted *"everything committed under `posts/`, whatever its
+format"*. #180 will put og-cards and images under `posts/`, so a content-type cut leaks immediately.
+
+**The rule: each instrument states its extent once and refers to it by name thereafter.** Stated as
+a rule for whoever edits these files next, not as a claim about what they currently say — a rule
+survives being violated, where a claim about current state is simply false the moment someone adds a
+sentence. The term in `LICENSE-prose.md` is **the Licensed Material**, defined in its opening grant
+and taken from CC BY 4.0's own §1(f); in root `LICENSE` it is `"the Software"`, defined in the scope
+preamble and used by the MIT permission clause below it. **A sentence that does not restate the
+extent cannot misstate it.**
+
+**Why a rule and not a fixed literal, which is what this entry said first.** The first attempt at
+this paragraph mandated one string — *"the top-level `posts/` directory and everything under it"* —
+everywhere, and asserted every sentence already used it. Security review falsified that in the same
+commit: five sentences in `LICENSE-prose.md` dropped the `top-level` anchor, and the primary grant
+interposed *"of this repository"*, so the `grep` the rule was justified by could not have matched the
+one sentence that mattered most. **That is the completeness proof bolted onto a rule that root
+`CLAUDE.md` warns about, arriving inside the entry written to prevent it.** Six documented misses of
+this class on #190 — three prior attempts, two review rounds, and that one — every one of them a
+sentence *restating* the boundary near a sentence that stated it correctly. The defined term removes
+the restatements, so there is nothing left to drift. The README copies sit outside both instruments
+and cannot use a term defined in one, so they spell the boundary out; that is the one place the
+literal still applies.
+
+**Why no exception, and note that decision 1 forces it.** Both prior attempts excluded
+`posts/README.md` and neither could say it operatively; round 2 then found that *"everything under
+`posts/` except `posts/README.md`"* is a sweeping grant minus an exclusion, which rots when a second
+non-series file lands there. **The exception is the defect.** And under decision 1 the root MIT is
+itself scoped to *"everything except `posts/`"* — so an exception on the CC-BY side would leave
+`posts/README.md` assigned to **neither licence**, an outright partition gap rather than merely rot.
+
+**The honest cost:** this is *over*-inclusion, and the attempt-1 architect ruling held that
+over-inclusion is the dangerous direction for a grant because CC-BY-ing MIT material is hard to claw
+back. It does not bite here for reasons specific to this file rather than general:
+`posts/README.md` is licensor-authored, is not code, never ships, and CC-BY over it costs a copier
+one attribution line. Scoping by filename convention (`posts/YYYY-MM-DD-*.md`) was considered and
+rejected — also exception-free, but keyed to `.md`, so it under-covers the assets #180 introduces.
+
+### 3. `plugin.json` stays `MIT`, and that is a conclusion rather than an omission
+
+`plugins/dev-loop/.claude-plugin/plugin.json`'s `"license": "MIT"` is **unchanged, deliberately**:
+the payload is `plugins/dev-loop/`, which is no part of the top-level `posts/` tree, so it is
+genuinely all-MIT. `.claude-plugin/marketplace.json` carries no `license` field. Recorded because
+the point of this exercise is that no licence assertion goes unexamined.
+
+### 4. Forward notes
+
+- **When the slim consumer README lands** and `plugins/dev-loop/README.md` stops mirroring the front
+  door, the payload copy must **not** inherit the root's `posts/` scope prose. The payload has no
+  `posts/` to scope.
+- **AC5's second half is discharged, and the deferral that stood here was built on a false
+  premise.** This bullet previously read *"unobservable before merge, since detection reads the
+  default branch"* and deferred the check past the merge gate. **That is wrong**: the endpoint takes
+  a `?ref=`, so `gh api repos/frederick-douglas-pearce/claude-code-loop/license?ref=<branch>` reads
+  any ref. Measured on `docs/prose-licence-for-posts` at `3f747ac`: `other` / `NOASSERTION`, `path`
+  `LICENSE`, `sha` `009d5505b1d3053a905ffef28248c9f2374e1778`, which `git rev-parse HEAD:LICENSE`
+  matches byte for byte; `main` returns `mit`. So the check was run rather than assumed, before merge
+  rather than after, and `README.md`'s licence-detection paragraph and its payload copy are **true**.
+  **The measurement is bound to that blob, not to the branch.** An earlier draft of this bullet cited
+  blob `e208f69` — and the very commit that wrote the citation also edited `LICENSE`, so the sentence
+  was false the moment it was written, and the acceptance gate caught it. A recorded measurement
+  naming a hash the same change can move is a falsifier discharged against the wrong object. If
+  `LICENSE` is edited again before merge, re-run the call; the result is expected to hold, because
+  what costs the label is the presence of a scope preamble rather than its wording.
+  **The lesson generalises past this entry**: the deferral was not created by a limit of the tool, it
+  was created by not reading the tool's parameters. A capture mechanism is the right response to
+  something genuinely unobservable now; reaching for one first is how an observable fact becomes a
+  post-merge TODO. Re-running after merge is still worth doing once, since the default branch is what
+  a reader's sidebar reflects — but nothing in this change now waits on it.
+- **E2's future guard must never be written as byte-identity.** Nothing pins the two `LICENSE` files
+  today, so this divergence breaks nothing now. If such a guard is ever added it has to encode a
+  **relationship** — payload `LICENSE` == root `LICENSE` minus the scope preamble — because equality
+  is now false by design.
