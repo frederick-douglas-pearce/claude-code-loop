@@ -1,0 +1,61 @@
+name: OG card guard
+
+# Pre-merge check that every post under posts/ has a resolvable og_card_source --
+# the SAME fail-closed resolution the Pages-sync Action runs at publish time
+# (tooling/publish-to-pages.py). Without it, a post merged without its OG card
+# turns the Pages sync RED on main, after the fact -- it did, in the
+# `claude-code-sessions` repo, for its Part 3 post. Running it on PRs surfaces
+# the miss on the PR; the push:main run mirrors pages-sync's own trigger so main
+# independently proves green, with a faster/clearer signal and no Pages checkout
+# or PAT. Stdlib only. Ported with the publisher in issue #180.
+#
+# Scope note: unlike `claude-code-sessions` (where posts/ is direct-commit-allowed
+# to main, making its guard advisory), this repo is PR-per-feature-branch
+# (CLAUDE.md -> Branching & PR flow) -- so this IS the pre-merge gate for card
+# presence, not just a loud warning.
+#
+# NOT a job inside test.yml: that workflow's `test-suite` is the aggregate check
+# branch protection requires, and folding this in would make a missing card read
+# as a test failure. Keeping them apart means a red card guard is legible as a
+# card problem.
+#
+# This workflow is NOT currently a required status check -- branch protection
+# requires `test-suite` only. That is a repo setting, not something this file can
+# assert. While posts/ holds no dated post the guard exits 0 either way; it
+# becomes load-bearing at the first dated post.
+
+on:
+  pull_request:
+    paths:
+      # posts/images/ lives under posts/, so one filter covers both the posts
+      # and their cards. The source repo also watches "social/images/**"; that
+      # path is NOT carried here -- issue #180 settled this repo's cards under
+      # posts/ (see .claude/specs/decisions.md D013), so social/ stays wholly
+      # gitignored and can never hold a card.
+      - "posts/**"
+      - "tooling/publish-to-pages.py"
+      - "tooling/check-og-cards.py"
+      - "tests/test_check_og_cards.py"
+      - ".github/workflows/og-card-guard.yml"
+  push:
+    branches: [main]
+    paths:
+      - "posts/**"
+
+permissions:
+  contents: read
+
+jobs:
+  og-card-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Reads frontmatter and checks each post's og_card_source resolves to an
+      # existing file, by running the publisher's own build_plan. No Pages repo,
+      # no secrets, no dependencies.
+      - run: python3 tooling/check-og-cards.py

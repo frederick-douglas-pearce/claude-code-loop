@@ -200,9 +200,23 @@ def check_post(filename, text):
 
     if "og_card_source" in fields:
         src = str(fields["og_card_source"])
-        # Shape only. The card renders into social/, which is gitignored, so existence
-        # is deliberately NOT checked -- posts/README.md states that gap rather than
-        # letting a green run imply the card is there.
+        # Shape only; existence is checked by `tooling/check-og-cards.py` (#180), which
+        # runs the publisher's own `build_plan` in the `og-card-guard` workflow.
+        #
+        # That guard's check is a STRICT SUPERSET of this one on a live post -- it flags
+        # absent, absolute, repo-escaping AND non-existent, where this flags the middle
+        # two -- so this sub-check is genuinely redundant wherever a dated post exists.
+        # It is kept anyway, for two reasons that have nothing to do with coverage of a
+        # live post:
+        #   1. this module runs under TEST_CMD, i.e. inside the aggregate `test-suite`
+        #      job branch protection requires; the og-card-guard workflow is NOT a
+        #      required check, so removing this would leave no merge-blocking assertion
+        #      about og_card_source at all;
+        #   2. it fires against CheckerBatteryTests' fixture with ZERO posts on disk,
+        #      which is the repo's state today and exactly where the guard exits 0
+        #      having checked nothing.
+        # Do not read this as "shape here, resolvability there over different objects" --
+        # that framing is false, and an earlier draft of this comment said it.
         if src.startswith("/") or ".." in pathlib.PurePosixPath(src).parts:
             problems.append(
                 "og_card_source must be a repo-relative path that does not escape the "
@@ -267,7 +281,7 @@ description: "Why the roles on a dev team outlived the people who filled them."
 categories: ["claude-code-loop"]
 tags: ["claude-code", "dev-loop", "foundation"]
 og_image: https://frederick-douglas-pearce.github.io/assets/img/team-you-didnt-hire-og.png
-og_card_source: social/images/2026-10-01-linkedin-team-you-didnt-hire/og-card.png
+og_card_source: posts/images/team-you-didnt-hire/og-card.png
 featured: false
 claude_code_version_verified: v2.1.243
 humanizer_pass: v3.0.0
@@ -372,7 +386,7 @@ class CheckerBatteryTests(unittest.TestCase):
 
     def test_og_card_source_escaping_the_repo_is_caught(self) -> None:
         self._assert_complains(
-            self._mutated("social/images/", "../../social/images/"),
+            self._mutated("posts/images/", "../../posts/images/"),
             "does not escape the repo",
         )
 

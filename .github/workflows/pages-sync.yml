@@ -32,7 +32,9 @@ on:
       # NOT "social/images/**", which the source repo also watches: `social/` is
       # gitignored in THIS repo (see .gitignore), so that path can never change
       # in a push event here. Dropped deliberately rather than carried as a dead
-      # filter. If #180 moves OG cards to a tracked directory, add THAT path.
+      # filter. #180 settled this repo's cards at `posts/images/<slug>/`, which
+      # the "posts/**" filter above already covers, so no path was added --
+      # `social/` stays wholly gitignored and can never hold a card.
   workflow_dispatch:
     inputs:
       dry_run:

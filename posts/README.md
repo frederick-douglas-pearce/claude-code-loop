@@ -26,7 +26,9 @@ nothing here is left unassigned and nothing is covered by both.
 
 ## Formatting
 
-**Everything in this directory is checked by Prettier, and nothing else in the repo is.**
+**Every file in this directory that Prettier can parse is checked by it, and nothing else in
+the repo is.** Prettier skips extensions it has no parser for, so the OG cards under
+`posts/images/` ride along unformatted; the markdown is what the gate is for.
 [`.github/workflows/prettier.yml`](../.github/workflows/prettier.yml) runs `prettier . --check`
 on every PR and every push to `main`, pinned to the **exact** formatter version the Pages site
 pins. The rest of the repo — the plugin payload, `tests/`, `docs/`, `.claude/`, the maintainer
@@ -65,7 +67,7 @@ description: "One-sentence summary used for previews and SEO"
 categories: ["claude-code-loop"]
 tags: ["claude-code", "dev-loop", "agents", "foundation | failure-mode | method"]
 og_image: https://frederick-douglas-pearce.github.io/assets/img/<slug>-og.png
-og_card_source: social/images/YYYY-MM-DD-linkedin-<slug>/og-card.png
+og_card_source: posts/images/<slug>/og-card.png
 featured: false
 claude_code_version_verified: vX.Y.Z
 humanizer_pass: vX.Y.Z | none
@@ -75,6 +77,31 @@ claims_verified: YYYY-MM-DD | none
 
 `date` carries a time and a UTC offset, not a bare date, and its date part must match the
 filename.
+
+### Where an OG card lives
+
+**`posts/images/<slug>/og-card.png`, committed.** `<slug>` is the post's filename without the
+date prefix or the `.md` — so `posts/2026-10-01-the-team-you-didnt-hire.md` pairs with
+`posts/images/the-team-you-didnt-hire/og-card.png`. The card must be **committed**, because the
+publisher resolves it on a CI runner that has only what the checkout contains.
+
+**This diverges from the two sibling repos, deliberately, and the reason is not style.** Both
+`us-presidential-vote-analysis` and `claude-code-sessions` keep cards at
+`social/images/<date>-linkedin-<slug>/`, reached by a `/social/*` + `!/social/images/`
+carve-out in `.gitignore`. This repo does not copy that, for two reasons:
+
+1. **A recorded decision already assumed otherwise.** `.claude/specs/decisions.md` D013 — the
+   `posts/` prose licence — cuts the CC-BY grant on the **path axis** at the literal token
+   `posts/`, and explicitly rejected a `posts/YYYY-MM-DD-*.md` alternative because it would
+   "under-cover the assets #180 introduces." Cards under `social/` would fall on the root
+   `LICENSE`'s MIT side, so a published card would carry a different licence from the post it
+   illustrates.
+2. **`social/` is working state here, and stays wholly gitignored.** `CLAUDE.md` draws the
+   boundary as _a file crosses over when it is ready to be reviewed as publishable_. A card
+   that is ready to publish crosses into `posts/`, exactly as its post does — one rule instead
+   of a carve-out whose failure is silent.
+
+**Do not "fix" this back to match the siblings.** Settled in #180; the divergence is the point.
 
 ### The three attestation fields
 
@@ -229,14 +256,5 @@ loud.
 
 Stated plainly so nobody assumes more exists than does:
 
-- **`og_image` / `og_card_source` are checked for shape, not resolvability.** The guard checks
-  that the fields are present and well-formed and that the `og_card_source` path stays inside
-  the repo. **It does not check that the file exists**, because the card is rendered into
-  `social/`, which is gitignored. A post can therefore pass CI and still fail the sync.
-- **No OG card can resolve on a CI runner, so the publisher is wired but inert.** The publisher
-  fail-closes when `og_card_source` does not resolve, and `social/` is gitignored, so a CI
-  checkout has no card to read. Nothing publishes today because `posts/` holds no dated post;
-  **the first real post will hit this** unless #180 lands first. Where a card should live is
-  #180's to settle, and it changes the `og_card_source` convention stated above.
 - **No OG-card renderer.** `render-og-card.py` is #181, which also carries the one dependency
   decision this repo's stdlib-only rule forces.

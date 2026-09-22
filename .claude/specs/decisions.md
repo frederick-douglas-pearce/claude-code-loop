@@ -383,3 +383,61 @@ the point of this exercise is that no licence assertion goes unexamined.
   today, so this divergence breaks nothing now. If such a guard is ever added it has to encode a
   **relationship** — payload `LICENSE` == root `LICENSE` minus the scope preamble — because equality
   is now false by design.
+
+---
+
+## D014 — 2026-09-22 — OG cards live at `posts/images/<slug>/`, and D013's forward premise held
+
+**Appending, not amending.** This log is append-only, so D013's two forward references to #180
+stay exactly as written — they were accurate when written and are now simply settled. This entry
+is what a reader arriving at them should find next.
+
+### The decision
+
+**An OG card lives at `posts/images/<slug>/og-card.png`, committed**, where `<slug>` is the post's
+filename minus the date prefix and the `.md`. Settled at #180's plan gate, approved by the human
+2026-09-22. Written into `posts/README.md` → *Where an OG card lives*, which is the copy an author
+reads; this entry records **why**, which that section states only in summary.
+
+### D013's premise is confirmed, not merely unfalsified
+
+D013 §2 cuts the CC-BY grant on the **path axis** at the literal token `posts/` and gave as one
+reason: *"#180 will put og-cards and images under `posts/`, so a content-type cut leaks
+immediately."* It also **rejected** a `posts/YYYY-MM-DD-*.md` scoping as *"keyed to `.md`, so it
+under-covers the assets #180 introduces."*
+
+**Both were forward-looking claims about a decision nobody had taken yet.** They are now true as
+stated: this change lands the first non-`.md` file under `posts/`, and a `.md`-keyed grant would
+have failed to cover it. D013's path-axis cut needs no revision.
+
+**This ran the other way round, and it is worth recording which direction the reasoning went.**
+The fork was argued first on other grounds — boundary preservation and the silent failure mode of
+a negated-ignore idiom — by two agents, both of which reached `posts/`. D013 was found afterwards,
+by a `git grep -n '#180'` the architect demanded for an unrelated reason, and it turned a
+preference into a constraint: the alternative would have put a **published card on the MIT side of
+a grant whose post is CC-BY**, re-opening the partition gap D013 §2 spent three attempts closing.
+**A recorded decision reasoning about unfinished work is a constraint on that work, and nothing
+searches for it on your behalf.** Grep the decision log for the issue number before settling
+anything a prior entry may have assumed.
+
+### The cost, stated rather than buried
+
+**This diverges from both sibling repos**, which keep cards at
+`social/images/<date>-linkedin-<slug>/` behind a `/social/*` + `!/social/images/` carve-out. This
+repo's `social/` stays wholly gitignored. The divergence was accepted twice: once on its merits,
+and once again after the orchestrator corrected a mistaken belief that `posts/images/` matched the
+siblings — it matches neither, and neither sibling has any non-`.md` file under `posts/`.
+
+Two things follow for whoever edits this next. **`posts/` is no longer markdown-only**, so a rule
+written as "every file in `posts/`" must say what it means about assets — `posts/README.md`'s
+Prettier paragraph was corrected in this change for exactly that reason. And **do not "tidy" the
+card path back to match the siblings**; it would falsify this entry and D013 together.
+
+### Forward note
+
+`tooling/check-og-cards.py` (#180) now runs the publisher's `build_plan` on PRs, so an
+unresolvable card fails the PR rather than the `main` sync. It is **not** a required status check —
+branch protection requires the aggregate `test-suite` job only, and no file in this repo can assert
+a protection setting. While `posts/` holds no dated post the guard exits 0 either way; it becomes
+load-bearing at the first dated post. Making it required is the same open question as #195 asks for
+`prettier`.
