@@ -48,7 +48,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -566,7 +566,12 @@ class CliContractTests(_FixtureTree):
         self.assertIn("--source-repo must not be empty", str(cm.exception))
 
     def test_source_repo_is_required(self) -> None:
-        with self.assertRaises(SystemExit):
+        # argparse writes its usage block to stderr on a missing required arg.
+        # Swallow it: otherwise a fully green run prints what reads at a glance
+        # like a failure, and a suite whose clean output looks broken trains the
+        # reader to skim past real output.
+        err = io.StringIO()
+        with redirect_stderr(err), self.assertRaises(SystemExit):
             publish_to_pages.main(
                 [
                     str(self.post),
@@ -574,6 +579,10 @@ class CliContractTests(_FixtureTree):
                     "--assets-dir", str(self.assets_dir),
                 ]
             )
+        # Assert the diagnosis, not merely the exit: argparse exits non-zero for
+        # any bad invocation, so a bare SystemExit would pass if the flag were
+        # renamed rather than made required.
+        self.assertIn("--source-repo", err.getvalue())
 
 
 if __name__ == "__main__":
