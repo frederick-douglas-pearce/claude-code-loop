@@ -183,18 +183,39 @@ something the guard has retired.
 
 ### One-time owner setup: `PAGES_SYNC_TOKEN`
 
-Publishing needs a cross-repo write token, and **it is an _environment_ secret, not a repo
-secret** — the workflow declares `environment: pages-sync` and matches that name literally, so a
-repo-level secret fails the preflight under a message that points at the wrong place.
+Publishing needs a cross-repo write token. Store it as an **environment** secret:
 
 1. Create a **fine-grained PAT** with `contents: write` on the **Pages repo only**.
 2. In this repo: Settings → Environments → new environment named exactly **`pages-sync`**.
 3. Add the PAT there as a secret named exactly **`PAGES_SYNC_TOKEN`**.
+4. **On that same environment, restrict deployment branches to `main`.** Do this _when you create
+   it_, not later — see the warning below.
 
-Both names are matched literally by the workflow; the PAT's own display name is not read by
-anything. The token is never echoed — it is consumed only by the Pages checkout, which persists
-it in `pages/.git/config` for the push. **Never `cat` that file, dump `env`, or upload the
-workspace as an artifact.**
+**Why an environment secret rather than a repository secret:** blast radius. An environment secret
+is exposed only to jobs that name that environment, while a repository secret is in the `secrets`
+context of every job in the repo. It is not that a repository secret would fail — it would
+resolve, and publishing would work — it is that it would also be reachable from every other
+workflow here.
+
+The environment name and the secret name are matched literally by the workflow; the PAT's own
+display name is not read by anything. The token is consumed by the preflight's presence check and
+by the Pages checkout; **only the checkout persists it**, in `pages/.git/config`, for the push.
+It is never echoed. **Never `cat` that file, dump `env`, or upload the workspace as an artifact.**
+
+> ⚠ **Step 4 is not optional, and it is why the order matters.** The workflow's "only main may
+> publish" guard gates _publishing_, not _token exposure_: a `workflow_dispatch` from any branch
+> with `dry_run` ticked still enters the `pages-sync` environment, checks the Pages repo out with
+> the PAT, and runs **that branch's** copy of `tooling/publish-to-pages.py`. So anyone who can push
+> a branch and dispatch a workflow can execute code with the PAT in reach. Restricting the
+> environment's deployment branches to `main` closes that; nothing in the repo's files can. The
+> trade-off is that the feature-branch dry-run preview below stops working — take it.
+
+### Previewing without publishing
+
+Run the workflow manually (Actions → Pages sync → Run workflow) with **`dry_run` ticked**. It
+performs the whole transform against the live Pages tip, writes the diff to the job summary, and
+exits before the push. The namespace guard still runs — deliberately, because an operator preview
+is exactly where a collision with another series should surface, before a real push finds it.
 
 Until that environment exists the workflow still exits **green** on a run with nothing to
 publish, because the `detect` step gates the preflight. A run with a real post to publish fails

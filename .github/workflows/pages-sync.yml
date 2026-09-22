@@ -4,11 +4,8 @@ name: Pages sync
 # Jekyll Pages repo. The transform, OG-card resolution, and content-compare live
 # in tooling/publish-to-pages.py; this Action owns auth + the reconcile-retry
 # push to a shared branch. Ported from `us-presidential-vote-analysis`, which
-# ported it from `claude-code-sessions` (its issue #132). All three publish into
-# the SAME Pages site, and this repo makes the THIRD.
-#
-# Tracker refs here are cross-repo and spelled out (`us-presidential-vote-analysis#NNN`)
-# because the repos share one issue-number namespace with different meanings.
+# ported it from `claude-code-sessions`. All three publish into the SAME Pages
+# site, and this repo makes the THIRD.
 #
 # TWO STRINGS IN THIS FILE ARE A CROSS-REPO API, not local style: the commit
 # author `pages-sync[bot]` and the subject
@@ -71,7 +68,7 @@ env:
   PAGES_BRANCH: main
   # This repo's own slug, and the ONE source for it. It is consumed twice — the
   # sync commit subject below, and the publisher's --source-repo flag — and the
-  # provenance guard (#157) is only sound while those two agree: the guard reads
+  # provenance guard is only sound while those two agree: the guard reads
   # a past subject and compares it to the flag, so a drift between them would
   # make this repo's own cards read as another publisher's. Taken from GitHub
   # rather than typed, so it cannot drift from the repository it runs in.
@@ -90,7 +87,6 @@ jobs:
       # from a feature branch WITHOUT ticking dry_run would check out that
       # branch's posts/ and push it to the live site — an unreviewed draft
       # published under a green run. Only main publishes; any ref may preview.
-      # (This guard is an addition to the ported workflow, not a port of one.)
       - name: Guard — only main may publish
         env:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
@@ -110,9 +106,8 @@ jobs:
       # `posts/**` filter matches posts/README.md, and posts/ holds only that
       # README until post 1 ships — so without this ordering, merging the port
       # itself would turn `main` red on a repo with no PAT and nothing to
-      # publish. It would also contradict the PR guard, which calls the
-      # identical state clean. The publisher never deletes, so an empty match
-      # can only ever mean "nothing to do".
+      # publish. The publisher never deletes, so an empty match can only ever
+      # mean "nothing to do".
       - name: Detect publishable posts
         id: detect
         working-directory: source
@@ -147,7 +142,7 @@ jobs:
           token: ${{ secrets.PAGES_SYNC_TOKEN }}
           path: pages
           # Full history so the reconcile/retry loop can reset onto a moved tip —
-          # AND so the shared-namespace guard (#157) can read who last published
+          # AND so the shared-namespace guard can read who last published
           # each target. Do NOT shorten this to speed the job: the reconcile loop
           # would still work, and the guard would not go noisy — it would go
           # SILENT. A shallow tip is parentless, so every path reads as added
@@ -241,8 +236,8 @@ jobs:
           commit_msg="chore(sync): publish posts from ${SOURCE_REPO}@${GITHUB_SHA:0:7}"
           git commit -m "${commit_msg}"
 
-          # Pages main has OTHER automated writers (the daily ESG cron, and the
-          # sibling claude-code-sessions sync). An event-triggered push has no
+          # Pages main has OTHER automated writers (the daily ESG cron, and
+          # both sibling syncs). An event-triggered push has no
           # 'next run' to reconcile a lost race, so on rejection: fetch + reset to
           # the moved tip, RE-TRANSFORM against it (content-compare authoritative
           # at push time — no stale bytes and no rebase-replay conflict),

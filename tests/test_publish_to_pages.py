@@ -21,9 +21,10 @@ and the walk that stops on an unattributable sync rather than skipping it).
 A seam-only suite would assert the *outcome* (owner=X => refuse naming X) while
 leaving the *mechanism* (a real history parsed INTO owner=X) untested. That is
 the outcome-shaped hole `tests/CLAUDE.md` is about, and it is not hypothetical:
-the source repo MEASURED it. Swapping `%cn` for `%an` left all 55 of its tests
-green, and dropping the pathspec was green across its whole unit suite. Both
-mutations restore a silent cross-publisher overwrite. Tier 2 is what notices.
+the source repo MEASURED it. Swapping `%cn` for `%an` left its whole suite green,
+and so did dropping the pathspec. Both mutations restore a silent cross-publisher
+overwrite. Tier 2 is what notices. (No test count is quoted: the figure carried
+over from the source was already stale against the file it named.)
 
 **Tier 2 requires a real `git` binary** and builds throwaway repositories under
 `tempfile`. That is a deliberate, conscious precondition rather than an
@@ -31,10 +32,11 @@ accident: the alternative -- skipping when git is absent -- would let the
 security coverage evaporate silently on exactly the machine where nobody looks.
 Still stdlib-only: `subprocess` + `tempfile`, no dependency.
 
-Nothing here touches the real repository or the real Pages site. Every test gets
-a throwaway source tree with `REPO_ROOT` repointed at it, and a Pages tree that
-is deliberately a SIBLING of that root, because `run()` refuses Pages
-directories that live inside the source repo.
+Nothing here touches the real repository or the real Pages site. Tests that
+subclass `_FixtureTree` get a throwaway source tree with `REPO_ROOT` repointed at
+it, and a Pages tree deliberately made a SIBLING of that root, because `run()`
+refuses Pages directories inside the source repo. `ProvenanceGitFixtureTests`
+builds its own throwaway git repo and does not patch `REPO_ROOT`; it reads none.
 """
 
 from __future__ import annotations
@@ -71,7 +73,18 @@ UNATTRIBUTED_SYNC = publish_to_pages.UNATTRIBUTED_SYNC
 OURS = "claude-code-loop"
 SIBLING = "claude-code-sessions"
 
-_GOOD_POST = """---
+# Deliberately hostile to a formatter: trailing spaces, a tab, and a run of blank
+# lines. A "byte-for-byte" assertion against a body with none of these is
+# satisfied by any reformat that finds nothing to strip -- which is how the first
+# version of this fixture let a whitespace-stripping mutation survive.
+_FRAGILE_BODY = (
+    "\nBody text with *emphasis* and a trailing line.   \n"
+    "\tTab-indented line with trailing tab.\t\n"
+    "\n\n\n"
+    "Three blank lines above this one.\n"
+)
+
+_FRONTMATTER = """---
 layout: post
 title: "The team you didn't hire"
 date: 2026-10-01 09:00:00-0700
@@ -85,9 +98,9 @@ claude_code_version_verified: v2.1.243
 humanizer_pass: v3.0.0
 claims_verified: 2026-10-01
 ---
-
-Body text with *emphasis* and a trailing line.
 """
+
+_GOOD_POST = _FRONTMATTER + _FRAGILE_BODY
 
 _POST_STEM = "2026-10-01-team-you-didnt-hire"
 _CARD_BYTES = b"\x89PNG\r\n\x1a\n-not-really-a-png-but-bytes-are-bytes"
@@ -204,16 +217,37 @@ class TransformTests(_FixtureTree):
         # bytes that differ from the source of record and redden the SITE.
         fm, body = publish_to_pages.split_frontmatter(_GOOD_POST)
         out = publish_to_pages.transform_bytes(fm, body).decode("utf-8")
+        # The contract is the bytes, not a substring: asserting one sentence
+        # survives would pass for whitespace normalization, CRLF conversion, or
+        # a stripped blank line -- every reformat this must not do.
+        self.assertTrue(out.endswith(body))
         self.assertIn("Body text with *emphasis* and a trailing line.", out)
-        self.assertTrue(out.endswith("\n"))
 
-    def test_a_missing_card_aborts_the_batch_before_any_write(self) -> None:
-        (self.repo / "social" / "images" / "2026-10-01-linkedin-team-you-didnt-hire"
-         / "og-card.png").unlink()
+    def test_a_missing_card_aborts_the_whole_batch_before_any_write(self) -> None:
+        # validate-all-then-write: one bad post must not half-publish the batch.
+        # Driven through run() with TWO posts, because build_plan has no write
+        # path at all -- asserting an empty output dir against it would hold for
+        # every possible implementation, including one that writes eagerly.
+        second = self.repo / "posts" / "2026-10-02-second-post.md"
+        second.write_text(
+            _GOOD_POST.replace("2026-10-01", "2026-10-02")
+            .replace("team-you-didnt-hire", "second-post"),
+            encoding="utf-8",
+        )
+        # The FIRST post is fully valid; only the second's card is missing.
+        (self.repo / "social" / "images" / "2026-10-02-linkedin-second-post").mkdir(
+            parents=True
+        )
         with self.assertRaises(PublishError) as cm:
-            self.plan()
+            publish_to_pages.run(
+                [self.post, second], self.posts_dir, self.assets_dir,
+                dry_run=False, source_repo=OURS, pages_owner=lambda dest: OURS,
+            )
         self.assertIn("og card source not found", str(cm.exception))
-        self.assertEqual(list(self.posts_dir.iterdir()), [])
+        self.assertIn("2026-10-02-second-post.md", str(cm.exception))
+        # The valid post must NOT have been written despite being planned first.
+        self.assertEqual(sorted(p.name for p in self.posts_dir.iterdir()), [])
+        self.assertEqual(sorted(p.name for p in self.assets_dir.iterdir()), [])
 
 
 class DryRunTests(_FixtureTree):
@@ -306,10 +340,24 @@ class NamespaceGuardSeamTests(_FixtureTree):
 
     def test_a_target_owned_by_a_sibling_is_refused_naming_that_sibling(self) -> None:
         # AC5's required negative: it must fail, and fail FOR THAT REASON.
+        # The needle must be the branch's OWN discriminator. "rename this post's
+        # slug" is not: it is a substring of all three refusals, two of which say
+        # "do NOT rename" -- so asserting it passes whichever branch fired, which
+        # is the polarity-blind shape tests/CLAUDE.md warns about.
         msg = self._refusal(SIBLING)
         self._assert_names(
-            msg, "refusing to overwrite", SIBLING, OURS, "rename this post's slug"
+            msg,
+            "refusing to overwrite",
+            SIBLING,
+            OURS,
+            "shared with another publisher",
+            "targets are unique across both series",
         )
+        # Case-INSENSITIVE: a lowercase "do NOT rename" inversion survived the
+        # first version of this assertion, which is the same polarity hole one
+        # capital letter further down.
+        self.assertNotIn("not rename", msg.lower())
+        self.assertNotIn("reflexively", msg.lower())
 
     def test_an_unattributable_sync_is_refused_with_the_subject_format_remedy(self) -> None:
         msg = self._refusal(UNATTRIBUTED_SYNC)
@@ -352,8 +400,10 @@ class NamespaceGuardSeamTests(_FixtureTree):
 class ProvenanceGitFixtureTests(unittest.TestCase):
     """Tier 2 -- `git_pages_owner` against real histories. Requires `git`.
 
-    Every test here pins a property the seam cannot reach, and each one of them
-    was measured GREEN across the source repo's whole suite when broken.
+    Every test here pins a property the seam cannot reach. Three of those
+    properties were measured in the source repo: swapping `%an` for `%cn` and
+    dropping the pathspec each left its whole suite green, and the field order
+    likewise. No claim is made here about the others having been measured.
     """
 
     def setUp(self) -> None:
@@ -450,8 +500,30 @@ class ProvenanceGitFixtureTests(unittest.TestCase):
         outside = Path(self._tmp.name) / "not-a-repo" / "x.md"
         outside.parent.mkdir()
         outside.write_text("x\n", encoding="utf-8")
-        with self.assertRaises(PublishError):
+        with self.assertRaises(PublishError) as cm:
             publish_to_pages.git_pages_owner(outside)
+        # Delete the toplevel check and `git log` still raises PublishError here
+        # -- under a message blaming an empty repository. Assert the diagnosis,
+        # not merely that something was raised.
+        self.assertIn("is not inside a git checkout", str(cm.exception))
+
+
+class ProvenanceFormatTests(unittest.TestCase):
+    """The field order in `_PROVENANCE_FORMAT` is a security property.
+
+    Pinned on the constant as well as behaviourally (see
+    `test_a_split_forging_subject_cannot_forge_our_ownership`): the free-text
+    field must come LAST, so that every fragment a `splitlines()` split produces
+    lands in the author slot with an empty subject. Reversed, a crafted subject
+    lands in the slot that gets parsed, and forges ownership.
+    """
+
+    def test_the_provenance_format_puts_the_free_text_field_last(self) -> None:
+        fmt = publish_to_pages._PROVENANCE_FORMAT
+        self.assertTrue(fmt.endswith("%s"), "the free-text subject must come last")
+        self.assertEqual(fmt.index("%an"), 0, "the author must come first")
+        self.assertIn("%x00", fmt, "the separator must be NUL")
+        self.assertNotIn("%cn", fmt, "the committer does not survive a rebase")
 
 
 class SubjectParsingTests(unittest.TestCase):

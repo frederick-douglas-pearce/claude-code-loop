@@ -10,14 +10,6 @@ auth and the reconcile-retry push; this script owns the transform, OG-image
 resolution, and the content-compare that makes re-runs idempotent. That split is
 what lets this file be tested with no Pages checkout and no token.
 
-**Tracker references in this file are cross-repo and are written as such.**
-Comments below cite the source repo's issues and decisions as
-`us-presidential-vote-analysis#NNN` / `us-presidential-vote-analysis DNNN`. They
-are spelled out because the two repos share one issue-number namespace with
-different meanings — a bare `#157` here denotes an unrelated issue in THIS repo,
-and `#200`/`#214`/`#225` do not exist here yet but will. A citation that silently
-resolves to the wrong thing is worse than none, because the reader stops looking.
-
 Usage:
     publish-to-pages.py <source.md>... --posts-dir DIR --assets-dir DIR
                         --source-repo SLUG [--dry-run]
@@ -55,7 +47,7 @@ What it does, per post:
    versions. Do not "helpfully" add a format pass here — it would break the
    byte-for-byte contract and make the published post differ from the source of
    record. (That gate was MISSING when the source repo was ported in
-   `us-presidential-vote-analysis#132`, and its post 1 duly turned the site red
+   the source repo, and its post 1 duly turned the site red
    on 2026-08-12. This repo landed the gate FIRST, deliberately, in #178.)
 2. **Resolve + copy the OG card**: the post's `og_card_source` field
    (repo-root-relative) is the source; the target is `<assets-dir>/<basename of
@@ -95,11 +87,9 @@ before any write, a target that already exists with different bytes must have
 been written last by a sync from THIS repo, or the run aborts. The provenance is
 the Pages repo's own history — each sync commits as
 `chore(sync): publish posts from <repo>@<sha>`, under the author
-`pages-sync[bot]`. **Both halves are read**
-(`us-presidential-vote-analysis#200` / `D058`): the subject says which publisher,
-and the author says that some publisher synced this at all, so a sibling that
-rewords its subject is refused rather than walked past. That history has to be
-there: the Action's `fetch-depth: 0` predates this guard (it exists for the
+`pages-sync[bot]`. **The subject decides ownership; the author is a fallback
+read only when the subject does not parse** — `git_pages_owner` is the statement
+of record. That history has to be there: the Action's `fetch-depth: 0` predates this guard (it exists for the
 reconcile-retry loop) but the guard now depends on it too, and the workflow
 says so at the checkout step. A shallow clone does not merely degrade this — it
 **silently fails open**: the grafted tip is parentless, so every path reads as
@@ -155,9 +145,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #   claims_verified              — attestation: the date the post's receipts list
 #                                  was walked
 #
-# The three attestations are THIS repo's contract (posts/README.md); the source
-# repo strips only the first two of them and `claims_verified` exists in neither
-# sibling. They record that a manual step was performed, which is a fact about
+# The three attestations are THIS repo's contract (posts/README.md).
+# `claude-code-sessions` strips the first two; `claims_verified` exists in
+# neither sibling. They record that a manual step was performed, a fact about
 # how the post was produced and not content for the published page.
 #
 # Note the interaction, recorded rather than silently accepted: AI-DISCLOSURE.md
@@ -211,7 +201,7 @@ def _top_level_key(line: str) -> str | None:
 def _unquote(value: str) -> str:
     """Drop one matching pair of surrounding quotes, YAML-style.
 
-    Added on the port: the source repo reads the raw partition. This repo's own
+    Added when the source repo ported this from `claude-code-sessions`: the source repo reads the raw partition. This repo's own
     frontmatter convention quotes `title` and `description`, so quoting
     `og_image` too is a natural habit — and an unstripped quote survives all the
     way into a filename (see `og_target_name`).
@@ -285,7 +275,7 @@ def og_target_name(og_image: str | None) -> str:
         raise PublishError(
             f"could not derive an OG target basename from og_image {og_image!r}"
         )
-    # Added on the port. Without it, a stray character in the frontmatter value
+    # Added when the source repo ported this from `claude-code-sessions`. Without it, a stray character in the frontmatter value
     # rides through into the filename and the card is written one byte away from
     # where `og_image` points — a broken share image on a green Action, which is
     # the precise failure this module's fail-closed design exists to prevent. A
@@ -352,37 +342,27 @@ def build_plan(
 #: `--source-repo` (see .github/workflows/pages-sync.yml), so OUR half cannot
 #: drift.
 #:
-#: The sibling's half is still an assumption, not an invariant: it must match
-#: what `claude-code-sessions`'s own Action writes, which no test here can pin.
-#: Verified by hand against that repo's `pages-sync.yml` on 2026-08-28, and
-#: against its 15 sync commits in the live Pages history on 2026-09-07 —
-#: `chore(sync): publish posts from claude-code-sessions@<sha>`, identical.
+#: Each sibling's half is an assumption, not an invariant: it must match what
+#: that repo's own Action writes, and no test here can pin another repo.
 #:
-#: **Drift in that subject no longer fails open**, which is the change us-presidential-vote-analysis#200 made
-#: and the reason this comment is shorter than it was. A drifted sibling subject
-#: was previously not read as "theirs" — it was not read at all, so the scan
-#: walked past it to an older sync of OURS and the overwrite proceeded silently.
-#: `_SYNC_AUTHOR` below is the second, independent signal that closes that: the
-#: commit is still authored by the sync bot, so it is now read as an
-#: unattributable sync and refused. See us-presidential-vote-analysis D058, which supersedes its D056's accepted
-#: residual on this point (us-presidential-vote-analysis D056 itself is unedited — append-only).
+#: A drifted sibling subject is not walked past. `_SYNC_AUTHOR` below is a second
+#: signal, read when this pattern does not match: the commit is still authored by
+#: the sync bot, so it is read as an unattributable sync and refused rather than
+#: resolving to an older sync of ours.
 _SYNC_SUBJECT = re.compile(
     r"^chore\(sync\): publish posts from (?P<repo>[A-Za-z0-9._-]+)@"
 )
 
-#: The identity BOTH publishers' syncs commit under — the second signal, and the
-#: only thing standing between a reworded sibling subject and a silent
-#: overwrite. Our own Action sets it (`git config user.name` in
-#: .github/workflows/pages-sync.yml, tied to this constant by
-#: `test_the_workflow_commits_under_the_identity_the_guard_keys_on`); the
-#: sibling's is verified empirically rather than assumed — all 23 sync commits
-#: in the live Pages history, ours and theirs alike, carry it (2026-09-07).
+#: The identity a publisher's sync commits under — the second signal, read when a
+#: subject does not parse. Our own Action sets it with `git config user.name` in
+#: .github/workflows/pages-sync.yml. **Nothing in this repo ties the two
+#: together**, so keeping them equal is manual.
 #:
 #: Deliberately the sync identity and NOT "any bot": the Pages repo's other
 #: automated writer is `dependabot[bot]`, and a rule keyed on the `[bot]` suffix
 #: would refuse the day it — or any future image optimizer — touched a guarded
 #: dir. Narrow makes that safety structural rather than contingent on what
-#: dependabot happens to write today. See us-presidential-vote-analysis D058.
+#: dependabot happens to write today.
 _SYNC_AUTHOR = "pages-sync[bot]"
 
 #: The `git log` format the provenance walk reads — and the one place its field
@@ -409,9 +389,8 @@ _SYNC_AUTHOR = "pages-sync[bot]"
 #:
 #: Both halves are pinned by `test_the_provenance_format_puts_the_free_text_field_last`,
 #: and the security consequence by
-#: `test_a_split_forging_subject_cannot_forge_our_ownership` — both in
-#: `us-presidential-vote-analysis`'s `tests/unit/test_publish_to_pages.py`. Until us-presidential-vote-analysis#215 this order was held by a
-#: comment alone, which is the defect class this repo refuses to leave standing.
+#: `test_a_split_forging_subject_cannot_forge_our_ownership`
+#: (tests/test_publish_to_pages.py).
 _PROVENANCE_FORMAT: Final = "%an%x00%s"
 
 
@@ -469,8 +448,8 @@ def git_pages_owner(dest: Path) -> PagesOwner:
     `UNATTRIBUTED_SYNC` means the most recent commit this reader could attribute
     to a publisher at all was one it could not attribute to WHICH publisher: a
     commit authored by `_SYNC_AUTHOR` whose subject `_SYNC_SUBJECT` does not
-    parse. That is the sibling-drift case (us-presidential-vote-analysis#200 / D058), and reading it required a
-    second signal because the subject alone cannot: a drifted subject is
+    parse. That is the sibling-drift case, and reading it required a second
+    signal because the subject alone cannot: a drifted subject is
     indistinguishable from prose, so it was previously skipped and the scan
     resolved ownership to whatever it found NEXT — an older sync of ours,
     typically, which meant the overwrite proceeded. The author survives the walk
@@ -480,23 +459,21 @@ def git_pages_owner(dest: Path) -> PagesOwner:
     both repos today, but the author is what survives a rebase or cherry-pick of
     a sync commit, where the committer flips to whoever rewrote it — and "who
     originally published this target" is the provenance question being asked.
-    Guarded since us-presidential-vote-analysis#223 by `test_a_rebased_sibling_sync_is_not_misread_as_ours`,
-    which builds a history where the two differ, and by
-    `test_the_provenance_format_reads_the_author_not_the_committer` on the
-    constant. Until then this paragraph was the only thing holding it: swapping
-    `_PROVENANCE_FORMAT` to `%cn` left all 55 tests in
-    `us-presidential-vote-analysis`'s `tests/unit/test_publish_to_pages.py` green — and the whole unit suite with
-    them — while restoring the us-presidential-vote-analysis D058 silent overwrite.
+    Guarded by `test_the_read_uses_the_author_not_the_committer`
+    (tests/test_publish_to_pages.py), which builds a history where the two
+    differ. It is worth a test rather than a paragraph: in the source repo,
+    swapping `_PROVENANCE_FORMAT` to `%cn` left the whole suite green while
+    restoring a silent overwrite.
 
     **Scoped to `dest`, by the `-- <path>` pathspec on the log call.** The
     summary line above says *touching `dest`*; this is the mechanism that makes
     it true, and it is load-bearing rather than incidental. Drop the pathspec and
     the walk answers "who wrote the repo last" instead of "who wrote this target
     last": whichever publisher synced most recently then owns EVERY target, and
-    right after one of our own publishes that is us, so the us-presidential-vote-analysis D058 overwrite
-    proceeds. Measured, and green across the whole unit suite until us-presidential-vote-analysis#225 — see
-    `test_a_sibling_owned_target_is_not_read_from_our_sync_of_another_file`,
-    the first fixture here holding two targets owned by two publishers.
+    right after one of our own publishes that is us, so the overwrite proceeds.
+    Guarded by `test_ownership_is_scoped_to_the_path_not_the_repository`
+    (tests/test_publish_to_pages.py), whose fixture holds two targets owned by
+    two publishers.
 
     **A RENAME is not covered by that, and is not fail-closed in general.** A
     path-scoped walk loses everything BEFORE a rename but keeps the renaming
@@ -552,14 +529,13 @@ def git_pages_owner(dest: Path) -> PagesOwner:
         if owner is not None:
             return owner
         # A sync we cannot attribute stops the walk rather than being skipped.
-        # Walking past it is the us-presidential-vote-analysis#200 failure: the next recognizable sync is
-        # usually an older one of ours, which reads as ownership we do not have.
+        # Walking past it would reach the next recognizable sync, usually an
+        # older one of ours, which reads as ownership we do not have.
         if author == _SYNC_AUTHOR:
             return UNATTRIBUTED_SYNC
         # Anything else is a non-sync writer — a hand edit, a web merge, the
-        # site's daily ESG cron — and is skipped, which is the leg us-presidential-vote-analysis#157's review
-        # paid for: reading it as foreign would let one typo fix on the Pages
-        # side brick every future publish.
+        # site's daily ESG cron — and is skipped: reading it as foreign would
+        # let one typo fix on the Pages side brick every future publish.
     return None
 
 
@@ -657,7 +633,7 @@ def assert_no_foreign_overwrite(
     series and actively wrong for a site-owned file, where renaming an
     already-published post would break a permalink and a share-card URL that
     are already in the wild. It is wrong again for the third case
-    (`UNATTRIBUTED_SYNC`, us-presidential-vote-analysis#200 / D058) and for a third reason: the target is not a
+    (`UNATTRIBUTED_SYNC`) and for a third reason: the target is not a
     slug collision at all, so renaming would move a live URL and leave the
     actual defect — two publishers disagreeing about the subject format —
     exactly where it was.
@@ -808,7 +784,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # subject `_SYNC_SUBJECT` can never parse: `... posts from @<sha>`. Nothing
     # goes wrong at the time — every target of a brand-new post is absent, so
     # the guard waves the run through — and the cost lands on a LATER run.
-    # Since us-presidential-vote-analysis#200 that commit is also authored by `_SYNC_AUTHOR`, so every later
+    # That commit is also authored by `_SYNC_AUTHOR`, so every later
     # update of that post reads as `UNATTRIBUTED_SYNC`: a loud refusal by then,
     # but under a remedy ("realign the subject format across both publishers")
     # that names the wrong cause entirely.
@@ -816,8 +792,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     # The check below closes the EMPTY case only. A non-empty slug carrying a
     # character outside `_SYNC_SUBJECT`'s `[A-Za-z0-9._-]` — `my repo`, say —
     # reaches the identical trap, and nothing here rejects it: the pattern is
-    # never applied to the incoming slug (us-presidential-vote-analysis#214). Unreached in practice for the
-    # reason below rather than by validation.
+    # never applied to the incoming slug. Unreached in practice for the reason
+    # below rather than by validation.
     #
     # The workflow feeds this from `github.event.repository.name`; check it
     # rather than trust it.

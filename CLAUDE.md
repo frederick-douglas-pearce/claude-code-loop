@@ -13,7 +13,10 @@ none** — and note what that invariant is about: what a *consumer's* environmen
 this repo's file list. The guard hook runs under bare `python3` there, so the stdlib suite must too;
 `test.yml` installs nothing and nothing should need it to.
 
-Two workflows run here, and the second is deliberately out of scope for the rule above. `test.yml` runs
+**The rule, not a count of the workflows that satisfy it:** anything that reaches a consumer's
+environment, or that `TEST_CMD` runs, is stdlib-only. Workflows that are maintainer-side CI and
+reach neither are out of scope for it — and that scoping is per-workflow, so adding one changes
+nothing here. `test.yml` runs
 that suite. `prettier.yml` (#178) is a **maintainer-side** gate over `posts/` only, pinned to the
 Pages site's exact formatter through a root `package.json` — it ships to no consumer, the hook and
 the suite never touch it, and it is **not** licence to add a dependency anywhere else. Anything
@@ -199,28 +202,27 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
   it. Both shipped directories are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both
   are **stdlib-only**, for the same reason — they execute under bare `python3` in a consumer's
   environment.
-- **`tooling/` is maintainer-side tooling at the repo root, and it is a category rather than a
-  directory.** A maintainer-side tool serves *this repo's* upkeep and reaches no consumer, so
-  whether it ships is already settled by the payload rule above — a file ships iff a consumer
-  needs it in the cache, enforced positionally — and this bullet deliberately **does not restate
-  a ship test**. It also deliberately **does not enumerate which root executables are allowed**;
-  that list would be the enumerable-assertion trap one directory behind the tree, exactly as the
-  payload rule's own two failed drafts were.
+- **`tooling/` is the repo-root directory for maintainer-side executables** — currently
+  `tooling/publish-to-pages.py` (#179), the blog publisher the `pages-sync.yml` Action runs.
+  Whether it ships is already settled by the payload rule above — a file ships iff a consumer
+  needs it in the cache, enforced positionally — so this bullet deliberately **does not restate a
+  ship test**, and deliberately **does not enumerate which root executables are allowed**; that
+  list would be the enumerable-assertion trap one directory behind the tree.
 
-  Two members today, on the same footing: `tooling/publish-to-pages.py` (#179), the blog
-  publisher the `pages-sync.yml` Action runs; and #178's root `package.json` /
-  `package-lock.json` / `.prettierrc` / `.prettierignore`, the Prettier gate's pinned toolchain.
-  Neither is in the payload, neither is read by `TEST_CMD`, and the stdlib-only rule still binds
-  **`tooling/`** because `tests/test_publish_to_pages.py` imports the publisher and the suite runs
-  on bare `python3` 3.9–3.13. (#178's npm pin is the standing exception the preamble already
-  carves out, and it is maintainer-side CI only.)
+  **The stdlib-only rule binds `tooling/`, and for a reason worth stating exactly:
+  `TEST_CMD` DOES read it.** `tests/test_publish_to_pages.py` loads
+  `tooling/publish-to-pages.py` by path and the suite runs on bare `python3` 3.9–3.13, so a
+  dependency added here breaks the suite on a consumer-shaped interpreter. (Contrast #178's root
+  `package.json` / `.prettierrc`, which are also maintainer-side and also do not ship, but which
+  `TEST_CMD` never touches — that npm pin is the standing exception the preamble carves out. Same
+  non-shipping status, different relationship to the suite; do not merge the two cases.)
 
   **`tooling/` and `tools/` differ by one character and carry opposite rules**, which is the one
   thing worth memorising here: `tooling/` holds root **executables**, `tools/` holds only
-  **inputs** to the shipped harness. The names are inherited — both sibling publishers use
-  `tooling/` — and the publisher's `REPO_ROOT = Path(__file__).resolve().parent.parent` requires
-  its script to sit **exactly one directory below the repo root**, so the depth is forced even
-  though the name is not. Do not "tidy" the two together.
+  **inputs** to the shipped harness. The name is inherited — both sibling publishers use
+  `tooling/` — while the **depth** is forced rather than chosen: the publisher's
+  `REPO_ROOT = Path(__file__).resolve().parent.parent` requires its script to sit exactly one
+  directory below the repo root. Do not "tidy" the two together.
 
   Anything later that lands here inherits the same terms — #181's OG-card renderer is the next
   candidate, and if it takes a rendering dependency that dependency stays maintainer-side, out of
