@@ -202,21 +202,8 @@ def check_post(filename, text):
         src = str(fields["og_card_source"])
         # Shape only; existence is checked by `tooling/check-og-cards.py` (#180), which
         # runs the publisher's own `build_plan` in the `og-card-guard` workflow.
-        #
-        # That guard's check is a STRICT SUPERSET of this one on a live post -- it flags
-        # absent, absolute, repo-escaping AND non-existent, where this flags the middle
-        # two -- so this sub-check is genuinely redundant wherever a dated post exists.
-        # It is kept anyway, for two reasons that have nothing to do with coverage of a
-        # live post:
-        #   1. this module runs under TEST_CMD, i.e. inside the aggregate `test-suite`
-        #      job branch protection requires; the og-card-guard workflow is NOT a
-        #      required check, so removing this would leave no merge-blocking assertion
-        #      about og_card_source at all;
-        #   2. it fires against CheckerBatteryTests' fixture with ZERO posts on disk,
-        #      which is the repo's state today and exactly where the guard exits 0
-        #      having checked nothing.
-        # Do not read this as "shape here, resolvability there over different objects" --
-        # that framing is false, and an earlier draft of this comment said it.
+        # Both checks are kept. No claim is made here about how their coverage
+        # relates: two drafts of such a claim were written and both were false.
         if src.startswith("/") or ".." in pathlib.PurePosixPath(src).parts:
             problems.append(
                 "og_card_source must be a repo-relative path that does not escape the "

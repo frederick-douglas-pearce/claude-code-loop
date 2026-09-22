@@ -27,8 +27,8 @@ nothing here is left unassigned and nothing is covered by both.
 ## Formatting
 
 **Every file in this directory that Prettier can parse is checked by it, and nothing else in
-the repo is.** Prettier skips extensions it has no parser for, so the OG cards under
-`posts/images/` ride along unformatted; the markdown is what the gate is for.
+the repo is.** Prettier skips extensions it has no parser for, so an OG card under
+`posts/images/` will ride along unformatted; the markdown is what the gate is for.
 [`.github/workflows/prettier.yml`](../.github/workflows/prettier.yml) runs `prettier . --check`
 on every PR and every push to `main`, pinned to the **exact** formatter version the Pages site
 pins. The rest of the repo — the plugin payload, `tests/`, `docs/`, `.claude/`, the maintainer
@@ -87,13 +87,15 @@ publisher resolves it on a CI runner that has only what the checkout contains.
 
 **This diverges from the two sibling repos, deliberately, and the reason is not style.** Both
 `us-presidential-vote-analysis` and `claude-code-sessions` keep cards at
-`social/images/<date>-linkedin-<slug>/`, reached by a `/social/*` + `!/social/images/`
-carve-out in `.gitignore`. This repo does not copy that, for two reasons:
+`social/images/<date>-linkedin-<slug>/`, though they get there differently:
+the vote repo carves that directory out of an otherwise-ignored `social/`, while
+`claude-code-sessions` ignores only `social/drafts/`. This repo does not copy either, for two
+reasons:
 
 1. **A recorded decision already assumed otherwise.** `.claude/specs/decisions.md` D013 — the
    `posts/` prose licence — cuts the CC-BY grant on the **path axis** at the literal token
    `posts/`, and explicitly rejected a `posts/YYYY-MM-DD-*.md` alternative because it would
-   "under-cover the assets #180 introduces." Cards under `social/` would fall on the root
+   "under-covers the assets #180 introduces." Cards under `social/` would fall on the root
    `LICENSE`'s MIT side, so a published card would carry a different licence from the post it
    illustrates.
 2. **`social/` is working state here, and stays wholly gitignored.** `CLAUDE.md` draws the

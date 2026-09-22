@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`tooling/check-og-cards.py` is the pre-merge gate for OG-card presence (#180).
+"""`tooling/check-og-cards.py` checks that every post's OG card resolves (#180).
 
 **Why this module exists at all, stated first because it is the whole argument.**
 The guard scans `posts/` for dated posts. While `posts/` holds no dated post it
@@ -21,10 +21,10 @@ under test was dead. Borrowed from `_assert_complains` in
 `tests/test_posts_frontmatter.py`, for the same reason it exists there.
 
 **What this module does NOT cover.** It does not run `assert_no_foreign_overwrite`
--- the guard structurally cannot, having no Pages checkout, which is recorded in
-the guard's own docstring and in `posts/README.md`. It does not check that a card
-is a valid image, only that the path resolves to a file. And it asserts nothing
-about whether any real post is any good.
+-- the guard structurally cannot, having no Pages checkout. See that guard's own
+docstring, and `posts/README.md` -> The shared-namespace guard. It does not
+check that a card is a valid image, only that the path resolves to a file. And
+it asserts nothing about whether any real post is any good.
 
 **No `git` binary is needed**, unlike `tests/test_publish_to_pages.py`'s Tier 2:
 `build_plan` is Phase 1 and this guard never reaches `git_pages_owner`.
@@ -118,7 +118,10 @@ class _PostTree(unittest.TestCase):
         into a vacuous pass -- the same guard `_mutated` applies in
         tests/test_posts_frontmatter.py.
         """
-        self.assertIn(old, _GOOD, "fixture drifted; %r no longer present" % old)
+        self.assertEqual(
+            _GOOD.count(old), 1, "fixture drifted; %r is not unique in _GOOD" % old
+        )
+        self.assertNotEqual(old, new, "a no-op substitution asserts nothing")
         return _GOOD.replace(old, new, 1)
 
     # -- running the guard -----------------------------------------------
@@ -156,7 +159,14 @@ class ControlTests(_PostTree):
 
 
 class FailClosedTests(_PostTree):
-    """One case per fail-closed condition `build_plan` enforces."""
+    """Cases over the fail-closed conditions `build_plan` enforces.
+
+    Not one per condition, and deliberately not claimed as one: `build_plan`
+    reaches about ten, and these cover six. `og_target_name`'s `_SAFE_BASENAME`
+    branch in particular is unguarded by the whole suite -- confirmed by
+    mutation, and filed on #1 rather than fixed here, because it is #179's
+    surface.
+    """
 
     def test_missing_og_card_source_is_caught(self) -> None:
         self.write_card()
@@ -197,14 +207,39 @@ class FailClosedTests(_PostTree):
         self.write_card(other_rel)
         # Different slug and different card, but the SAME og_image basename --
         # so both resolve individually and collide on one Pages target.
-        second_text = _GOOD.replace(_CARD_REL, other_rel).replace(
-            'title: "The team you didn\'t hire"', 'title: "A different post"'
+        second = self.write_post(
+            self.mutated(_CARD_REL, other_rel), stem="2026-10-02-a-different-post"
+        )
+
+        # Two needles: the guard's own label for the batch branch, AND
+        # `build_plan`'s own wording, so deleting either side is caught.
+        self.assert_complains(
+            self.run_guard(first, second),
+            "cross-post image collision",
+            "target collision (image)",
+        )
+
+    def test_two_valid_posts_pass_together(self) -> None:
+        """The batch pass's PASSING direction, which nothing else exercises.
+
+        Every other multi-post case here expects the batch call to raise, and the
+        single-post cases never reach it (it is gated on `len(ok_sources) > 1`).
+        Without this, a mutation making that second `build_plan` call always raise
+        leaves the whole suite green while every multi-post PR is falsely blocked.
+        """
+        self.write_card()
+        first = self.write_post()
+
+        other_rel = "posts/images/a-different-post/og-card.png"
+        self.write_card(other_rel)
+        second_text = self.mutated(_CARD_REL, other_rel).replace(
+            f"{_SLUG}-og.png", "a-different-post-og.png", 1
         )
         second = self.write_post(second_text, stem="2026-10-02-a-different-post")
 
-        self.assert_complains(
-            self.run_guard(first, second), "cross-post image collision"
-        )
+        code, out, err = self.run_guard(first, second)
+        self.assertEqual(code, 0, "two valid posts failed: %r %r" % (out, err))
+        self.assertEqual(out.count("[ok]"), 2, out)
 
     def test_every_failing_post_is_reported_not_just_the_first(self) -> None:
         """`build_plan` raises on the first failure; the guard runs it per post.
@@ -263,12 +298,12 @@ class RemedyTests(unittest.TestCase):
     exactly how a citation to a nonexistent tool gets back in.
     """
 
-    def test_the_remedy_names_no_tool_this_repo_does_not_have(self) -> None:
+    def test_the_remedy_keeps_the_source_repos_renderer_wording_deleted(self) -> None:
         for absent in ("render-og-card", "uv run", "Inkscape", ".toml"):
             self.assertNotIn(
                 absent,
                 cog._REMEDY,
-                "remedy cites %r, which does not exist in this repo" % absent,
+                "remedy carries %r, which the port deleted deliberately" % absent,
             )
 
     def test_the_remedy_points_at_the_issue_that_automates_rendering(self) -> None:
@@ -279,12 +314,37 @@ class RemedyTests(unittest.TestCase):
 
 
 class ReuseTests(unittest.TestCase):
-    """The guard runs the publisher's validator; it does not re-derive the rules.
+    """The guard's VERDICT comes from `build_plan`; it does not re-derive the rules.
 
-    A coupling's identity, not a proposition's truth (`tests/CLAUDE.md`). If
-    someone reimplements the checks inside the guard, `build_plan` stops being
-    the thing that runs and this fails.
+    AC1 says "Do not reimplement the checks. Call `build_plan`." Asserting only
+    that `build_plan` was *called* does not pin that: a guard that called it once
+    decoratively, discarded the result and re-derived everything would pass such a
+    test. So these observe which code *decided* -- a sentinel error injected into
+    `build_plan` must reach the report, and a stubbed-clean `build_plan` must make
+    a guaranteed-bad post pass. Both directions, because either alone is
+    satisfiable by an implementation that only half-delegates.
+
+    A coupling's identity, not a proposition's truth (`tests/CLAUDE.md`).
     """
+
+    def _tree(self) -> Path:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        repo = Path(tmp.name) / "repo"
+        (repo / "posts").mkdir(parents=True)
+        card = repo / _CARD_REL
+        card.parent.mkdir(parents=True)
+        card.write_bytes(_CARD_BYTES)
+        post = repo / "posts" / f"{_POST_STEM}.md"
+        post.write_text(_GOOD, encoding="utf-8")
+        return repo, post
+
+    def _run(self, repo: Path, post: Path) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(cog.ptp, "REPO_ROOT", repo):
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = cog.main([str(post)])
+        return code, out.getvalue(), err.getvalue()
 
     def test_the_guard_loads_the_real_publisher(self) -> None:
         self.assertEqual(
@@ -292,24 +352,30 @@ class ReuseTests(unittest.TestCase):
             (_REPO_ROOT / "tooling" / "publish-to-pages.py").resolve(),
         )
 
-    def test_the_guard_calls_build_plan(self) -> None:
+    def test_build_plans_refusal_is_what_the_guard_reports(self) -> None:
+        """Inject a sentinel refusal; it must surface as the guard's verdict."""
+        repo, post = self._tree()
+        sentinel = "sentinel-only-build-plan-can-say-this"
         with mock.patch.object(
-            cog.ptp, "build_plan", side_effect=cog.ptp.build_plan
-        ) as spy:
-            tmp = tempfile.TemporaryDirectory()
-            self.addCleanup(tmp.cleanup)
-            repo = Path(tmp.name) / "repo"
-            (repo / "posts").mkdir(parents=True)
-            card = repo / _CARD_REL
-            card.parent.mkdir(parents=True)
-            card.write_bytes(_CARD_BYTES)
-            post = repo / "posts" / f"{_POST_STEM}.md"
-            post.write_text(_GOOD, encoding="utf-8")
-            with mock.patch.object(cog.ptp, "REPO_ROOT", repo):
-                out, err = io.StringIO(), io.StringIO()
-                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-                    cog.main([str(post)])
-        self.assertTrue(spy.called, "the guard did not call build_plan")
+            cog.ptp, "build_plan", side_effect=cog.ptp.PublishError(sentinel)
+        ):
+            code, out, err = self._run(repo, post)
+        self.assertEqual(code, 1, "a refusing build_plan did not fail the guard")
+        self.assertIn(sentinel, out + err)
+
+    def test_build_plans_acceptance_is_what_the_guard_reports(self) -> None:
+        """The other direction: a post that MUST fail passes if build_plan says so.
+
+        The card is deleted, so any re-derived existence check inside the guard
+        would still refuse. Only a guard that takes `build_plan`'s word passes.
+        """
+        repo, post = self._tree()
+        (repo / _CARD_REL).unlink()
+        with mock.patch.object(cog.ptp, "build_plan", return_value={}):
+            code, out, err = self._run(repo, post)
+        self.assertEqual(
+            code, 0, "the guard refused a post build_plan accepted: %r %r" % (out, err)
+        )
 
 
 if __name__ == "__main__":

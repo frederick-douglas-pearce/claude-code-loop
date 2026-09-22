@@ -202,8 +202,10 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
   it. Both shipped directories are reached as `${CLAUDE_PLUGIN_ROOT}/<dir>/<file>` and both
   are **stdlib-only**, for the same reason — they execute under bare `python3` in a consumer's
   environment.
-- **`tooling/` is the repo-root directory for maintainer-side executables** — currently
-  `tooling/publish-to-pages.py` (#179), the blog publisher the `pages-sync.yml` Action runs.
+- **`tooling/` is the repo-root directory for maintainer-side executables** — the blog publisher
+  the `pages-sync.yml` Action runs (#179) and the OG-card guard the `og-card-guard.yml` Action runs
+  (#180). **No inventory is kept here**; the previous wording said "currently" and named one file,
+  and the second one falsified it. Read the directory.
   Whether it ships is already settled by the payload rule above — a file ships iff a consumer
   needs it in the cache, enforced positionally — so this bullet deliberately **does not restate a
   ship test**, and deliberately **does not enumerate which root executables are allowed**; that
@@ -227,12 +229,15 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
   Anything later that lands here inherits the same terms — #181's OG-card renderer is the next
   candidate, and if it takes a rendering dependency that dependency stays maintainer-side, out of
   the payload and out of the suite's import path.
-- **`posts/` holds the blog series sources and does not ship.** Markdown for the
-  `claude-code-loop` series, published to the Pages site that two sibling repos already publish
-  into. The boundary with `social/` is what matters: `social/` is **gitignored working state** —
+- **`posts/` holds the blog series sources and does not ship.** The `claude-code-loop` series,
+  published to the Pages site that two sibling repos already publish into. **Not markdown only** —
+  #180 settled that an OG card lives at `posts/images/<slug>/og-card.png`, committed, so a rule
+  written as "every file in `posts/`" must say what it means about assets. Describing this
+  directory by content type is the cut D013 spent three attempts removing from the licence
+  instruments. The boundary with `social/` is what matters: `social/` is **gitignored working state** —
   the candidate ledger, the scout, the series outline, the research evidence base, drafts — while
   `posts/` is committed deliverable. A file crosses over when it is ready to be reviewed as
-  publishable. **`social/README.md` indexes that working state, and it is the thing to read first
+  publishable — **a card crosses with its post, by the same rule**. **`social/README.md` indexes that working state, and it is the thing to read first
   when picking the series back up**: gitignored files leave no trace in git history, so nothing
   else will tell you they exist or which one is authoritative for what.
   `posts/README.md` is the frontmatter contract and `tests/test_posts_frontmatter.py` enforces it,

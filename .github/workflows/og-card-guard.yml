@@ -7,12 +7,13 @@ name: OG card guard
 # `claude-code-sessions` repo, for its Part 3 post. Running it on PRs surfaces
 # the miss on the PR; the push:main run mirrors pages-sync's own trigger so main
 # independently proves green, with a faster/clearer signal and no Pages checkout
-# or PAT. Stdlib only. Ported with the publisher in issue #180.
+# or PAT. Stdlib only. Ported in issue #180; the publisher it reuses was ported
+# in #179.
 #
 # Scope note: unlike `claude-code-sessions` (where posts/ is direct-commit-allowed
-# to main, making its guard advisory), this repo is PR-per-feature-branch
-# (CLAUDE.md -> Branching & PR flow) -- so this IS the pre-merge gate for card
-# presence, not just a loud warning.
+# to main), this repo is PR-per-feature-branch (CLAUDE.md -> Branching & PR flow),
+# so this runs on every posts/ PR. What it does NOT do is block one -- see the
+# required-check paragraph below.
 #
 # NOT a job inside test.yml: that workflow's `test-suite` is the aggregate check
 # branch protection requires, and folding this in would make a missing card read
@@ -30,7 +31,7 @@ on:
       # posts/images/ lives under posts/, so one filter covers both the posts
       # and their cards. The source repo also watches "social/images/**"; that
       # path is NOT carried here -- issue #180 settled this repo's cards under
-      # posts/ (see .claude/specs/decisions.md D013), so social/ stays wholly
+      # posts/ (see .claude/specs/decisions.md D014), so social/ stays wholly
       # gitignored and can never hold a card.
       - "posts/**"
       - "tooling/publish-to-pages.py"

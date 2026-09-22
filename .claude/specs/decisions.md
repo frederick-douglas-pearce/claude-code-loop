@@ -406,9 +406,11 @@ reason: *"#180 will put og-cards and images under `posts/`, so a content-type cu
 immediately."* It also **rejected** a `posts/YYYY-MM-DD-*.md` scoping as *"keyed to `.md`, so it
 under-covers the assets #180 introduces."*
 
-**Both were forward-looking claims about a decision nobody had taken yet.** They are now true as
-stated: this change lands the first non-`.md` file under `posts/`, and a `.md`-keyed grant would
-have failed to cover it. D013's path-axis cut needs no revision.
+**Both were forward-looking claims about a decision nobody had taken yet.** This change takes
+that decision: the first non-`.md` file under `posts/` will be an OG card, which a `.md`-keyed
+grant would not have covered. **No card lands in this change** — `posts/` still holds only
+`posts/README.md`, and the guard ported here exits 0 until a dated post exists. D013's path-axis
+cut needs no revision.
 
 **This ran the other way round, and it is worth recording which direction the reasoning went.**
 The fork was argued first on other grounds — boundary preservation and the silent failure mode of
@@ -423,14 +425,17 @@ anything a prior entry may have assumed.
 ### The cost, stated rather than buried
 
 **This diverges from both sibling repos**, which keep cards at
-`social/images/<date>-linkedin-<slug>/` behind a `/social/*` + `!/social/images/` carve-out. This
-repo's `social/` stays wholly gitignored. The divergence was accepted twice: once on its merits,
+`social/images/<date>-linkedin-<slug>/`. They reach them differently, and the difference matters
+to the argument below: `us-presidential-vote-analysis` carves `social/images/` out of an otherwise
+ignored `social/` (`/social/*` plus `!/social/images/`), while `claude-code-sessions` ignores only
+`social/drafts/` and tracks the rest. This repo's `social/` stays wholly gitignored. The divergence was accepted twice: once on its merits,
 and once again after the orchestrator corrected a mistaken belief that `posts/images/` matched the
 siblings — it matches neither, and neither sibling has any non-`.md` file under `posts/`.
 
-Two things follow for whoever edits this next. **`posts/` is no longer markdown-only**, so a rule
-written as "every file in `posts/`" must say what it means about assets — `posts/README.md`'s
-Prettier paragraph was corrected in this change for exactly that reason. And **do not "tidy" the
+Two things follow for whoever edits this next. **`posts/` will stop being markdown-only** when the
+first card lands, so a rule written as "every file in `posts/`" must say what it means about
+assets — `posts/README.md`'s Prettier paragraph was corrected in this change for that reason,
+ahead of the card rather than after it. And **do not "tidy" the
 card path back to match the siblings**; it would falsify this entry and D013 together.
 
 ### Forward note

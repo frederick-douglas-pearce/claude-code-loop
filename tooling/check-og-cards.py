@@ -23,12 +23,14 @@ here for free.
 repo's commit history to decide whether a target belongs to this repo or to a
 sibling publisher. This guard has no Pages checkout by design (see below), so it
 structurally cannot run that check: a slug that collides with a sibling passes
-here green and stops at the sync. That is recorded in posts/README.md, where an
-author writing a slug will meet it.
+here green and stops at the sync. See posts/README.md → The shared-namespace
+guard.
 
 This repo is PR-per-feature-branch (CLAUDE.md → Branching & PR flow; `posts/` is
-on the PR side), so this guard IS the pre-merge gate for card presence, not an
-advisory warning.
+on the PR side), so this runs on every `posts/` PR — unlike `claude-code-sessions`,
+where `posts/` is direct-commit-allowed. It does not BLOCK a merge: branch
+protection requires the aggregate `test-suite` job only, and whether this becomes
+a required check is issue #195's question.
 
 It guards card *presence*, not *generation*. **There is no renderer in this repo
 yet** — producing the card is a manual step, and automating it is issue #181. So
