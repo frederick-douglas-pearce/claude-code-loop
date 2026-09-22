@@ -66,7 +66,6 @@ publish_to_pages = importlib.util.module_from_spec(_spec)
 sys.modules["publish_to_pages"] = publish_to_pages
 _spec.loader.exec_module(publish_to_pages)
 
-PlanEntry = publish_to_pages.PlanEntry
 PublishError = publish_to_pages.PublishError
 UNATTRIBUTED_SYNC = publish_to_pages.UNATTRIBUTED_SYNC
 
@@ -402,8 +401,8 @@ class ProvenanceGitFixtureTests(unittest.TestCase):
 
     Every test here pins a property the seam cannot reach. Three of those
     properties were measured in the source repo: swapping `%an` for `%cn` and
-    dropping the pathspec each left its whole suite green, and the field order
-    likewise. No claim is made here about the others having been measured.
+    dropping the pathspec each left its whole suite green. No claim is made here
+    about the others having been measured.
     """
 
     def setUp(self) -> None:

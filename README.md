@@ -105,7 +105,7 @@ claude-code-loop/
 ├── tools/mutation-specs/    # hand-run harness self-check; does NOT ship
 ├── docs/research/           # the research notebook; does NOT ship
 ├── posts/                   # blog series sources + frontmatter contract; does NOT ship
-├── .github/workflows/       # CI, the posts/ gate, the Pages publisher; does NOT ship
+├── .github/workflows/       # CI and repo automation; does NOT ship
 ├── .claude/                 # this repo's dogfood config + internal specs; does NOT ship
 ├── CLAUDE.md                # maintainer instructions for THIS repo; does NOT ship
 ├── package.json             # Prettier pin for the posts/ gate, maintainer-side; does NOT ship

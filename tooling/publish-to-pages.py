@@ -89,7 +89,8 @@ the Pages repo's own history — each sync commits as
 `chore(sync): publish posts from <repo>@<sha>`, under the author
 `pages-sync[bot]`. **The subject decides ownership; the author is a fallback
 read only when the subject does not parse** — `git_pages_owner` is the statement
-of record. That history has to be there: the Action's `fetch-depth: 0` predates this guard (it exists for the
+of record. That history has to be there: the Action's `fetch-depth: 0` predates
+this guard (it exists for the
 reconcile-retry loop) but the guard now depends on it too, and the workflow
 says so at the checkout step. A shallow clone does not merely degrade this — it
 **silently fails open**: the grafted tip is parentless, so every path reads as
@@ -201,7 +202,8 @@ def _top_level_key(line: str) -> str | None:
 def _unquote(value: str) -> str:
     """Drop one matching pair of surrounding quotes, YAML-style.
 
-    Added when the source repo ported this from `claude-code-sessions`: the source repo reads the raw partition. This repo's own
+    Added by `us-presidential-vote-analysis` on its port; `claude-code-sessions`
+    reads the raw partition. This repo's own
     frontmatter convention quotes `title` and `description`, so quoting
     `og_image` too is a natural habit — and an unstripped quote survives all the
     way into a filename (see `og_target_name`).
@@ -275,8 +277,9 @@ def og_target_name(og_image: str | None) -> str:
         raise PublishError(
             f"could not derive an OG target basename from og_image {og_image!r}"
         )
-    # Added when the source repo ported this from `claude-code-sessions`. Without it, a stray character in the frontmatter value
-    # rides through into the filename and the card is written one byte away from
+    # Added by `us-presidential-vote-analysis` on its port. Without it, a stray
+    # character in the frontmatter value rides through into the filename and the
+    # card is written one byte away from
     # where `og_image` points — a broken share image on a green Action, which is
     # the precise failure this module's fail-closed design exists to prevent. A
     # trailing inline comment does it (urlparse reads `# …` as a fragment,

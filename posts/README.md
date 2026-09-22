@@ -214,7 +214,11 @@ It is never echoed. **Never `cat` that file, dump `env`, or upload the workspace
 
 Run the workflow manually (Actions → Pages sync → Run workflow) with **`dry_run` ticked**. It
 performs the whole transform against the live Pages tip, writes the diff to the job summary, and
-exits before the push. The namespace guard still runs — deliberately, because an operator preview
+exits before the push.
+
+**From `main` only, once step 4 is done.** Restricting the environment's deployment branches is
+what stops a dispatch from any branch reaching the PAT, and it forecloses previewing a feature
+branch as a side effect. That is the trade accepted above, not an oversight. The namespace guard still runs — deliberately, because an operator preview
 is exactly where a collision with another series should surface, before a real push finds it.
 
 Until that environment exists the workflow still exits **green** on a run with nothing to

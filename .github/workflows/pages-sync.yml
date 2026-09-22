@@ -18,8 +18,9 @@ name: Pages sync
 # the Pages repo ONLY, then add it as the secret PAGES_SYNC_TOKEN inside a GitHub
 # Environment named `pages-sync` (Settings -> Environments). Those two names are
 # matched literally by this file; the PAT's own name is a display label nothing
-# reads. The token is never echoed; it is consumed only by the Pages checkout
-# below. Without it, a run with nothing to publish still exits green (the
+# reads. The token is never echoed; it is consumed by the preflight's presence
+# check and by the Pages checkout, and only the checkout persists it.
+# Without it, a run with nothing to publish still exits green (the
 # `detect` step gates the preflight), while a run with a real post to publish
 # fails loud. Full runbook: posts/README.md.
 
@@ -82,11 +83,15 @@ jobs:
     runs-on: ubuntu-latest
     environment: pages-sync
     steps:
-      # A workflow_dispatch offers a branch picker, and posts/README.md teaches
-      # operators to use exactly that path for the dry-run preview. Dispatching
-      # from a feature branch WITHOUT ticking dry_run would check out that
-      # branch's posts/ and push it to the live site — an unreviewed draft
-      # published under a green run. Only main publishes; any ref may preview.
+      # Dispatching from a feature branch WITHOUT ticking dry_run would check
+      # out that branch's posts/ and push it to the live site — an unreviewed
+      # draft published under a green run. Only main publishes.
+      #
+      # This guard does NOT bound which refs may DISPATCH, and dispatching
+      # reaches the PAT. posts/README.md's setup requires restricting the
+      # pages-sync environment's deployment branches to main, which is what
+      # actually closes that — and which also forecloses previewing from a
+      # feature branch.
       - name: Guard — only main may publish
         env:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}

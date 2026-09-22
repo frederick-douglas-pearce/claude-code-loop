@@ -54,14 +54,15 @@ that used to sit here went stale the first time a module was added):
 
   **This module makes a real `git` binary a suite precondition, and it does not skip without
   one.** That is deliberate: skipping would let the security coverage evaporate silently on
-  exactly the machine where nobody looks. It is the first module here to shell out at all, so
-  "bare `python3` is enough to run this suite" is no longer true — `python3` **and** `git`. Still
+  exactly the machine where nobody looks. So "bare `python3` is enough to run this
+  suite" is no longer true — `python3` **and** `git`. Still
   stdlib-only; `subprocess` and `tempfile` are not dependencies.
 
   **What it does not cover, as of #179:** the production wiring (`run()` → the real
   `git_pages_owner`) is untested — every test injects the seam — and nothing ties the workflow's
   `pages-sync[bot]` identity and commit-subject template to the constants that parse them. Both
-  are deferred with a capture gate; see #179's scope ruling.
+  are deferred with a capture gate — see **#199**, which carries the gate itself
+  (before the first real post, or before the `pages-sync` environment exists).
 - **`tests/test_repo_consistency.py`** — **mechanical** checks on the markdown/JSON deliverable:
   the shipped example sidecar still loads through the real `load_registry`; the composed
   `plugin@marketplace` identifier still matches every hand-written call site; engine `CAPS` ⊆
