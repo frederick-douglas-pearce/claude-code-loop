@@ -6,7 +6,8 @@ guard, and the ceiling on what a test over prose can ever assert. Run it with
 
 ## What is and isn't covered
 
-Four modules, and the split between them matters:
+The modules, and the split between them matters (no count is stated: the figure
+that used to sit here went stale the first time a module was added):
 
 - **`tests/test_guard_append_only.py`** — behavior of the guard hook.
 - **`tests/test_posts_frontmatter.py`** — the frontmatter contract for `posts/`, the blog
@@ -40,6 +41,28 @@ Four modules, and the split between them matters:
   grepping for `git`, because a substring search passes for any implementation that avoids the
   word). But a **file-level** guarantee of it is exactly the enumerable assertion this project keeps
   having to retract, so it is not made. Check the test, not this sentence.
+- **`tests/test_publish_to_pages.py`** — behavior of `tooling/publish-to-pages.py`, the Pages
+  publisher (#179). **Two tiers, and the split is the point.** Tier 1 drives the namespace guard
+  through its `pages_owner` injection seam, pinning the *refusal logic* — three refusals carrying
+  three different remedies, each asserted by its own discriminator rather than by a shared
+  substring. Tier 2 drives `git_pages_owner` against **real git histories**, because the seam
+  bypasses it entirely and that function is where the security-critical parsing lives (`%an%x00%s`
+  field order, `%an` not `%cn`, the `-- <path>` pathspec, the walk that stops on an unattributable
+  sync). A seam-only suite would assert the outcome while leaving the mechanism untested — the
+  exact hole this file is about — and the source repo *measured* that: `%cn` and a dropped pathspec
+  each left its whole suite green while restoring a silent cross-publisher overwrite.
+
+  **This module makes a real `git` binary a suite precondition, and it does not skip without
+  one.** That is deliberate: skipping would let the security coverage evaporate silently on
+  exactly the machine where nobody looks. So "bare `python3` is enough to run this
+  suite" is no longer true — `python3` **and** `git`. Still
+  stdlib-only; `subprocess` and `tempfile` are not dependencies.
+
+  **What it does not cover, as of #179:** the production wiring (`run()` → the real
+  `git_pages_owner`) is untested — every test injects the seam — and nothing ties the workflow's
+  `pages-sync[bot]` identity and commit-subject template to the constants that parse them. Both
+  are deferred with a capture gate — see **#199**, which carries the gate itself
+  (before the first real post, or before the `pages-sync` environment exists).
 - **`tests/test_repo_consistency.py`** — **mechanical** checks on the markdown/JSON deliverable:
   the shipped example sidecar still loads through the real `load_registry`; the composed
   `plugin@marketplace` identifier still matches every hand-written call site; engine `CAPS` ⊆

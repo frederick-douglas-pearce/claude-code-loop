@@ -145,15 +145,98 @@ than on a thread with hundreds of comments.
 
 `YYYY-MM-DD-short-slug.md`, Jekyll-style. The date must match the `date:` frontmatter field.
 
+## Publishing
+
+`tooling/publish-to-pages.py` and
+[`.github/workflows/pages-sync.yml`](../.github/workflows/pages-sync.yml) sync `posts/` to the
+Jekyll Pages site on every push to `main` that touches `posts/`. Ported in #179 from
+`us-presidential-vote-analysis`, which ported it from `claude-code-sessions`. All three publish
+into the **same** `_posts/` namespace, and this repo is the third.
+
+The Action owns auth and the reconcile-retry push; the script owns the transform, the OG-card
+resolution, and the content-compare that makes re-runs idempotent. That split is what lets the
+script be exercised with no Pages checkout and no token — which is what
+`tests/test_publish_to_pages.py` does.
+
+**The script never formats anything.** The body is copied byte-for-byte, so what a post says
+here is what lands on the site. Keeping posts in the site's dialect is the Prettier gate's job
+(above), not the publisher's.
+
+**Upstream-only fields are stripped on publish** and never reach the site: `og_card_source`
+(consumed by the script to find the image) and the three attestations
+(`claude_code_version_verified`, `humanizer_pass`, `claims_verified`), which record how the post
+was produced rather than content for the page.
+
+### The shared-namespace guard
+
+Because three repos write into one `_posts/` directory, a slug collision would mean one series
+silently overwriting another series' **published** post — a failure that lands on someone else's
+blog and that nothing here would surface. `assert_no_foreign_overwrite` prevents it: before any
+write, a target that already exists with different bytes must have been published last by a sync
+from **this** repo, or the run aborts. Ownership is read from the Pages repo's own history.
+
+**Reciprocity is partial.** `us-presidential-vote-analysis` carries this guard and so do we;
+`claude-code-sessions` does **not**. So we will refuse to overwrite a target either sibling
+owns, and the vote repo will refuse ours, but a sessions sync can still overwrite anyone's.
+**Keeping slugs distinct across all three series is therefore still an operator rule**, not
+something the guard has retired.
+
+### One-time owner setup: `PAGES_SYNC_TOKEN`
+
+Publishing needs a cross-repo write token. Store it as an **environment** secret:
+
+1. Create a **fine-grained PAT** with `contents: write` on the **Pages repo only**.
+2. In this repo: Settings → Environments → new environment named exactly **`pages-sync`**.
+3. Add the PAT there as a secret named exactly **`PAGES_SYNC_TOKEN`**.
+4. **On that same environment, restrict deployment branches to `main`.** Do this _when you create
+   it_, not later — see the warning below.
+
+**Why an environment secret rather than a repository secret:** blast radius. An environment secret
+is exposed only to jobs that name that environment, while a repository secret is in the `secrets`
+context of every job in the repo. It is not that a repository secret would fail — it would
+resolve, and publishing would work — it is that it would also be reachable from every other
+workflow here.
+
+The environment name and the secret name are matched literally by the workflow; the PAT's own
+display name is not read by anything. The token is consumed by the preflight's presence check and
+by the Pages checkout; **only the checkout persists it**, in `pages/.git/config`, for the push.
+It is never echoed. **Never `cat` that file, dump `env`, or upload the workspace as an artifact.**
+
+> ⚠ **Step 4 is not optional, and it is why the order matters.** The workflow's "only main may
+> publish" guard gates _publishing_, not _token exposure_: a `workflow_dispatch` from any branch
+> with `dry_run` ticked still enters the `pages-sync` environment, checks the Pages repo out with
+> the PAT, and runs **that branch's** copy of `tooling/publish-to-pages.py`. So anyone who can push
+> a branch and dispatch a workflow can execute code with the PAT in reach. Restricting the
+> environment's deployment branches to `main` closes that; nothing in the repo's files can. The
+> trade-off is that the feature-branch dry-run preview below stops working — take it.
+
+### Previewing without publishing
+
+Run the workflow manually (Actions → Pages sync → Run workflow) with **`dry_run` ticked**. It
+performs the whole transform against the live Pages tip, writes the diff to the job summary, and
+exits before the push.
+
+**From `main` only, once step 4 is done.** Restricting the environment's deployment branches is
+what stops a dispatch from any branch reaching the PAT, and it forecloses previewing a feature
+branch as a side effect. That is the trade accepted above, not an oversight. The namespace guard still runs — deliberately, because an operator preview
+is exactly where a collision with another series should surface, before a real push finds it.
+
+Until that environment exists the workflow still exits **green** on a run with nothing to
+publish, because the `detect` step gates the preflight. A run with a real post to publish fails
+loud.
+
 ## What is not wired up yet
 
-Stated plainly so nobody assumes a pipeline exists:
+Stated plainly so nobody assumes more exists than does:
 
-- **No publisher.** The sessions repo syncs to Pages via `tooling/publish-to-pages.py` and a
-  `pages-sync.yml` workflow. Nothing here does. Publishing is manual until that is ported.
-- **`og_image` / `og_card_source` are checked for shape, not resolvability.** The sessions
-  guard reuses the publisher's own validator so it cannot drift from what publish enforces.
-  With no publisher here, this guard checks that the fields are present and well-formed and
-  that the `og_card_source` path stays inside the repo. **It does not check that the file
-  exists**, because the card is rendered into `social/`, which is gitignored. A post can
-  therefore pass CI and still fail a future sync.
+- **`og_image` / `og_card_source` are checked for shape, not resolvability.** The guard checks
+  that the fields are present and well-formed and that the `og_card_source` path stays inside
+  the repo. **It does not check that the file exists**, because the card is rendered into
+  `social/`, which is gitignored. A post can therefore pass CI and still fail the sync.
+- **No OG card can resolve on a CI runner, so the publisher is wired but inert.** The publisher
+  fail-closes when `og_card_source` does not resolve, and `social/` is gitignored, so a CI
+  checkout has no card to read. Nothing publishes today because `posts/` holds no dated post;
+  **the first real post will hit this** unless #180 lands first. Where a card should live is
+  #180's to settle, and it changes the `og_card_source` convention stated above.
+- **No OG-card renderer.** `render-og-card.py` is #181, which also carries the one dependency
+  decision this repo's stdlib-only rule forces.

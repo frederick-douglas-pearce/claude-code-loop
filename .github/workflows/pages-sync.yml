@@ -1,0 +1,271 @@
+name: Pages sync
+
+# Publishes posts/ (and each post's OG card) from this repo to the separate
+# Jekyll Pages repo. The transform, OG-card resolution, and content-compare live
+# in tooling/publish-to-pages.py; this Action owns auth + the reconcile-retry
+# push to a shared branch. Ported from `us-presidential-vote-analysis`, which
+# ported it from `claude-code-sessions`. All three publish into the SAME Pages
+# site, and this repo makes the THIRD.
+#
+# TWO STRINGS IN THIS FILE ARE A CROSS-REPO API, not local style: the commit
+# author `pages-sync[bot]` and the subject
+# `chore(sync): publish posts from <repo>@<sha7>`. The siblings' namespace guards
+# parse exactly those. Change either and the first publish still looks green --
+# every target of a new post is absent, so nothing is arbitrated -- while every
+# LATER update of that post is refused, under an error naming the wrong cause.
+#
+# Owner setup (one-time): create a fine-grained PAT with `contents: write` on
+# the Pages repo ONLY, then add it as the secret PAGES_SYNC_TOKEN inside a GitHub
+# Environment named `pages-sync` (Settings -> Environments). Those two names are
+# matched literally by this file; the PAT's own name is a display label nothing
+# reads. The token is never echoed; it is consumed by the preflight's presence
+# check and by the Pages checkout, and only the checkout persists it.
+# Without it, a run with nothing to publish still exits green (the
+# `detect` step gates the preflight), while a run with a real post to publish
+# fails loud. Full runbook: posts/README.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "posts/**"
+      # NOT "social/images/**", which the source repo also watches: `social/` is
+      # gitignored in THIS repo (see .gitignore), so that path can never change
+      # in a push event here. Dropped deliberately rather than carried as a dead
+      # filter. If #180 moves OG cards to a tracked directory, add THAT path.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Transform + show the diff, but do NOT commit/push to Pages"
+        type: boolean
+        default: false
+
+# The default GITHUB_TOKEN can't write to another repo; the cross-repo push uses
+# PAGES_SYNC_TOKEN, exposed only inside the `pages-sync` Environment. This job
+# needs nothing from the source repo beyond read.
+permissions:
+  contents: read
+
+# Serialize syncs so two runs can't race each other onto Pages main. Let an
+# in-flight publish finish rather than cancelling it mid-push. (Forward-compat:
+# when multi-branch lands, key this on the target branch so distinct targets
+# don't serialize against each other — group: pages-sync-${{ matrix.branch }}.)
+#
+# Note this group is per-REPO: it cannot serialize against EITHER sibling's sync
+# (`claude-code-sessions`, `us-presidential-vote-analysis`) or the Pages repo's
+# own daily ESG cron. Cross-writer races are handled by the reconcile-retry loop
+# below, not by this key -- and a third publisher raises the race rate against a
+# fixed MAX_PUSH_ATTEMPTS budget, so that loop matters more here than it did
+# upstream, not less.
+concurrency:
+  group: pages-sync
+  cancel-in-progress: false
+
+env:
+  # Single source of truth for the target. Forward-compat: later multi-branch
+  # turns these into a matrix without touching the steps below. POSTS_DIR /
+  # ASSETS_DIR are relative to the Pages checkout.
+  PAGES_REPO: frederick-douglas-pearce/frederick-douglas-pearce.github.io
+  PAGES_BRANCH: main
+  # This repo's own slug, and the ONE source for it. It is consumed twice — the
+  # sync commit subject below, and the publisher's --source-repo flag — and the
+  # provenance guard is only sound while those two agree: the guard reads
+  # a past subject and compares it to the flag, so a drift between them would
+  # make this repo's own cards read as another publisher's. Taken from GitHub
+  # rather than typed, so it cannot drift from the repository it runs in.
+  SOURCE_REPO: ${{ github.event.repository.name }}
+  PAGES_POSTS_DIR: _posts
+  PAGES_ASSETS_DIR: assets/img
+  MAX_PUSH_ATTEMPTS: "5"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    environment: pages-sync
+    steps:
+      # Dispatching from a feature branch WITHOUT ticking dry_run would check
+      # out that branch's posts/ and push it to the live site — an unreviewed
+      # draft published under a green run. Only main publishes.
+      #
+      # This guard does NOT bound which refs may DISPATCH, and dispatching
+      # reaches the PAT. posts/README.md's setup requires restricting the
+      # pages-sync environment's deployment branches to main, which is what
+      # actually closes that — and which also forecloses previewing from a
+      # feature branch.
+      - name: Guard — only main may publish
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          if [ "${GITHUB_REF}" != "refs/heads/main" ] && [ "${DRY_RUN}" != "true" ]; then
+            echo "::error::Refusing to publish from ${GITHUB_REF} — only main publishes. Re-run with dry_run ticked to preview this branch."
+            exit 1
+          fi
+
+      - name: Checkout source (this repo)
+        uses: actions/checkout@v4
+        with:
+          path: source
+
+      # Runs BEFORE the PAT preflight on purpose: the token is only needed to
+      # push, so "no posts yet" must not require one. The push trigger's
+      # `posts/**` filter matches posts/README.md, and posts/ holds only that
+      # README until post 1 ships — so without this ordering, merging the port
+      # itself would turn `main` red on a repo with no PAT and nothing to
+      # publish. The publisher never deletes, so an empty match can only ever
+      # mean "nothing to do".
+      - name: Detect publishable posts
+        id: detect
+        working-directory: source
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          posts=(posts/[0-9][0-9][0-9][0-9]-*.md)
+          if [ ${#posts[@]} -eq 0 ]; then
+            echo "::notice::No date-prefixed posts under posts/ yet — nothing to publish."
+            echo "found=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "Found ${#posts[@]} publishable post(s)."
+            echo "found=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Preflight — require the Pages PAT
+        if: ${{ steps.detect.outputs.found == 'true' }}
+        env:
+          PAGES_SYNC_TOKEN: ${{ secrets.PAGES_SYNC_TOKEN }}
+        run: |
+          if [ -z "${PAGES_SYNC_TOKEN}" ]; then
+            echo "::error::PAGES_SYNC_TOKEN is not set in the 'pages-sync' environment — cannot publish. See posts/README.md for the one-time setup."
+            exit 1
+          fi
+
+      - name: Checkout Pages repo
+        if: ${{ steps.detect.outputs.found == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PAGES_REPO }}
+          ref: ${{ env.PAGES_BRANCH }}
+          token: ${{ secrets.PAGES_SYNC_TOKEN }}
+          path: pages
+          # Full history so the reconcile/retry loop can reset onto a moved tip —
+          # AND so the shared-namespace guard can read who last published
+          # each target. Do NOT shorten this to speed the job: the reconcile loop
+          # would still work, and the guard would not go noisy — it would go
+          # SILENT. A shallow tip is parentless, so every path reads as added
+          # there and resolves to whoever that tip's sync names, which right
+          # after one of our own publishes is us. The sibling's cards would then
+          # be overwritten with no refusal. See tooling/publish-to-pages.py.
+          fetch-depth: 0
+          # persist-credentials (default true) stores the PAT in pages/.git/config
+          # for the push below. NEVER cat that file, dump `env`, or upload the
+          # workspace as an artifact — that is the only place the token lives.
+
+      - name: Set up Python
+        if: ${{ steps.detect.outputs.found == 'true' }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Publish to Pages
+        if: ${{ steps.detect.outputs.found == 'true' }}
+        env:
+          # Explicit: only a dispatch with the box ticked is a dry run. On a push
+          # event `inputs.dry_run` is null, so this evaluates to false (publish).
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          SOURCE="${GITHUB_WORKSPACE}/source"
+          PAGES="${GITHUB_WORKSPACE}/pages"
+
+          # Only date-prefixed posts — posts/README.md (and any future non-post)
+          # has no frontmatter and must never reach the transform. The `detect`
+          # step above already gated on this being non-empty; re-globbing here
+          # keeps transform_and_stage self-contained, and the check stays as an
+          # assertion that the two globs agree.
+          posts=("${SOURCE}"/posts/[0-9][0-9][0-9][0-9]-*.md)
+          if [ ${#posts[@]} -eq 0 ]; then
+            echo "::error::No date-prefixed posts found under posts/, but the detect step said there were — these two globs must agree."
+            exit 1
+          fi
+          echo "Publishing ${#posts[@]} post(s)."
+
+          # Transform every post into the Pages tree and stage ONLY the two
+          # target dirs (safe-push discipline — never `git add -A`). Re-run after
+          # each reconcile so content-compare is evaluated against the CURRENT
+          # Pages tip, not the checkout-time tip. REPO_ROOT inside the script is
+          # derived from its own path (= $SOURCE), so og_card_source resolves
+          # there regardless of this CWD.
+          transform_and_stage() {
+            python3 "${SOURCE}/tooling/publish-to-pages.py" "${posts[@]}" \
+              --posts-dir  "${PAGES}/${PAGES_POSTS_DIR}" \
+              --assets-dir "${PAGES}/${PAGES_ASSETS_DIR}" \
+              --source-repo "${SOURCE_REPO}"
+            git -C "${PAGES}" add "${PAGES_POSTS_DIR}" "${PAGES_ASSETS_DIR}"
+          }
+
+          cd "${PAGES}"
+          transform_and_stage
+
+          # Always surface the planned changes — this is also the dry-run "diff".
+          {
+            echo "## Pages sync — planned changes"
+            echo
+            echo '```'
+            git --no-pager diff --cached --stat || true
+            echo '```'
+            echo
+            echo "<details><summary>Markdown content diff</summary>"
+            echo
+            echo '```diff'
+            git --no-pager diff --cached -- '*.md' || true
+            echo '```'
+            echo
+            echo "</details>"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          echo "=== staged ==="
+          git --no-pager diff --cached --name-status
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "Dry run: transform + diff complete, no push. See the job summary."
+            exit 0
+          fi
+
+          if git diff --cached --quiet; then
+            echo "No changes to publish — ${PAGES_REPO}@${PAGES_BRANCH} already up to date."
+            exit 0
+          fi
+
+          git config user.name  "pages-sync[bot]"
+          git config user.email "pages-sync[bot]@users.noreply.github.com"
+          commit_msg="chore(sync): publish posts from ${SOURCE_REPO}@${GITHUB_SHA:0:7}"
+          git commit -m "${commit_msg}"
+
+          # Pages main has OTHER automated writers (the daily ESG cron, and
+          # both sibling syncs). An event-triggered push has no
+          # 'next run' to reconcile a lost race, so on rejection: fetch + reset to
+          # the moved tip, RE-TRANSFORM against it (content-compare authoritative
+          # at push time — no stale bytes and no rebase-replay conflict),
+          # re-commit, and retry. Bounded, then fail LOUD.
+          attempt=1
+          until git push origin "HEAD:${PAGES_BRANCH}"; do
+            if [ "${attempt}" -ge "${MAX_PUSH_ATTEMPTS}" ]; then
+              echo "::error::pages-sync: push to ${PAGES_REPO}@${PAGES_BRANCH} failed after ${MAX_PUSH_ATTEMPTS} attempts. POST NOT PUBLISHED — investigate the Pages branch."
+              exit 1
+            fi
+            echo "Push rejected (attempt ${attempt}/${MAX_PUSH_ATTEMPTS}); reconciling with ${PAGES_BRANCH} and retrying…"
+            sleep "$((attempt * 5))"
+            if ! git fetch origin "${PAGES_BRANCH}"; then
+              echo "::error::pages-sync: could not fetch ${PAGES_BRANCH} to reconcile. POST NOT PUBLISHED."
+              exit 1
+            fi
+            git reset --hard "origin/${PAGES_BRANCH}"
+            transform_and_stage
+            if git diff --cached --quiet; then
+              echo "After reconcile, ${PAGES_REPO}@${PAGES_BRANCH} is already up to date — nothing to push."
+              exit 0
+            fi
+            git commit -m "${commit_msg}"
+            attempt=$((attempt + 1))
+          done
+          echo "Published to ${PAGES_REPO}@${PAGES_BRANCH}."
