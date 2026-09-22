@@ -101,7 +101,7 @@ claude-code-loop/
 │       ├── README.md            # a copy of the front-door README -- see below
 │       └── LICENSE              # pristine MIT, unlike the root -- see below
 ├── tests/                   # stdlib unittest suite + its own CLAUDE.md; does NOT ship
-├── tooling/                 # maintainer-side root executables (the Pages publisher); does NOT ship
+├── tooling/                 # maintainer-side root executables; does NOT ship
 ├── tools/mutation-specs/    # hand-run harness self-check; does NOT ship
 ├── docs/research/           # the research notebook; does NOT ship
 ├── posts/                   # blog series sources + frontmatter contract; does NOT ship

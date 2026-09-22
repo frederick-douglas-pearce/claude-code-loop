@@ -200,9 +200,9 @@ def check_post(filename, text):
 
     if "og_card_source" in fields:
         src = str(fields["og_card_source"])
-        # Shape only. The card renders into social/, which is gitignored, so existence
-        # is deliberately NOT checked -- posts/README.md states that gap rather than
-        # letting a green run imply the card is there.
+        # `tooling/check-og-cards.py` (#180) also reads this field, in the
+        # `og-card-guard` workflow. No claim is made here about how the two
+        # relate: two drafts of such a claim were written and both were false.
         if src.startswith("/") or ".." in pathlib.PurePosixPath(src).parts:
             problems.append(
                 "og_card_source must be a repo-relative path that does not escape the "
@@ -267,7 +267,7 @@ description: "Why the roles on a dev team outlived the people who filled them."
 categories: ["claude-code-loop"]
 tags: ["claude-code", "dev-loop", "foundation"]
 og_image: https://frederick-douglas-pearce.github.io/assets/img/team-you-didnt-hire-og.png
-og_card_source: social/images/2026-10-01-linkedin-team-you-didnt-hire/og-card.png
+og_card_source: posts/images/team-you-didnt-hire/og-card.png
 featured: false
 claude_code_version_verified: v2.1.243
 humanizer_pass: v3.0.0
@@ -372,7 +372,7 @@ class CheckerBatteryTests(unittest.TestCase):
 
     def test_og_card_source_escaping_the_repo_is_caught(self) -> None:
         self._assert_complains(
-            self._mutated("social/images/", "../../social/images/"),
+            self._mutated("posts/images/", "../../posts/images/"),
             "does not escape the repo",
         )
 

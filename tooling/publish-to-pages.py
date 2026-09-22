@@ -58,14 +58,13 @@ repo-escaping path, a missing source file, or two posts colliding on one target
 all abort the run with zero writes. A wrong image shipped under a green Action
 is the exact failure mode this design exists to prevent.
 
-**In THIS repo that fail-closed path is currently unreachable-by-design and will
-fire on the first real post.** `posts/README.md` puts `og_card_source` under
-`social/`, which is gitignored, so a CI checkout has no card to resolve. Where a
-card should live is issue #180's to settle; until it does, this publisher is
-wired but inert (the Action's `detect` step finds no dated post and skips).
-Nothing here hardcodes a card directory — `og_card_source` is a per-post
-frontmatter value resolved against REPO_ROOT — so #180's decision changes a
-frontmatter convention and a file location, never this file.
+**Cards live at `posts/images/<slug>/og-card.png`, committed** — settled by issue
+#180, which also ported `tooling/check-og-cards.py` so the same fail-closed
+resolution runs on a PR rather than first on `main`. Nothing here hardcodes a
+card directory: `og_card_source` is a per-post frontmatter value resolved against
+REPO_ROOT, so that decision changed a frontmatter convention and a file location
+and never this file. The publisher is still inert until a dated post exists (the
+Action's `detect` step finds none and skips).
 
 Idempotency is **content-compare, not push-diff**: every output is written only
 when its bytes differ from what's already in the Pages tree, so a re-run makes
@@ -107,8 +106,9 @@ this repo can cover the siblings' halves, and none pretends to.
 One consequence is load-bearing rather than incidental: the check is invisible
 to any PR-time guard, which has no Pages checkout. A slug colliding with either
 sibling passes CI green and fails at publish time — loudly, but late. (The
-source repo has `tooling/check-og-cards.py` for the PR-time half; porting that
-is issue #180.) See posts/README.md.
+PR-time half is `tooling/check-og-cards.py`, ported in issue #180, which runs
+`build_plan` but cannot run this check — it has no Pages checkout.) See
+posts/README.md.
 
 **Reciprocity is partial, and the asymmetry is worth stating exactly.** Of the
 three publishers, `us-presidential-vote-analysis` carries this guard and so does

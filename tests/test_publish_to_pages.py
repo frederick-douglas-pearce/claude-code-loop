@@ -83,7 +83,16 @@ _FRAGILE_BODY = (
     "Three blank lines above this one.\n"
 )
 
-_FRONTMATTER = """---
+#: The card's repo-relative path, settled at `posts/images/<slug>/` by #180
+#: (.claude/specs/decisions.md D014). Defined ONCE and interpolated into the
+#: frontmatter below, because the fixture that creates the file and the post that
+#: points at it must agree -- and when they were two separate literals, a
+#: convention change updated the post and left the fixture behind. A `git grep`
+#: for the old path did not find the fixture either, because it built the path
+#: from `Path` segments rather than writing it out.
+_CARD_REL = "posts/images/team-you-didnt-hire/og-card.png"
+
+_FRONTMATTER = f"""---
 layout: post
 title: "The team you didn't hire"
 date: 2026-10-01 09:00:00-0700
@@ -91,7 +100,7 @@ description: "Why the roles on a dev team outlived the people who filled them."
 categories: ["claude-code-loop"]
 tags: ["claude-code", "dev-loop", "foundation"]
 og_image: https://frederick-douglas-pearce.github.io/assets/img/team-you-didnt-hire-og.png
-og_card_source: social/images/2026-10-01-linkedin-team-you-didnt-hire/og-card.png
+og_card_source: {_CARD_REL}
 featured: false
 claude_code_version_verified: v2.1.243
 humanizer_pass: v3.0.0
@@ -159,9 +168,9 @@ class _FixtureTree(unittest.TestCase):
 
         self.post = self.repo / "posts" / (_POST_STEM + ".md")
         self.post.write_text(_GOOD_POST, encoding="utf-8")
-        card = self.repo / "social" / "images" / "2026-10-01-linkedin-team-you-didnt-hire"
-        card.mkdir(parents=True)
-        (card / "og-card.png").write_bytes(_CARD_BYTES)
+        card = self.repo / _CARD_REL
+        card.parent.mkdir(parents=True)
+        card.write_bytes(_CARD_BYTES)
 
         patcher = mock.patch.object(publish_to_pages, "REPO_ROOT", self.repo)
         patcher.start()
@@ -234,9 +243,8 @@ class TransformTests(_FixtureTree):
             encoding="utf-8",
         )
         # The FIRST post is fully valid; only the second's card is missing.
-        (self.repo / "social" / "images" / "2026-10-02-linkedin-second-post").mkdir(
-            parents=True
-        )
+        # Directory only, no card file -- the second post's pointer must dangle.
+        (self.repo / "posts" / "images" / "second-post").mkdir(parents=True)
         with self.assertRaises(PublishError) as cm:
             publish_to_pages.run(
                 [self.post, second], self.posts_dir, self.assets_dir,

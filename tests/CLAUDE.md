@@ -63,6 +63,25 @@ that used to sit here went stale the first time a module was added):
   `pages-sync[bot]` identity and commit-subject template to the constants that parse them. Both
   are deferred with a capture gate — see **#199**, which carries the gate itself
   (before the first real post, or before the `pages-sync` environment exists).
+- **`tests/test_check_og_cards.py`** — behavior of `tooling/check-og-cards.py`, the PR-time
+  OG-card guard (#180). It exists for the reason `CheckerBatteryTests` does, one file over: the
+  guard globs `posts/` for dated posts, and while there are none it prints `no posts found to
+  check` and exits **0** — so without this module it would ship as a check nobody had ever seen
+  fail. Control first, then one case per fail-closed condition it covers, each asserting the
+  *specific* complaint. **It does not claim to cover every condition `build_plan` enforces**: it
+  reaches six of about ten, and `og_target_name`'s `_SAFE_BASENAME` branch is unguarded by this
+  whole suite — confirmed by mutation and filed on #1, because that is #179's surface rather than
+  #180's.
+
+  `ReuseTests` is the part worth knowing about. AC1 said *"Do not reimplement the checks. Call
+  `build_plan`."* The first version asserted `spy.called`, which pins that `build_plan` **ran** and
+  not that its answer was **used** — a guard calling it decoratively and re-deriving everything
+  passed. It now injects a sentinel refusal and a stubbed acceptance and asserts both reach the
+  guard's verdict, in both directions, because either alone is satisfiable by a half-delegating
+  implementation. Confirmed by writing that mutant and watching the new tests kill it. **No `git`
+  binary needed**, unlike `test_publish_to_pages.py`'s Tier 2: `build_plan` is Phase 1 and this
+  guard never reaches `git_pages_owner`.
+
 - **`tests/test_repo_consistency.py`** — **mechanical** checks on the markdown/JSON deliverable:
   the shipped example sidecar still loads through the real `load_registry`; the composed
   `plugin@marketplace` identifier still matches every hand-written call site; engine `CAPS` ⊆
