@@ -327,7 +327,7 @@ class ReuseTests(unittest.TestCase):
     A coupling's identity, not a proposition's truth (`tests/CLAUDE.md`).
     """
 
-    def _tree(self) -> Path:
+    def _tree(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         repo = Path(tmp.name) / "repo"

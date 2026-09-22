@@ -29,8 +29,7 @@ guard.
 This repo is PR-per-feature-branch (CLAUDE.md → Branching & PR flow; `posts/` is
 on the PR side), so this runs on every `posts/` PR — unlike `claude-code-sessions`,
 where `posts/` is direct-commit-allowed. It does not BLOCK a merge: branch
-protection requires the aggregate `test-suite` job only, and whether this becomes
-a required check is issue #195's question.
+protection requires the aggregate `test-suite` job only.
 
 It guards card *presence*, not *generation*. **There is no renderer in this repo
 yet** — producing the card is a manual step, and automating it is issue #181. So

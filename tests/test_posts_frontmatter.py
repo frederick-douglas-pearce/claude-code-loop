@@ -200,10 +200,9 @@ def check_post(filename, text):
 
     if "og_card_source" in fields:
         src = str(fields["og_card_source"])
-        # Shape only; existence is checked by `tooling/check-og-cards.py` (#180), which
-        # runs the publisher's own `build_plan` in the `og-card-guard` workflow.
-        # Both checks are kept. No claim is made here about how their coverage
-        # relates: two drafts of such a claim were written and both were false.
+        # `tooling/check-og-cards.py` (#180) also reads this field, in the
+        # `og-card-guard` workflow. No claim is made here about how the two
+        # relate: two drafts of such a claim were written and both were false.
         if src.startswith("/") or ".." in pathlib.PurePosixPath(src).parts:
             problems.append(
                 "og_card_source must be a repo-relative path that does not escape the "

@@ -94,7 +94,7 @@ reasons:
 
 1. **A recorded decision already assumed otherwise.** `.claude/specs/decisions.md` D013 — the
    `posts/` prose licence — cuts the CC-BY grant on the **path axis** at the literal token
-   `posts/`, and explicitly rejected a `posts/YYYY-MM-DD-*.md` alternative because it would
+   `posts/`, and explicitly rejected a `posts/YYYY-MM-DD-*.md` alternative because it
    "under-covers the assets #180 introduces." Cards under `social/` would fall on the root
    `LICENSE`'s MIT side, so a published card would carry a different licence from the post it
    illustrates.
