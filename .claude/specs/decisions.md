@@ -500,12 +500,13 @@ that defines it, rather than against the filesystem. Worth recording because the
 not "the guard was wrong": it is that a guard can be **green for an environmental reason**, and
 only a clean checkout says so.
 
-**A fourth attempt was killed by the guard itself, during review fixes, and it is the cleanest
-evidence the guard works.** The walker originally had a second branch that treated any whole
-string literal ending in `.py` as a load. Code review predicted exactly what that would cost —
-*"one keystroke from red: writing `tooling/render-og-card.py` in any docstring turns the whole
-guard red on a clean tree, for a mention"* — and the very next fix wrote that literal into a test
-assertion, so the renderer entered the closure and the guard failed on a correct tree. The branch
+**The guard then killed a regression of its own author's, during the review fixes, and that is the
+cleanest evidence it works.** The walker shipped with a second branch that treated any whole string
+literal ending in `.py` as a load. Code review called it *"one keystroke from red"* — and the very
+next fix wrote `tooling/render-og-card.py` into a test assertion, so the renderer entered the
+closure and the guard failed on a correct tree. (The prediction was right about the outcome and
+loose about the mechanism: a docstring merely *containing* the path would not have fired, since the
+branch tested the whole literal.) The branch
 was **deleted** rather than special-cased: it detected no real load in this suite, which names
 every script it loads as a `/`-joined chain, and its only live effect was the false red. **A
 mention is not a load** — the same sentence the basename attempt was rejected on, arriving a second

@@ -3340,10 +3340,7 @@ class SuiteImportClosureTests(unittest.TestCase):
     a clean interpreter notices. That is the whole reason this is a test rather than a
     convention.
 
-    The closure is the ``tests/`` modules themselves **plus every repo ``.py`` file
-    they name in a string literal**, which is how this suite loads a script it does not
-    import -- so the check follows ``spec_from_file_location`` targets rather than
-    stopping at the import statement it never writes.
+    What the closure reaches, and what it misses, is ``tests/CLAUDE.md``'s to state.
     """
 
     def _closure(self) -> dict[Path, ast.Module]:

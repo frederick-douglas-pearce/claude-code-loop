@@ -145,10 +145,8 @@ uv run tooling/render-og-card.py posts/images/<slug>/og-card.toml
 
 `uv` is required and Inkscape must be on PATH. You do **not** need to install Pillow or create a
 virtualenv: the renderer declares its own dependency in a PEP-723 header, so `uv` resolves it
-per-script. That is the point rather than a convenience — the stdlib-only rule binds by **reach**,
-and the renderer reaches neither the payload nor the test suite (`CLAUDE.md` → the `tooling/`
-bullet states the predicate, including what to do when you cannot tell; **D015** for the
-reasoning).
+per-script. That is the point rather than a convenience: see `CLAUDE.md` → the `tooling/` bullet
+for the rule that makes it so, and **D015** for the reasoning.
 
 `tooling/og-card.example.toml` documents the brief format.
 
@@ -157,11 +155,11 @@ the card, and it is committed. `og-card.svg` and `og-card@2x.png` are reproducib
 that nothing downstream resolves, and `.gitignore` keeps them out — do not commit them, and do
 not add a rule that would.
 
-**The visual system is shared on purpose, and only one part of it is yours to choose.** The
-chassis — the 1200×630 canvas, the palette and the wordmark — is shared so the series read as the
-same author; `tooling/og-card-template.svg` is that chassis, and it is byte-identical to the vote
-repo's. What differs per series is the **specimen frame**: `claude-code-sessions` shows a terminal
-window, `us-presidential-vote-analysis` shows record panels.
+**The visual system is shared on purpose.** `tooling/og-card-template.svg` is the chassis; what a
+series chooses is its **specimen frame** — the thing the card actually shows.
+`us-presidential-vote-analysis` shows record panels, `claude-code-sessions` shows a terminal
+window. How far the chassis is shared with each of them is deliberately not described here: two
+drafts of that sentence were written and both were false.
 
 **This series' specimen frame is not settled yet.** It was split out of #181 to be designed
 against a real post rather than speculatively, so until it is, the renderer draws the two-panel

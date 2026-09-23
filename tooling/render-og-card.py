@@ -137,9 +137,8 @@ def _assert_no_collapsing_runs(panel: dict) -> None:
     same width and silently ruins the column the moment they are not.
 
     Emitting ``xml:space="preserve"`` would fix it globally but rewrite the SVG of
-    every card rendered before the change, and byte-identity with the sibling repos'
-    chassis is the property this port preserves. So the brief carries U+00A0 instead,
-    and this guard makes the requirement enforced rather than remembered.
+    every card rendered before the change. So the brief carries U+00A0 instead, and
+    this guard makes the requirement enforced rather than remembered.
     """
     for row in panel["rows"]:
         for text in (row,) if isinstance(row, str) else tuple(row):
@@ -295,7 +294,11 @@ def assert_exported(png: Path, svg: Path, stderr: str = "") -> None:
     file in place, both checks below pass, and the run goes on to flatten and
     downscale the **previous brief's** card -- shipping the wrong image with a
     success message, which is worse than the crash it replaced. Code review found
-    this; the first version of this function checked existence alone.
+    this.
+
+    ``stderr`` is shown only on the no-file path below. A **non-zero** exit raises
+    ``CalledProcessError`` from the call site instead, and its string form omits
+    captured output, so Inkscape's message is still lost there.
     """
     if not png.exists():
         detail = f"\ninkscape said: {stderr.strip()}" if stderr.strip() else ""
@@ -327,7 +330,10 @@ def render(brief_path: Path) -> None:
     proc = subprocess.run(
         ["inkscape", str(svg_path), "--export-type=png", f"--export-filename={png2x}",
          f"--export-width={WIDTH * 2}", f"--export-height={HEIGHT * 2}"],
-        check=True, capture_output=True, text=True,
+        # `errors="replace"`, because the point of capturing stderr is to show it:
+        # the locale codec is ASCII under LANG=C, and a strict decode would turn a
+        # diagnostic into a UnicodeDecodeError raised from inside `subprocess.run`.
+        check=True, capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     assert_exported(png2x, svg_path, proc.stderr)
 

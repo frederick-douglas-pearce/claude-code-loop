@@ -103,9 +103,10 @@ that used to sit here went stale the first time a module was added):
   enforce, and it is review's, per the ceiling below.
   Second, its guard-the-guard asserts that `tooling/publish-to-pages.py` is reached — but that
   assertion is itself a `/`-joined literal in a file the walker parses, so it is partly
-  self-witnessing: dropping the payload root, or deleting the whole-string branch, both leave it
-  green (confirmed by mutation). Third, it checks the *suite-reach* half of the predicate; the
-  *ships-to-a-consumer* half is covered only incidentally.
+  self-witnessing. Measured: dropping the payload root leaves it green **and changes the closure by
+  zero files**, because every load site also spells the full repo-relative chain. Third, it checks
+  the *suite-reach* half of the predicate; the *ships-to-a-consumer* half is covered only
+  incidentally.
 
   The rest of the module:
   the shipped example sidecar still loads through the real `load_registry`; the composed
