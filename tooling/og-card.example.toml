@@ -1,0 +1,47 @@
+# Example OG-card brief -- the schema, not this series' specimen frame.
+#
+# A real brief lives beside its card at `posts/images/<slug>/og-card.toml` and is
+# committed, so a card can be re-rendered after a title edit without re-prompting.
+# This copy lives in `tooling/` because it is documentation of the format rather
+# than any post's content, and because `posts/` is CC BY 4.0 while `tooling/` is MIT.
+#
+# Render:
+#     uv run tooling/render-og-card.py posts/images/<slug>/og-card.toml
+#
+# **The specimen frame for the `claude-code-loop` series is NOT settled** -- it was
+# split out of #181 at that issue's plan gate, to be designed against post 1's real
+# draft. The two panels below only exercise the ported machinery. Do not read them
+# as the series' visual identity.
+
+[card]
+# 1 or 2 lines. Two is the design budget; the renderer rejects three.
+title = ["The Review That Passed", "Because Nobody Ran It"]
+subhead = "A gate that returns no verdict is not a gate that returned a clean one."
+# Lower-right mark. Keep the series name stable across cards.
+series_mark = "A Cross-Functional Team of One · example"
+
+# Exactly two panels, with EQUAL row counts -- the renderer enforces both, because
+# the rows are index-aligned across the pair.
+[[panel]]
+label = "What the ledger said"
+sublabel = "as journalled"
+mono = true
+rows = [
+  ["code review", "clean"],
+  ["security", "clean"],
+  ["acceptance", "5/5"],
+  ["hermetic tier", "n/a"],
+  ["mutation pass", "0 survivors"],
+]
+
+[[panel]]
+label = "What actually ran"
+sublabel = "on the merged commit"
+mono = true
+rows = [
+  ["code review", "2 commits earlier"],
+  ["security", "2 commits earlier"],
+  ["acceptance", "5/5"],
+  ["hermetic tier", "never due"],
+  ["mutation pass", "0 survivors"],
+]

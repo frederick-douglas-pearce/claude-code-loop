@@ -210,13 +210,34 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
   ship test**, and deliberately **does not enumerate which root executables are allowed**; that
   list would be the enumerable-assertion trap one directory behind the tree.
 
-  **The stdlib-only rule binds `tooling/`, and for a reason worth stating exactly:
-  `TEST_CMD` DOES read it.** `tests/test_publish_to_pages.py` loads
-  `tooling/publish-to-pages.py` by path and the suite runs on bare `python3` 3.9–3.13, so a
-  dependency added here breaks the suite on a consumer-shaped interpreter. (Contrast #178's root
-  `package.json` / `.prettierrc`, which are also maintainer-side and also do not ship, but which
-  `TEST_CMD` never touches — that npm pin is the standing exception the preamble carves out. Same
-  non-shipping status, different relationship to the suite; do not merge the two cases.)
+  **The stdlib-only rule binds by REACH, never by directory — and `tooling/` is where that
+  distinction first bites.** A file is bound iff it **ships to a consumer** or **the suite imports
+  or runs it**; **if you cannot establish that it reaches neither, it is bound.** That is the
+  preamble's predicate, applied here rather than restated in a second form. This bullet used to say
+  *"the stdlib-only rule binds `tooling/`"*, keyed to the directory, and the drift was not harmless:
+  it made a true statement about the directory's only two files into a false one about the
+  directory, which then needed a bolted-on exception for the first file that did not fit
+  (#181's renderer). **Do not re-introduce a directory-scoped form, and do not replace it with a
+  list of exempt files** — an exception list is the enumerable-assertion trap this document
+  records everywhere else, and it rots on the second file that needs it.
+
+  Both directions are live in this one directory, which is why it is the worked example rather
+  than a hypothetical: `tooling/publish-to-pages.py` **is bound**, because
+  `tests/test_publish_to_pages.py` loads it by path and the suite runs on bare `python3` 3.9–3.13,
+  so a dependency there breaks the suite on a consumer-shaped interpreter.
+  `tooling/render-og-card.py` **is not**, because nothing ships it and the suite is forbidden to
+  reach it — it declares Pillow in a PEP-723 block and runs under `uv`, so the dependency lives in
+  the one file that has it and no repo-level manifest exists. **The day anything imports or loads
+  it, it is bound, with no list to amend.** That is not left to memory:
+  `SuiteImportClosureTests` walks the suite's import closure — the `tests/` modules plus every repo
+  `.py` they load by path — and fails on any non-stdlib import, so an **unknown** dependency fails
+  too. Read those two files as illustrations of the predicate, never as the rule. The reasoning,
+  and the options rejected, are **D015**.
+
+  (Contrast #178's root `package.json` / `.prettierrc`, which are also maintainer-side and also do
+  not ship, but which `TEST_CMD` never touches — that npm pin is the standing exception the
+  preamble carves out. Same non-shipping status, different relationship to the suite; do not merge
+  the two cases.)
 
   **`tooling/` and `tools/` differ by one character and carry opposite rules**, which is the one
   thing worth memorising here: `tooling/` holds root **executables**, `tools/` holds only
@@ -225,9 +246,9 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
   `REPO_ROOT = Path(__file__).resolve().parent.parent` requires its script to sit exactly one
   directory below the repo root. Do not "tidy" the two together.
 
-  Anything later that lands here inherits the same terms — #181's OG-card renderer is the next
-  candidate, and if it takes a rendering dependency that dependency stays maintainer-side, out of
-  the payload and out of the suite's import path.
+  Anything later that lands here inherits the same terms. #181's OG-card renderer was the
+  candidate this sentence used to anticipate; it has landed, on exactly those terms, and settling
+  it is what replaced the directory-scoped rule above with the reach predicate.
 - **`posts/` holds the blog series sources and does not ship.** The `claude-code-loop` series,
   published to the Pages site that two sibling repos already publish into. The boundary with
   `social/` is what matters: `social/` is **gitignored working state** —

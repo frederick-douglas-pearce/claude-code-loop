@@ -86,8 +86,9 @@ _REMEDY = (
     "This is the same fail-closed resolution the Pages-sync Action runs at\n"
     "publish time — fixing it here keeps it off `main`. Commit an OG card at the\n"
     "path the post's `og_card_source` names (under `posts/images/<slug>/`, per\n"
-    "posts/README.md), or correct the pointer. Producing the card is a manual\n"
-    "step today; automating it is issue #181."
+    "posts/README.md), or correct the pointer. To produce the card, write a\n"
+    "brief beside it and run:\n"
+    "    uv run tooling/render-og-card.py posts/images/<slug>/og-card.toml"
 )
 
 
