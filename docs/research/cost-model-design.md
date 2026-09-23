@@ -400,7 +400,7 @@ the most valuable artifacts in this directory, and each was bought with a wrong 
 
 **A separate repo, consuming sanitized derived tables.** Three reasons, in order of force:
 
-1. This repo is **stdlib-only on Python 3.9–3.13 by hard constraint**, because the guard hook runs
+1. Everything here that ships to a consumer or that `TEST_CMD` runs is **stdlib-only on Python 3.9–3.13 by hard constraint**, because the guard hook runs
    under bare `python3` in a consumer's environment. The analysis wants pandas, statsmodels,
    numpy, matplotlib. Those do not reconcile, and stdlib-only regression is masochism.
 2. Different deliverable, different audience, different lifecycle. `docs/research/` holds artifacts

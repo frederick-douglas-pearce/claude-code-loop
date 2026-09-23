@@ -1,0 +1,8 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif">
+<rect x="0" y="0" width="1200" height="630" fill="#0f0f14"/>
+{{TITLE_BLOCK}}
+{{SUBHEAD_BLOCK}}
+{{SPECIMEN_BLOCK}}
+<text x="38" y="608" fill="#8a8a99" font-size="20" font-weight="300">Frederick Pearce · Data. AI. Human.</text>
+<text x="1162" y="608" text-anchor="end" fill="#5a5a68" font-size="18" font-weight="300">{{SERIES_MARK}}</text>
+</svg>

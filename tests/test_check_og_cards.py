@@ -38,6 +38,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -290,27 +291,87 @@ class SelectionTests(_PostTree):
 class RemedyTests(unittest.TestCase):
     """The remedy string may only describe things that exist in THIS repo.
 
-    The guard is ported from `us-presidential-vote-analysis`, whose remedy tells
-    the author to run `uv run python tooling/render-og-card.py <brief>.toml`
-    (which needs Inkscape). **None of that exists here** -- the renderer is #181
-    -- so the port deletes that procedure rather than substituting one. This
-    pins the deletion, because a later editor restoring the source's wording is
-    exactly how a citation to a nonexistent tool gets back in.
+    The guard was ported from `us-presidential-vote-analysis`, whose remedy tells the
+    author to run its card renderer. When this guard landed (#180) no renderer existed
+    here, so the port **deleted** that procedure and these tests pinned the deletion --
+    a blocklist of the four source strings, which was sound while its premise held.
+
+    **#181 ported the renderer, so that premise is now false** and the blocklist would
+    pin a remedy that withholds the very command the author needs. The pins are
+    therefore inverted rather than deleted: instead of naming strings that must stay
+    absent, they now check that **every repo path the remedy names actually resolves**
+    -- which is the property the docstring above always claimed, stated so that it
+    survives the next edit to the remedy rather than the next edit to this list.
+
+    Note what that buys over the blocklist it replaces: a remedy citing a tool this
+    repo does not have fails **whatever** the tool is called, with no list to amend.
+    That is the same defect the old tests guarded, caught by its mechanism instead of
+    by four names.
     """
 
-    def test_the_remedy_keeps_the_source_repos_renderer_wording_deleted(self) -> None:
-        for absent in ("render-og-card", "uv run", "Inkscape", ".toml"):
-            self.assertNotIn(
-                absent,
-                cog._REMEDY,
-                "remedy carries %r, which the port deleted deliberately" % absent,
-            )
+    #: Tokens in the remedy that look like repo paths. Anchored on the two directories
+    #: the remedy legitimately points into; a path outside them is not a false negative
+    #: here, it is a remedy that has wandered off the two surfaces an author touches.
+    _PATH_RE = re.compile(r"\b((?:tooling|posts)/[A-Za-z0-9_./<>@-]+)")
 
-    def test_the_remedy_points_at_the_issue_that_automates_rendering(self) -> None:
-        self.assertIn("#181", cog._REMEDY)
+    def test_every_concrete_repo_path_the_remedy_names_exists(self) -> None:
+        """Concrete citations must resolve. Placeholder paths are templates, not paths.
+
+        The first version of this checked every cited path by stripping at the `<` and
+        probing the prefix -- so `posts/images/<slug>/` became `posts/images/`, which
+        **does not exist until the first card is committed**. It passed locally only
+        because an earlier step in the same session had left that directory behind
+        empty, and git does not track empty directories, so CI had no such path and
+        went red on all five interpreters. The guard was reading local dirt.
+
+        A path with a placeholder in it is a *template* the author fills; asserting it
+        exists asserts something the remedy never claimed. What must resolve is a
+        citation to a concrete thing -- above all the renderer, which is the citation
+        that would rot if the tool were renamed or removed. The card directory
+        convention is pinned separately below, against the README that defines it,
+        rather than against the filesystem.
+        """
+        cited = self._PATH_RE.findall(cog._REMEDY)
+        self.assertTrue(cited, "remedy names no repo path at all; it cannot be actionable")
+        concrete = [c for c in cited if "<" not in c]
+        self.assertTrue(
+            concrete,
+            "the remedy names only placeholder paths, so nothing in it is checkable "
+            "and a citation to a nonexistent tool could not be caught",
+        )
+        missing = [c for c in concrete if not (_REPO_ROOT / c).exists()]
+        self.assertEqual(
+            [], missing,
+            "the remedy cites %s, which does not exist in this repo -- the exact "
+            "defect this class exists to catch (a citation to a nonexistent tool)."
+            % missing,
+        )
+
+    def test_the_remedy_names_the_renderer_now_that_it_exists(self) -> None:
+        """The inverse of the pin this replaced, and it fails for the same reason.
+
+        Before #181 the renderer was absent and naming it was the defect; now it is
+        present and NOT naming it is, because the author is left with a red PR and no
+        way to fix it.
+        """
+        self.assertIn("tooling/render-og-card.py", cog._REMEDY)
 
     def test_the_remedy_names_the_settled_card_directory(self) -> None:
+        """And the directory it names is the one `posts/README.md` documents.
+
+        Asserting the string alone would let the remedy and the contract drift apart
+        silently; asserting it against the README couples them. Deliberately NOT a
+        filesystem check -- `posts/images/` does not exist until the first card lands,
+        which is precisely the state this repo is in.
+        """
         self.assertIn("posts/images/", cog._REMEDY)
+        contract = (_REPO_ROOT / "posts" / "README.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "posts/images/<slug>/og-card.png",
+            contract,
+            "the remedy points at posts/images/ but the frontmatter contract no "
+            "longer documents that path; one of the two has drifted",
+        )
 
 
 class ReuseTests(unittest.TestCase):

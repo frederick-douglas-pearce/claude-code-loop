@@ -20,5 +20,20 @@ __pycache__/
 # social/marketing drafts (local working state, never committed)
 social/
 
+# OG-card build intermediates. Only `og-card.png` is committed -- the publisher
+# resolves that one file and nothing reads the other two, so committing them just
+# invites drift from the brief they were built from. The renderer writes all three
+# alongside the brief, which lives in a COMMITTED directory, so without these rules
+# they show up untracked and get swept in by a wide `git add`. Cards themselves are
+# deliberately NOT ignored: `posts/images/<slug>/og-card.png` is committed, per D014.
+posts/images/**/og-card.svg
+posts/images/**/og-card@2x.png
+# And the same three for `tooling/og-card.example.toml`, which renders in place:
+# the example is the brief most likely to be run first by someone learning the
+# format, and it is the one whose outputs the rules above do not reach.
+tooling/og-card.svg
+tooling/og-card@2x.png
+tooling/og-card.png
+
 # Node (the Prettier gate on posts/ -- root package.json, CI-only, never shipped)
 node_modules/

@@ -82,7 +82,33 @@ that used to sit here went stale the first time a module was added):
   binary needed**, unlike `test_publish_to_pages.py`'s Tier 2: `build_plan` is Phase 1 and this
   guard never reaches `git_pages_owner`.
 
-- **`tests/test_repo_consistency.py`** — **mechanical** checks on the markdown/JSON deliverable:
+- **`tests/test_repo_consistency.py`** — **mechanical** checks on the markdown/JSON deliverable,
+  and — since #181 — one check over the suite's own imports:
+
+  `SuiteImportClosureTests` — the suite's import closure is stdlib-only, checked **default-deny**:
+  an *unknown* import fails, with no list to amend. It exists because the stdlib-only rule binds by
+  **reach** (root `CLAUDE.md` → the `tooling/` bullet), and the maintainer-side card renderer sits
+  outside that boundary only while nothing here reaches it. A local run cannot substitute for it —
+  Pillow is installed on the maintainer's machine, so only a clean interpreter notices.
+  **Three limits, stated because the guard cannot state them itself.** The closure is the `tests/`
+  modules plus every repo `.py` they name as a **`/`-joined path-literal chain** anchored at the
+  repo root or the payload root — the idiom this suite uses for every script it loads. A
+  whole-string branch was tried and removed: a bare `"tooling/x.py"` literal resolves whether it is
+  a load or a mere mention, and the first mention anyone wrote turned the guard red on a clean
+  tree. A load built any other way — `joinpath`, an f-string, `os.path.join`, a directory held in a variable, or the
+  sibling-relative `Path(__file__).parent / "x.py"` idiom `tooling/check-og-cards.py` itself uses —
+  is **invisible to it**. Chasing those was considered and **declined**: path construction is an
+  open domain, and completing the matcher rebuilds the enumerable-assertion trap one level down in
+  the AST. So the residual is an authoring convention the guard now depends on and does not
+  enforce, and it is review's, per the ceiling below.
+  Second, its guard-the-guard asserts that `tooling/publish-to-pages.py` is reached — but that
+  assertion is itself a `/`-joined literal in a file the walker parses, so it is partly
+  self-witnessing. Measured: dropping the payload root leaves it green **and changes the closure by
+  zero files**, because every file so loaded is also spelled in full at some other site. Third, it checks
+  the *suite-reach* half of the predicate; the *ships-to-a-consumer* half is covered only
+  incidentally.
+
+  The rest of the module:
   the shipped example sidecar still loads through the real `load_registry`; the composed
   `plugin@marketplace` identifier still matches every hand-written call site; engine `CAPS` ⊆
   the `/init-loop` skeleton (see the root `CLAUDE.md`'s three-layer split — this is that

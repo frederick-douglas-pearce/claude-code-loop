@@ -130,6 +130,41 @@ walked. The series is a catalogue of this project publishing things that turned 
 false — PR #136 retracted three already-published claims — so an unattested post is the one
 failure mode the series itself is about.
 
+## Share cards
+
+Every post needs an OG card before it can publish — `og_card_source` is a required frontmatter
+field and the guard fails closed on a card that does not resolve, so a post without one cannot
+pass CI. `### Where an OG card lives` above says where it goes; this says how to make it.
+
+Cards are built from a **committed TOML brief**, so a card can be re-rendered after a title edit
+without re-prompting anyone:
+
+```
+uv run tooling/render-og-card.py posts/images/<slug>/og-card.toml
+```
+
+`uv` is required and Inkscape must be on PATH. You do **not** need to install Pillow or create a
+virtualenv: the renderer declares its own dependency in a PEP-723 header, so `uv` resolves it
+per-script. That is the point rather than a convenience: see `CLAUDE.md` → the `tooling/` bullet
+for the rule that makes it so, and **D015** for the reasoning.
+
+`tooling/og-card.example.toml` documents the brief format.
+
+**Three files are written beside the brief; only one is committed.** `og-card.png` (1200×630) is
+the card, and it is committed. `og-card.svg` and `og-card@2x.png` are reproducible intermediates
+that nothing downstream resolves, and `.gitignore` keeps them out — do not commit them, and do
+not add a rule that would.
+
+**The visual system is shared on purpose.** `tooling/og-card-template.svg` is the chassis; what a
+series chooses is its **specimen frame** — the thing the card actually shows.
+`us-presidential-vote-analysis` shows record panels, `claude-code-sessions` shows a terminal
+window.
+
+**This series' specimen frame is not settled yet.** It was split out of #181 to be designed
+against a real post rather than speculatively, so until it is, the renderer draws the two-panel
+specimen it was ported with. Treat the example brief as a format demonstration, not as the
+series' visual identity.
+
 ## Categories and tags
 
 `categories` names the **series**, not the kind of post, and is always
@@ -258,5 +293,9 @@ loud.
 
 Stated plainly so nobody assumes more exists than does:
 
-- **No OG-card renderer.** `render-og-card.py` is #181, which also carries the one dependency
-  decision this repo's stdlib-only rule forces.
+- **No specimen frame for this series.** The renderer landed in #181 and draws the two-panel
+  specimen it was ported with; choosing what this series' cards actually show was split out of
+  that issue, to be designed against a real post. Until it is settled, a card rendered here will
+  look like the vote series' rather than like its own.
+- **No `pages-sync` environment.** See `## Publishing` above: until it exists, a run with a real
+  post to publish fails loud, and a run with nothing to publish exits green.

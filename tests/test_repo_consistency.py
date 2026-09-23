@@ -26,11 +26,14 @@ design (CLAUDE.md -> the append-only guard hook). Run with:
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import io
 import json
 import re
 import shutil
+import sys
+import sysconfig
 import tempfile
 import unittest
 from pathlib import Path
@@ -3309,6 +3312,198 @@ class LensDifferentialAgreementTests(unittest.TestCase):
             "still reads correctly -- which is why this is pinned rather than left "
             "to review.")
 
+
+class SuiteImportClosureTests(unittest.TestCase):
+    """The suite's import closure is stdlib-only, checked default-deny.
+
+    **What this pins and why it is shaped this way.** #181 ports
+    ``tooling/render-og-card.py``, which imports Pillow and 3.11+ ``tomllib``. The
+    stdlib-only rule here binds by *reach* -- what ships to a consumer, and what the
+    test suite imports or runs (``CLAUDE.md``) -- so that renderer is outside the rule
+    **exactly as long as the suite never reaches it**. CI runs ``discover`` on Python
+    3.9-3.13 with no install step, and every test module that touches a ``tooling/``
+    script loads it at *module import time* via ``spec_from_file_location``, so a
+    single test reaching the renderer is not one red test: it is a collection-time
+    failure of the whole run on 3.9 and 3.10. This is the guard that stops that
+    reaching from being reintroduced.
+
+    **It is deliberately NOT a blocklist.** The first draft of this guard, at #181's
+    plan gate, was "assert no test imports the renderer" -- a forbidden-name check over
+    an open domain, whose cheap fix for a red run is to append the new name. That is
+    ``tests/CLAUDE.md``'s ``ALLOWED_NON_BINDINGS`` trap, and it asserts an *outcome*
+    (this one name is absent) rather than the *mechanism* (the closure is stdlib-only).
+    Inverted, an **unknown** import fails with no list to amend, and a second
+    dependency-taking file is caught without touching this test.
+
+    **A local run cannot substitute for it.** Pillow is installed on the maintainer's
+    machine, so a local ``discover`` would import the renderer perfectly happily; only
+    a clean interpreter notices. That is the whole reason this is a test rather than a
+    convention.
+
+    What the closure reaches, and what it misses, is ``tests/CLAUDE.md``'s to state.
+    """
+
+    def _closure(self) -> dict[Path, ast.Module]:
+        """Every Python file the suite can pull in, parsed."""
+        found: dict[Path, ast.Module] = {}
+        queue = sorted((_REPO_ROOT / "tests").glob("*.py"))
+        while queue:
+            path = queue.pop()
+            if path in found:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            found[path] = tree
+            # A path-loaded module is named in a string, never imported, so the import
+            # statements alone would stop at the edge of the closure. Only `/`-joined
+            # chains are followed: a whole-string branch was tried and **removed**,
+            # because a bare `"tooling/x.py"` literal resolves whether it is a load or
+            # a mere mention, and the first mention written -- an assertion string in
+            # `test_check_og_cards.py` -- turned this guard red on a clean tree. It
+            # detected no real load in this suite, which names every script it loads as
+            # a `/`-joined chain. A mention is not a load.
+            for rel in self._joined_path_literals(tree):
+                for base in (_REPO_ROOT, _REPO_ROOT / "plugins" / "dev-loop"):
+                    hit = (base / rel).resolve()
+                    if hit.is_file() and _REPO_ROOT in hit.parents:
+                        queue.append(hit)
+        return found
+
+    @staticmethod
+    def _joined_path_literals(tree: ast.Module) -> list[str]:
+        """Repo-relative paths built as `/`-joined string components.
+
+        This suite never writes a script's path as one literal -- it writes
+        ``_REPO_ROOT / "tooling" / "publish-to-pages.py"``, so the AST holds the
+        directory and the basename as separate constants with no path between them.
+        Reconstructing the chain is what lets the closure follow a
+        ``spec_from_file_location`` target, which is the only way the suite reaches a
+        file it never imports.
+
+        Matching on basename alone was tried first and rejected: it pulled in every
+        same-named file anywhere in the repo, including files named only in a
+        *docstring*. A mention is not a load, and a guard that fails on a clean tree
+        is not a strict guard, it is a broken one.
+        """
+        out = []
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div)):
+                continue
+            parts, cur = [], node
+            while isinstance(cur, ast.BinOp) and isinstance(cur.op, ast.Div):
+                if isinstance(cur.right, ast.Constant) and isinstance(
+                    cur.right.value, str
+                ):
+                    parts.append(cur.right.value)
+                cur = cur.left
+            parts.reverse()
+            if parts and parts[-1].endswith(".py"):
+                out.append("/".join(parts))
+        return out
+
+    @staticmethod
+    def _top_level_imports(tree: ast.Module) -> set[str]:
+        names: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names.update(a.name.split(".")[0] for a in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                # `level` > 0 is a relative import: it resolves inside the repo, not
+                # to a distribution, so it is not a dependency.
+                if node.level == 0 and node.module:
+                    names.add(node.module.split(".")[0])
+        return names
+
+    @staticmethod
+    def _is_stdlib(name: str) -> bool:
+        """True iff `name` resolves to the standard library of THIS interpreter.
+
+        Two mechanisms because the suite runs on 3.9, where
+        ``sys.stdlib_module_names`` does not exist. Both ask the same default-deny
+        question; neither is an allow-list of accepted names.
+        """
+        stdlib_names = getattr(sys, "stdlib_module_names", None)
+        if stdlib_names is not None:
+            return name in stdlib_names
+        try:
+            spec = importlib.util.find_spec(name)
+        except (ImportError, ValueError):
+            return False
+        if spec is None:
+            return False
+        if spec.origin in (None, "built-in", "frozen"):
+            return True
+        stdlib_dir = sysconfig.get_paths()["stdlib"]
+        origin = str(Path(spec.origin).resolve())
+        return origin.startswith(str(Path(stdlib_dir).resolve())) and (
+            "site-packages" not in origin
+        )
+
+    def test_the_walker_actually_reaches_the_path_loaded_scripts(self) -> None:
+        """Guard the guard: a closure that silently stopped at `tests/` would pass.
+
+        The check below is vacuous if `_closure` never leaves `tests/`, and it would
+        look identical either way. This pins that it followed a string literal out to
+        a `tooling/` script the suite loads but never imports.
+        """
+        reached = set(self._closure())
+        self.assertIn(
+            (_REPO_ROOT / "tooling" / "publish-to-pages.py").resolve(),
+            reached,
+            "the closure walker did not follow tests/ out to the scripts they load "
+            "by path, so the import check below proves nothing about them",
+        )
+
+    def test_the_stdlib_predicate_separates_stdlib_from_not(self) -> None:
+        """Guard the predicate, not just the closure it is applied to.
+
+        The Class B mutation pass found this gap by killing the guard rather than
+        the code: replacing `_is_stdlib`'s body with `return True` leaves the check
+        below with nothing to report, so it passes on a tree carrying any dependency
+        at all -- and no other test noticed. A closure walked correctly and then
+        measured with a predicate that always says yes is the vacuous-guard shape
+        this whole class exists to refuse, one level in.
+
+        `PIL` is the probe because it answers correctly on *both* branches without
+        depending on what is installed: on 3.10+ it is simply absent from
+        `sys.stdlib_module_names`, and on 3.9 `find_spec` either fails to find it
+        (CI, no dependencies) or resolves it under site-packages (a maintainer's
+        machine, where Pillow is installed for the renderer).
+        """
+        for name in ("json", "unittest", "importlib"):
+            with self.subTest(stdlib=name):
+                self.assertTrue(
+                    self._is_stdlib(name), "%r is stdlib and must be accepted" % name
+                )
+        for name in ("PIL", "definitely_not_a_real_module_xyzzy"):
+            with self.subTest(not_stdlib=name):
+                self.assertFalse(
+                    self._is_stdlib(name),
+                    "%r is not stdlib and must be rejected -- a predicate that "
+                    "accepts everything makes the closure check below vacuous" % name,
+                )
+
+    def test_every_import_in_the_suites_closure_is_stdlib(self) -> None:
+        closure = self._closure()
+        # A script the suite loads by path is registered in `sys.modules` under its
+        # own name and then imported normally (`from mutate_verify import ...`). That
+        # is an in-repo module, not a distribution, so it is not a dependency -- and
+        # the file behind it is itself in the closure and checked on its own account.
+        in_repo = {p.stem.replace("-", "_") for p in closure}
+        offenders = []
+        for path, tree in sorted(closure.items()):
+            for name in sorted(self._top_level_imports(tree)):
+                if name in in_repo or self._is_stdlib(name):
+                    continue
+                offenders.append(f"{path.relative_to(_REPO_ROOT)}: {name}")
+        self.assertEqual(
+            [],
+            offenders,
+            "a non-stdlib import is reachable from the test suite: %s.\n"
+            "CI runs `discover` on 3.9-3.13 with no install step, so this fails the "
+            "whole run there rather than one test. If a maintainer-side tool needs a "
+            "dependency, keep it OUT of what the suite imports or loads by path "
+            "(CLAUDE.md -> the stdlib-only rule binds by reach)." % offenders,
+        )
 
 if __name__ == "__main__":
     unittest.main()

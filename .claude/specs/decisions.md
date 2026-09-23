@@ -446,3 +446,148 @@ branch protection requires the aggregate `test-suite` job only, and no file in t
 a protection setting. While `posts/` holds no dated post the guard exits 0 either way; it becomes
 load-bearing at the first dated post. Making it required is the same open question as #195 asks for
 `prettier`.
+
+## D015 — 2026-09-23 — The stdlib-only rule binds by reach, not by directory; the card renderer takes Pillow
+
+**Appending, not amending.** D014's forward note stands as written. This entry settles the one
+architectural decision epic #177 said this pipeline would force, taken at #181's plan gate and
+approved by the human on 2026-09-23.
+
+### The decision
+
+**`tooling/render-og-card.py` is ported, with Pillow, Inkscape and `tomllib`.** The dependency is
+maintainer-side: it does not ship in the payload, CI never runs the renderer, and the test suite is
+forbidden to reach it. **`CLAUDE.md`'s stdlib-only rule is re-scoped to say so by predicate rather
+than by directory:** a file is bound iff it **ships to a consumer** or **the suite imports or runs
+it**, and if you cannot establish it reaches neither, it is bound.
+
+### Why the rule needed re-scoping at all, which is the part worth keeping
+
+The preamble already stated the predicate correctly — *"anything that reaches a consumer's
+environment, or that `TEST_CMD` runs, is stdlib-only"*. The `tooling/` bullet restated it as
+*"the stdlib-only rule binds `tooling/`"*, keyed to the **directory**. That was true of the two
+files in there and false of the directory, and the drift had already been paid for once: a
+forward-looking exception for this very issue was bolted onto the end of the bullet, which is the
+shape an enumerated exception list starts as. **The fix is not a better list.** A second
+dependency-taking file would rot any list on arrival; a predicate classifies it with no edit.
+
+**A guard backs the common case.** `SuiteImportClosureTests` parses the `tests/` modules plus
+every repo `.py` file they **name as a `/`-joined path-literal chain**, and fails on any import that does
+not resolve to the standard library. An **unknown** dependency fails too, which is what makes it
+default-deny rather than a blocklist. It follows path *literals*, not loads, so it is a backstop
+for the predicate and never a substitute for it; `tests/CLAUDE.md` states what it reaches and what
+it misses, which is that file's to state rather than this one's.
+
+**That guard was itself the third attempt, and the first two are worth recording.** The plan
+proposed *"assert no test imports the renderer"* — a forbidden-name check over an open domain,
+whose cheap fix for a red run is to append the new name. The architect rejected it against
+`tests/CLAUDE.md`'s own `ALLOWED_NON_BINDINGS` trap: it asserts an **outcome** (one name is absent)
+rather than the **mechanism** (the closure is stdlib-only). The first implementation of the
+inverted form then resolved path literals **by basename anywhere in the repo**, which pulled in
+files named only in a *docstring* and went red on a clean tree. A guard that fails on a clean tree
+is not a strict guard, it is a broken one. The shipped form follows `/`-joined path literals, which
+is how this suite actually names a script.
+
+**A third attempt failed in CI for a different reason, and it is the most instructive of the
+three.** The inverted `RemedyTests` check probed every path the remedy cites by stripping at the
+placeholder — so `posts/images/<slug>/` became `posts/images/`, which **does not exist until the
+first card is committed**. It passed locally only because an earlier step in the same session had
+left that directory behind, empty; git does not track empty directories, so CI had no such path and
+went red on all five interpreters. **The guard was reading local dirt.** The fix distinguishes a
+*concrete* citation, which must resolve, from a *template* the author fills, which must not be
+asserted to exist — and pins the card-directory convention against `posts/README.md`, the document
+that defines it, rather than against the filesystem. Worth recording because the failure mode is
+not "the guard was wrong": it is that a guard can be **green for an environmental reason**, and
+only a clean checkout says so.
+
+**The guard then killed a regression of its own author's, during the review fixes, and that is the
+cleanest evidence it works.** The walker shipped with a second branch that treated any whole string
+literal ending in `.py` as a load. Code review called it *"one keystroke from red"* — and the very
+next fix wrote `tooling/render-og-card.py` into a test assertion, so the renderer entered the
+closure and the guard failed on a correct tree. (The prediction was right about the outcome and
+loose about the mechanism: a docstring merely *containing* the path would not have fired, since the
+branch tested the whole literal.) The branch
+was **deleted** rather than special-cased: it detected no real load in this suite, which names
+every script it loads as a `/`-joined chain, and its only live effect was the false red. **A
+mention is not a load** — the same sentence the basename attempt was rejected on, arriving a second
+time in a different shape. The guard caught a regression its own author introduced, which is the
+property the whole class exists for.
+
+### What was rejected, and why
+
+1. **Don't port it.** Rejected on value: every post needs a card it cannot produce here. Two
+   separate mechanisms sit behind that, and **this entry deliberately does not state how they
+   relate** — `tests/test_posts_frontmatter.py:203-205` records that a claim about exactly that
+   relation was drafted twice and was false both times, and a third draft of it stood in this
+   entry until code review caught it. What each one does, separately: the required `test-suite`
+   check enforces that `og_card_source` is *present* and well-formed; the non-required
+   `og-card-guard` workflow fails closed when the card does not *resolve*. This option would also
+   leave the documented remedy having to point at a script in *another repo* — the
+   unresolvable-citation shape #180 deleted from the ported guard on purpose.
+2. **Consolidate one renderer into a shared home.** Not wrong, and **not closed** — see below. It
+   was rejected *for this issue* because it stands up a fourth repo or adopts Python tooling into a
+   Jekyll site, and drags two out-of-scope repos into an epic whose own priority note says this work
+   is not high priority. Option 1 forecloses none of it.
+
+### Two premises this decision was nearly taken on, both false
+
+- **`claude-code-sessions` does not render cards by hand.** #181 and #177 both said so — #177's
+  comparison table is captioned *"checked, not assumed"* and that row was neither. It has a
+  **272-line `render.py`** running the same `tomllib` + Inkscape + Pillow pipeline as the vote
+  repo's 274-line copy. So the delta between the two repos is **location and specimen frame**, not
+  script-vs-hand, and the "don't port" option's stated fallback never existed. Both bodies were
+  corrected on 2026-09-23.
+- **The README trust-model section does not state a dependency posture.** The plan claimed it did
+  and that it had to move in this change. It does not: that section covers enforcement and the
+  guard hook's scope, and the dependency claims live in **Requirements** (whose "Both" is the guard
+  hook and the mutation harness) and in the run-the-suite line. Option 1 falsifies none of them, so
+  **no README line is part of this change.**
+
+### Three placement calls, each with a consequence
+
+- **The chassis template is `tooling/og-card-template.svg` — MIT, not CC-BY.** It is machinery: it
+  is never published (only the 1x PNG reaches the site) and it is shared across series. D013 §2
+  records that **over-inclusion is the dangerous direction for a grant**, so unpublished
+  scaffolding does not go on the CC-BY side. The brief **does** go under `posts/` with its card,
+  because a brief is per-post authored content. The line is **content CC-BY, machinery MIT**, which
+  is the boundary D013 already draws.
+- **Only `og-card.png` is committed.** `og-card.svg` and `og-card@2x.png` are reproducible
+  intermediates that nothing resolves; they are gitignored. They are written *beside the brief*,
+  which under this layout is a committed directory, so without those rules a wide `git add` sweeps
+  them in.
+- **`uv` is the invocation, via a PEP-723 header rather than a repo manifest.** `uv run` had nothing
+  to resolve Pillow from here — the vote repo's works off its `pyproject.toml` + `uv.lock`, and
+  neither sibling uses PEP-723. Declaring the dependency inside the one file that has it keeps
+  *"the payload carries no dependency manifest"* and *"nothing the suite imports gains a
+  dependency"* trivially true. Whether to graduate to a full `pyproject.toml` + lockfile is a
+  separate issue.
+
+### A gotcha was inherited wrong, and the port fixes it
+
+Both source repos document *"Inkscape is snap-confined to `$HOME`. Absolute resolved paths only; a
+brief outside `$HOME` fails fast rather than silently no-opping."* **Measured 2026-09-23: it does
+not.** Snap's `home` interface grants access to **non-hidden** paths only, so a brief in a
+dot-directory sits under `$HOME`, passes the source's guard, and Inkscape then prints
+`ink_file_open: … cannot be opened!`, **exits 0**, and writes nothing — `check=True` passes and the
+failure surfaces several steps later as a missing-file error from Pillow. The port adds both a
+named fast-path for the dot-directory case and, load-bearing, an **assertion that the export
+actually produced a non-empty file**, which catches any silent no-op whatever its cause. The
+enumerated check is the message; the artifact check is the guard.
+
+### The cost, stated rather than buried
+
+**CI does not guard the renderer's pixel pipeline, and cannot without breaking the suite.** The
+byte-identical reproduction measured at plan time is a one-time observation, not a standing
+guarantee. This is the honest form of attesting what cannot be checked, and it is the reason
+"add testing for the renderer" is filed rather than assumed.
+
+### Forward notes
+
+Four follow-ups were identified at the plan gate and are the human's to file: this series'
+**specimen frame** (split out of #181's AC3); **renderer consolidation** across the three copies,
+which should carry a recurrence trigger — *the next substantive behavioural change to any copy, not
+a specimen swap, consolidates instead of editing three* — and should record this port's
+snap-guard fix as the first such divergence, since it is the first thing that ought to propagate;
+**dependency-management artifacts** (`pyproject.toml`/lockfile/a repo-wide Python floor — this
+repo declares none today, so `tomllib` puts a 3.11 floor on one file, declared in that file's
+PEP-723 header and nowhere else); and **testing for the renderer**, per the cost above.
