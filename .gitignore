@@ -28,6 +28,12 @@ social/
 # deliberately NOT ignored: `posts/images/<slug>/og-card.png` is committed, per D014.
 posts/images/**/og-card.svg
 posts/images/**/og-card@2x.png
+# And the same three for `tooling/og-card.example.toml`, which renders in place:
+# the example is the brief most likely to be run first by someone learning the
+# format, and it is the one whose outputs the rules above do not reach.
+tooling/og-card.svg
+tooling/og-card@2x.png
+tooling/og-card.png
 
 # Node (the Prettier gate on posts/ -- root package.json, CI-only, never shipped)
 node_modules/

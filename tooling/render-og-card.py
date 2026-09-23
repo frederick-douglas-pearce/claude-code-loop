@@ -7,9 +7,10 @@
 
 Ported from `us-presidential-vote-analysis`'s `tooling/render-og-card.py`, which was
 itself a port of the `claude-code-sessions` repo's `og-card` skill script. The
-chassis -- dimensions, palette, type scale, wordmark -- is shared across all three
-series on purpose, so they read as the same author; only the *specimen frame*
-differs (sessions shows a terminal window, vote shows record panels).
+chassis -- the canvas, the palette and the wordmark -- is shared so the series read
+as the same author, and this repo's template is byte-identical to the vote repo's;
+what differs per series is the *specimen frame* (sessions shows a terminal window,
+vote shows record panels).
 
 **This series' own specimen frame is not settled here.** It was split out of #181 at
 that issue's plan gate, to be designed against post 1's actual draft rather than
@@ -20,8 +21,8 @@ handoff, a review-round pair) as pure brief authoring, with no code change.
 Usage:
     uv run tooling/render-og-card.py posts/images/<slug>/og-card.toml
 
-`uv` reads the PEP-723 block above and resolves Pillow per-script, so this repo
-needs no dependency manifest and no lockfile for it. That is deliberate: the
+`uv` reads the PEP-723 block above and resolves Pillow per-script, so nothing
+outside this file has to declare the dependency. That is deliberate: the
 stdlib-only rule here binds by *reach* -- what ships to a consumer, and what the
 test suite imports or runs -- and this file is neither (see `CLAUDE.md`). Keeping
 the dependency inside the one file that has it is what keeps that true. Inkscape
@@ -136,9 +137,9 @@ def _assert_no_collapsing_runs(panel: dict) -> None:
     same width and silently ruins the column the moment they are not.
 
     Emitting ``xml:space="preserve"`` would fix it globally but rewrite the SVG of
-    every already-shipped card, which is exactly the property this chassis promises
-    not to break. So the brief carries U+00A0 instead, and this guard makes the
-    requirement enforced rather than remembered.
+    every card rendered before the change, and byte-identity with the sibling repos'
+    chassis is the property this port preserves. So the brief carries U+00A0 instead,
+    and this guard makes the requirement enforced rather than remembered.
     """
     for row in panel["rows"]:
         for text in (row,) if isinstance(row, str) else tuple(row):
@@ -260,7 +261,10 @@ def assert_inkscape_readable(path: Path) -> None:
     enumeration of known-bad cases and cannot be complete -- `assert_exported`
     below is the default-deny backstop that catches whatever this misses.
     """
-    home = Path.home()
+    # Resolved, because `render` resolves the brief before calling this: comparing a
+    # resolved path against an unresolved home mis-refuses a valid brief wherever
+    # $HOME itself traverses a symlink.
+    home = Path.home().resolve()
     if home not in path.parents:
         raise SystemExit(
             f"brief must live under {home}: Inkscape is snap-confined and cannot "
@@ -276,21 +280,29 @@ def assert_inkscape_readable(path: Path) -> None:
         )
 
 
-def assert_exported(png: Path, svg: Path) -> None:
-    """Fail if the export produced no usable file, whatever the cause.
+def assert_exported(png: Path, svg: Path, stderr: str = "") -> None:
+    """Fail if THIS run's export produced no usable file, whatever the cause.
 
     **This is the guard.** Inkscape can refuse to open its input, print the reason
     on stderr and still **exit 0**, so `check=True` on the subprocess proves only
-    that Inkscape ran -- not that it did anything. Without this assertion the run
-    continues to Pillow and dies on a confusing missing-file error several steps
-    from the actual fault; worse, any future silent-failure mode lands the same way.
-    Checking the artifact rather than the exit status is what makes that impossible.
+    that Inkscape ran -- not that it did anything. Checking the artifact rather than
+    the exit status is what catches that.
+
+    **It only works because the caller deletes the target first**, and that is the
+    load-bearing half rather than a tidiness step. The outputs live beside the brief
+    in a directory that persists, and the 2x PNG is gitignored, so a previous run's
+    file sits there indefinitely. Without the delete, a silent no-op leaves the old
+    file in place, both checks below pass, and the run goes on to flatten and
+    downscale the **previous brief's** card -- shipping the wrong image with a
+    success message, which is worse than the crash it replaced. Code review found
+    this; the first version of this function checked existence alone.
     """
     if not png.exists():
+        detail = f"\ninkscape said: {stderr.strip()}" if stderr.strip() else ""
         raise SystemExit(
             f"inkscape exited 0 but wrote no {png.name}. It most often means the "
             f"input could not be read: confirm {svg} exists and sits outside any "
-            f"dot-directory under {Path.home()}."
+            f"dot-directory under {Path.home()}.{detail}"
         )
     if png.stat().st_size == 0:
         raise SystemExit(f"inkscape wrote an empty {png.name}; refusing to continue.")
@@ -309,12 +321,15 @@ def render(brief_path: Path) -> None:
         brief = tomllib.load(fh)
     svg_path.write_text(build_svg(brief))
 
-    subprocess.run(
+    # Delete before exporting: this is what lets `assert_exported` distinguish "this
+    # run wrote it" from "a previous run left it here". See that function's docstring.
+    png2x.unlink(missing_ok=True)
+    proc = subprocess.run(
         ["inkscape", str(svg_path), "--export-type=png", f"--export-filename={png2x}",
          f"--export-width={WIDTH * 2}", f"--export-height={HEIGHT * 2}"],
-        check=True, capture_output=True,
+        check=True, capture_output=True, text=True,
     )
-    assert_exported(png2x, svg_path)
+    assert_exported(png2x, svg_path, proc.stderr)
 
     # Flatten RGBA onto BG *before* downscaling: LinkedIn composites RGBA on white.
     img = Image.open(png2x).convert("RGBA")

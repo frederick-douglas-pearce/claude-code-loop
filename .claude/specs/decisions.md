@@ -471,11 +471,12 @@ forward-looking exception for this very issue was bolted onto the end of the bul
 shape an enumerated exception list starts as. **The fix is not a better list.** A second
 dependency-taking file would rot any list on arrival; a predicate classifies it with no edit.
 
-**The rule is now enforced rather than remembered.** `SuiteImportClosureTests` walks the suite's
-import closure — the `tests/` modules **plus every repo `.py` file they load by path**, since this
-suite reaches a script through `spec_from_file_location` and never through an import statement —
-and fails on any import that does not resolve to the standard library. An **unknown** dependency
-fails too, which is what makes it default-deny rather than a blocklist.
+**A guard backs the common case.** `SuiteImportClosureTests` parses the `tests/` modules plus
+every repo `.py` file they **name as a `/`-joined path-literal chain**, and fails on any import that does
+not resolve to the standard library. An **unknown** dependency fails too, which is what makes it
+default-deny rather than a blocklist. It follows path *literals*, not loads, so it is a backstop
+for the predicate and never a substitute for it; `tests/CLAUDE.md` states what it reaches and what
+it misses, which is that file's to state rather than this one's.
 
 **That guard was itself the third attempt, and the first two are worth recording.** The plan
 proposed *"assert no test imports the renderer"* — a forbidden-name check over an open domain,
@@ -499,13 +500,29 @@ that defines it, rather than against the filesystem. Worth recording because the
 not "the guard was wrong": it is that a guard can be **green for an environmental reason**, and
 only a clean checkout says so.
 
+**A fourth attempt was killed by the guard itself, during review fixes, and it is the cleanest
+evidence the guard works.** The walker originally had a second branch that treated any whole
+string literal ending in `.py` as a load. Code review predicted exactly what that would cost —
+*"one keystroke from red: writing `tooling/render-og-card.py` in any docstring turns the whole
+guard red on a clean tree, for a mention"* — and the very next fix wrote that literal into a test
+assertion, so the renderer entered the closure and the guard failed on a correct tree. The branch
+was **deleted** rather than special-cased: it detected no real load in this suite, which names
+every script it loads as a `/`-joined chain, and its only live effect was the false red. **A
+mention is not a load** — the same sentence the basename attempt was rejected on, arriving a second
+time in a different shape. The guard caught a regression its own author introduced, which is the
+property the whole class exists for.
+
 ### What was rejected, and why
 
-1. **Don't port it.** Rejected on value: `og_card_source` is a required frontmatter field in an
-   exact set, and #180's guard fails closed, so **no post passes the required `test-suite` check
-   without a card**. This option does not document a gap, it blocks the series. It also leaves the
-   documented remedy pointing at a script in *another repo* — the unresolvable-citation shape #180
-   deleted from the ported guard on purpose.
+1. **Don't port it.** Rejected on value: every post needs a card it cannot produce here. Two
+   separate mechanisms sit behind that, and **this entry deliberately does not state how they
+   relate** — `tests/test_posts_frontmatter.py:203-205` records that a claim about exactly that
+   relation was drafted twice and was false both times, and a third draft of it stood in this
+   entry until code review caught it. What each one does, separately: the required `test-suite`
+   check enforces that `og_card_source` is *present* and well-formed; the non-required
+   `og-card-guard` workflow fails closed when the card does not *resolve*. This option would also
+   leave the documented remedy having to point at a script in *another repo* — the
+   unresolvable-citation shape #180 deleted from the ported guard on purpose.
 2. **Consolidate one renderer into a shared home.** Not wrong, and **not closed** — see below. It
    was rejected *for this issue* because it stands up a fourth repo or adopts Python tooling into a
    Jekyll site, and drags two out-of-scope repos into an epic whose own priority note says this work
@@ -570,6 +587,6 @@ Four follow-ups were identified at the plan gate and are the human's to file: th
 which should carry a recurrence trigger — *the next substantive behavioural change to any copy, not
 a specimen swap, consolidates instead of editing three* — and should record this port's
 snap-guard fix as the first such divergence, since it is the first thing that ought to propagate;
-**dependency-management artifacts** (`pyproject.toml`/lockfile/a declared Python floor — this repo
-declares none today, so `tomllib` introduces an undeclared 3.11 floor on one file); and **testing
-for the renderer**, per the cost above.
+**dependency-management artifacts** (`pyproject.toml`/lockfile/a repo-wide Python floor — this
+repo declares none today, so `tomllib` puts a 3.11 floor on one file, declared in that file's
+PEP-723 header and nowhere else); and **testing for the renderer**, per the cost above.

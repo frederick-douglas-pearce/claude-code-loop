@@ -145,22 +145,23 @@ uv run tooling/render-og-card.py posts/images/<slug>/og-card.toml
 
 `uv` is required and Inkscape must be on PATH. You do **not** need to install Pillow or create a
 virtualenv: the renderer declares its own dependency in a PEP-723 header, so `uv` resolves it
-per-script and this repo carries no dependency manifest and no lockfile. That is the point rather
-than a convenience — the stdlib-only rule here binds by what ships and what the test suite
-reaches, and the renderer is neither (`CLAUDE.md`, and **D015** for the reasoning).
+per-script. That is the point rather than a convenience — the stdlib-only rule binds by **reach**,
+and the renderer reaches neither the payload nor the test suite (`CLAUDE.md` → the `tooling/`
+bullet states the predicate, including what to do when you cannot tell; **D015** for the
+reasoning).
 
 `tooling/og-card.example.toml` documents the brief format.
 
 **Three files are written beside the brief; only one is committed.** `og-card.png` (1200×630) is
 the card, and it is committed. `og-card.svg` and `og-card@2x.png` are reproducible intermediates
-that nothing reads, and `.gitignore` keeps them out — do not commit them, and do not add a rule
-that would.
+that nothing downstream resolves, and `.gitignore` keeps them out — do not commit them, and do
+not add a rule that would.
 
 **The visual system is shared on purpose, and only one part of it is yours to choose.** The
-chassis — 1200×630 canvas, palette, type scale, and the wordmark — is fixed across all three of
-these series so they read as the same author; `tooling/og-card-template.svg` is that chassis. Only
-the **specimen frame** differs per series: `claude-code-sessions` shows a terminal window,
-`us-presidential-vote-analysis` shows record panels.
+chassis — the 1200×630 canvas, the palette and the wordmark — is shared so the series read as the
+same author; `tooling/og-card-template.svg` is that chassis, and it is byte-identical to the vote
+repo's. What differs per series is the **specimen frame**: `claude-code-sessions` shows a terminal
+window, `us-presidential-vote-analysis` shows record panels.
 
 **This series' specimen frame is not settled yet.** It was split out of #181 to be designed
 against a real post rather than speculatively, so until it is, the renderer draws the two-panel

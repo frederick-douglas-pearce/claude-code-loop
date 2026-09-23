@@ -31,11 +31,10 @@ on the PR side), so this runs on every `posts/` PR — unlike `claude-code-sessi
 where `posts/` is direct-commit-allowed. It does not BLOCK a merge: branch
 protection requires the aggregate `test-suite` job only.
 
-It guards card *presence*, not *generation*. **There is no renderer in this repo
-yet** — producing the card is a manual step, and automating it is issue #181. So
-the remedy this guard prints tells you to commit a card at the path
-`og_card_source` names; it deliberately describes no rendering procedure, because
-none exists here to describe.
+It guards card *presence*, not *generation*: it never runs the renderer, which is
+`tooling/render-og-card.py` (#181). The remedy this guard prints tells you to
+commit a card at the path `og_card_source` names, and names the command that
+produces one.
 
 Stdlib only; needs no Pages repo, checkout, or PAT — `build_plan` is Phase 1 (no
 writes), so the Pages target dirs are passed as inert placeholders used only as

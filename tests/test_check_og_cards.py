@@ -354,7 +354,7 @@ class RemedyTests(unittest.TestCase):
         present and NOT naming it is, because the author is left with a red PR and no
         way to fix it.
         """
-        self.assertIn("render-og-card.py", cog._REMEDY)
+        self.assertIn("tooling/render-og-card.py", cog._REMEDY)
 
     def test_the_remedy_names_the_settled_card_directory(self) -> None:
         """And the directory it names is the one `posts/README.md` documents.

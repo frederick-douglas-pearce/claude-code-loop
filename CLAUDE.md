@@ -227,12 +227,10 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
   so a dependency there breaks the suite on a consumer-shaped interpreter.
   `tooling/render-og-card.py` **is not**, because nothing ships it and the suite is forbidden to
   reach it — it declares Pillow in a PEP-723 block and runs under `uv`, so the dependency lives in
-  the one file that has it and no repo-level manifest exists. **The day anything imports or loads
-  it, it is bound, with no list to amend.** That is not left to memory:
-  `SuiteImportClosureTests` walks the suite's import closure — the `tests/` modules plus every repo
-  `.py` they load by path — and fails on any non-stdlib import, so an **unknown** dependency fails
-  too. Read those two files as illustrations of the predicate, never as the rule. The reasoning,
-  and the options rejected, are **D015**.
+  the one file that has it. **The day anything imports or loads it, it is bound, with no list to
+  amend.** A guard backs the common case — `SuiteImportClosureTests`; what it does and does not
+  reach is `tests/CLAUDE.md`'s to state, not this file's. Read those two files as illustrations of
+  the predicate, never as the rule. The reasoning, and the options rejected, are **D015**.
 
   (Contrast #178's root `package.json` / `.prettierrc`, which are also maintainer-side and also do
   not ship, but which `TEST_CMD` never touches — that npm pin is the standing exception the

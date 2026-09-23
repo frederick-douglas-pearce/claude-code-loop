@@ -3313,10 +3313,6 @@ class LensDifferentialAgreementTests(unittest.TestCase):
             "to review.")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SuiteImportClosureTests(unittest.TestCase):
     """The suite's import closure is stdlib-only, checked default-deny.
 
@@ -3360,14 +3356,14 @@ class SuiteImportClosureTests(unittest.TestCase):
                 continue
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             found[path] = tree
-            for node in ast.walk(tree):
-                # A path-loaded module is named in a string, never imported, so the
-                # import statements alone would stop at the edge of the closure.
-                if isinstance(node, ast.Constant) and isinstance(node.value, str):
-                    if node.value.endswith(".py"):
-                        direct = (_REPO_ROOT / node.value).resolve()
-                        if direct.is_file() and _REPO_ROOT in direct.parents:
-                            queue.append(direct)
+            # A path-loaded module is named in a string, never imported, so the import
+            # statements alone would stop at the edge of the closure. Only `/`-joined
+            # chains are followed: a whole-string branch was tried and **removed**,
+            # because a bare `"tooling/x.py"` literal resolves whether it is a load or
+            # a mere mention, and the first mention written -- an assertion string in
+            # `test_check_og_cards.py` -- turned this guard red on a clean tree. It
+            # detected no real load in this suite, which names every script it loads as
+            # a `/`-joined chain. A mention is not a load.
             for rel in self._joined_path_literals(tree):
                 for base in (_REPO_ROOT, _REPO_ROOT / "plugins" / "dev-loop"):
                     hit = (base / rel).resolve()
@@ -3482,3 +3478,6 @@ class SuiteImportClosureTests(unittest.TestCase):
             "dependency, keep it OUT of what the suite imports or loads by path "
             "(CLAUDE.md -> the stdlib-only rule binds by reach)." % offenders,
         )
+
+if __name__ == "__main__":
+    unittest.main()
