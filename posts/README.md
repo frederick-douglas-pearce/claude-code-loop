@@ -158,8 +158,7 @@ not add a rule that would.
 **The visual system is shared on purpose.** `tooling/og-card-template.svg` is the chassis; what a
 series chooses is its **specimen frame** — the thing the card actually shows.
 `us-presidential-vote-analysis` shows record panels, `claude-code-sessions` shows a terminal
-window. How far the chassis is shared with each of them is deliberately not described here: two
-drafts of that sentence were written and both were false.
+window.
 
 **This series' specimen frame is not settled yet.** It was split out of #181 to be designed
 against a real post rather than speculatively, so until it is, the renderer draws the two-panel

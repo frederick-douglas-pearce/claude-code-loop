@@ -188,7 +188,7 @@ def _panel_box(n_rows: int) -> tuple[int, int]:
     )
     # Integer division on purpose: a half-pixel offset buys nothing visually, and a
     # float would render as y="148.0" where the rest of the chassis emits y="148" --
-    # enough to break byte-identity against the sibling repos' shipped cards.
+    # enough to break byte-identity against the vote repo's shipped cards.
     return PANEL_Y + (PANEL_H - height) // 2, height
 
 
@@ -330,9 +330,9 @@ def render(brief_path: Path) -> None:
     proc = subprocess.run(
         ["inkscape", str(svg_path), "--export-type=png", f"--export-filename={png2x}",
          f"--export-width={WIDTH * 2}", f"--export-height={HEIGHT * 2}"],
-        # `errors="replace"`, because the point of capturing stderr is to show it:
-        # the locale codec is ASCII under LANG=C, and a strict decode would turn a
-        # diagnostic into a UnicodeDecodeError raised from inside `subprocess.run`.
+        # `errors="replace"`, because the point of capturing stderr is to show it: a
+        # strict decode of a non-UTF-8 byte in a diagnostic raises UnicodeDecodeError
+        # from inside `subprocess.run`, turning the diagnostic into a crash.
         check=True, capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     assert_exported(png2x, svg_path, proc.stderr)
