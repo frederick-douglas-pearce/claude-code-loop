@@ -3453,6 +3453,35 @@ class SuiteImportClosureTests(unittest.TestCase):
             "by path, so the import check below proves nothing about them",
         )
 
+    def test_the_stdlib_predicate_separates_stdlib_from_not(self) -> None:
+        """Guard the predicate, not just the closure it is applied to.
+
+        The Class B mutation pass found this gap by killing the guard rather than
+        the code: replacing `_is_stdlib`'s body with `return True` leaves the check
+        below with nothing to report, so it passes on a tree carrying any dependency
+        at all -- and no other test noticed. A closure walked correctly and then
+        measured with a predicate that always says yes is the vacuous-guard shape
+        this whole class exists to refuse, one level in.
+
+        `PIL` is the probe because it answers correctly on *both* branches without
+        depending on what is installed: on 3.10+ it is simply absent from
+        `sys.stdlib_module_names`, and on 3.9 `find_spec` either fails to find it
+        (CI, no dependencies) or resolves it under site-packages (a maintainer's
+        machine, where Pillow is installed for the renderer).
+        """
+        for name in ("json", "unittest", "importlib"):
+            with self.subTest(stdlib=name):
+                self.assertTrue(
+                    self._is_stdlib(name), "%r is stdlib and must be accepted" % name
+                )
+        for name in ("PIL", "definitely_not_a_real_module_xyzzy"):
+            with self.subTest(not_stdlib=name):
+                self.assertFalse(
+                    self._is_stdlib(name),
+                    "%r is not stdlib and must be rejected -- a predicate that "
+                    "accepts everything makes the closure check below vacuous" % name,
+                )
+
     def test_every_import_in_the_suites_closure_is_stdlib(self) -> None:
         closure = self._closure()
         # A script the suite loads by path is registered in `sys.modules` under its
