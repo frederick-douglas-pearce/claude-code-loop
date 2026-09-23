@@ -314,16 +314,32 @@ class RemedyTests(unittest.TestCase):
     #: here, it is a remedy that has wandered off the two surfaces an author touches.
     _PATH_RE = re.compile(r"\b((?:tooling|posts)/[A-Za-z0-9_./<>@-]+)")
 
-    def test_every_repo_path_the_remedy_names_exists(self) -> None:
+    def test_every_concrete_repo_path_the_remedy_names_exists(self) -> None:
+        """Concrete citations must resolve. Placeholder paths are templates, not paths.
+
+        The first version of this checked every cited path by stripping at the `<` and
+        probing the prefix -- so `posts/images/<slug>/` became `posts/images/`, which
+        **does not exist until the first card is committed**. It passed locally only
+        because an earlier step in the same session had left that directory behind
+        empty, and git does not track empty directories, so CI had no such path and
+        went red on all five interpreters. The guard was reading local dirt.
+
+        A path with a placeholder in it is a *template* the author fills; asserting it
+        exists asserts something the remedy never claimed. What must resolve is a
+        citation to a concrete thing -- above all the renderer, which is the citation
+        that would rot if the tool were renamed or removed. The card directory
+        convention is pinned separately below, against the README that defines it,
+        rather than against the filesystem.
+        """
         cited = self._PATH_RE.findall(cog._REMEDY)
         self.assertTrue(cited, "remedy names no repo path at all; it cannot be actionable")
-        missing = []
-        for path in cited:
-            # `<slug>` is a placeholder for the author to fill, so check the directory
-            # that contains it rather than the literal, which is never meant to exist.
-            probe = _REPO_ROOT / path.split("<")[0]
-            if not probe.exists():
-                missing.append(path)
+        concrete = [c for c in cited if "<" not in c]
+        self.assertTrue(
+            concrete,
+            "the remedy names only placeholder paths, so nothing in it is checkable "
+            "and a citation to a nonexistent tool could not be caught",
+        )
+        missing = [c for c in concrete if not (_REPO_ROOT / c).exists()]
         self.assertEqual(
             [], missing,
             "the remedy cites %s, which does not exist in this repo -- the exact "
@@ -341,7 +357,21 @@ class RemedyTests(unittest.TestCase):
         self.assertIn("render-og-card.py", cog._REMEDY)
 
     def test_the_remedy_names_the_settled_card_directory(self) -> None:
+        """And the directory it names is the one `posts/README.md` documents.
+
+        Asserting the string alone would let the remedy and the contract drift apart
+        silently; asserting it against the README couples them. Deliberately NOT a
+        filesystem check -- `posts/images/` does not exist until the first card lands,
+        which is precisely the state this repo is in.
+        """
         self.assertIn("posts/images/", cog._REMEDY)
+        contract = (_REPO_ROOT / "posts" / "README.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "posts/images/<slug>/og-card.png",
+            contract,
+            "the remedy points at posts/images/ but the frontmatter contract no "
+            "longer documents that path; one of the two has drifted",
+        )
 
 
 class ReuseTests(unittest.TestCase):

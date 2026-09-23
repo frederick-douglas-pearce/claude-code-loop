@@ -487,6 +487,18 @@ files named only in a *docstring* and went red on a clean tree. A guard that fai
 is not a strict guard, it is a broken one. The shipped form follows `/`-joined path literals, which
 is how this suite actually names a script.
 
+**A third attempt failed in CI for a different reason, and it is the most instructive of the
+three.** The inverted `RemedyTests` check probed every path the remedy cites by stripping at the
+placeholder — so `posts/images/<slug>/` became `posts/images/`, which **does not exist until the
+first card is committed**. It passed locally only because an earlier step in the same session had
+left that directory behind, empty; git does not track empty directories, so CI had no such path and
+went red on all five interpreters. **The guard was reading local dirt.** The fix distinguishes a
+*concrete* citation, which must resolve, from a *template* the author fills, which must not be
+asserted to exist — and pins the card-directory convention against `posts/README.md`, the document
+that defines it, rather than against the filesystem. Worth recording because the failure mode is
+not "the guard was wrong": it is that a guard can be **green for an environmental reason**, and
+only a clean checkout says so.
+
 ### What was rejected, and why
 
 1. **Don't port it.** Rejected on value: `og_card_source` is a required frontmatter field in an
