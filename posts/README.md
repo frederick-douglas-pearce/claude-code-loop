@@ -121,6 +121,11 @@ on. **There is deliberately no `predates` value.** The sessions series needed on
 written before its convention landed; this series has no such archive, and creating an empty
 closed set invites someone to widen it later.
 
+`tests/test_posts_frontmatter.py` is the check that enforces all three, in the required
+`test-suite` job. For `humanizer_pass` there is also `tooling/check-humanizer-pass.py`, run by
+`.github/workflows/humanizer-guard.yml`: it reports each post's value and counts the `none`s.
+Both take the `vX.Y.Z`-or-`none` grammar from `tooling/attestation.py`.
+
 **`claims_verified` is the one field this series adds beyond the sessions contract**, and it
 exists because `social/README.md` and `social/scout.config.md` both name claim verification as
 "the one gate here with real teeth" while nothing anywhere specified it. Every post in

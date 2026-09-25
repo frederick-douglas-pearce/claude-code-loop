@@ -31,6 +31,7 @@ Run with:
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import pathlib
 import re
@@ -68,12 +69,19 @@ _KIND_TAGS = frozenset({"foundation", "failure-mode", "method"})
 _FILENAME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})-[a-z0-9]+(?:-[a-z0-9]+)*$")
 # A time and a UTC offset, not a bare date.
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[+-]\d{4}$")
-_VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 _ISO_DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
-# `none` records a step deliberately declined. There is deliberately no `predates`:
-# see posts/README.md on why an empty closed set is not created.
-_DECLINED = "none"
+# The version-attestation grammar is defined once, in tooling/attestation.py, and
+# loaded from there so this checker and tooling/check-humanizer-pass.py read the same
+# definition.
+_ATTESTATION_PATH = _REPO_ROOT / "tooling" / "attestation.py"
+_spec = importlib.util.spec_from_file_location("attestation", _ATTESTATION_PATH)
+assert _spec is not None and _spec.loader is not None, "cannot load %s" % _ATTESTATION_PATH
+_attestation = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_attestation)
+
+# `none` records a step deliberately declined.
+_DECLINED = _attestation.DECLINED
 
 
 def _split_frontmatter(text):
@@ -212,7 +220,7 @@ def check_post(filename, text):
     for field in ("claude_code_version_verified", "humanizer_pass"):
         if field in fields:
             value = str(fields[field])
-            if value != _DECLINED and not _VERSION_RE.match(value):
+            if not _attestation.is_version_attestation(value):
                 problems.append(
                     "%s must be a vX.Y.Z version or %r, got %r"
                     % (field, _DECLINED, value)
