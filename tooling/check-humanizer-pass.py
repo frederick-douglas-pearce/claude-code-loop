@@ -19,10 +19,10 @@ requires `humanizer_pass` on every post and rejects a malformed value, under the
 required `test-suite` check. What this guard adds is a per-post report, a remedy
 message, and the **count of declined passes**: `none` keeps a post green without
 claiming work that never happened, and the number of them is debt someone can act
-on. Both read the value grammar from `tooling/attestation.py`, so this guard
-cannot accept a value the contract checker rejects.
+on. The value grammar is `tooling/attestation.py`'s, which the contract checker
+also loads. The two read frontmatter with different parsers.
 
-Two deltas from the source, both deliberate:
+Deltas from the source include:
   - it accepts only `vX.Y.Z` or `none`. The source also accepts `predates`, a
     version without its `v`, a two-part version, and a trailing `# comment`; this
     series' contract rejects all four (posts/README.md).
@@ -36,8 +36,8 @@ field exactly as the publisher does.
 Stdlib only. Usage:
     python3 tooling/check-humanizer-pass.py [posts/NNNN-*.md ...]
 
-Defaults to every dated post (`posts/[0-9][0-9][0-9][0-9]-*.md`), matching the
-publisher's own selection, so `posts/README.md` is skipped. Exit 0 if every post
+Defaults to every dated post (`posts/[0-9][0-9][0-9][0-9]-*.md`), the glob
+`.github/workflows/pages-sync.yml` publishes, so `posts/README.md` is skipped. Exit 0 if every post
 records a pass, 1 with a per-post report otherwise.
 """
 
@@ -54,7 +54,8 @@ _HERE = Path(__file__).resolve().parent
 
 
 def _load(name: str, filename: str) -> ModuleType:
-    # publish-to-pages.py is hyphenated, so neither sibling is imported by name.
+    # Both siblings are loaded by path: publish-to-pages.py is hyphenated, and
+    # loading attestation.py the same way keeps the guard independent of sys.path.
     path = _HERE / filename
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None, f"cannot load {path}"
@@ -147,7 +148,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if n_fail:
         sys.stdout.flush()  # keep the per-post report ahead of the stderr summary
         print(
-            f"\n{n_fail} post(s) with no recorded humanizer pass. Run the humanizer skill over the\n"
+            f"\n{n_fail} post(s) without a valid recorded humanizer pass; "
+            f"{n_declined} other post(s) declined one.\nRun the humanizer skill over the\n"
             f"draft, then set `{FIELD}: v<version>` in its frontmatter. If the pass was\n"
             f"deliberately skipped, set `{FIELD}: {attestation.DECLINED}` to record that instead.",
             file=sys.stderr,

@@ -136,13 +136,19 @@ class ValueTests(_PostTree):
         post = self.write_post(self.with_pass("predates"))
         self.assert_complains(self.run_guard(post), "`humanizer_pass: predates` is not")
 
-    def test_the_source_guards_looser_forms_are_rejected(self) -> None:
-        # The source accepts each of these; this series' contract rejects each, and the
-        # guard must not be the weaker of the two checks (AC5).
+    def test_malformed_values_are_rejected(self) -> None:
+        # The source guard accepts the first three; the contract rejects all five, and
+        # the guard must not be the weaker of the two checks on the grammar (AC5).
         for value in ("3.0.0", "v3.0", "v3.0.0 # 2026-10-01", "yes", "true"):
             with self.subTest(value=value):
                 post = self.write_post(self.with_pass(value))
                 self.assert_complains(self.run_guard(post), f"`humanizer_pass: {value}`")
+
+    def test_a_declined_value_with_a_stray_space_is_rejected(self) -> None:
+        # The source strips the space inside the quotes and counts this as declined;
+        # the contract rejects it, so the guard does too.
+        post = self.write_post(self.with_pass('"none "'))
+        self.assert_complains(self.run_guard(post), "`humanizer_pass: none ` is not")
 
     def test_a_quoted_version_passes(self) -> None:
         code, out, err = self.run_guard(self.write_post(self.with_pass('"v3.0.0"')))
@@ -168,6 +174,14 @@ class ValueTests(_PostTree):
         b = self.write_post(self.with_pass("predates"), stem="2026-10-02-b")
         self.assert_complains(
             self.run_guard(a, b), "2026-10-01-a.md", "2026-10-02-b.md", "2 post(s)"
+        )
+
+    def test_the_declined_count_is_reported_on_a_failing_run_too(self) -> None:
+        # AC3: the debt stays visible when some other post fails.
+        bad = self.write_post(self.with_pass("yes"), stem="2026-10-01-bad")
+        declined = self.write_post(self.with_pass("none"), stem="2026-10-02-declined")
+        self.assert_complains(
+            self.run_guard(bad, declined), "1 post(s) without", "1 other post(s) declined"
         )
 
 
@@ -239,17 +253,37 @@ class GrammarSourceTests(unittest.TestCase):
         )
 
     def test_the_guard_takes_its_verdict_from_the_shared_grammar(self) -> None:
-        with mock.patch.object(chp.attestation, "is_version_attestation", return_value=True):
-            self.assertIsNone(chp.check_value("yes"))
-        with mock.patch.object(chp.attestation, "is_version_attestation", return_value=False):
-            self.assertIsNotNone(chp.check_value("v3.0.0"))
+        with tempfile.TemporaryDirectory() as tmp:
+            yes = Path(tmp) / "2026-10-01-yes.md"
+            yes.write_text(_GOOD.replace("humanizer_pass: v3.0.0", "humanizer_pass: yes", 1), encoding="utf-8")
+            good = Path(tmp) / f"{_POST_STEM}.md"
+            good.write_text(_GOOD, encoding="utf-8")
+            with mock.patch.object(chp.attestation, "is_version_attestation", return_value=True):
+                self.assertEqual(self._exit(yes), 0)
+            with mock.patch.object(chp.attestation, "is_version_attestation", return_value=False):
+                self.assertEqual(self._exit(good), 1)
+
+    @staticmethod
+    def _exit(post: Path) -> int:
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            return chp.main([str(post)])
 
     def test_the_contract_takes_its_verdict_from_the_shared_grammar(self) -> None:
         yes = _GOOD.replace("humanizer_pass: v3.0.0", "humanizer_pass: yes", 1)
         with mock.patch.object(contract._attestation, "is_version_attestation", return_value=True):
             self.assertEqual(contract.check_post(_POST_STEM, yes), [])
         with mock.patch.object(contract._attestation, "is_version_attestation", return_value=False):
-            self.assertTrue(contract.check_post(_POST_STEM, _GOOD))
+            problems = contract.check_post(_POST_STEM, _GOOD)
+        # Named, because the strict stub also fails claude_code_version_verified, which
+        # would satisfy a bare non-empty check on its own.
+        self.assertTrue(
+            any(p.startswith("humanizer_pass must be") for p in problems), problems
+        )
+
+    def test_the_grammar_does_not_accept_a_trailing_newline_or_non_ascii_digits(self) -> None:
+        for value in ("v3.0.0\n", "v\u0663.0.0"):
+            with self.subTest(value=value):
+                self.assertFalse(chp.attestation.is_version_attestation(value))
 
 
 class ParserReuseTests(_PostTree):

@@ -9,8 +9,7 @@ contract in prose.
 one.** Two things read it: `tests/test_posts_frontmatter.py`, the contract checker that
 runs under the required `test-suite` check, and `tooling/check-humanizer-pass.py`, the
 humanizer guard (#182). Before #182 the grammar lived only in the contract checker; the
-guard it was ported from carried a looser grammar of its own. Importing one definition
-into both means the guard cannot accept a value the contract rejects.
+guard it was ported from carried a looser grammar of its own.
 
 What this does **not** make identical is how the two callers *extract* a value from a
 frontmatter line: the contract checker uses its own parser and the guard uses the
@@ -28,7 +27,7 @@ import re
 # see posts/README.md on why an empty closed set is not created.
 DECLINED = "none"
 
-VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+$")
+VERSION_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+\Z")
 
 
 def is_version_attestation(value: str) -> bool:
