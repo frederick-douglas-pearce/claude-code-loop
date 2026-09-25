@@ -1,0 +1,54 @@
+name: Humanizer guard
+
+# Pre-merge check that every post under posts/ records a humanizer pass in its
+# `humanizer_pass` frontmatter (#182). The humanizer skill
+# (https://github.com/blader/humanizer) strips structural AI-writing tells from a
+# draft; it is a manual step, and nothing about a finished draft reveals whether
+# it ran. Ported from `claude-code-sessions`.
+#
+# It guards the RECORD, not the prose: `humanizer_pass: none` is a valid value
+# that records a deliberate skip, and the guard reports how many posts carry it.
+#
+# This is not the check that enforces the field. tests/test_posts_frontmatter.py
+# requires it on every post, inside the `test-suite` job in test.yml. This
+# workflow adds a per-post report and the declined count. It is a separate job so
+# that a failure reads as a humanizer problem rather than a test failure -- the
+# same reason og-card-guard.yml gives.
+#
+# The guard's own tests (tests/test_check_humanizer_pass.py) run in test.yml's
+# `discover`, so they are not repeated here.
+#
+# This workflow is NOT currently a required status check -- branch protection
+# requires `test-suite` only. That is a repo setting, not something this file can
+# assert. While posts/ holds no dated post the guard exits 0.
+#
+# Stdlib only; no npm, no Pages repo, no secrets.
+
+on:
+  pull_request:
+    paths:
+      - "posts/**"
+      - "tooling/check-humanizer-pass.py"
+      - "tooling/attestation.py"
+      - "tooling/publish-to-pages.py"
+      - "tests/test_check_humanizer_pass.py"
+      - ".github/workflows/humanizer-guard.yml"
+  push:
+    branches: [main]
+    paths:
+      - "posts/**"
+
+permissions:
+  contents: read
+
+jobs:
+  humanizer-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: python3 tooling/check-humanizer-pass.py
