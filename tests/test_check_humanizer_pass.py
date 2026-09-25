@@ -259,14 +259,18 @@ class GrammarSourceTests(unittest.TestCase):
             good = Path(tmp) / f"{_POST_STEM}.md"
             good.write_text(_GOOD, encoding="utf-8")
             with mock.patch.object(chp.attestation, "is_version_attestation", return_value=True):
-                self.assertEqual(self._exit(yes), 0)
+                self.assertEqual(self._run(yes)[0], 0)
             with mock.patch.object(chp.attestation, "is_version_attestation", return_value=False):
-                self.assertEqual(self._exit(good), 1)
+                code, report = self._run(good)
+            self.assertEqual(code, 1, report)
+            self.assertIn("`humanizer_pass: v3.0.0` is not", report)
 
     @staticmethod
-    def _exit(post: Path) -> int:
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            return chp.main([str(post)])
+    def _run(post: Path) -> tuple[int, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = chp.main([str(post)])
+        return code, out.getvalue() + err.getvalue()
 
     def test_the_contract_takes_its_verdict_from_the_shared_grammar(self) -> None:
         yes = _GOOD.replace("humanizer_pass: v3.0.0", "humanizer_pass: yes", 1)
