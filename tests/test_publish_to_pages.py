@@ -6,8 +6,8 @@ whose own suite is pytest; this repo is stdlib `unittest` only, so these are
 rewritten rather than copied.
 
 **Three tiers, and the split is the whole point of this module** -- plus one
-coupling check, `SyncCouplingTests`, that ties the workflow's commit identity and
-subject to the constants the guard parses them with.
+coupling check, `SyncCouplingTests`, that ties what the workflow commits under to
+what the guard parses.
 
 *Tier 1* drives `assert_no_foreign_overwrite` through its `pages_owner` injection
 seam. That pins the **refusal logic**: given an owner, does the guard refuse, and
@@ -33,16 +33,21 @@ over from the source was already stale against the file it named.)
 of the connection: replace `run`'s default with a permissive stub and both stay
 green.
 
-**Tiers 2 and 3 require a real `git` binary** and build throwaway repositories under
-`tempfile`. That is a deliberate, conscious precondition rather than an
+**This module requires a real `git` binary** -- at import, because
+`_REPO_LOCATING_VARS` asks git for its list -- and Tiers 2 and 3 build throwaway
+repositories under `tempfile`. That is a deliberate, conscious precondition rather than an
 accident: the alternative -- skipping when git is absent -- would let the
 security coverage evaporate silently on exactly the machine where nobody looks.
 Still stdlib-only: `subprocess` + `tempfile`, no dependency.
 
-Nothing here writes to the real repository or reads the real Pages site. Beyond
-loading the publisher itself, the one file of this repository read is the
+Nothing here writes to the real repository or reads the real Pages site: the
+fixture helper `_git` strips the variables git uses to locate a repository, so an
+inherited `GIT_DIR` or `GIT_INDEX_FILE` cannot redirect a fixture's writes.
+Beyond loading the publisher itself, the one file of this repository read is the
 committed `.github/workflows/pages-sync.yml`, which `SyncCouplingTests` reads as
-text. Tests that
+text. The publisher's own reader, `_git_run`, still inherits the ambient
+environment, so under an inherited `GIT_DIR` Tiers 2 and 3 read that repository's
+history instead of the fixture's -- F166 on #1. Tests that
 subclass `_FixtureTree` get a throwaway source tree with `REPO_ROOT` repointed at
 it, and a Pages tree deliberately made a SIBLING of that root, because `run()`
 refuses Pages directories inside the source repo. `ProvenanceGitFixtureTests`
@@ -125,10 +130,25 @@ _POST_STEM = "2026-10-01-team-you-didnt-hire"
 _CARD_BYTES = b"\x89PNG\r\n\x1a\n-not-really-a-png-but-bytes-are-bytes"
 
 
+#: The variables git itself names as locating a repository (`GIT_DIR`,
+#: `GIT_INDEX_FILE`, `GIT_WORK_TREE`, ...). Git exports them to hooks, so a suite
+#: run from a hook inherits the host repository's. Left in the fixture's
+#: environment, `git -C <tempdir> add` still writes the index they name -- outside
+#: the tempdir. Asked of git rather than listed here, so a variable a later git
+#: adds is stripped without an edit to this file.
+_REPO_LOCATING_VARS = frozenset(
+    subprocess.run(
+        ["git", "rev-parse", "--local-env-vars"],
+        check=True, capture_output=True, encoding="utf-8",
+    ).stdout.split()
+)
+
+
 def _git(cwd: Path, *args: str, env_extra: dict | None = None) -> str:
-    env = dict(os.environ)
-    # Pin identity and disable any user/system config so a developer's global
-    # git settings cannot change what these tests observe.
+    env = {k: v for k, v in os.environ.items() if k not in _REPO_LOCATING_VARS}
+    # Pin identity and disable user/system config files, so neither a
+    # developer's global git settings nor an inherited repository location can
+    # change what these fixtures write or where they write it.
     env.update(
         {
             "GIT_CONFIG_GLOBAL": os.devnull,
@@ -396,9 +416,12 @@ class NamespaceGuardSeamTests(_FixtureTree):
         self.assertEqual(len(set(msgs)), 3)
         # Distinct strings are not distinct remedies: delete either special branch
         # and the generic one interpolates `{owner!r}` -- `None`, or the sentinel's
-        # `<... object at 0x...>` -- which is still three distinct strings.
+        # `<... object at 0x...>` -- which is still three distinct strings. The
+        # needles are the generic branch's rendering of each, never a bare "0x":
+        # every message carries a tempdir path, which can contain that.
         for msg in msgs:
-            self.assertNotIn("0x", msg)
+            self.assertNotIn("object at 0x", msg)
+            self.assertNotIn("published by None", msg)
 
     def test_a_target_we_own_is_allowed(self) -> None:
         self.published_post().write_bytes(b"our own older bytes\n")
@@ -647,7 +670,7 @@ class ProductionWiringTests(_FixtureTree):
         # UNATTRIBUTED_SYNC raises a different branch's message.
         for needle in ("refusing to overwrite", SIBLING, "shared with another publisher"):
             self.assertIn(needle, message)
-        # Phase 1 refuses before any write.
+        # No target is written.
         self.assertEqual(self.published_post().read_bytes(), self._OLDER)
         self.assertFalse(self.published_card().exists())
 
@@ -698,9 +721,16 @@ class SyncCouplingTests(unittest.TestCase):
 
     The subject is checked by rendering the workflow's template and handing it to
     the guard's own `sync_source_repo`, so this module holds no second copy of the
-    pattern. Every extraction asserts its match COUNT before comparing anything: a
+    pattern, and the `SOURCE_REPO:` binding the template interpolates is pinned
+    too. Every extraction asserts its match COUNT before comparing anything: a
     regex that stops matching would otherwise leave nothing to compare, and every
     assertion over an empty list passes.
+
+    Extraction matches literal tokens: `git config user.name` and `commit_msg=`
+    anywhere on a line, and `git commit` and `SOURCE_REPO:` only at the start of
+    one. Removing or respelling a checked line fails; a commit or identity ADDED in another spelling
+    (`git -C ... commit`, `git -c user.name=...`) is not seen at all. That is
+    append-class, and `tests/CLAUDE.md` assigns it to review.
 
     Only OUR half. Each sibling's half is written by its own repo's workflow, which
     no test here can read.
@@ -711,6 +741,7 @@ class SyncCouplingTests(unittest.TestCase):
     _COMMIT_MSG = re.compile(r'commit_msg="([^"]*)"')
     _SOURCE_REPO_FLAG = re.compile(r'--source-repo\s+"([^"]*)"')
     _GIT_COMMIT = re.compile(r"^\s*git commit\b.*$", re.MULTILINE)
+    _SOURCE_REPO_ENV = re.compile(r"^\s*SOURCE_REPO:\s*(.+?)\s*$", re.MULTILINE)
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -747,7 +778,17 @@ class SyncCouplingTests(unittest.TestCase):
         flag = self._one(self._SOURCE_REPO_FLAG, "--source-repo argument")
         self.assertIn(flag, self._one(self._COMMIT_MSG, "commit_msg= assignment"))
 
-    def test_every_commit_in_the_workflow_uses_that_subject(self) -> None:
+    def test_source_repo_is_bound_to_the_bare_repository_name(self) -> None:
+        # The two tests above treat `${SOURCE_REPO}` as a token. What it expands
+        # to is this binding: `github.repository` would give `owner/name`, whose
+        # `/` `_SYNC_SUBJECT` does not accept, and every later update of a post
+        # would be refused while each test above stayed green.
+        self.assertEqual(
+            self._one(self._SOURCE_REPO_ENV, "SOURCE_REPO: binding"),
+            "${{ github.event.repository.name }}",
+        )
+
+    def test_every_line_beginning_git_commit_uses_that_subject(self) -> None:
         # The reconcile-retry loop commits a second time; a literal subject there
         # would drift on exactly the path that runs least often.
         commits = self._GIT_COMMIT.findall(self.text)

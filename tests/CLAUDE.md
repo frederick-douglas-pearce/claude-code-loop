@@ -57,10 +57,13 @@ that used to sit here went stale the first time a module was added):
   re-subjected as our own sync, must publish, so the refusal is shown to come from the history.
   `SyncCouplingTests` (#199) ties the workflow to the parser. It checks that `pages-sync.yml`'s
   `git config user.name` equals `_SYNC_AUTHOR`. It renders the `commit_msg` template for two repos
-  through the guard's own `sync_source_repo`, so no second copy of the pattern exists. And it
-  checks that the subject interpolates the value passed to `--source-repo` and that every
-  `git commit` uses it. Each extraction asserts its match count first, because a regex that stops
-  matching would otherwise leave every comparison passing over an empty list.
+  through the guard's own `sync_source_repo`, so no second copy of the pattern exists. It checks
+  that the subject interpolates the value passed to `--source-repo`, that the `SOURCE_REPO:`
+  binding is `${{ github.event.repository.name }}`, and that every line beginning `git commit`
+  uses the subject. Each extraction asserts its match count first, because a regex that stops
+  matching would otherwise leave every comparison passing over an empty list. The fixture helper
+  `_git` strips git's own list of repository-locating variables (`git rev-parse --local-env-vars`),
+  so a suite run from a git hook cannot redirect a fixture's writes into the host repository.
 
   **This module makes a real `git` binary a suite precondition, and it does not skip without
   one.** That is deliberate: skipping would let the security coverage evaporate silently on
@@ -68,16 +71,22 @@ that used to sit here went stale the first time a module was added):
   suite" is no longer true — `python3` **and** `git`. Still
   stdlib-only; `subprocess` and `tempfile` are not dependencies.
 
-  **What it does not cover, as of #199:** each **sibling's** half of the subject and identity,
-  which its own repo's workflow writes and no test here can read. The workflow's shell logic
-  beyond those strings: the reconcile-retry loop, the preflight, and the `detect` gate. Whether
-  `github.event.repository.name` always fits `_SYNC_SUBJECT`'s `[A-Za-z0-9._-]` slug class, which
-  is a GitHub naming rule rather than anything in this repo. The workflow's `user.email`,
-  deliberately unpinned because no publisher constant reads it. And the rejection paths of
-  `_unquote`, `og_target_name`'s `_SAFE_BASENAME` and `resolve_og_source`, filed on #1 as F165.
-  `SyncCouplingTests` reads the workflow as text with regexes anchored on literal tokens, so a
-  rewrite that builds the same strings differently (a YAML anchor, a helper script) makes it fail
-  loud rather than follow the change.
+  **What it does not cover, as of #199: anything not named above.** Read the coverage stated
+  above as the whole of it. What follows is examples, not a list to check against. Each
+  **sibling's** half of the subject and identity is written by its own repo's workflow, which no
+  test here can read. Nothing in the workflow beyond the strings and the binding
+  `SyncCouplingTests` extracts is checked, including the Pages checkout's `fetch-depth: 0` (the
+  publisher documents a shallow clone as failing the guard open silently), the main-only guard,
+  the `git add` scope, the preflight, the `detect` gate and the reconcile-retry loop. A commit or
+  `user.name` *added* in another spelling (`git -C … commit`, `if ! git commit`) is not seen,
+  because extraction matches literal tokens (`git commit` and `SOURCE_REPO:` only at the start of
+  a line); removing or respelling a checked line fails. That is append-class, which is review's (below). Whether
+  `github.event.repository.name` always fits `_SYNC_SUBJECT`'s `[A-Za-z0-9._-]` slug class is a
+  GitHub naming rule, not anything in this repo. The workflow's `user.email` is deliberately
+  unpinned, because no publisher constant reads it. The publisher's own reader, `_git_run`,
+  inherits the ambient git environment (F166 on #1). And `resolve_og_source`'s absolute-path and
+  repo-escape rejections, `og_target_name`'s `_SAFE_BASENAME` rejection and `_unquote`'s
+  quote-stripping are untested (F165 on #1, with its correction).
 - **`tests/test_check_og_cards.py`** — behavior of `tooling/check-og-cards.py`, the PR-time
   OG-card guard (#180). It exists for the reason `CheckerBatteryTests` does, one file over: the
   guard globs `posts/` for dated posts, and while there are none it prints `no posts found to
