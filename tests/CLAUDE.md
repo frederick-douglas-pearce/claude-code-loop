@@ -42,7 +42,7 @@ that used to sit here went stale the first time a module was added):
   word). But a **file-level** guarantee of it is exactly the enumerable assertion this project keeps
   having to retract, so it is not made. Check the test, not this sentence.
 - **`tests/test_publish_to_pages.py`** — behavior of `tooling/publish-to-pages.py`, the Pages
-  publisher (#179). **Two tiers, and the split is the point.** Tier 1 drives the namespace guard
+  publisher (#179). **Three tiers, and the split is the point.** Tier 1 drives the namespace guard
   through its `pages_owner` injection seam, pinning the *refusal logic* — three refusals carrying
   three different remedies, each asserted by its own discriminator rather than by a shared
   substring. Tier 2 drives `git_pages_owner` against **real git histories**, because the seam
@@ -50,7 +50,20 @@ that used to sit here went stale the first time a module was added):
   field order, `%an` not `%cn`, the `-- <path>` pathspec, the walk that stops on an unattributable
   sync). A seam-only suite would assert the outcome while leaving the mechanism untested — the
   exact hole this file is about — and the source repo *measured* that: `%cn` and a dropped pathspec
-  each left its whole suite green while restoring a silent cross-publisher overwrite.
+  each left its whole suite green while restoring a silent cross-publisher overwrite. Tier 3
+  (`ProductionWiringTests`, #199) drives `run()` and `main()` with **no** `pages_owner` against a
+  real history, because Tiers 1 and 2 each stop at one side of the connection: replace `run`'s
+  default with a permissive stub and both stay green. A same-fixture control, the commit
+  re-subjected as our own sync, must publish, so the refusal is shown to come from the history.
+  `SyncCouplingTests` (#199) ties the workflow to the parser. It checks that `pages-sync.yml`'s
+  `git config user.name` equals `_SYNC_AUTHOR`. It renders the `commit_msg` template for two repos
+  through the guard's own `sync_source_repo`, so no second copy of the pattern exists. It checks
+  that the subject interpolates the value passed to `--source-repo`, that the `SOURCE_REPO:`
+  binding is `${{ github.event.repository.name }}`, and that every line beginning `git commit`
+  uses the subject. Each extraction asserts its match count first, because a regex that stops
+  matching would otherwise leave every comparison passing over an empty list. The fixture helper
+  `_git` strips git's own list of repository-locating variables (`git rev-parse --local-env-vars`),
+  so a suite run from a git hook cannot redirect a fixture's writes into the host repository.
 
   **This module makes a real `git` binary a suite precondition, and it does not skip without
   one.** That is deliberate: skipping would let the security coverage evaporate silently on
@@ -58,11 +71,20 @@ that used to sit here went stale the first time a module was added):
   suite" is no longer true — `python3` **and** `git`. Still
   stdlib-only; `subprocess` and `tempfile` are not dependencies.
 
-  **What it does not cover, as of #179:** the production wiring (`run()` → the real
-  `git_pages_owner`) is untested — every test injects the seam — and nothing ties the workflow's
-  `pages-sync[bot]` identity and commit-subject template to the constants that parse them. Both
-  are deferred with a capture gate — see **#199**, which carries the gate itself
-  (before the first real post, or before the `pages-sync` environment exists).
+  **What it does not cover, as of #199: anything not named above.** Read the coverage stated
+  above as the whole of it. What follows is examples, not a list to check against. Each
+  **sibling's** half of the subject and identity is written by its own repo's workflow, which no
+  test here can read. Nothing in the workflow beyond the strings and the binding
+  `SyncCouplingTests` extracts is checked, including the Pages checkout's `fetch-depth: 0` (the
+  publisher documents a shallow clone as failing the guard open silently), the main-only guard,
+  the `git add` scope, the preflight, the `detect` gate and the reconcile-retry loop. A commit or
+  `user.name` *added* in another spelling (`git -C … commit`, `if ! git commit`) is not seen,
+  because extraction matches literal tokens (`git commit` and `SOURCE_REPO:` only at the start of
+  a line); removing or respelling a checked line fails. That is append-class, which is review's
+  (below). Whether `github.event.repository.name` always fits `_SYNC_SUBJECT`'s `[A-Za-z0-9._-]`
+  slug class is a GitHub naming rule, not anything in this repo. The workflow's `user.email` is
+  deliberately unpinned, because no publisher constant reads it. The publisher's own reader,
+  `_git_run`, inherits the ambient git environment (F166 on #1).
 - **`tests/test_check_og_cards.py`** — behavior of `tooling/check-og-cards.py`, the PR-time
   OG-card guard (#180). It exists for the reason `CheckerBatteryTests` does, one file over: the
   guard globs `posts/` for dated posts, and while there are none it prints `no posts found to
