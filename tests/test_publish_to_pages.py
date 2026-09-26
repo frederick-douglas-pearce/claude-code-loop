@@ -726,11 +726,12 @@ class SyncCouplingTests(unittest.TestCase):
     regex that stops matching would otherwise leave nothing to compare, and every
     assertion over an empty list passes.
 
-    Extraction matches literal tokens: `git config user.name` and `commit_msg=`
-    anywhere on a line, and `git commit` and `SOURCE_REPO:` only at the start of
-    one. Removing or respelling a checked line fails; a commit or identity ADDED in another spelling
-    (`git -C ... commit`, `git -c user.name=...`) is not seen at all. That is
-    append-class, and `tests/CLAUDE.md` assigns it to review.
+    Extraction matches literal tokens: `git config user.name`, `commit_msg=` and
+    `--source-repo` anywhere on a line, and `git commit` and `SOURCE_REPO:` only at
+    the start of one. Removing or respelling a checked line fails; a commit or
+    identity ADDED in another spelling (`git -C ... commit`, `git -c user.name=...`)
+    is not seen at all. That is append-class, and `tests/CLAUDE.md` assigns it to
+    review.
 
     Only OUR half. Each sibling's half is written by its own repo's workflow, which
     no test here can read.

@@ -80,13 +80,11 @@ that used to sit here went stale the first time a module was added):
   the `git add` scope, the preflight, the `detect` gate and the reconcile-retry loop. A commit or
   `user.name` *added* in another spelling (`git -C … commit`, `if ! git commit`) is not seen,
   because extraction matches literal tokens (`git commit` and `SOURCE_REPO:` only at the start of
-  a line); removing or respelling a checked line fails. That is append-class, which is review's (below). Whether
-  `github.event.repository.name` always fits `_SYNC_SUBJECT`'s `[A-Za-z0-9._-]` slug class is a
-  GitHub naming rule, not anything in this repo. The workflow's `user.email` is deliberately
-  unpinned, because no publisher constant reads it. The publisher's own reader, `_git_run`,
-  inherits the ambient git environment (F166 on #1). And `resolve_og_source`'s absolute-path and
-  repo-escape rejections, `og_target_name`'s `_SAFE_BASENAME` rejection and `_unquote`'s
-  quote-stripping are untested (F165 on #1, with its correction).
+  a line); removing or respelling a checked line fails. That is append-class, which is review's
+  (below). Whether `github.event.repository.name` always fits `_SYNC_SUBJECT`'s `[A-Za-z0-9._-]`
+  slug class is a GitHub naming rule, not anything in this repo. The workflow's `user.email` is
+  deliberately unpinned, because no publisher constant reads it. The publisher's own reader,
+  `_git_run`, inherits the ambient git environment (F166 on #1).
 - **`tests/test_check_og_cards.py`** — behavior of `tooling/check-og-cards.py`, the PR-time
   OG-card guard (#180). It exists for the reason `CheckerBatteryTests` does, one file over: the
   guard globs `posts/` for dated posts, and while there are none it prints `no posts found to
