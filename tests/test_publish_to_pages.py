@@ -5,7 +5,9 @@ Ported with the publisher itself (#179) from `us-presidential-vote-analysis`,
 whose own suite is pytest; this repo is stdlib `unittest` only, so these are
 rewritten rather than copied.
 
-**Two tiers, and the split is the whole point of this module.**
+**Three tiers, and the split is the whole point of this module** -- plus one
+coupling check, `SyncCouplingTests`, that ties the workflow's commit identity and
+subject to the constants the guard parses them with.
 
 *Tier 1* drives `assert_no_foreign_overwrite` through its `pages_owner` injection
 seam. That pins the **refusal logic**: given an owner, does the guard refuse, and
@@ -26,13 +28,21 @@ and so did dropping the pathspec. Both mutations restore a silent cross-publishe
 overwrite. Tier 2 is what notices. (No test count is quoted: the figure carried
 over from the source was already stale against the file it named.)
 
-**Tier 2 requires a real `git` binary** and builds throwaway repositories under
+*Tier 3* (`ProductionWiringTests`) drives `run()` and `main()` with NO
+`pages_owner` against a real history, because Tiers 1 and 2 each stop at one side
+of the connection: replace `run`'s default with a permissive stub and both stay
+green.
+
+**Tiers 2 and 3 require a real `git` binary** and build throwaway repositories under
 `tempfile`. That is a deliberate, conscious precondition rather than an
 accident: the alternative -- skipping when git is absent -- would let the
 security coverage evaporate silently on exactly the machine where nobody looks.
 Still stdlib-only: `subprocess` + `tempfile`, no dependency.
 
-Nothing here touches the real repository or the real Pages site. Tests that
+Nothing here writes to the real repository or reads the real Pages site. Beyond
+loading the publisher itself, the one file of this repository read is the
+committed `.github/workflows/pages-sync.yml`, which `SyncCouplingTests` reads as
+text. Tests that
 subclass `_FixtureTree` get a throwaway source tree with `REPO_ROOT` repointed at
 it, and a Pages tree deliberately made a SIBLING of that root, because `run()`
 refuses Pages directories inside the source repo. `ProvenanceGitFixtureTests`
@@ -44,6 +54,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -383,6 +394,11 @@ class NamespaceGuardSeamTests(_FixtureTree):
         # The distinction is the point; collapsing any two loses it.
         msgs = [self._refusal(SIBLING), self._refusal(UNATTRIBUTED_SYNC), self._refusal(None)]
         self.assertEqual(len(set(msgs)), 3)
+        # Distinct strings are not distinct remedies: delete either special branch
+        # and the generic one interpolates `{owner!r}` -- `None`, or the sentinel's
+        # `<... object at 0x...>` -- which is still three distinct strings.
+        for msg in msgs:
+            self.assertNotIn("0x", msg)
 
     def test_a_target_we_own_is_allowed(self) -> None:
         self.published_post().write_bytes(b"our own older bytes\n")
@@ -591,6 +607,154 @@ class CliContractTests(_FixtureTree):
         # any bad invocation, so a bare SystemExit would pass if the flag were
         # renamed rather than made required.
         self.assertIn("--source-repo", err.getvalue())
+
+
+class ProductionWiringTests(_FixtureTree):
+    """Tier 3 -- `run()` and `main()` with the DEFAULT owner, against a real history.
+
+    Tier 1 injects the seam and Tier 2 calls `git_pages_owner` directly, so neither
+    notices if the two stop being connected: replace `run`'s default with a
+    permissive stub and both tiers stay green. These tests pass no `pages_owner`
+    at all, so the refusal can only come from the real reader parsing the real
+    history. Requires `git`, like Tier 2.
+
+    The our-sync control is what makes the refusal evidence: the same fixture with
+    the one commit re-subjected as OUR sync must publish, so a refusal is caused by
+    the history rather than by a REPO_ROOT or directory precondition failing first.
+    """
+
+    # Deliberately different from the transform output, so that the control's
+    # write is real rather than skipped by the content-compare as unchanged.
+    _OLDER = b"older bytes already on the pages side\n"
+
+    def setUp(self) -> None:
+        super().setUp()
+        _git(self.pages.parent, "init", "-q", "-b", "main", str(self.pages))
+
+    def _synced_by(self, repo: str) -> None:
+        target = self.published_post()
+        target.write_bytes(self._OLDER)
+        _git(self.pages, "add", str(target))
+        _git(
+            self.pages, "commit", "-q", "-m",
+            "chore(sync): publish posts from %s@abc1234" % repo,
+            env_extra={"GIT_AUTHOR_NAME": publish_to_pages._SYNC_AUTHOR},
+        )
+
+    def _assert_refused_for_the_sibling(self, message: str) -> None:
+        # The sibling branch's OWN discriminators, as in Tier 1: a permissive
+        # wiring raises nothing, and a wiring that answers None or
+        # UNATTRIBUTED_SYNC raises a different branch's message.
+        for needle in ("refusing to overwrite", SIBLING, "shared with another publisher"):
+            self.assertIn(needle, message)
+        # Phase 1 refuses before any write.
+        self.assertEqual(self.published_post().read_bytes(), self._OLDER)
+        self.assertFalse(self.published_card().exists())
+
+    def test_run_with_the_default_owner_refuses_a_sibling_owned_target(self) -> None:
+        self._synced_by(SIBLING)
+        with redirect_stdout(io.StringIO()), self.assertRaises(PublishError) as cm:
+            publish_to_pages.run(
+                [self.post], self.posts_dir, self.assets_dir,
+                dry_run=False, source_repo=OURS,
+            )
+        self._assert_refused_for_the_sibling(str(cm.exception))
+
+    def test_main_reaches_the_same_refusal(self) -> None:
+        # `main()` is what the workflow runs, and it passes no owner to `run()`.
+        # A `run()`-only test would not notice `main()` passing a permissive one.
+        self._synced_by(SIBLING)
+        with redirect_stdout(io.StringIO()), self.assertRaises(PublishError) as cm:
+            publish_to_pages.main(
+                [
+                    str(self.post),
+                    "--posts-dir", str(self.posts_dir),
+                    "--assets-dir", str(self.assets_dir),
+                    "--source-repo", OURS,
+                ]
+            )
+        self._assert_refused_for_the_sibling(str(cm.exception))
+
+    def test_the_same_history_under_our_own_sync_publishes(self) -> None:
+        self._synced_by(OURS)
+        with redirect_stdout(io.StringIO()):
+            rc = publish_to_pages.run(
+                [self.post], self.posts_dir, self.assets_dir,
+                dry_run=False, source_repo=OURS,
+            )
+        self.assertEqual(rc, 0)
+        self.assertNotEqual(self.published_post().read_bytes(), self._OLDER)
+        self.assertEqual(self.published_card().read_bytes(), _CARD_BYTES)
+
+
+class SyncCouplingTests(unittest.TestCase):
+    """The workflow writes the strings the guard parses; this ties the two together.
+
+    `.github/workflows/pages-sync.yml` commits as `git config user.name` and under
+    `commit_msg`, and the publisher reads those back through `_SYNC_AUTHOR` and
+    `_SYNC_SUBJECT`. If they drift, a post's FIRST publish still looks green --
+    every target is new, so nothing is arbitrated -- and every later update of that
+    post is refused under a remedy that names the wrong cause.
+
+    The subject is checked by rendering the workflow's template and handing it to
+    the guard's own `sync_source_repo`, so this module holds no second copy of the
+    pattern. Every extraction asserts its match COUNT before comparing anything: a
+    regex that stops matching would otherwise leave nothing to compare, and every
+    assertion over an empty list passes.
+
+    Only OUR half. Each sibling's half is written by its own repo's workflow, which
+    no test here can read.
+    """
+
+    _WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "pages-sync.yml"
+    _USER_NAME = re.compile(r'git config user\.name\s+"([^"]*)"')
+    _COMMIT_MSG = re.compile(r'commit_msg="([^"]*)"')
+    _SOURCE_REPO_FLAG = re.compile(r'--source-repo\s+"([^"]*)"')
+    _GIT_COMMIT = re.compile(r"^\s*git commit\b.*$", re.MULTILINE)
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.text = cls._WORKFLOW.read_text(encoding="utf-8")
+
+    def _one(self, pattern: "re.Pattern[str]", what: str) -> str:
+        found = pattern.findall(self.text)
+        self.assertEqual(
+            len(found), 1,
+            f"expected exactly one {what} in {self._WORKFLOW.name}, found {found!r}",
+        )
+        return found[0]
+
+    def _render(self, repo: str) -> str:
+        template = self._one(self._COMMIT_MSG, "commit_msg= assignment")
+        return template.replace("${SOURCE_REPO}", repo).replace("${GITHUB_SHA:0:7}", "abc1234")
+
+    def test_the_workflow_commits_under_the_identity_the_guard_reads(self) -> None:
+        self.assertEqual(
+            self._one(self._USER_NAME, "git config user.name"),
+            publish_to_pages._SYNC_AUTHOR,
+        )
+
+    def test_the_workflow_subject_parses_back_to_the_repo_it_names(self) -> None:
+        # Rendered for two different repos: a subject that hardcoded one slug
+        # instead of interpolating the variable would pass for that slug alone.
+        for repo in (OURS, SIBLING):
+            with self.subTest(repo=repo):
+                self.assertEqual(publish_to_pages.sync_source_repo(self._render(repo)), repo)
+
+    def test_the_subject_names_the_repo_the_publisher_is_told_it_is(self) -> None:
+        # The publisher's own comment says OUR half "cannot drift" because the
+        # subject is built from the value passed to --source-repo. This is that.
+        flag = self._one(self._SOURCE_REPO_FLAG, "--source-repo argument")
+        self.assertIn(flag, self._one(self._COMMIT_MSG, "commit_msg= assignment"))
+
+    def test_every_commit_in_the_workflow_uses_that_subject(self) -> None:
+        # The reconcile-retry loop commits a second time; a literal subject there
+        # would drift on exactly the path that runs least often.
+        commits = self._GIT_COMMIT.findall(self.text)
+        self.assertGreaterEqual(len(commits), 2, f"found {commits!r}")
+        for line in commits:
+            with self.subTest(line=line.strip()):
+                self.assertIn('-m "${commit_msg}"', line)
 
 
 if __name__ == "__main__":

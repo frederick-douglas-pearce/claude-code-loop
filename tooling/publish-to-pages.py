@@ -343,7 +343,8 @@ def build_plan(
 #: source repo — the provenance the guard needs, recorded by the very mechanism
 #: that would be racing. Our Action builds it from the same value it passes to
 #: `--source-repo` (see .github/workflows/pages-sync.yml), so OUR half cannot
-#: drift.
+#: drift -- pinned by `SyncCouplingTests` (tests/test_publish_to_pages.py), which
+#: renders the workflow's subject through `sync_source_repo`.
 #:
 #: Each sibling's half is an assumption, not an invariant: it must match what
 #: that repo's own Action writes, and no test here can pin another repo.
@@ -358,8 +359,9 @@ _SYNC_SUBJECT = re.compile(
 
 #: The identity a publisher's sync commits under — the second signal, read when a
 #: subject does not parse. Our own Action sets it with `git config user.name` in
-#: .github/workflows/pages-sync.yml. **Nothing in this repo ties the two
-#: together**, so keeping them equal is manual.
+#: .github/workflows/pages-sync.yml, and
+#: `test_the_workflow_commits_under_the_identity_the_guard_reads`
+#: (tests/test_publish_to_pages.py) fails if the two differ.
 #:
 #: Deliberately the sync identity and NOT "any bot": the Pages repo's other
 #: automated writer is `dependabot[bot]`, and a rule keyed on the `[bot]` suffix
