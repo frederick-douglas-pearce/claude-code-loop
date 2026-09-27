@@ -63,18 +63,18 @@ These were misread once, so they are pinned here rather than left to inference.
 | **carry / carry-per-turn** | resident-turn ÷ ingested (÷ turns) | **use carry/turn** — raw carry scales with session length and cannot be compared across runs |
 | **% of bill** | engine's share of billable-equivalent input | engine takes a share of the **input** side only; it does not cause output tokens |
 | **peak context** | the high-water mark of a **single turn** | *not* a total for the run; compaction *lowers* it |
-| **bill/turn** | billable-equivalent per parent turn | near-constant (~28–33k) — that is the point, not a coincidence |
+| **bill/turn** | billable-equivalent per parent turn | near-constant (~28–33k) — that is the point, not a coincidence. *Finding 10, n=8, pooled across `claude-opus-5@xhigh` and `@high`* |
 
 **Pricing is per model** (`stratum.PRICING`, from the
 [pricing page](https://platform.claude.com/docs/en/about-claude/pricing), checked 2026-09-27). Input
 splits fresh / cache-write / cache-read at 1× / 1.25× / **0.1×** on `claude-opus-5`, `-4-8` and `-4-7`,
 and 1× / 1.25× / **0.05×** on `claude-opus-5-5`; output is 5× input on all of them. A model with no
 entry refuses to price. 97.6–98.9% of input is cache-read, so **share of context ≈ share of cost** and
-cache is a uniform ~8× discount rather than a lever — *fitted on `claude-opus-5`; re-measure per
-stratum.*
+cache is a uniform ~8× discount rather than a lever — *Finding 10's n=8 on `claude-opus-5`, pooled
+across `@xhigh` and `@high`; re-measure per stratum.*
 
-**The cost model in one line:** `cost ≈ turns × ~33k` (*fitted on `claude-opus-5`; re-measure per
-stratum*). Average context is bounded above by the
+**The cost model in one line:** `cost ≈ turns × ~33k` (*Finding 10's n=8 on `claude-opus-5`, pooled
+across `@xhigh` and `@high`; re-measure per stratum*). Average context is bounded above by the
 compaction ceiling and below by the starting footprint, so it varies little; turn count has no
 ceiling. **Turns is the free variable.**
 
