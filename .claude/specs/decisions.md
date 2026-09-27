@@ -591,3 +591,44 @@ snap-guard fix as the first such divergence, since it is the first thing that ou
 **dependency-management artifacts** (`pyproject.toml`/lockfile/a repo-wide Python floor — this
 repo declares none today, so `tomllib` puts a 3.11 floor on one file, declared in that file's
 PEP-723 header and nowhere else); and **testing for the renderer**, per the cost above.
+
+## D016 — 2026-09-27 — A cost stratum is any well-formed `(model, effort)` key, and zero-usage `<synthetic>` records are ignored
+
+**Taken at #207's plan gate** (architect review, human approval 2026-09-27); recorded here at the
+human's request because it narrows #207's literal acceptance criteria, and a comment on the issue is
+not where the next reader of `docs/research/` will look. The same two rulings are on #207 as a dated
+comment.
+
+### The decision
+
+1. **Recognising a stratum never consults the pricing table.** `docs/research/stratum.py` groups
+   sessions by the exact parent `(model, effort)` key. A well-formed model no script has seen forms
+   **its own** stratum; it never pools with another and is never "unstratified" for being new. A
+   session is unstratified only when its key cannot be positively determined (a missing or malformed
+   field, a mid-session switch, a `<synthetic>` record carrying usage, no counted record), and if you
+   cannot tell, it is. **Pricing is separate:** a model with no `PRICING` entry refuses to price and
+   never falls back to a default weight — but it is still stratified.
+2. **A `<synthetic>` record is ignored for stratum determination only if its usage is absent or all
+   four token fields are zero.** It is counted and printed, never silently dropped. A `<synthetic>`
+   record with nonzero usage makes the session unstratified; a session whose only records are
+   synthetic is unstratified. The same test applies to subagent records and to pricing.
+
+### Why
+
+**(1)** An allowlist used as the stratum gate is an enumeration of the safe set: every future model
+release, and every model the table happens not to price (the `claude-opus-4-8` control arm, before
+its entry was added), would silently fall out of every comparison. Default-deny belongs on *whether
+the key is known*, not on *whether we have seen the value before*.
+
+**(2)** `<synthetic>` records are client-written placeholders — no `effort`, zero usage — written on
+events such as an API error. Read literally, #207's "missing field ⇒ unstratified" excludes every
+session that hit one, and the chance of hitting one grows with session length, so the exclusion
+selects on the outcome the instruments measure. The reference accounting agrees these are not real
+calls: `claude-code-sessions` `reference/cost-model.md:92` and `reference/data-dictionary.md:525`
+(pitfall 12) both say to skip `<synthetic>` lines before pricing.
+
+**The carve-out is deliberately narrower than that reference.** It skips every `<synthetic>` line;
+this skips only the zero-usage ones. A `<synthetic>` record that carries tokens is not the
+placeholder shape anyone has described, so it is an unknown, and unknown lands on the excluded side.
+If #212 (which conforms this directory's cost arithmetic to that reference) finds the broader rule is
+right, it amends this entry by appending, not by editing it.

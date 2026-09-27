@@ -15,8 +15,16 @@ Quantities, each labelled:
                            mean fraction of the run each engine token is carried
                            for. Prefer this to raw `carry`, which scales with
                            session length and so cannot be compared across runs.
-  * **billable-equiv**  -- priced. Input splits into fresh / cache-write /
-                           cache-read at 1x / 1.25x / 0.1x; output bills ~5x input.
+  * **billable-equiv**  -- priced, on the session's OWN model's weights
+                           (`stratum.PRICING`; e.g. cache-read is 0.1x input on
+                           `claude-opus-5` and 0.05x on `claude-opus-5-5`). A
+                           session whose parent is unstratified, or whose model has
+                           no PRICING entry, REFUSES to price -- it never falls back
+                           to a default. Every other figure is unpriced and prints.
+
+Every profile prints a `stratum` line (`stratum.py`) beside the `engine era` line.
+This script profiles one session at a time and never pools, so it cannot cross
+strata itself; anything that pools its output must group by that line.
 
 DETECTION IS THE HARD PART, and it has been wrong three separate ways. Each bug
 was silent and each moved the number in a believable direction, so read
@@ -44,6 +52,10 @@ import json
 import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from stratum import UnknownModel, input_equiv, output_equiv, session_strata, \
+    stratum_line, weights_for  # noqa: E402
 
 CTX = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
 
@@ -118,9 +130,6 @@ def floor_for(version):
 # and `main()` passes None so the floor is derived per session. Do not wire it
 # back into a default -- that is precisely the regression this comment records.
 DEFAULT_FLOOR = 177529 / CHARS_PER_TOKEN
-
-# Relative to one fresh input token.
-W_FRESH, W_CACHE_WRITE, W_CACHE_READ, W_OUTPUT = 1.0, 1.25, 0.1, 5.0
 
 _READ_VERB = ("cat ", "sed ", "head ", "tail ", "awk ", "grep ", "less ", "more ")
 # Shapes that name a file but return a scalar, not its text.
@@ -287,18 +296,28 @@ def profile(path, target="loop-engine.md", kinds=("load",), floor=None):
 
     ctx = [sum(turns[m].get(f, 0) or 0 for f in CTX) for m in order]
     out = [turns[m].get("output_tokens", 0) or 0 for m in order]
+
+    stratum = session_strata(path)
+    weights, refused = None, None
+    if not stratum.stratified:
+        refused = "unstratified: %s" % stratum.reason
+    else:
+        try:
+            weights = weights_for(stratum.parent[0])
+        except UnknownModel as exc:
+            refused = str(exc)
     # Input and output are billed separately AND attributed separately: the
     # engine occupies context, so it takes a share of the INPUT side only. It does
     # not cause output tokens. Folding output into the per-turn weight and then
     # multiplying by the engine's context share silently credited the engine with
     # a slice of the model's own writing, which cancelled the dilution that
     # including output is supposed to produce.
-    bill_in = [(turns[m].get("input_tokens", 0) or 0) * W_FRESH
-               + (turns[m].get("cache_creation_input_tokens", 0) or 0) * W_CACHE_WRITE
-               + (turns[m].get("cache_read_input_tokens", 0) or 0) * W_CACHE_READ
-               for m in order]
-    bill_out = [(turns[m].get("output_tokens", 0) or 0) * W_OUTPUT for m in order]
-    bill_total = sum(bill_in) + sum(bill_out)
+    if weights:
+        bill_in = [input_equiv(turns[m], weights) for m in order]
+        bill_out = [output_equiv(turns[m], weights) for m in order]
+        bill_total = sum(bill_in) + sum(bill_out)
+    else:
+        bill_in = bill_out = bill_total = None
 
     reads, by_tool, per_turn, calib = 0, {}, {}, []
     for i, mid in enumerate(order):
@@ -332,9 +351,11 @@ def profile(path, target="loop-engine.md", kinds=("load",), floor=None):
                 resident = min(resident, ctx[i])
                 share = resident / ctx[i]
                 peak_share = max(peak_share, share)
-                billable += share * bill_in[i]
+                if bill_in is not None:
+                    billable += share * bill_in[i]
             resident_turns += resident
-        models[model] = (resident_turns, billable, peak_share)
+        models[model] = (resident_turns, billable if bill_in is not None else None,
+                         peak_share)
 
     # An era mixed within one session (a re-install mid-run) is scored against
     # the WIDEST engine seen, never the average: a session that straddles a
@@ -350,8 +371,11 @@ def profile(path, target="loop-engine.md", kinds=("load",), floor=None):
         "reads": reads, "by_tool": by_tool, "kind_counts": kind_counts,
         "ingested": ingested, "calib": calib, "spills": len(spills),
         "peak_ctx": max(ctx), "processed": sum(ctx),
-        "billable_total": bill_total, "billable_in": sum(bill_in),
-        "billable_out": sum(bill_out), "output_total": sum(out), "models": models,
+        "billable_total": bill_total,
+        "billable_in": sum(bill_in) if bill_in is not None else None,
+        "billable_out": sum(bill_out) if bill_out is not None else None,
+        "output_total": sum(out), "models": models,
+        "stratum": stratum, "weights": weights, "price_refused": refused,
     }
 
 
@@ -363,10 +387,17 @@ def render(p):
     # Printed unconditionally: the directory's standing rule is that a before/after
     # naming no engine version is not interpretable.
     print(f"  engine era              {(p['era'] or 'UNKNOWN -- floor defaults to the widest known engine'):>12}{mixed}")
+    print(f"  {stratum_line(p['stratum'])}")
     print(f"  peak context            {p['peak_ctx']:>12,}")
     print(f"  no-cache input basis    {proc:>12,}")
-    print(f"  billable-equiv          {p['billable_total']:>12,.0f}   "
-          f"(input {p['billable_in']:,.0f} @1/1.25/0.1x + output {p['billable_out']:,.0f} @5x)")
+    w = p["weights"]
+    if w is None:
+        print(f"  billable-equiv          {'REFUSED':>12}   ({p['price_refused']})")
+    else:
+        # The label is derived from the weights actually applied, never typed.
+        print(f"  billable-equiv          {p['billable_total']:>12,.0f}   "
+              f"(input {p['billable_in']:,.0f} + output {p['billable_out']:,.0f}"
+              f" @{w.label()}, {p['stratum'].parent[0]})")
     kc = ", ".join(f"{k}:{v}" for k, v in sorted(p["kind_counts"].items())) or "none"
     print(f"  engine reads counted    {p['reads']:>12}   [all matches: {kc}]")
     if not ing:
@@ -387,8 +418,12 @@ def render(p):
           f"{'eng bill':>12}{'% of bill':>11}{'peak share':>12}")
     for m in ("NONE", "PROP", "FULL"):
         rt, bl, ps = p["models"][m]
+        if bl is None or not p["billable_total"]:
+            priced = f"{'REFUSED':>12}{'REFUSED':>11}"
+        else:
+            priced = f"{bl:>12,.0f}{bl/p['billable_total']:>11.1%}"
         print(f"  {m:<7}{rt:>15,.0f}{rt/ing:>7.0f}x{rt/(ing*n):>12.2f}"
-              f"{bl:>12,.0f}{bl/p['billable_total']:>11.1%}{ps:>12.1%}")
+              f"{priced}{ps:>12.1%}")
     rt = p["models"]["PROP"][0]
     # P2c, turn-invariant. THE primary acceptance metric for the sharding epic --
     # it had no read-out here at all and was being hand-derived from two other
