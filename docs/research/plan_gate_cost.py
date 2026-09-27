@@ -44,8 +44,7 @@ invocation before pooling; the run that found this bug was itself misreported th
    established in `baseline-2026-08-25.md`; the era rule is the finding filed against #135/PR #146.
    The stratum rule is #207's: every session prints a `stratum` line (`stratum.py`) naming its
    parent `(model, effort)`, and this script's output is pooled by hand, so pool only sessions
-   whose parent stratum matches and whose line does not read UNSTRATIFIED. This script prices
-   nothing, so it has no per-model weights to apply.
+   whose parent stratum matches and whose line does not read UNSTRATIFIED.
 """
 
 import collections

@@ -14,7 +14,6 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import calls_per_turn as C  # noqa: E402
-from stratum import weights_for  # noqa: E402
 
 MODEL = "claude-opus-5"
 
@@ -137,7 +136,7 @@ class TurnTests(unittest.TestCase):
                 turn("m1", [("t1", "Read", {"file_path": "/e.md"})], ctx=20000),
                 turn("m2", [("t2", "Read", {"file_path": "/e.md"})], ctx=300000)]
         r = self.analyse(recs)
-        self.assertAlmostEqual(r["page_bill"], (20000 + 300000) * weights_for(MODEL).cache_read)
+        self.assertAlmostEqual(r["page_bill"], (20000 + 300000) * 0.1)   # claude-opus-5's cache-read weight
 
     def test_run_length_is_recorded_and_k2_runs_recover_nothing(self):
         """A k=2 run contributes 1 to the theoretical collapse and 0 to what a

@@ -30,9 +30,12 @@ session that hit one unstratified, and the chance of that grows with session
 length: the exclusion would select on the outcome being measured. So a record is
 ignored for stratum determination ONLY IF its model is `<synthetic>` AND its usage
 is absent or all four token fields are zero. Ignored records are counted and
-printed, never silently dropped. A `<synthetic>` record with any nonzero usage
-makes the session UNSTRATIFIED; a session whose only records are synthetic is
-UNSTRATIFIED. The same test applies to subagent records and to pricing.
+printed, never silently dropped. In the PARENT, a `<synthetic>` record with any
+nonzero or malformed usage makes the session UNSTRATIFIED, and a session whose only
+parent records are synthetic is UNSTRATIFIED. The same ignore test applies to
+subagent records -- a non-ignorable one is recorded as a `<synthetic>@?` subagent
+stratum, which is not a grouping key -- and to pricing, where a non-ignorable one
+has no PRICING entry and refuses.
 
 Counts are **records**, never turns: one API turn is written as several records
 that repeat its usage.
@@ -100,19 +103,28 @@ def weights_for(model):
 
 
 def _num(usage, field):
+    """A token field for the synthetic test: None when present and not a number."""
     v = usage.get(field, 0) if isinstance(usage, dict) else 0
     return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
+def _tok(usage, field):
+    """A token field for PRICING. Absent or null is 0, as on `main`. Anything else is
+    used as-is, so a string or a non-dict `usage` raises rather than pricing as zero.
+    Refusing such a session by name is #212's (its AC6)."""
+    v = usage.get(field)
+    return 0 if v is None else v
+
+
 def input_equiv(usage, w):
     """Input side in fresh-input-token equivalents on this model's weights."""
-    return ((_num(usage, "input_tokens") or 0) * w.fresh
-            + (_num(usage, "cache_creation_input_tokens") or 0) * w.cache_write_5m
-            + (_num(usage, "cache_read_input_tokens") or 0) * w.cache_read)
+    return (_tok(usage, "input_tokens") * w.fresh
+            + _tok(usage, "cache_creation_input_tokens") * w.cache_write_5m
+            + _tok(usage, "cache_read_input_tokens") * w.cache_read)
 
 
 def output_equiv(usage, w):
-    return (_num(usage, "output_tokens") or 0) * w.output
+    return _tok(usage, "output_tokens") * w.output
 
 
 def usd(usage, w):
@@ -146,7 +158,7 @@ def _key_problem(model, effort):
     if not isinstance(model, str) or not model:
         return "missing model"
     if model == SYNTHETIC:
-        return "<synthetic> record with nonzero usage"
+        return "<synthetic> record with nonzero or malformed usage"
     if not _MODEL_ID.match(model):
         return "malformed model %r" % model
     if not isinstance(effort, str) or not effort:
@@ -194,7 +206,8 @@ class SessionStratum:
     version_min: str = None
     version_max: str = None
     missing_version: int = 0
-    synthetic_ignored: int = 0
+    synthetic_ignored: int = 0      # parent + subagents; the line prints both halves
+    parent_synthetic_ignored: int = 0
 
     @property
     def stratified(self):
@@ -219,6 +232,7 @@ def session_strata(parent_path):
             continue
         if is_ignorable_synthetic(rec):
             s.synthetic_ignored += 1
+            s.parent_synthetic_ignored += 1
             continue
         s.parent_records += 1
         model, effort, version = record_stratum(rec)
@@ -245,8 +259,15 @@ def session_strata(parent_path):
                 if is_ignorable_synthetic(rec):
                     s.synthetic_ignored += 1
                     continue
-                model, effort, _ = record_stratum(rec)
+                model, effort, version = record_stratum(rec)
                 s.subagents[(model, effort)] += 1
+                # AC1: version is read from subagent records too, so the printed
+                # CLI range and missing-version count cover the whole tree.
+                vk = version_key(version)
+                if vk is None:
+                    s.missing_version += 1
+                else:
+                    versions.append((vk, version))
 
     if versions:
         versions.sort()
@@ -258,7 +279,7 @@ def session_strata(parent_path):
     elif len(keys) > 1:
         s.reason = "switched mid-session: " + " -> ".join(label(k) for k in keys)
     elif not keys:
-        s.reason = ("only <synthetic> records" if s.synthetic_ignored
+        s.reason = ("only <synthetic> parent records" if s.parent_synthetic_ignored
                     else "no parent assistant record")
     else:
         s.parent = next(iter(keys))
@@ -285,8 +306,9 @@ def stratum_line(s):
     else:
         cli = "%s–%s" % (s.version_min, s.version_max)
     return ("stratum  %s · started %s · subagents %s · cli %s (+%d without version)"
-            " · %d synthetic ignored" % (head, _minute(s.started), subs or "none", cli,
-                                         s.missing_version, s.synthetic_ignored))
+            " · %d synthetic ignored (%d parent)" % (
+                head, _minute(s.started), subs or "none", cli, s.missing_version,
+                s.synthetic_ignored, s.parent_synthetic_ignored))
 
 
 def group_by_stratum(items, key):

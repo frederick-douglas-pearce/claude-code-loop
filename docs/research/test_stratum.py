@@ -7,7 +7,7 @@ scope brake. Same rationale as `test_engine_cost.py`.
 The cases pin MECHANISM: a switched session is asserted by its presence in the
 named-exclusion list with its reason, never only by a smaller n; a weight is
 asserted by the bill it produces on a fixture where the two models' weights
-disagree, never by reading the constant back.
+disagree.
 
     python3 docs/research/test_stratum.py
 """
@@ -33,9 +33,10 @@ def arec(model=M55, effort="high", version="2.1.280", mid=None, usage=None,
     msg = {"id": mid or "m%d" % id(object()), "content": content or []}
     if model is not None:
         msg["model"] = model
-    msg["usage"] = usage if usage is not None else {
-        "input_tokens": 10, "cache_read_input_tokens": 0,
-        "cache_creation_input_tokens": 0, "output_tokens": 5}
+    if usage is not False:          # usage=False omits the field entirely
+        msg["usage"] = usage if usage is not None else {
+            "input_tokens": 10, "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0, "output_tokens": 5}
     r = {"type": "assistant", "isSidechain": sidechain, "message": msg}
     if effort is not None:
         r["effort"] = effort
@@ -100,6 +101,13 @@ class ExtractorTests(Sessions, unittest.TestCase):
         self.assertIn("claude-opus-5@xhigh", s.reason)
         self.assertIn("claude-opus-5-5@medium", s.reason)
 
+    def test_a_model_change_alone_is_a_switch(self):
+        s = S.session_strata(self.session("mo", [arec(M5, "high"), arec(M55, "high")]))
+        self.assertIsNone(s.parent)
+        self.assertIn("switched mid-session", s.reason)
+        self.assertIn("claude-opus-5@high", s.reason)
+        self.assertIn("claude-opus-5-5@high", s.reason)
+
     def test_an_effort_change_alone_is_a_switch(self):
         s = S.session_strata(self.session("ef", [arec(M55, "medium"), arec(M55, "high")]))
         self.assertIn("switched mid-session", s.reason)
@@ -159,7 +167,44 @@ class ExtractorTests(Sessions, unittest.TestCase):
         self.assertEqual(s.parent_records, 1)
 
 
+ZERO = {"input_tokens": 0, "output_tokens": 0,
+        "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
+
+
 class SyntheticCarveOutTests(Sessions, unittest.TestCase):
+    def test_a_zero_usage_record_from_a_real_model_is_counted_not_ignored(self):
+        """The carve-out needs BOTH halves: model == <synthetic> AND zero usage.
+        A real model's zero- or no-usage record is a real record -- here it is the
+        record that switches, so ignoring it would hide the switch."""
+        for usage in (ZERO, False):
+            with self.subTest(usage=usage):
+                s = S.session_strata(self.session("zr", [arec(M55), arec(M5, "xhigh", usage=usage)]))
+                self.assertIsNone(s.parent)
+                self.assertIn("switched mid-session", s.reason)
+                self.assertEqual(s.synthetic_ignored, 0)
+                self.assertEqual(s.parent_records, 2)
+
+    def test_every_usage_field_counts_toward_nonzero(self):
+        for field in S.USAGE_FIELDS:
+            with self.subTest(field=field):
+                s = S.session_strata(self.session("f", [arec(), synthetic(dict(ZERO, **{field: 1}))]))
+                self.assertIsNone(s.parent)
+                self.assertEqual(s.synthetic_ignored, 0)
+
+    def test_a_malformed_usage_field_is_not_ignorable_and_says_so(self):
+        s = S.session_strata(self.session("mf", [arec(), synthetic(dict(ZERO, cache_read_input_tokens=None))]))
+        self.assertIsNone(s.parent)
+        self.assertIn("nonzero or malformed usage", s.reason)
+
+    def test_a_nonzero_synthetic_SUBAGENT_record_is_recorded_not_unstratifying(self):
+        """Ruling (2026-09-27): the parent key stands; the record is a subagent
+        stratum, which is never a grouping key. Whole-tree pricing refuses it
+        (test_tree_cost.py)."""
+        s = S.session_strata(self.session("sn", [arec()], subagents=[[synthetic(dict(ZERO, output_tokens=7))]]))
+        self.assertEqual(s.parent, (M55, "high"))
+        self.assertEqual(dict(s.subagents), {(S.SYNTHETIC, None): 1})
+        self.assertIn("<synthetic>@?×1 rec", S.stratum_line(s))
+
     def test_a_zero_usage_synthetic_record_is_ignored_and_counted(self):
         s = S.session_strata(self.session("z", [arec(), synthetic(), arec()]))
         self.assertEqual(s.parent, (M55, "high"))
@@ -181,7 +226,16 @@ class SyntheticCarveOutTests(Sessions, unittest.TestCase):
     def test_an_all_synthetic_session_is_unstratified(self):
         s = S.session_strata(self.session("all", [synthetic(), synthetic()]))
         self.assertIsNone(s.parent)
-        self.assertIn("only <synthetic>", s.reason)
+        self.assertIn("only <synthetic> parent records", s.reason)
+
+    def test_the_only_synthetic_reason_counts_parent_records_alone(self):
+        """A parent with no assistant record and a synthetic SUBAGENT record: the
+        reason must not claim the parent's records were synthetic."""
+        user = {"type": "user", "timestamp": "2026-09-27T08:00:00Z", "message": {}}
+        s = S.session_strata(self.session("np", [user], subagents=[[synthetic()]]))
+        self.assertEqual(s.reason, "no parent assistant record")
+        self.assertEqual((s.synthetic_ignored, s.parent_synthetic_ignored), (1, 0))
+        self.assertIn("1 synthetic ignored (0 parent)", S.stratum_line(s))
 
     def test_the_carve_out_applies_to_subagent_records(self):
         s = S.session_strata(self.session("sub", [arec()], subagents=[[synthetic(), arec(M48, "xhigh")]]))
@@ -195,6 +249,12 @@ class VersionAndStartTests(Sessions, unittest.TestCase):
                                                 arec(version="2.1.283")]))
         self.assertEqual((s.version_min, s.version_max), ("2.1.99", "2.1.283"))
         self.assertIn("cli 2.1.99–2.1.283", S.stratum_line(s))
+
+    def test_subagent_versions_enter_the_cli_range(self):
+        s = S.session_strata(self.session("sv", [arec(version="2.1.280")],
+                                          subagents=[[arec(version="2.1.300"), arec(version=None)]]))
+        self.assertEqual((s.version_min, s.version_max), ("2.1.280", "2.1.300"))
+        self.assertEqual(s.missing_version, 1)
 
     def test_a_record_with_no_version_is_counted_not_dropped(self):
         s = S.session_strata(self.session("nv", [arec(), arec(version=None)]))
@@ -238,6 +298,16 @@ class PricingTests(unittest.TestCase):
             with self.subTest(m=m):
                 with self.assertRaises(S.UnknownModel):
                     S.weights_for(m)
+
+    def test_a_present_non_numeric_token_field_never_prices_as_zero(self):
+        """Absent or null is 0, as on main; anything else raises. #212 owns turning
+        this into a named refusal."""
+        w = S.weights_for(M5)
+        self.assertEqual(S.usd({"input_tokens": None}, w), 0.0)
+        for bad in ({"input_tokens": "1000000"}, [1, 2]):
+            with self.subTest(bad=bad):
+                with self.assertRaises((TypeError, AttributeError)):
+                    S.usd(bad, w)
 
     def test_usd_uses_the_models_own_base_price(self):
         one_m = {"input_tokens": 1_000_000}
@@ -365,6 +435,31 @@ class CallsPerTurnWiringTests(Sessions, unittest.TestCase):
                      content=[{"type": "tool_use", "id": "u%d" % i, "name": "Read",
                                "input": {"file_path": "/f.md"}}]) for i in range(n)]
 
+    def test_the_input_bill_uses_the_parent_models_weights(self):
+        def paging(model):
+            return [arec(model, "high", mid="c%d" % i, usage={"cache_read_input_tokens": ctx},
+                         content=[{"type": "tool_use", "id": "u%d" % i, "name": "Read",
+                                   "input": {"file_path": "/e.md"}}])
+                    for i, ctx in enumerate((10000, 20000, 300000))]
+        r55 = self.C.analyse(self.session("a", paging(M55)))
+        r5 = self.C.analyse(self.session("b", paging(M5)))
+        self.assertAlmostEqual(r55["page_bill"], 16000.0)    # (20k + 300k) x 0.05
+        self.assertAlmostEqual(r5["page_bill"], 32000.0)     # (20k + 300k) x 0.1
+
+    def test_every_session_prints_its_full_stratum_line(self):
+        a = self.session("aaaaaaaa", self.turns(M55, "high", 3),
+                         subagents=[[arec(M48, "xhigh")]])
+        c = self.session("cccccccc", self.turns(M55, None, 2))
+        out = run(self.C.main, ["c", a, c])
+        for p in (a, c):
+            self.assertIn(S.stratum_line(S.session_strata(p)), out)
+
+    def test_non_numeric_usage_is_not_priced_as_zero(self):
+        recs = self.turns(M55, "high", 2)
+        recs[1]["message"]["usage"] = {"cache_read_input_tokens": "9000"}
+        with self.assertRaises(TypeError):
+            self.C.analyse(self.session("bad", recs))
+
     def test_corpus_totals_are_per_stratum(self):
         a = self.session("aaaaaaaa", self.turns(M55, "high", 3))
         b = self.session("bbbbbbbb", self.turns(M5, "xhigh", 2))
@@ -386,7 +481,8 @@ class CallsPerTurnWiringTests(Sessions, unittest.TestCase):
 
     def test_the_naive_figure_names_the_model_it_was_fitted_on(self):
         a = self.session("aaaaaaaa", self.turns(M55, "high", 3))
-        self.assertIn("fitted on claude-opus-5;", run(self.C.main, ["c", a]))
+        self.assertIn("Finding 10, claude-opus-5 @xhigh+@high, n=8; spans a stratum",
+                      run(self.C.main, ["c", a]))
 
 
 class PlanGateCostWiringTests(Sessions, unittest.TestCase):

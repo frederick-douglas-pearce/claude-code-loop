@@ -253,9 +253,10 @@ def report_stratum(key, rows):
               f"   ({MB/n:>9,.0f}/session)")
         print(f"    floor   (paging only)    {PB:>12,.0f} tok  = {PB/TB:>5.1%} of input bill"
               f"   ({PB/n:>9,.0f}/session)")
-        # ~33k/turn is Finding 10's figure, fitted on claude-opus-5 only.
-        print(f"    naive avg-priced ceiling {Mp*33000:>12,.0f} tok  (33k/turn, fitted on "
-              f"claude-opus-5; re-measure per stratum)"
+        # ~33k/turn is Finding 10's figure: claude-opus-5, n=8, pooled across
+        # @xhigh x6 and @high x2 -- so it spans an effort stratum itself.
+        print(f"    naive avg-priced ceiling {Mp*33000:>12,.0f} tok  (33k/turn: Finding 10, "
+              f"claude-opus-5 @xhigh+@high, n=8; spans a stratum -- re-measure per stratum)"
               + (f"  <- overstates by {Mp*33000/MB:.1f}x" if MB else ""))
     h = Counter(allruns)
     print(f"\n  paging run lengths: " + ", ".join(f"k={k}x{h[k]}" for k in sorted(h)))

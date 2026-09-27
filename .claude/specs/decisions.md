@@ -609,9 +609,15 @@ comment.
    cannot tell, it is. **Pricing is separate:** a model with no `PRICING` entry refuses to price and
    never falls back to a default weight — but it is still stratified.
 2. **A `<synthetic>` record is ignored for stratum determination only if its usage is absent or all
-   four token fields are zero.** It is counted and printed, never silently dropped. A `<synthetic>`
-   record with nonzero usage makes the session unstratified; a session whose only records are
-   synthetic is unstratified. The same test applies to subagent records and to pricing.
+   four token fields are zero.** It is counted and printed, never silently dropped. In the parent, a
+   `<synthetic>` record with nonzero or malformed usage makes the session unstratified, and a session
+   whose only parent records are synthetic is unstratified. **The same ignore test applies to
+   subagent records**: a non-ignorable one is recorded as a `<synthetic>@?` subagent stratum, which
+   is not a grouping key, so it does not unstratify the session. It applies to pricing too, where a
+   non-ignorable record has no `PRICING` entry and refuses — so whole-tree pricing fails closed on
+   it. *(This reading of "the same rule applies to subagent records" was confirmed by the human on
+   2026-09-27, after code review; no nonzero-usage `<synthetic>` record exists in any transcript on
+   disk at that date.)*
 
 ### Why
 

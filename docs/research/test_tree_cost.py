@@ -94,6 +94,20 @@ class TreeCostTests(unittest.TestCase):
         self.assertRegex(out, r"EXCLUDED aaaaaaaa: UNSTRATIFIED: switched mid-session")
         self.assertNotIn("### stratum", out)
 
+    def test_a_nonzero_usage_synthetic_subagent_record_refuses_the_session(self):
+        syn = {"type": "assistant", "message": {"model": "<synthetic>", "usage": dict(ONE_M)}}
+        self.session("aaaaaaaa", [rec(M55)], [[rec(M55), syn]])
+        rows, refused = T.survey(self.root)
+        self.assertEqual(rows, [])
+        self.assertEqual(refused[0][0], "aaaaaaaa")
+        self.assertIn("<synthetic>", refused[0][2])
+
+    def test_a_non_numeric_token_field_is_never_priced_as_zero(self):
+        bad = rec(M55, usage={"input_tokens": "1000000"})
+        self.session("aaaaaaaa", [rec(M55), bad], [[rec(M55)]])
+        with self.assertRaises(TypeError):
+            T.survey(self.root)
+
     def test_a_zero_usage_synthetic_record_is_skipped_not_refused(self):
         syn = {"type": "assistant", "message": {"model": "<synthetic>", "usage": {
             "input_tokens": 0, "output_tokens": 0, "cache_creation_input_tokens": 0,
