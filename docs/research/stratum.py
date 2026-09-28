@@ -110,7 +110,7 @@ def _is_count(v):
 
 def _num(usage, field):
     """A token field for the synthetic test: 0 when absent, None when malformed."""
-    v = usage.get(field, 0) if isinstance(usage, dict) else 0
+    v = usage.get(field, 0)
     return v if _is_count(v) else None
 
 

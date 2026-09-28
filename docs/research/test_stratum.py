@@ -194,6 +194,13 @@ class SyntheticCarveOutTests(Sessions, unittest.TestCase):
                 self.assertIsNone(s.parent)
                 self.assertEqual(s.synthetic_ignored, 0)
 
+    def test_a_bool_usage_field_is_not_ignorable(self):
+        """Pins the synthetic side of the one shared well-formedness predicate: a
+        bool is malformed here exactly as it is in pricing."""
+        s = S.session_strata(self.session("bo", [arec(), synthetic(dict(ZERO, output_tokens=False))]))
+        self.assertIsNone(s.parent)
+        self.assertEqual(s.synthetic_ignored, 0)
+
     def test_a_malformed_usage_field_is_not_ignorable_and_says_so(self):
         s = S.session_strata(self.session("mf", [arec(), synthetic(dict(ZERO, cache_read_input_tokens=None))]))
         self.assertIsNone(s.parent)
