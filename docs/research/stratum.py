@@ -76,7 +76,7 @@ class Weights:
     cache_write_5m: float
     cache_read: float
     output: float
-    cache_write_1h: float = 2.0
+    cache_write_1h: float        # no default: an entry that omits it fails at import
 
     def label(self):
         """The ratio label a report prints -- derived, so it cannot drift."""
@@ -153,8 +153,7 @@ CACHE_TIERS = ("ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens")
 
 def check_shape(usage):
     """Refuse (`Unpriceable`) a usage whose token fields cannot be read: not a dict,
-    or a present token field that is not a count (#212/AC6). Run on EVERY line of a
-    turn by `turns`, because the winner is chosen by comparing `output_tokens`."""
+    or a present token field that is not a count (#212/AC6). Part of `check_priceable`."""
     if not isinstance(usage, dict):
         raise Unpriceable("usage is not a dict: %r" % (usage,))
     for f in USAGE_FIELDS:
@@ -212,8 +211,11 @@ def check_levers(usage):
 
 
 def check_priceable(usage):
-    """Everything a usage must pass before it is priced. `input_equiv`, `output_equiv`
-    and `usd` call it themselves, so no caller can price around it."""
+    """Everything a usage must pass before it is counted or priced. `turns` runs it on
+    every line that survives the exclusions, and `input_equiv` and `output_equiv` run
+    it again themselves (`usd` reaches it through them), so no caller can count or
+    price around it. One predicate, so what a script counts and what it prices can
+    never disagree about which usages are readable."""
     check_shape(usage)
     if not any(f in usage for f in USAGE_FIELDS):
         raise Unpriceable("usage carries no token field: %r" % (usage,))
@@ -283,8 +285,9 @@ def turns(records):
       * `isApiErrorMessage` lines and ignorable `<synthetic>` lines are excluded and
         counted (AC4). `toolUseResult.usage` and `usage.iterations` are never read.
 
-    Every surviving line's usage is shape-checked (`check_shape`), including a line
-    that loses the comparison. `index` is the position in `records`, so a caller that
+    Every surviving line's usage must pass `check_priceable` -- a readable dict with
+    at least one token field and no pricing lever -- including a line that loses the
+    comparison; the exclusions run first. `index` is the position in `records`, so a caller that
     walks the same sequence can find each line's turn with `turn_key(rec, index)`."""
     counts = TurnCounts()
     by_key, order = {}, []
@@ -301,7 +304,10 @@ def turns(records):
         msg = rec.get("message") or {}
         if "usage" not in msg:
             raise Unpriceable("assistant line %d has no usage" % i)
-        check_shape(msg["usage"])
+        try:
+            check_priceable(msg["usage"])
+        except Unpriceable as exc:
+            raise Unpriceable("assistant line %d: %s" % (i, exc)) from None
         key = turn_key(rec, i)
         if not isinstance(key, str):
             counts.no_id += 1

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Whole-tree cost: parent transcript + its subagent transcripts, priced together.
 
-SCOUTING SCRIPT — no hand-checked sample. `test_tree_cost.py` covers only the
-stratification and per-model pricing added by #207, not the billing arithmetic.
+SCOUTING SCRIPT — no hand-checked sample.
 Every other script in this directory earned its tests by publishing a wrong number
 first (see the README's six detection bugs). Output here motivates a build order; it
 is not a finding, and nothing from it should be cited until it has been through the
@@ -97,7 +96,7 @@ def survey(root, counts=None):
             refused.append((name, stratum, why))
             continue
         if counts is not None:
-            seen, cross = {}, 0
+            seen = {}
             for f in files:
                 for key in {t.key for t in f.turns if isinstance(t.key, str)}:
                     seen[key] = seen.get(key, 0) + 1

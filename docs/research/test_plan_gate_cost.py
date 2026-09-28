@@ -404,9 +404,52 @@ class SpecDedupeTests(unittest.TestCase):
         self.assertEqual(r["resident_at_plan_gate"], 150_000)
 
     def test_the_max_output_line_supplies_the_turns_output(self):
+        """The max line is in the MIDDLE, so a last-line read gives 3, a first-line 1."""
         r = self.run_on(pgc.analyze, turn_line("t1", 100_000, 1), turn_line("t1", 100_000, 50),
-                        turn_line("t2", 200_000, 0, [PLAN_WRITE]))
+                        turn_line("t1", 100_000, 3), turn_line("t2", 200_000, 0, [PLAN_WRITE]))
         self.assertEqual(r["model_output"], 50)
+
+    def test_the_merged_zero_context_turn_sits_before_its_own_result(self):
+        """Skipping before the merge would place t2 at its SECOND line, after the
+        result for its own plan Write."""
+        _, events = self.run_on(pgc._timeline, turn_line("t1", 100_000, 5),
+                                turn_line("t2", 0, 0, [PLAN_WRITE]), results(("plan", 10)),
+                                turn_line("t2", 150_000, 700))
+        kinds = [(e[0], e[5] if e[0] == "assistant" else e[1]) for e in events]
+        self.assertLess(kinds.index(("assistant", "t2")), kinds.index(("result", "plan")))
+
+    def test_growth_with_no_pending_result_is_its_own_bucket_never_dropped(self):
+        """A text-only turn, then the user's prompt: +6,240 with nothing pending. Dropped,
+        it made over_attribution negative (-6,240)."""
+        prompt = {"type": "user", "message": {"content": "please continue"}}
+        r = self.run_on(pgc.analyze, turn_line("t1", 100_000, 50), prompt,
+                        turn_line("t2", 106_290, 0, [PLAN_WRITE]))
+        self.assertEqual(r["by_source"][pgc.USER_OTHER], 6_240)
+        self.assertEqual(r["over_attribution"], 0)
+
+    def test_an_empty_usage_refuses_rather_than_counting_as_zero_context(self):
+        bad = turn_line("t2", 0, 0, [PLAN_WRITE])
+        bad["message"]["usage"] = {}
+        path = transcript(turn_line("t1", 100_000, 5), bad)
+        try:
+            with self.assertRaisesRegex(pgc.Unpriced, "no token field"):
+                pgc.analyze(path)
+        finally:
+            os.unlink(path)
+
+    def test_an_all_refused_set_never_reads_as_no_plan_gate(self):
+        bad = turn_line("t1", 100_000, 5, [PLAN_WRITE])
+        bad["message"]["usage"]["output_tokens"] = None
+        path = transcript(bad)
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = pgc.main([path])
+        finally:
+            os.unlink(path)
+        self.assertIn("1 session(s) REFUSED", buf.getvalue())
+        self.assertNotIn("No session in this set reached a plan gate", buf.getvalue())
+        self.assertEqual(rc, 1)
 
     def test_no_id_and_api_error_lines_are_counted_and_errors_are_not_turns(self):
         r = self.run_on(pgc.analyze, assistant(100_000, 5), assistant(100_000, 5),

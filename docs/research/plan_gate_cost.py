@@ -30,7 +30,7 @@ by the cost spec's dedupe (#212, `stratum.turns`), globally rather than only whe
 turn sits at its FIRST entry's position, carries every entry's calls and output blocks, and
 takes its context and output from the max-`output_tokens` entry. A zero-context turn is skipped
 only AFTER the merge, so a zero-context entry's calls (a plan-file `Write` among them) still
-count. An entry with no id is its own turn; API-error and ignorable `<synthetic>` entries are
+count when another entry of the same turn carries context. An entry with no id is its own turn; API-error and ignorable `<synthetic>` entries are
 not turns. Both are counted and printed. A session whose usage cannot be read is refused by name.
 
 **The anchor is a pattern, so it can false-positive.** Any session whose transcript merely
@@ -42,7 +42,9 @@ invocation before pooling; the run that found this bug was itself misreported th
 
 1. `model output` is an **upper bound**. Thinking blocks are stripped from later turns, so not
    all of it stays resident. `arrivals` therefore exceeds the resident context, and the printed
-   `over_attribution` is that gap — read it as the instrument's own error bar.
+   `over_attribution` is that gap — read it as the instrument's own error bar. It holds because
+   every step's growth is claimed: growth with no tool result pending (a user prompt, most often)
+   is its own `user/other input` bucket, so each step adds `max(prior output - growth, 0) >= 0`.
 2. A **compaction** before the anchor invalidates the run: growth is summed, so an eviction makes
    arrivals count bytes twice. Compactions are detected and reported; a session with any is
    flagged rather than silently averaged in.
@@ -66,6 +68,9 @@ from stratum import Unpriced, _tok, session_strata, stratum_line, turn_key, \
 #: A context drop larger than this between consecutive assistant turns is a compaction,
 #: not ordinary accounting jitter.
 COMPACTION_DROP_TOKENS = 5_000
+
+#: The bucket for context growth that arrives with no tool result pending.
+USER_OTHER = "user/other input"
 
 _LEDGER_FILE = re.compile(r"(queue|progress)\.md|\.plan\.md")
 _LEDGER_PATH = re.compile(r"loop/v?[\d.]+/(queue|progress)")
@@ -304,6 +309,10 @@ def analyze(path):
                     compactions.append(previous[1] - event[1])
                 model_output += previous[2]
                 arrivals = max(delta - previous[2], 0)
+                if arrivals and not pending:
+                    # Growth no tool result claims -- a user prompt after a text-only turn,
+                    # most often. Unclaimed, it made over_attribution negative (#212).
+                    by_source[USER_OTHER] += arrivals
                 if pending and arrivals:
                     sizes = [item[2] for item in pending]
                     total = sum(sizes)
@@ -376,8 +385,7 @@ def _report(result):
     for label, value in blocks.most_common():
         print("      %9s  %5.1f%%  %s" % (format(value, ","), 100 * value / max(persisted, 1), label))
     print("      (thinking blocks are stored as an empty placeholder plus a signature, so this"
-          "\n       counts what the transcript RETAINS, never what the turn produced. With"
-          "\n       over-attribution near zero the whole output bucket is resident — do not read"
+          "\n       counts what the transcript RETAINS, never what the turn produced — do not read"
           "\n       the gap between these two figures as eviction.)")
     if result["issue"]:
         sel, gate = result["selection_resident_turns"], result["gate_resident_turns"]
@@ -396,20 +404,26 @@ def main(argv):
     if not argv:
         print(__doc__)
         return 2
-    seen = 0
+    seen = refused = 0
     for path in argv:
         try:
             result = analyze(path)
         except Unpriced as exc:
             print("\n=== %s: REFUSED -- %s" % (os.path.basename(path)[:8], exc))
+            refused += 1
             continue
         if result is None:
             print("\n=== %s: no plan-file write — not a plan-writing session" % os.path.basename(path)[:8])
             continue
         _report(result)
         seen += 1
+    if refused:
+        # A refused session may have reached a plan gate; nothing here can say.
+        print("\n%d session(s) REFUSED, unmeasured -- not evidence of no plan gate." % refused)
     if not seen:
-        print("\nNo session in this set reached a plan gate.")
+        print("\nNo readable session in this set reached a plan gate." if refused
+              else "\nNo session in this set reached a plan gate.")
+        return 1 if refused else 0
     return 0
 
 

@@ -267,6 +267,7 @@ def profile(path, target="loop-engine.md", kinds=("load",), floor=None):
     records = [r for r in load(path) if isinstance(r, dict) and not r.get("isSidechain")]
     ts, counts = turns(records)          # raises Unpriced on unreadable usage (#212/AC6)
     known = {t.key for t in ts}
+    placed = set()
 
     for i, rec in enumerate(records):
         if rec.get("isCompactSummary"):
@@ -278,9 +279,16 @@ def profile(path, target="loop-engine.md", kinds=("load",), floor=None):
             for b in blocks(rec):
                 if isinstance(b, dict) and b.get("type") == "tool_use":
                     tools[b.get("id")] = (b.get("name", "?"), b.get("input"))
-            if pending:
-                arrivals.setdefault(key, []).extend(pending)
-                pending = []
+            # A tool result first enters the input of the NEXT API call. One call is
+            # written as several lines, and a parallel call's result can land between
+            # two of them -- so hand pending results only to a call's FIRST line, never
+            # to a later line of the call that issued them (#212; the placement
+            # plan_gate_cost uses, so the two tools agree).
+            if key not in placed:
+                placed.add(key)
+                if pending:
+                    arrivals[key] = pending
+                    pending = []
         elif rec.get("type") == "user":
             for b in blocks(rec):
                 if not (isinstance(b, dict) and b.get("type") == "tool_result"):

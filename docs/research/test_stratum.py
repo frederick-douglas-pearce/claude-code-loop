@@ -490,7 +490,12 @@ class LeverTests(unittest.TestCase):
                       {"server_tool_use": {"web_search_requests": 1}},
                       {"server_tool_use": {"web_fetch_requests": 2}},
                       {"server_tool_use": {"web_search_requests": None}},
-                      {"server_tool_use": [1]}):
+                      {"server_tool_use": [1]},
+                      # Values no denylist would name: the check is an allowlist.
+                      {"speed": "zz-unknown"}, {"service_tier": "zz-unknown"},
+                      {"inference_geo": "zz-unknown"},
+                      {"server_tool_use": {"code_execution_requests": 1}},
+                      {"server_tool_use": {"web_search_requests": True}}):
             with self.subTest(extra=extra):
                 with self.assertRaises(S.Unpriceable):
                     S.usd(dict(ONE_M_IN, **extra), S.weights_for(M5))
@@ -524,11 +529,32 @@ class UsageShapeTests(unittest.TestCase):
         with self.assertRaisesRegex(S.Unpriceable, "input_tokens"):
             S.turns([good, bad])
 
-    def test_an_empty_usage_refuses_at_pricing_not_as_zero(self):
-        ts, _ = S.turns([line("t", {})])
-        self.assertEqual(len(ts), 1)
-        with self.assertRaises(S.Unpriceable):
-            S.price_records([line("t", {})])
+    def test_a_usage_with_no_token_field_refuses_when_counted_not_only_when_priced(self):
+        """`{}` and a dict of non-token keys refuse in `turns` itself, so a script that
+        prices nothing (plan_gate_cost) cannot take one as a zero-context turn."""
+        for bad in ({}, {"service_tier": "standard"}):
+            with self.subTest(bad=bad):
+                with self.assertRaisesRegex(S.Unpriceable, "no token field"):
+                    S.turns([line("t", bad)])
+                with self.assertRaises(S.Unpriceable):
+                    S.usd(bad, S.weights_for(M5))
+
+    def test_a_lever_on_a_losing_line_still_refuses(self):
+        good = line("t", dict(ONE_M_IN, output_tokens=9))
+        fast = line("t", dict(ONE_M_IN, output_tokens=1, speed="fast"))
+        with self.assertRaisesRegex(S.Unpriceable, "speed"):
+            S.turns([good, fast])
+
+    def test_the_exclusions_run_before_the_usage_checks(self):
+        """A usage-less synthetic or API-error line is excluded, never refused: the
+        order is what keeps #207's carve-out reachable."""
+        err_absent = line("e", ONE_M_IN, isApiErrorMessage=True)
+        del err_absent["message"]["usage"]
+        err_bad = line("f", [1], isApiErrorMessage=True)
+        ts, counts = S.turns([synthetic(usage=False), err_absent, err_bad,
+                              line("t", ONE_M_IN)])
+        self.assertEqual([t.key for t in ts], ["t"])
+        self.assertEqual((counts.synthetic, counts.api_error), (1, 2))
 
     def test_every_refusal_is_one_family(self):
         self.assertTrue(issubclass(S.UnknownModel, S.Unpriced))
@@ -659,7 +685,10 @@ class EngineCostSpecTests(Sessions, unittest.TestCase):
         last = recs[-1]
         low = json.loads(json.dumps(last))
         low["message"]["usage"]["output_tokens"] = 1
-        recs[-1:] = [low, last]                # same id "e1": output 1, then 5
+        low2 = json.loads(json.dumps(low))
+        low2["message"]["usage"]["output_tokens"] = 3
+        low2["message"]["usage"]["input_tokens"] = 1        # a last-line read would show
+        recs[-1:] = [low, last, low2]           # same id "e1": output 1, 5, 3 -- max is NOT last
         p = self.E.profile(self.session("s", recs))
         self.assertEqual(p["turns"], 2)
         self.assertAlmostEqual(p["billable_total"], 100_025 + 2_000 * 0.1 + 50)
@@ -702,6 +731,37 @@ class EngineCostSpecTests(Sessions, unittest.TestCase):
         out = run(rounds_vs_turns.main, ["r", good, bad])
         self.assertIn("EXCLUDED badbadba: refused", out)
         self.assertIn("n = 1 sessions (1 priced)", out)
+        self.assertIn("(no_id=0 api_error=0)", out)
+
+    def test_a_result_landing_mid_call_is_credited_to_the_next_call(self):
+        """t1's engine result is written BETWEEN two lines of call m1 (parallel calls).
+        It first enters m2's input, so m2's 50,000-token growth is split between the
+        engine (600 chars) and the other read (400 chars): ~30,000 each tool. Handing
+        it to m1's second line credited it to m1's growth instead -- and made
+        engine_cost disagree with plan_gate_cost on the same session."""
+        import plan_gate_cost as pgc
+        other = {"type": "tool_use", "id": "t2", "name": "Read", "input": {"file_path": "/r/x.md"}}
+        plan = {"type": "tool_use", "id": "p", "name": "Write",
+                "input": {"file_path": "/r/.claude/loop/v0.3.1/issue-4.plan.md"}}
+        u = {"input_tokens": 10_000, "cache_read_input_tokens": 0,
+             "cache_creation_input_tokens": 0, "output_tokens": 10}
+        recs = [
+            arec(M55, "high", mid="m1", usage=dict(u), content=[
+                {"type": "tool_use", "id": "t1", "name": "Read", "input": {"file_path": ENG}}]),
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "t1", "content": "e" * 600}]}},
+            arec(M55, "high", mid="m1", usage=dict(u), content=[other]),
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "t2", "content": "o" * 400}]}},
+            arec(M55, "high", mid="m2", usage=dict(u, input_tokens=10_000 + 10 + 50_000),
+                 content=[plan]),
+        ]
+        path = self.session("mid", recs)
+        p = self.E.profile(path)
+        engine_pgc = pgc.analyze(path)["by_source"]["ENGINE read (installed)"]
+        self.assertAlmostEqual(p["ingested"], 30_000, delta=100)
+        self.assertAlmostEqual(engine_pgc, 30_000, delta=100)
+        self.assertAlmostEqual(p["ingested"], engine_pgc, delta=100)
 
 
 def budget_session(model, effort, rounds, turns):

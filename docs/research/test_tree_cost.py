@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Fixture tests for `tree_cost.py`: per-stratum grouping and per-turn, per-model
-pricing summed in US dollars (#207), and the spec's billing arithmetic -- the
+"""Fixture tests for `tree_cost.py`: per-stratum grouping and per-model pricing
+summed in US dollars (#207), and the spec's billing arithmetic -- the
 `message.id` dedupe and named refusals (#212). The arithmetic itself is pinned in
 `test_stratum.py`; this file pins that `tree_cost` routes through it.
 
@@ -125,7 +125,9 @@ class TreeCostTests(unittest.TestCase):
         self.session("aaaaaaaa", [rec(M55)], [streamed])
         (name, turns, parent_usd, n_subs, sub_usd, _), = T.survey(self.root)[0]
         self.assertAlmostEqual(sub_usd, 5.0)
-        self.assertEqual(turns, 1)
+        priced, _ = T.bill(self.root / "aaaaaaaa" / "subagents" / "a0.jsonl")
+        self.assertEqual(len(priced.turns), 1)          # the SUBAGENT's three lines, one turn
+        self.assertEqual(priced.counts.lines, 3)
 
     def test_an_opus_parent_and_a_newly_priced_subagent_sum_in_usd(self):
         """AC10: the parent on claude-opus-5-5 ($4/M input), the subagent on

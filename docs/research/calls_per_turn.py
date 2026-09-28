@@ -230,6 +230,16 @@ def main(argv):
     return 0
 
 
+def naive_verdict(naive, priced):
+    """Which way the naive average-priced figure misses the per-turn one. The word is
+    chosen by the ratio, never fixed: once 1-hour writes price at 2x (#212) the
+    naive figure can land on either side."""
+    ratio = naive / priced
+    if ratio >= 1:
+        return "overstates by %.1fx" % ratio
+    return "understates by %.1fx" % (1 / ratio)
+
+
 def report_stratum(key, rows):
     """Corpus totals within ONE parent stratum."""
     print(f"\n### stratum {label(key)}")
@@ -272,7 +282,7 @@ def report_stratum(key, rows):
         # @xhigh x6 and @high x2 -- so it spans an effort stratum itself.
         print(f"    naive avg-priced ceiling {Mp*33000:>12,.0f} tok  (33k/turn: Finding 10, "
               f"claude-opus-5 @xhigh+@high, n=8; spans a stratum -- re-measure per stratum)"
-              + (f"  <- overstates by {Mp*33000/MB:.1f}x" if MB else ""))
+              + ("  <- " + naive_verdict(Mp * 33000, MB) if MB else ""))
     h = Counter(allruns)
     print(f"\n  paging run lengths: " + ", ".join(f"k={k}x{h[k]}" for k in sorted(h)))
     print(f"  theoretical collapse (k-1): {P:,} turns")

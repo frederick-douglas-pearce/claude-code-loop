@@ -19,9 +19,10 @@ session that closed zero issues is excluded rather than counted as zero.
 **Every correlation and fit runs once per parent stratum** (`stratum.py`): a
 before/after pooled across a model or effort change credits the treatment with
 it (#207). An unstratified session is excluded from every statistic and named with
-its reason. A session that REFUSED to price (its model has no PRICING entry) is
-excluded only from the bill-based statistics, named, and kept in the turns-based
-ones, which need no price.
+its reason. A session that REFUSED to price is excluded only from the bill-based
+statistics, named with its reason, and kept in the turns-based ones, which need no
+price. A session whose usage cannot be read at all is excluded from every statistic
+and named (#212). Each session line reports its `no_id` count.
 
 Stdlib only.
 """
@@ -143,12 +144,14 @@ def main(argv):
             "bpi": (prof["billable_total"] / issues
                     if prof["billable_total"] is not None else None),
             "stratum": prof["stratum"], "price_refused": prof["price_refused"],
+            "no_id": prof["no_id"], "api_error": prof["api_error"],
         })
     if not rows:
         print("no sessions with parseable Budget lines")
         return 1
     for r in rows:
-        print(f"{r['s']:<10}{stratum_line(r['stratum'])}")
+        print(f"{r['s']:<10}{stratum_line(r['stratum'])}"
+              f"  (no_id={r['no_id']} api_error={r['api_error']})")
     groups, excluded = group_by_stratum(rows, key=lambda r: r["stratum"])
     for r, why in excluded:
         print(f"  EXCLUDED {r['s']}: {why}")
