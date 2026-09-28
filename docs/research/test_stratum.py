@@ -13,6 +13,7 @@ cache-read weight also on a fixture where two models' weights disagree.
 """
 import contextlib
 import io
+import itertools
 import json
 import os
 import shutil
@@ -26,11 +27,15 @@ import stratum as S  # noqa: E402
 M55, M5, M48 = "claude-opus-5-5", "claude-opus-5", "claude-opus-4-8"
 UNPRICED = "claude-opus-9"     # well-formed, no PRICING entry
 
+# A counter, never `id(object())`: CPython reuses a discarded object's id, so that
+# default gave distinct records one `message.id`, which a dedupe then merges.
+_IDS = itertools.count()
+
 
 def arec(model=M55, effort="high", version="2.1.280", mid=None, usage=None,
          sidechain=False, ts=None, content=None):
     """One assistant record. `model=None` / `effort=None` omit the field."""
-    msg = {"id": mid or "m%d" % id(object()), "content": content or []}
+    msg = {"id": mid or "m%d" % next(_IDS), "content": content or []}
     if model is not None:
         msg["model"] = model
     if usage is not False:          # usage=False omits the field entirely

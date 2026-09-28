@@ -12,6 +12,7 @@ scope brake. Same rationale as `test_engine_cost.py`.
 """
 import contextlib
 import io
+import itertools
 import json
 import os
 import pathlib
@@ -28,9 +29,14 @@ ONE_M = {"input_tokens": 1_000_000, "output_tokens": 0,
          "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
 
 
+_IDS = itertools.count()
+
+
 def rec(model, effort="high", usage=None):
+    """Each call is its own API turn: a distinct `message.id`, so a dedupe never
+    merges two fixture records that a test means to be two turns."""
     return {"type": "assistant", "effort": effort, "version": "2.1.280",
-            "message": {"id": "x", "model": model, "content": [],
+            "message": {"id": "x%d" % next(_IDS), "model": model, "content": [],
                         "usage": usage if usage is not None else ONE_M}}
 
 
