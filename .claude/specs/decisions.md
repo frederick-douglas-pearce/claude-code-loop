@@ -616,8 +616,7 @@ comment.
    is not a grouping key, so it does not unstratify the session. It applies to pricing too, where a
    non-ignorable record has no `PRICING` entry and refuses — so whole-tree pricing fails closed on
    it. *(This reading of "the same rule applies to subagent records" was confirmed by the human on
-   2026-09-27, after code review; no nonzero-usage `<synthetic>` record exists in any transcript on
-   disk at that date.)*
+   2026-09-27, after code review.)*
 
 ### Why
 

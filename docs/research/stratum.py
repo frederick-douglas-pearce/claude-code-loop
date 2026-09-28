@@ -102,18 +102,33 @@ def weights_for(model):
         raise UnknownModel("no PRICING entry for model %r" % (model,)) from None
 
 
+def _is_count(v):
+    """The one definition of a well-formed token field: an int or float, never a
+    bool. `null`, strings and everything else are malformed."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
 def _num(usage, field):
-    """A token field for the synthetic test: None when present and not a number."""
+    """A token field for the synthetic test: 0 when absent, None when malformed."""
     v = usage.get(field, 0) if isinstance(usage, dict) else 0
-    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+    return v if _is_count(v) else None
 
 
 def _tok(usage, field):
-    """A token field for PRICING. Absent or null is 0, as on `main`. Anything else is
-    used as-is, so a string or a non-dict `usage` raises rather than pricing as zero.
-    Refusing such a session by name is #212's (its AC6)."""
-    v = usage.get(field)
-    return 0 if v is None else v
+    """A token field for PRICING. An ABSENT field is 0; whether it should be is #212's
+    call. A present malformed field -- `null` included -- or a non-dict `usage` raises
+    TypeError rather than pricing as zero. Refusing such a session by name is #212's
+    (its AC6). (On `main` the scripts disagreed: two priced `null` as 0, `tree_cost`
+    raised. One shared function has to pick one answer, and this is the one that adds
+    no $0 path.)"""
+    if not isinstance(usage, dict):
+        raise TypeError("usage is not a dict: %r" % (usage,))
+    if field not in usage:
+        return 0
+    v = usage[field]
+    if not _is_count(v):
+        raise TypeError("malformed token field %s=%r" % (field, v))
+    return v
 
 
 def input_equiv(usage, w):

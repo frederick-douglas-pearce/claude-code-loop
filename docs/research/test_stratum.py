@@ -5,9 +5,9 @@ NOT part of the shipped suite -- under `docs/research/`, not `tests/`, per the
 scope brake. Same rationale as `test_engine_cost.py`.
 
 The cases pin MECHANISM: a switched session is asserted by its presence in the
-named-exclusion list with its reason, never only by a smaller n; a weight is
-asserted by the bill it produces on a fixture where the two models' weights
-disagree.
+named-exclusion list with its reason, never only by a smaller n. Each pricing
+weight is asserted by the literal bill one field produces (`PricingTests`), and the
+cache-read weight also on a fixture where two models' weights disagree.
 
     python3 docs/research/test_stratum.py
 """
@@ -185,7 +185,10 @@ class SyntheticCarveOutTests(Sessions, unittest.TestCase):
                 self.assertEqual(s.parent_records, 2)
 
     def test_every_usage_field_counts_toward_nonzero(self):
-        for field in S.USAGE_FIELDS:
+        # A literal list, never S.USAGE_FIELDS: iterating the constant would let a
+        # field dropped from it pass unnoticed.
+        for field in ("input_tokens", "output_tokens",
+                      "cache_creation_input_tokens", "cache_read_input_tokens"):
             with self.subTest(field=field):
                 s = S.session_strata(self.session("f", [arec(), synthetic(dict(ZERO, **{field: 1}))]))
                 self.assertIsNone(s.parent)
@@ -299,15 +302,27 @@ class PricingTests(unittest.TestCase):
                 with self.assertRaises(S.UnknownModel):
                     S.weights_for(m)
 
-    def test_a_present_non_numeric_token_field_never_prices_as_zero(self):
-        """Absent or null is 0, as on main; anything else raises. #212 owns turning
-        this into a named refusal."""
+    def test_a_present_malformed_token_field_never_prices_as_zero(self):
+        """Absent is 0. A present malformed value -- null, a bool, a string -- or a
+        non-dict usage raises. #212 owns turning this into a named refusal."""
         w = S.weights_for(M5)
-        self.assertEqual(S.usd({"input_tokens": None}, w), 0.0)
-        for bad in ({"input_tokens": "1000000"}, [1, 2]):
+        self.assertEqual(S.usd({}, w), 0.0)
+        for bad in ({"input_tokens": None}, {"cache_creation_input_tokens": True},
+                    {"output_tokens": "1000000"}, [1, 2]):
             with self.subTest(bad=bad):
-                with self.assertRaises((TypeError, AttributeError)):
+                with self.assertRaises(TypeError):
                     S.usd(bad, w)
+
+    def test_each_field_is_priced_at_its_own_weight(self):
+        """1M tokens of one field alone, as a literal dollar figure per field, so a
+        dropped term or a wrong weight changes a number."""
+        cases = [(M5, "input_tokens", 5.00), (M5, "cache_creation_input_tokens", 6.25),
+                 (M5, "cache_read_input_tokens", 0.50), (M5, "output_tokens", 25.00),
+                 (M55, "input_tokens", 4.00), (M55, "cache_creation_input_tokens", 5.00),
+                 (M55, "cache_read_input_tokens", 0.20), (M55, "output_tokens", 20.00)]
+        for model, field, dollars in cases:
+            with self.subTest(model=model, field=field):
+                self.assertAlmostEqual(S.usd({field: 1_000_000}, S.weights_for(model)), dollars)
 
     def test_usd_uses_the_models_own_base_price(self):
         one_m = {"input_tokens": 1_000_000}
