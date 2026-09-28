@@ -103,6 +103,9 @@ rounds and more turns. This join cannot separate them and does not try."* That i
   (config)      ▲            ▲
                 │            │
       round_cap ┘   engine_size ─▶ context/turn ─┘
+
+  run_env ─▶ { turns, context/turn, defect_rate }
+  (model, effort, CLI version: set by the harness, not by the config — see below)
 ```
 
 - **Treatment** — anything set before the run and under your control: `plan-gate:`, the review
@@ -124,6 +127,65 @@ a legitimate quantity and it is not the decision-relevant one.
 This is also the answer to the collinearity worry that prompted the note. For prediction,
 collinearity is harmless; for causal estimation, the enemy is not correlated regressors but a
 wrongly-chosen adjustment set. **Classify features by node first; select among them second.**
+
+### The run environment is a treatment the harness can change without asking
+
+*Added 2026-09-27 (#207, F167).* **Three variables are fixed before each turn,
+move the outcome, and can change without the operator choosing to change them:**
+
+| variable | where the transcript records it | observed shift |
+|---|---|---|
+| parent model | `message.model` | `claude-opus-5` → `claude-opus-5-5`: first reply 2026-09-23 (vote) and 2026-09-25 (loop) |
+| effort | record-level `effort` | `xhigh` → `medium` at the same boundary: a saved top-level `effortLevel` stopped applying to the new model |
+| Claude Code version | record-level `version` | continuous; a release can change a default |
+
+In the diagram they are the `run_env` node, pointing at `turns`, `context/turn` and `defect_rate`. They
+are not confounders in the classical sense, because nothing about the issue causes them. They are
+**time-varying co-treatments**, so they confound any comparison indexed by time. That covers every
+before/after and the DiD in *What identification is actually available* below: the switch hit every treated repo within three days,
+so a control repo differences out only the additive part of the model effect. The **interaction**
+isn't identified, and that is the part most likely to matter: does a lever save less on a model that
+already takes fewer turns?
+
+**Rule: stratify, and default-deny.** Compare or pool observations only within one parent
+`(model, effort)` stratum, and record the CLI version range beside it. A session whose stratum
+cannot be positively determined is **unstratified** — a missing or malformed field, a mid-session
+`/model` or effort switch, a parent `<synthetic>` record carrying usage — and it is reported and
+excluded.
+**If you cannot tell which stratum a session is in, it is excluded.** Grouping is by exact key, so a
+well-formed model no script has seen before forms **its own** stratum and never pools with another;
+recognising a stratum never consults a list of known models. Subagent strata are recorded but not a
+grouping key, since subagent model and effort vary by agent definition within a session.
+
+One narrow carve-out, because the literal rule selects on the outcome: a `<synthetic>` record with
+zero usage is a client-written placeholder (for example on an API error), and it is ignored for
+stratum determination, counted and reported rather than dropped. Excluding every session that hit
+one would drop sessions in proportion to their length. `stratum.py` states the carve-out's exact
+bounds, and decision D016 records it.
+
+**Three things in this directory that the switch changes:**
+- **Pricing weights are per model.** Cache read is 0.1× input on Opus 5 and **0.05×** on Opus 5.5.
+  The other ratios are unchanged. The README's single weight set, and its "~8× discount" and `~33k`
+  per-turn figures, were fitted on Opus 5 and pooled across `@xhigh` and `@high` (Finding 10,
+  n=8), so re-measure them per stratum rather than carrying them
+  across. An unknown model refuses to price and never falls back to a default.
+- **Token counts are per tokenizer.** Stratifying by model also holds the tokenizer fixed: models
+  from 4.7 on produce about 30% more tokens for the same text, so `CHARS_PER_TOKEN` and any
+  token-denominated size are per stratum too.
+- **Effort is itself a lever.** Pin it per model (`modelSettings.<model>.effortLevel`) so it stops
+  being an uncontrolled one. It then belongs on the treatment list above, and the reference-issue
+  experiment can vary it deliberately.
+
+**For the reference-issue experiment,** add to the validity threats: pin model, effort and CLI
+version per replicate, and interleave arms in time rather than running them in blocks. The
+model-effect question fits into the first experiment at no extra cost. Run the replication step at
+`k` on **both** models, with engine and effort fixed, and the same runs yield σ and the model effect
+together.
+
+**Where this is implemented:** `stratum.py` is the one extractor every transcript-reading script uses.
+Each per-session profile prints a `stratum` line, and every aggregate groups by parent stratum and
+names what it excluded. `budget_stats.py` reads ledgers, which carry no model field, so it says in
+its output that it cannot stratify.
 
 ### The estimands, stated so a result can be checked against one
 

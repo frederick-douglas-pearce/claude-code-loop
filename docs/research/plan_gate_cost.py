@@ -40,8 +40,11 @@ invocation before pooling; the run that found this bug was itself misreported th
 2. A **compaction** before the anchor invalidates the run: growth is summed, so an eviction makes
    arrivals count bytes twice. Compactions are detected and reported; a session with any is
    flagged rather than silently averaged in.
-3. Sessions are **not pooled across repos or engine eras**. Both rules are established in
-   `baseline-2026-08-25.md`; the era rule is the finding filed against #135/PR #146.
+3. Sessions are **not pooled across repos, engine eras, or strata**. The first two rules are
+   established in `baseline-2026-08-25.md`; the era rule is the finding filed against #135/PR #146.
+   The stratum rule is #207's: every session prints a `stratum` line (`stratum.py`) naming its
+   parent `(model, effort)`, and this script's output is pooled by hand, so pool only sessions
+   whose parent stratum matches and whose line does not read UNSTRATIFIED.
 """
 
 import collections
@@ -49,6 +52,9 @@ import json
 import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from stratum import session_strata, stratum_line  # noqa: E402
 
 #: A context drop larger than this between consecutive assistant turns is a compaction,
 #: not ordinary accounting jitter.
@@ -307,6 +313,7 @@ def analyze(path):
         "selection_output": sum(e[2] for e in selection_turns),
         "output_blocks": output_blocks,
         "session": os.path.basename(path)[:8],
+        "stratum": session_strata(path),
         "resident_at_plan_gate": resident,
         "arrivals": arrivals,
         "over_attribution": arrivals - resident,
@@ -322,6 +329,7 @@ def _report(result):
     arrivals = result["arrivals"] or 1
     print("\n=== %s   resident at plan-file write: %s tokens"
           % (result["session"], format(result["resident_at_plan_gate"], ",")))
+    print("    " + stratum_line(result["stratum"]))
     print("    cumulative arrivals: %s   (over-attribution %s = %.0f%%, the output-token bound)"
           % (format(round(result["arrivals"]), ","),
              format(round(result["over_attribution"]), ","),

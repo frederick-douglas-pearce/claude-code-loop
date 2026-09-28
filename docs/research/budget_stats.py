@@ -11,6 +11,12 @@ ledger has to a final cost -- plus per-ledger aggregates.
 
 Stdlib only, deliberately: it runs wherever the guard hook runs.
 
+**It cannot stratify, and says so in its output** (#207/AC4). It reads ledgers,
+and a ledger carries no model or effort field, so nothing here can separate
+sessions run on different `(model, effort)` strata. Its figures are therefore not
+comparable across ANY model or effort change; the transcript-reading scripts,
+which print a `stratum` line, are the ones that can.
+
 Caveats, because the numbers are softer than they look:
   * `subagent-runs` is self-reported by the orchestrator and its blind spot is
     parent-thread burn (loop-engine.md -> progress.md -> the Budget line).
@@ -359,12 +365,20 @@ def summarize_era(label, rows):
               f"own — marker rows spanning it are a bound, not an era")
 
 
+STRATUM_BANNER = (
+    "!! NOT STRATIFIED: this reads ledgers, and ledgers carry no model or effort\n"
+    "!! field. Figures below pool every (model, effort) the runs used and are not\n"
+    "!! comparable across any model or effort change. Stratify from transcripts\n"
+    "!! (the scripts that print a `stratum` line), not from this output.")
+
+
 def main(argv):
     args = [a for a in argv[1:] if not a.startswith("-")]
     era = "--era" in argv
     if not args:
         print(__doc__)
         return 1
+    print(STRATUM_BANNER)
     for root in args:
         rows = list(parse(root))
         summarize(root, rows)

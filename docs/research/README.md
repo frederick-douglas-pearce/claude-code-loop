@@ -30,7 +30,8 @@ All stdlib-only, all read Claude Code session transcripts from `~/.claude/projec
 | `calls_per_turn.py` | How many tool calls per turn, and how many turns could have been merged? (Finding 12) | `test_calls_per_turn.py` |
 | ~~`context_profile.py`~~ | **RETIRED 2026-08-26** → `deprecated/`. Kept only to reproduce Findings 6–9; its payload bug over-counts spilled reads by up to 13×, so **P4 and the "~50% of every byte" figure are withdrawn**. | — |
 | `budget_stats.py` | Ledger `- Budget:` aggregates by engine era. **`--era` resolves N eras and caps BOTH the date and marker columns at the repo's installed version**, so a held-back control cannot read as treated. An installed version missing from `ERAS` raises rather than silently dropping the cap. | `test_budget_stats.py` |
-| `tree_cost.py` | Parent **+ subagent** transcripts priced together — sizes the bill Finding 11 leaves unpriced. **Scouting only; output is not a finding.** | none |
+| `tree_cost.py` | Parent **+ subagent** transcripts priced together, each record on its own model's weights and summed in USD — sizes the bill Finding 11 leaves unpriced. **Scouting only; output is not a finding.** | `test_tree_cost.py` (stratification and per-model pricing only) |
+| `stratum.py` | Which `(model, effort)` stratum a session ran on, plus its CLI version range — the **one** extractor every transcript script above imports, and the per-model `PRICING` table. Every per-session profile prints its `stratum` line; every aggregate groups by parent stratum and names what it excluded. An unpriced model refuses to price, never falls back. (#207) | `test_stratum.py` |
 
 ```bash
 SLUG=~/.claude/projects/-home-fdpearce-Documents-Projects-git-us-presidential-vote-analysis
@@ -43,7 +44,10 @@ for t in docs/research/test_*.py; do python3 "$t" -q || break; done   # each mod
 
 **Always record the installed plugin version with any measurement** —
 `python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.claude/plugins/installed_plugins.json')))['plugins']['dev-loop@claude-code-loop'])"`.
-A before/after that does not name both engine versions is not interpretable.
+A before/after that does not name both engine versions is not interpretable. **Nor is one that does
+not name both strata:** a model or effort change is a treatment too (`cost-model-design.md` → *The run
+environment is a treatment*), so compare only within one parent `(model, effort)` stratum, as each
+script's `stratum` line reports it.
 
 ---
 
@@ -59,13 +63,18 @@ These were misread once, so they are pinned here rather than left to inference.
 | **carry / carry-per-turn** | resident-turn ÷ ingested (÷ turns) | **use carry/turn** — raw carry scales with session length and cannot be compared across runs |
 | **% of bill** | engine's share of billable-equivalent input | engine takes a share of the **input** side only; it does not cause output tokens |
 | **peak context** | the high-water mark of a **single turn** | *not* a total for the run; compaction *lowers* it |
-| **bill/turn** | billable-equivalent per parent turn | near-constant (~28–33k) — that is the point, not a coincidence |
+| **bill/turn** | billable-equivalent per parent turn | near-constant (~28–33k) — that is the point, not a coincidence. *Finding 10, n=8, pooled across `claude-opus-5@xhigh` and `@high`* |
 
-**Pricing.** Input splits fresh / cache-write / cache-read at 1× / 1.25× / 0.1×; output ≈ 5× input.
-97.6–98.9% of input is cache-read, so **share of context ≈ share of cost** and cache is a uniform
-~8× discount rather than a lever.
+**Pricing is per model** (`stratum.PRICING`, from the
+[pricing page](https://platform.claude.com/docs/en/about-claude/pricing), checked 2026-09-27). Input
+splits fresh / cache-write / cache-read at 1× / 1.25× / **0.1×** on `claude-opus-5`, `-4-8` and `-4-7`,
+and 1× / 1.25× / **0.05×** on `claude-opus-5-5`; output is 5× input on all of them. A model with no
+entry refuses to price. 97.6–98.9% of input is cache-read, so **share of context ≈ share of cost** and
+cache is a uniform ~8× discount rather than a lever — *Finding 10's n=8 on `claude-opus-5`, pooled
+across `@xhigh` and `@high`; re-measure per stratum.*
 
-**The cost model in one line:** `cost ≈ turns × ~33k`. Average context is bounded above by the
+**The cost model in one line:** `cost ≈ turns × ~33k` (*Finding 10's n=8 on `claude-opus-5`, pooled
+across `@xhigh` and `@high`; re-measure per stratum*). Average context is bounded above by the
 compaction ceiling and below by the starting footprint, so it varies little; turn count has no
 ceiling. **Turns is the free variable.**
 

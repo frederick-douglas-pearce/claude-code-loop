@@ -16,6 +16,13 @@ mapping is many-to-many.** A session can close several issues and an issue can
 span sessions. Per-issue figures are therefore averages within a session, and a
 session that closed zero issues is excluded rather than counted as zero.
 
+**Every correlation and fit runs once per parent stratum** (`stratum.py`): a
+before/after pooled across a model or effort change credits the treatment with
+it (#207). An unstratified session is excluded from every statistic and named with
+its reason. A session that REFUSED to price (its model has no PRICING entry) is
+excluded only from the bill-based statistics, named, and kept in the turns-based
+ones, which need no price.
+
 Stdlib only.
 """
 import json
@@ -25,6 +32,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from engine_cost import profile  # noqa: E402
+from stratum import group_by_stratum, label, stratum_line  # noqa: E402
 
 # Budget lines are LINE-WRAPPED in the ledger, so `gate-rounds=` routinely sits on
 # a continuation line. A single-line regex captures the prefix, finds no rounds,
@@ -126,30 +134,56 @@ def main(argv):
             "s": os.path.basename(p)[:8], "turns": prof["turns"], "issues": issues,
             "rounds": rounds, "runs": runs,
             "tpi": prof["turns"] / issues, "rpi": rounds / issues,
-            "bill": prof["billable_total"], "bpi": prof["billable_total"] / issues,
+            "bill": prof["billable_total"],
+            "bpi": (prof["billable_total"] / issues
+                    if prof["billable_total"] is not None else None),
+            "stratum": prof["stratum"], "price_refused": prof["price_refused"],
         })
     if not rows:
         print("no sessions with parseable Budget lines")
         return 1
-    rows.sort(key=lambda r: r["rpi"])
+    for r in rows:
+        print(f"{r['s']:<10}{stratum_line(r['stratum'])}")
+    groups, excluded = group_by_stratum(rows, key=lambda r: r["stratum"])
+    for r, why in excluded:
+        print(f"  EXCLUDED {r['s']}: {why}")
+    for key, grp in groups.items():
+        report_stratum(key, grp)
+    return 0
+
+
+def report_stratum(key, rows):
+    """Every statistic below is within ONE parent stratum."""
+    rows = sorted(rows, key=lambda r: r["rpi"])
+    priced = [r for r in rows if r["bpi"] is not None]
+    print(f"\n### stratum {label(key)}")
     print(f"{'session':<10}{'turns':>6}{'issues':>7}{'rounds':>7}{'runs':>6}"
           f"{'turns/issue':>12}{'rounds/issue':>13}{'bill/issue':>12}")
     for r in rows:
+        bpi = f"{r['bpi']:>12,.0f}" if r["bpi"] is not None else f"{'REFUSED':>12}"
         print(f"{r['s']:<10}{r['turns']:>6}{r['issues']:>7}{r['rounds']:>7}{r['runs']:>6}"
-              f"{r['tpi']:>12.0f}{r['rpi']:>13.1f}{r['bpi']:>12,.0f}")
+              f"{r['tpi']:>12.0f}{r['rpi']:>13.1f}{bpi}")
+    for r in rows:
+        if r["bpi"] is None:
+            print(f"  EXCLUDED from bill-based statistics only {r['s']}: "
+                  f"{r['price_refused']}")
     for xa, ya, lbl in (("rpi", "tpi", "rounds/issue -> turns/issue"),
                         ("rpi", "bpi", "rounds/issue -> bill/issue"),
                         ("rounds", "turns", "total rounds -> total turns"),
                         ("runs", "turns", "subagent-runs -> total turns")):
-        r = pearson([x[xa] for x in rows], [x[ya] for x in rows])
+        src = priced if ya == "bpi" else rows
+        r = pearson([x[xa] for x in src], [x[ya] for x in src])
         print(f"  pearson  {lbl:<32} r = {r:+.2f}" if r is not None else
               f"  pearson  {lbl:<32} n/a")
     for ya, unit in (("tpi", "turns"), ("bpi", "billable-equiv")):
-        b, a = fit([r["rpi"] for r in rows], [r[ya] for r in rows])
+        src = priced if ya == "bpi" else rows
+        if not src:
+            continue
+        b, a = fit([r["rpi"] for r in src], [r[ya] for r in src])
         if b is not None:
             print(f"  fit      {ya:<32} = {a:,.0f} + {b:,.0f} x rounds  ({unit})")
-    print(f"\n  n = {len(rows)} sessions, {sum(r['issues'] for r in rows)} issues")
-    return 0
+    print(f"\n  n = {len(rows)} sessions ({len(priced)} priced), "
+          f"{sum(r['issues'] for r in rows)} issues")
 
 
 if __name__ == "__main__":

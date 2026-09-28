@@ -21,6 +21,12 @@ Read-only is decided conservatively: a Bash command containing any write, move,
 commit or in-place-edit shape counts as a WRITE and breaks the run, because
 merging across a mutation would reorder effects.
 
+Every session prints its `stratum` line, and **corpus totals are grouped by the
+parent's stratum** (`stratum.py`), never pooled across one; an unstratified session
+is excluded and named. Input bills use the session's own model's weights
+(`stratum.PRICING`); a session that refuses to price is excluded from the WEIGHTED
+totals only, named, and still counted in the turn and call totals.
+
 Stdlib only.
 """
 import json
@@ -28,6 +34,10 @@ import os
 import re
 import sys
 from collections import Counter
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from stratum import UnknownModel, group_by_stratum, input_equiv, label, \
+    session_strata, stratum_line, weights_for  # noqa: E402
 
 READ_TOOLS = {"Read", "Grep", "Glob", "NotebookRead", "WebFetch", "WebSearch"}
 # Any of these in a Bash command makes it a mutation for our purposes.
@@ -78,11 +88,10 @@ def load(path):
                     continue
 
 
-W_FRESH, W_CACHE_WRITE, W_CACHE_READ = 1.0, 1.25, 0.1
+def profile_turns(path, weights=None):
+    """-> ordered list of per-turn dicts for the PARENT thread only.
 
-
-def profile_turns(path):
-    """-> ordered list of per-turn dicts for the PARENT thread only."""
+    `weights` prices each turn's input bill; with None, every `bill` is None."""
     turns, order = {}, []
     for rec in load(path):
         if rec.get("isSidechain") or rec.get("type") != "assistant":
@@ -93,16 +102,15 @@ def profile_turns(path):
             continue
         if mid not in turns:
             order.append(mid)
-            turns[mid] = {"calls": [], "seen": set(), "bill": 0.0}
+            turns[mid] = {"calls": [], "seen": set(),
+                          "bill": 0.0 if weights else None}
         t = turns[mid]
         u = msg.get("usage") or {}
         # A merged-away turn saves ITS OWN input bill, not the corpus average.
         # Paging runs sit early in a session where context is still small, so
         # pricing them at the average materially overstates the saving.
-        t["bill"] = max(t["bill"],
-                        (u.get("input_tokens", 0) or 0) * W_FRESH
-                        + (u.get("cache_creation_input_tokens", 0) or 0) * W_CACHE_WRITE
-                        + (u.get("cache_read_input_tokens", 0) or 0) * W_CACHE_READ)
+        if weights:
+            t["bill"] = max(t["bill"], input_equiv(u, weights))
         for b in (msg.get("content") or []):
             if not (isinstance(b, dict) and b.get("type") == "tool_use"):
                 continue
@@ -115,9 +123,19 @@ def profile_turns(path):
 
 
 def analyse(path):
-    ts = profile_turns(path)
+    stratum = session_strata(path)
+    weights, refused = None, None
+    if not stratum.stratified:
+        refused = "unstratified: %s" % stratum.reason
+    else:
+        try:
+            weights = weights_for(stratum.parent[0])
+        except UnknownModel as exc:
+            refused = str(exc)
+    ts = profile_turns(path, weights)
     if not ts:
         return None
+    priced = weights is not None
     hist = Counter(len(t["calls"]) for t in ts)
     total_calls = sum(len(t["calls"]) for t in ts)
 
@@ -126,7 +144,7 @@ def analyse(path):
     for i, flag in enumerate(solo_read + [False]):
         if flag:
             run += 1
-            buf.append(ts[i]["bill"])
+            buf.append(ts[i]["bill"] or 0.0)
         else:
             if run >= 2:
                 mergeable += run - 1
@@ -150,14 +168,14 @@ def analyse(path):
         tgt = _target(t) if solo_read[i] else None
         if tgt and tgt == prev:
             prun += 1
-            pbuf.append(t["bill"])
+            pbuf.append(t["bill"] or 0.0)
         else:
             if prun >= 2:
                 paging += prun - 1
                 runlens.append(prun)
                 page_bill += sum(sorted(pbuf)[1:])
             prun = 1 if tgt else 0
-            pbuf = [t["bill"]] if tgt else []
+            pbuf = [t["bill"] or 0.0] if tgt else []
         prev = tgt
     if prun >= 2:
         paging += prun - 1
@@ -167,9 +185,11 @@ def analyse(path):
         "path": path, "turns": len(ts), "calls": total_calls,
         "cpt": total_calls / len(ts), "hist": hist,
         "solo_read": sum(solo_read), "mergeable": mergeable, "paging": paging,
-        "merge_bill": merge_bill, "page_bill": page_bill,
+        "merge_bill": merge_bill if priced else None,
+        "page_bill": page_bill if priced else None,
         "runlens": runlens, "recoverable": sum(max(0, k - 2) for k in runlens),
-        "total_bill": sum(t["bill"] for t in ts),
+        "total_bill": sum(t["bill"] for t in ts) if priced else None,
+        "stratum": stratum, "price_refused": refused,
     }
 
 
@@ -185,6 +205,19 @@ def main(argv):
             rows.append(a)
     if not rows:
         return 1
+    for r in rows:
+        print(f"{os.path.basename(r['path'])[:8]:<10}{stratum_line(r['stratum'])}")
+    groups, excluded = group_by_stratum(rows, key=lambda r: r["stratum"])
+    for r, why in excluded:
+        print(f"  EXCLUDED {os.path.basename(r['path'])[:8]}: {why}")
+    for key, grp in groups.items():
+        report_stratum(key, grp)
+    return 0
+
+
+def report_stratum(key, rows):
+    """Corpus totals within ONE parent stratum."""
+    print(f"\n### stratum {label(key)}")
     print(f"{'session':<10}{'turns':>6}{'calls':>7}{'calls/turn':>11}"
           f"{'0-call':>8}{'1-call':>8}{'2+':>6}{'solo-read':>10}{'mergeable':>10}{'-turns':>8}{'paging':>8}")
     for r in rows:
@@ -202,26 +235,38 @@ def main(argv):
     P = sum(r["paging"] for r in rows)
     REC = sum(r["recoverable"] for r in rows)
     allruns = [k for r in rows for k in r["runlens"]]
-    MB = sum(r["merge_bill"] for r in rows)
-    PB = sum(r["page_bill"] for r in rows)
-    TB = sum(r["total_bill"] for r in rows)
-    n = len(rows)
     print(f"  of which same-file PAGING (high confidence): {P:,} turns ({P/T:.0%} of all turns)")
-    print(f"\n  priced at each merged-away turn's OWN input bill, not the corpus average:")
-    print(f"    ceiling (all mergeable)  {MB:>12,.0f} tok  = {MB/TB:>5.1%} of input bill"
-          f"   ({MB/n:>9,.0f}/session)")
-    print(f"    floor   (paging only)    {PB:>12,.0f} tok  = {PB/TB:>5.1%} of input bill"
-          f"   ({PB/n:>9,.0f}/session)")
-    print(f"    naive avg-priced ceiling {M*33000:>12,.0f} tok  <- overstates by "
-          f"{M*33000/MB:.1f}x")
-    from collections import Counter
+    priced = [r for r in rows if r["total_bill"] is not None]
+    for r in rows:
+        if r["total_bill"] is None:
+            print(f"  EXCLUDED from the weighted totals only "
+                  f"{os.path.basename(r['path'])[:8]}: {r['price_refused']}")
+    MB = sum(r["merge_bill"] for r in priced)
+    PB = sum(r["page_bill"] for r in priced)
+    TB = sum(r["total_bill"] for r in priced)
+    Mp = sum(r["mergeable"] for r in priced)
+    n = len(priced)
+    if priced and TB:
+        print(f"\n  priced at each merged-away turn's OWN input bill, not the corpus average"
+              f" ({n} priced sessions):")
+        print(f"    ceiling (all mergeable)  {MB:>12,.0f} tok  = {MB/TB:>5.1%} of input bill"
+              f"   ({MB/n:>9,.0f}/session)")
+        print(f"    floor   (paging only)    {PB:>12,.0f} tok  = {PB/TB:>5.1%} of input bill"
+              f"   ({PB/n:>9,.0f}/session)")
+        # ~33k/turn is Finding 10's figure: claude-opus-5, n=8, pooled across
+        # @xhigh x6 and @high x2 -- so it spans an effort stratum itself.
+        print(f"    naive avg-priced ceiling {Mp*33000:>12,.0f} tok  (33k/turn: Finding 10, "
+              f"claude-opus-5 @xhigh+@high, n=8; spans a stratum -- re-measure per stratum)"
+              + (f"  <- overstates by {Mp*33000/MB:.1f}x" if MB else ""))
     h = Counter(allruns)
     print(f"\n  paging run lengths: " + ", ".join(f"k={k}x{h[k]}" for k in sorted(h)))
     print(f"  theoretical collapse (k-1): {P:,} turns")
     print(f"  RECOVERABLE under a discovery-read-first protocol (k-2): {REC:,} turns"
           f"  = {REC/P:.0%} of theoretical" if P else "")
-    print(f"    -> realistic floor {PB*REC/P:,.0f} tok total, {PB*REC/P/n:,.0f}/session" if P else "")
-    return 0
+    PP = sum(r["paging"] for r in priced)
+    RP = sum(r["recoverable"] for r in priced)
+    print(f"    -> realistic floor {PB*RP/PP:,.0f} tok total, {PB*RP/PP/n:,.0f}/session"
+          if priced and PP else "")
 
 
 if __name__ == "__main__":

@@ -15,15 +15,18 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import calls_per_turn as C  # noqa: E402
 
+MODEL = "claude-opus-5"
+
 
 def bash(cmd):
     return C.is_read_only("Bash", {"command": cmd})
 
 
-def turn(mid, calls, ctx=100000, sidechain=False):
-    """calls: list of (id, name, input)"""
-    return {"type": "assistant", "isSidechain": sidechain,
-            "message": {"id": mid,
+def turn(mid, calls, ctx=100000, sidechain=False, model=MODEL, effort="xhigh"):
+    """calls: list of (id, name, input). Carries a model and effort: pricing fails
+    closed on a session with neither (#207/AC5)."""
+    return {"type": "assistant", "isSidechain": sidechain, "effort": effort,
+            "message": {"id": mid, "model": model,
                         "usage": {"cache_read_input_tokens": ctx},
                         "content": [{"type": "tool_use", "id": i, "name": n, "input": p}
                                     for i, n, p in calls]}}
@@ -133,7 +136,7 @@ class TurnTests(unittest.TestCase):
                 turn("m1", [("t1", "Read", {"file_path": "/e.md"})], ctx=20000),
                 turn("m2", [("t2", "Read", {"file_path": "/e.md"})], ctx=300000)]
         r = self.analyse(recs)
-        self.assertAlmostEqual(r["page_bill"], (20000 + 300000) * C.W_CACHE_READ)
+        self.assertAlmostEqual(r["page_bill"], (20000 + 300000) * 0.1)   # claude-opus-5's cache-read weight
 
     def test_run_length_is_recorded_and_k2_runs_recover_nothing(self):
         """A k=2 run contributes 1 to the theoretical collapse and 0 to what a
