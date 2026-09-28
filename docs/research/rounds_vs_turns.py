@@ -19,9 +19,8 @@ session that closed zero issues is excluded rather than counted as zero.
 **Every correlation and fit runs once per parent stratum** (`stratum.py`): a
 before/after pooled across a model or effort change credits the treatment with
 it (#207). An unstratified session is excluded from every statistic and named with
-its reason. A session that REFUSED to price (its model has no PRICING entry) is
-excluded only from the bill-based statistics, named, and kept in the turns-based
-ones, which need no price.
+its reason. A session `stratum.turns` refuses is excluded from every
+statistic, named. Each session line reports its `no_id` count.
 
 Stdlib only.
 """
@@ -32,7 +31,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from engine_cost import profile  # noqa: E402
-from stratum import group_by_stratum, label, stratum_line  # noqa: E402
+from stratum import Unpriced, group_by_stratum, label, stratum_line  # noqa: E402
 
 # Budget lines are LINE-WRAPPED in the ledger, so `gate-rounds=` routinely sits on
 # a continuation line. A single-line regex captures the prefix, finds no rounds,
@@ -121,7 +120,11 @@ def main(argv):
     paths = [a for a in argv[1:] if not a.startswith("-")]
     rows = []
     for p in paths:
-        prof = profile(p)
+        try:
+            prof = profile(p)
+        except Unpriced as exc:
+            print(f"  EXCLUDED {os.path.basename(p)[:8]}: refused -- {exc}")
+            continue
         if not prof:
             continue
         bs = budgets(p)
@@ -138,12 +141,14 @@ def main(argv):
             "bpi": (prof["billable_total"] / issues
                     if prof["billable_total"] is not None else None),
             "stratum": prof["stratum"], "price_refused": prof["price_refused"],
+            "no_id": prof["no_id"], "api_error": prof["api_error"],
         })
     if not rows:
         print("no sessions with parseable Budget lines")
         return 1
     for r in rows:
-        print(f"{r['s']:<10}{stratum_line(r['stratum'])}")
+        print(f"{r['s']:<10}{stratum_line(r['stratum'])}"
+              f"  (no_id={r['no_id']} api_error={r['api_error']})")
     groups, excluded = group_by_stratum(rows, key=lambda r: r["stratum"])
     for r, why in excluded:
         print(f"  EXCLUDED {r['s']}: {why}")

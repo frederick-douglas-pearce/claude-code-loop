@@ -6,6 +6,8 @@ Each test names the mutation it kills. The one that matters most is
 statement of decision D010, the payload bug that retired `context_profile.py`.
 """
 
+import contextlib
+import io
 import json
 import os
 import sys
@@ -357,6 +359,118 @@ class CompactionTests(unittest.TestCase):
         result = pgc.analyze(path)
         os.unlink(path)
         self.assertEqual(result["compactions"], [])
+
+
+def turn_line(turn_id, context, output_tokens=0, calls=(), **extra):
+    """One LINE of an API turn, carrying a `message.id` so the spec dedupe groups it."""
+    entry = assistant(context, output_tokens, calls)
+    entry["message"]["id"] = turn_id
+    entry.update(extra)
+    return entry
+
+
+class SpecDedupeTests(unittest.TestCase):
+    """#212/AC2: a global `message.id` merge, the max-output line's usage, and
+    the zero-context skip applied AFTER the merge."""
+
+    @staticmethod
+    def run_on(fn, *entries):
+        path = transcript(*entries)
+        try:
+            return fn(path)
+        finally:
+            os.unlink(path)
+
+    def test_a_turn_interleaved_with_a_result_is_one_event_with_every_call(self):
+        entries = (turn_line("t1", 100_000, 5, [("c1", "Bash", {"command": "ls"})]),
+                   results(("c1", 10)),
+                   turn_line("t1", 100_000, 5, [("c2", "Bash", {"command": "pwd"})]))
+        _, events = self.run_on(pgc._timeline, *entries)
+        assistant_events = [e for e in events if e[0] == "assistant"]
+        self.assertEqual(len(assistant_events), 1)
+        self.assertEqual([c[0] for c in assistant_events[0][3]], ["c1", "c2"])
+        self.assertEqual(events[0][0], "assistant")       # at its FIRST line's position
+        r = self.run_on(pgc.analyze, *entries, turn_line("t2", 150_000, 5, [PLAN_WRITE]))
+        self.assertEqual(r["gate_turns"], 2)
+
+    def test_a_zero_context_first_line_still_carries_its_plan_write(self):
+        """Under skip-then-merge this Write never reached `events` and no anchor was
+        found."""
+        r = self.run_on(pgc.analyze, turn_line("t1", 100_000, 5),
+                        turn_line("t2", 0, 0, [PLAN_WRITE]),
+                        turn_line("t2", 150_000, 700))
+        self.assertIsNotNone(r)
+        self.assertEqual(r["gate_turns"], 2)
+        self.assertEqual(r["resident_at_plan_gate"], 150_000)
+
+    def test_the_max_output_line_supplies_the_turns_output(self):
+        """The max line is in the MIDDLE, so a last-line read gives 3, a first-line 1."""
+        r = self.run_on(pgc.analyze, turn_line("t1", 100_000, 1), turn_line("t1", 100_000, 50),
+                        turn_line("t1", 100_000, 3), turn_line("t2", 200_000, 0, [PLAN_WRITE]))
+        self.assertEqual(r["model_output"], 50)
+
+    def test_the_merged_zero_context_turn_sits_before_its_own_result(self):
+        """Skipping before the merge would place t2 at its SECOND line, after the
+        result for its own plan Write."""
+        _, events = self.run_on(pgc._timeline, turn_line("t1", 100_000, 5),
+                                turn_line("t2", 0, 0, [PLAN_WRITE]), results(("plan", 10)),
+                                turn_line("t2", 150_000, 700))
+        kinds = [(e[0], e[5] if e[0] == "assistant" else e[1]) for e in events]
+        self.assertLess(kinds.index(("assistant", "t2")), kinds.index(("result", "plan")))
+
+    def test_growth_with_no_pending_result_is_its_own_bucket_never_dropped(self):
+        """A text-only turn, then the user's prompt: +6,240 with nothing pending. Dropped,
+        it made over_attribution negative (-6,240)."""
+        prompt = {"type": "user", "message": {"content": "please continue"}}
+        r = self.run_on(pgc.analyze, turn_line("t1", 100_000, 50), prompt,
+                        turn_line("t2", 106_290, 0, [PLAN_WRITE]))
+        self.assertEqual(r["by_source"][pgc.USER_OTHER], 6_240)
+        self.assertEqual(r["over_attribution"], 0)
+
+    def test_an_empty_usage_refuses_rather_than_counting_as_zero_context(self):
+        bad = turn_line("t2", 0, 0, [PLAN_WRITE])
+        bad["message"]["usage"] = {}
+        path = transcript(turn_line("t1", 100_000, 5), bad)
+        try:
+            with self.assertRaisesRegex(pgc.Unpriced, "no token field"):
+                pgc.analyze(path)
+        finally:
+            os.unlink(path)
+
+    def test_an_all_refused_set_never_reads_as_no_plan_gate(self):
+        bad = turn_line("t1", 100_000, 5, [PLAN_WRITE])
+        bad["message"]["usage"]["output_tokens"] = None
+        path = transcript(bad)
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = pgc.main([path])
+        finally:
+            os.unlink(path)
+        self.assertIn("1 session(s) REFUSED", buf.getvalue())
+        self.assertNotIn("No session in this set reached a plan gate", buf.getvalue())
+        self.assertEqual(rc, 1)
+
+    def test_no_id_and_api_error_lines_are_counted_and_errors_are_not_turns(self):
+        r = self.run_on(pgc.analyze, assistant(100_000, 5), assistant(100_000, 5),
+                        turn_line("e", 100_000, 5, isApiErrorMessage=True),
+                        turn_line("t2", 200_000, 0, [PLAN_WRITE]))
+        self.assertEqual((r["gate_turns"], r["no_id"], r["api_error"]), (3, 2, 1))
+
+    def test_malformed_usage_refuses_the_session_by_name(self):
+        bad = turn_line("t1", 100_000, 5)
+        bad["message"]["usage"]["input_tokens"] = "100000"
+        path = transcript(bad, turn_line("t2", 200_000, 0, [PLAN_WRITE]))
+        try:
+            with self.assertRaises(pgc.Unpriced):
+                pgc.analyze(path)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                pgc.main([path])
+        finally:
+            os.unlink(path)
+        self.assertIn("REFUSED", buf.getvalue())
+        self.assertIn("input_tokens", buf.getvalue())
 
 
 if __name__ == "__main__":

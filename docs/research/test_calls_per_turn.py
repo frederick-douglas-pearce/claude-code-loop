@@ -159,5 +159,54 @@ class TurnTests(unittest.TestCase):
         self.assertIsNone(self.analyse([]))
 
 
+
+class SpecDedupeTests(unittest.TestCase):
+    """#212/AC2, AC5: the shared `message.id` dedupe, and per-turn model pricing."""
+
+    def test_the_bill_is_the_max_output_record_not_the_max_input_one(self):
+        a = turn("t", [("u1", "Read", {"file_path": "/a.md"})], ctx=900_000)
+        a["message"]["usage"]["output_tokens"] = 1
+        b = turn("t", [("u2", "Read", {"file_path": "/b.md"})], ctx=100_000)
+        b["message"]["usage"]["output_tokens"] = 9
+        c = turn("t", [("u3", "Read", {"file_path": "/c.md"})], ctx=500_000)
+        c["message"]["usage"]["output_tokens"] = 3       # the max line is NOT the last
+        path = write_jsonl([a, b, c])
+        ts, counts = C.profile_turns(path)
+        os.unlink(path)
+        self.assertEqual(len(ts), 1)
+        self.assertAlmostEqual(ts[0]["bill"], 100_000 * 0.1)    # claude-opus-5 cache read
+        self.assertEqual([n for n, _ in ts[0]["calls"]], ["Read", "Read", "Read"])
+
+    def test_each_turn_is_billed_on_its_own_model(self):
+        """Two turns, two models with different cache-read weights: a weight taken
+        once for the session prices one of them wrong."""
+        a = turn("a", [("u1", "Read", {"file_path": "/a.md"})], ctx=100_000,
+                 model="claude-opus-5")
+        b = turn("b", [("u2", "Read", {"file_path": "/b.md"})], ctx=100_000,
+                 model="claude-opus-5-5")
+        path = write_jsonl([a, b])
+        ts, _ = C.profile_turns(path)
+        r = C.analyse(path)
+        os.unlink(path)
+        self.assertEqual([t["bill"] for t in ts], [100_000 * 0.1, 100_000 * 0.05])
+        self.assertEqual([t["model"] for t in ts], ["claude-opus-5", "claude-opus-5-5"])
+        self.assertIsNone(r["total_bill"])      # ratio units across two models refuse
+
+    def test_the_naive_verdict_word_follows_the_ratio(self):
+        self.assertEqual(C.naive_verdict(120, 100), "overstates by 1.2x")
+        self.assertEqual(C.naive_verdict(80, 100), "understates by 1.2x")
+
+    def test_no_id_turns_are_counted_unmerged_and_reported(self):
+        a = turn("x", [("u1", "Read", {"file_path": "/a.md"})])
+        b = turn("x", [("u2", "Read", {"file_path": "/b.md"})])
+        del a["message"]["id"], b["message"]["id"]
+        path = write_jsonl([a, b])
+        ts, counts = C.profile_turns(path)
+        r = C.analyse(path)
+        os.unlink(path)
+        self.assertEqual(len(ts), 2)
+        self.assertEqual(counts.no_id, 2)
+        self.assertEqual(r["no_id"], 2)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -37,8 +37,10 @@ subagent records -- a non-ignorable one is recorded as a `<synthetic>@?` subagen
 stratum, which is not a grouping key -- and to pricing, where a non-ignorable one
 has no PRICING entry and refuses.
 
-Counts are **records**, never turns: one API turn is written as several records
-that repeat its usage.
+The stratum counts above are **records**, never turns: one API turn is written as
+several records that repeat its usage. **Pricing counts turns**: `turns` applies the
+cost spec's `message.id` dedupe, and `price_records` prices each turn once, on its
+own model (#212; the spec is `claude-code-sessions/reference/cost-model.md`).
 
 Stdlib only.  Self-test: `python3 test_stratum.py`
 """
@@ -59,40 +61,57 @@ USAGE_FIELDS = ("input_tokens", "cache_creation_input_tokens",
 # `claude-haiku-4-5-20251001` pass; `<synthetic>`, `""` and `unknown` do not.
 _MODEL_ID = re.compile(r"^[a-z0-9]+(?:[-._][a-z0-9]+)+$")
 
-PRICING_SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing (checked 2026-09-27)"
+PRICING_SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing (checked 2026-09-28)"
 
 
 @dataclasses.dataclass(frozen=True)
 class Weights:
     """Per-token weights relative to one fresh input token, plus the base price.
 
-    Read fields BY NAME. The class is deliberately not a tuple, so a later field
-    (a 1-hour cache-write ratio, #212) is an addition rather than a change to
-    every caller that unpacked it.
+    Read fields BY NAME. The class is deliberately not a tuple, so a field added
+    later is an addition rather than a change to every caller that unpacked it.
     """
     base_usd_per_mtok: float
     fresh: float
     cache_write_5m: float
     cache_read: float
     output: float
+    cache_write_1h: float        # no default: an entry that omits it fails at import
 
     def label(self):
         """The ratio label a report prints -- derived, so it cannot drift."""
-        return "%g/%g/%gx in, %gx out" % (self.fresh, self.cache_write_5m,
-                                          self.cache_read, self.output)
+        return "%g/%g/%gx in (fresh/5m write/read), %gx 1h write, %gx out" % (
+            self.fresh, self.cache_write_5m, self.cache_read, self.cache_write_1h,
+            self.output)
 
 
-#: Every entry: PRICING_SOURCE.
+#: Every entry: PRICING_SOURCE, keyed on the EXACT model ID a transcript carries
+#: (#212/AC10: found by census, never by family or prefix). The 1-hour write is 2x
+#: base input on every model the pricing page lists.
 PRICING = {
-    "claude-opus-5-5": Weights(4.0, 1.0, 1.25, 0.05, 5.0),
-    "claude-opus-5": Weights(5.0, 1.0, 1.25, 0.1, 5.0),
-    "claude-opus-4-8": Weights(5.0, 1.0, 1.25, 0.1, 5.0),
-    "claude-opus-4-7": Weights(5.0, 1.0, 1.25, 0.1, 5.0),
+    "claude-opus-5-5": Weights(4.0, 1.0, 1.25, 0.05, 5.0, 2.0),
+    "claude-opus-5": Weights(5.0, 1.0, 1.25, 0.1, 5.0, 2.0),
+    "claude-opus-4-8": Weights(5.0, 1.0, 1.25, 0.1, 5.0, 2.0),
+    "claude-opus-4-7": Weights(5.0, 1.0, 1.25, 0.1, 5.0, 2.0),
+    "claude-opus-4-6": Weights(5.0, 1.0, 1.25, 0.1, 5.0, 2.0),
+    "claude-sonnet-5": Weights(2.0, 1.0, 1.25, 0.1, 5.0, 2.0),
+    "claude-sonnet-4-6": Weights(3.0, 1.0, 1.25, 0.1, 5.0, 2.0),
+    "claude-haiku-4-5-20251001": Weights(1.0, 1.0, 1.25, 0.1, 5.0, 2.0),
 }
 
 
-class UnknownModel(ValueError):
+class Unpriced(ValueError):
+    """The one refusal family. Every script catches THIS, so a new refusal reason is
+    an addition, never a catch site somebody forgot."""
+
+
+class UnknownModel(Unpriced):
     """A model with no PRICING entry. Pricing refuses; it never falls back."""
+
+
+class Unpriceable(Unpriced):
+    """A turn the spec's arithmetic cannot price honestly: malformed usage, a cache
+    split that disagrees with its total, or a pricing lever (#212/AC3, AC6)."""
 
 
 def weights_for(model):
@@ -115,12 +134,10 @@ def _num(usage, field):
 
 
 def _tok(usage, field):
-    """A token field for PRICING. An ABSENT field is 0; whether it should be is #212's
-    call. A present malformed field -- `null` included -- or a non-dict `usage` raises
-    TypeError rather than pricing as zero. Refusing such a session by name is #212's
-    (its AC6). (On `main` the scripts disagreed: two priced `null` as 0, `tree_cost`
-    raised. One shared function has to pick one answer, and this is the one that adds
-    no $0 path.)"""
+    """One token field. An ABSENT field is 0 (#212's plan gate: the spec's cache fields are
+    zero on a first turn, and it says to ignore rather than assume fields). A present
+    malformed field -- `null` included -- or a non-dict `usage` raises TypeError. The
+    pricing path refuses those by name first (`check_shape`); this is the backstop."""
     if not isinstance(usage, dict):
         raise TypeError("usage is not a dict: %r" % (usage,))
     if field not in usage:
@@ -131,14 +148,98 @@ def _tok(usage, field):
     return v
 
 
+CACHE_TIERS = ("ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens")
+
+
+def check_shape(usage):
+    """Refuse (`Unpriceable`) a usage whose token fields cannot be read (#212/AC6).
+    Part of `check_priceable`."""
+    if not isinstance(usage, dict):
+        raise Unpriceable("usage is not a dict: %r" % (usage,))
+    for f in USAGE_FIELDS:
+        if f in usage and not _is_count(usage[f]):
+            raise Unpriceable("malformed token field %s=%r" % (f, usage[f]))
+    cc = usage.get("cache_creation")
+    if cc is None:
+        return
+    if not isinstance(cc, dict):
+        raise Unpriceable("cache_creation is not a dict: %r" % (cc,))
+    for f in CACHE_TIERS:
+        if f in cc and not _is_count(cc[f]):
+            raise Unpriceable("malformed cache_creation.%s=%r" % (f, cc[f]))
+
+
+def cache_split(usage):
+    """-> (5-minute, 1-hour) cache-write tokens, per the spec (#212/AC3).
+
+    An absent `cache_creation` breakdown is all 5-minute. A breakdown that does not
+    sum to `cache_creation_input_tokens` REFUSES: the spec is silent on that case and
+    reconciling it would price one side of a disagreement nobody resolved."""
+    total = _tok(usage, "cache_creation_input_tokens")
+    cc = usage.get("cache_creation")
+    if cc is None:
+        return total, 0
+    if not isinstance(cc, dict):
+        raise Unpriceable("cache_creation is not a dict: %r" % (cc,))
+    parts = []
+    for f in CACHE_TIERS:
+        v = cc.get(f, 0)
+        if not _is_count(v):
+            raise Unpriceable("malformed cache_creation.%s=%r" % (f, v))
+        parts.append(v)
+    m5, h1 = parts
+    if m5 + h1 != total:
+        raise Unpriceable("cache split 5m+1h=%s != cache_creation_input_tokens %s"
+                          % (m5 + h1, total))
+    return m5, h1
+
+
+#: The values of each lever that price at standard rates. Anything else refuses
+#: (#212/AC6). None of these levers takes a non-default value in the plan-time
+#: census, so none is priced. An UNKNOWN future lever key is not seen here at all --
+#: the spec says to ignore unknown fields -- which is a named limit, not a default.
+LEVER_DEFAULTS = {"speed": (None, "standard"), "service_tier": (None, "standard"),
+                  "inference_geo": (None, "", "not_available", "global")}
+
+
+def check_levers(usage):
+    for lever, ok in LEVER_DEFAULTS.items():
+        v = usage.get(lever)
+        if v not in ok:
+            raise Unpriceable("pricing lever %s=%r is not priced here" % (lever, v))
+    stu = usage.get("server_tool_use")
+    if stu is None:
+        return
+    if not isinstance(stu, dict):
+        raise Unpriceable("server_tool_use is not a dict: %r" % (stu,))
+    for k, v in stu.items():
+        if not _is_count(v) or v:
+            raise Unpriceable("pricing lever server_tool_use.%s=%r is not priced here"
+                              % (k, v))
+
+
+def check_priceable(usage):
+    """Everything a usage must pass before it is counted or priced. `turns` runs it on
+    every line that survives the exclusions, and `input_equiv` and `output_equiv` run
+    it again themselves (`usd` reaches it through them), so no caller can count or
+    price around it."""
+    check_shape(usage)
+    if not any(f in usage for f in USAGE_FIELDS):
+        raise Unpriceable("usage carries no token field: %r" % (usage,))
+    check_levers(usage)
+
+
 def input_equiv(usage, w):
     """Input side in fresh-input-token equivalents on this model's weights."""
+    check_priceable(usage)
+    m5, h1 = cache_split(usage)
     return (_tok(usage, "input_tokens") * w.fresh
-            + _tok(usage, "cache_creation_input_tokens") * w.cache_write_5m
+            + m5 * w.cache_write_5m + h1 * w.cache_write_1h
             + _tok(usage, "cache_read_input_tokens") * w.cache_read)
 
 
 def output_equiv(usage, w):
+    check_priceable(usage)
     return _tok(usage, "output_tokens") * w.output
 
 
@@ -146,6 +247,118 @@ def usd(usage, w):
     """US dollars. The one unit two models' costs may be summed in: ratio units
     from models with different base prices are not the same unit."""
     return (input_equiv(usage, w) + output_equiv(usage, w)) * w.base_usd_per_mtok / 1e6
+
+
+# ------------------------------------------------------------------ turns (#212)
+
+@dataclasses.dataclass
+class Turn:
+    """One API call. `records` is every transcript line it was written as, in stream
+    order; `winner` is the line whose usage and model price it."""
+    key: object              # `message.id`, or ("no-id", first_index)
+    first_index: int
+    winner: dict
+    records: list
+
+    @property
+    def usage(self):
+        return self.winner["message"]["usage"]
+
+    @property
+    def model(self):
+        return self.winner["message"].get("model")
+
+
+@dataclasses.dataclass
+class TurnCounts:
+    lines: int = 0           # assistant lines seen, excluded ones included
+    no_id: int = 0           # lines with no `message.id`, each its own turn
+    api_error: int = 0       # `isApiErrorMessage` lines, excluded
+    synthetic: int = 0       # ignorable `<synthetic>` lines, excluded
+
+
+def turn_key(rec, index):
+    mid = (rec.get("message") or {}).get("id")
+    return mid if isinstance(mid, str) and mid else ("no-id", index)
+
+
+def turns(records):
+    """-> (list of Turn in first-line order, TurnCounts). The spec's dedupe (#212/AC2):
+
+      * assistant lines group by `message.id`, globally -- never only when adjacent;
+      * the line with the highest `output_tokens` wins, the first on a tie, and every
+        usage field comes from that one line, never a per-field max;
+      * a line with no `message.id` is its own turn, counted in `no_id`;
+      * `isApiErrorMessage` lines and ignorable `<synthetic>` lines are excluded and
+        counted (AC4). `toolUseResult.usage` and `usage.iterations` are never read.
+
+    Every surviving line's usage must pass `check_priceable` -- a readable dict with
+    at least one token field and no pricing lever -- including a line that loses the
+    comparison; the exclusions run first. `index` is the position in `records`, so a caller that
+    walks the same sequence can find each line's turn with `turn_key(rec, index)`."""
+    counts = TurnCounts()
+    by_key, order = {}, []
+    for i, rec in enumerate(records):
+        if not isinstance(rec, dict) or rec.get("type") != "assistant":
+            continue
+        counts.lines += 1
+        if rec.get("isApiErrorMessage"):
+            counts.api_error += 1
+            continue
+        if is_ignorable_synthetic(rec):
+            counts.synthetic += 1
+            continue
+        msg = rec.get("message") or {}
+        try:
+            check_priceable(msg.get("usage"))
+        except Unpriceable as exc:
+            raise Unpriceable("assistant line %d: %s" % (i, exc)) from None
+        key = turn_key(rec, i)
+        if not isinstance(key, str):
+            counts.no_id += 1
+        t = by_key.get(key)
+        if t is None:
+            by_key[key] = t = Turn(key, i, rec, [])
+            order.append(t)
+        elif _tok(msg["usage"], "output_tokens") > _tok(t.usage, "output_tokens"):
+            t.winner = rec
+        t.records.append(rec)
+    return order, counts
+
+
+def one_model(ts):
+    """The single model every turn in `ts` ran on, or `Unpriceable`. For a ratio-unit
+    total, which is one unit only on one model's weights -- keyed on the model, never
+    on equal weights, so two strata that happen to share a price never pool."""
+    models = sorted({str(t.model) for t in ts})
+    if len(models) > 1:
+        raise Unpriceable("priced turns carry more than one model: %s" % ", ".join(models))
+    return ts[0].model if ts else None
+
+
+@dataclasses.dataclass
+class PricedRecords:
+    usd: float
+    by_model: dict
+    turns: list
+    counts: TurnCounts
+
+
+def turn_usd(turn):
+    """One turn in US dollars, on its OWN model's weights (#212/AC5)."""
+    try:
+        return usd(turn.usage, weights_for(turn.model))
+    except Unpriceable as exc:
+        raise Unpriceable("turn %s: %s" % (turn.key, exc)) from None
+
+
+def price_records(records):
+    """Price one transcript file's records -> PricedRecords, or raise `Unpriced`."""
+    ts, counts = turns(records)
+    by_model = collections.OrderedDict()
+    for t in ts:
+        by_model[t.model] = by_model.get(t.model, 0.0) + turn_usd(t)
+    return PricedRecords(sum(by_model.values()), by_model, ts, counts)
 
 
 def is_ignorable_synthetic(rec):
