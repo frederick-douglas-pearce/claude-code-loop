@@ -152,9 +152,8 @@ CACHE_TIERS = ("ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens")
 
 
 def check_shape(usage):
-    """Refuse (`Unpriceable`) a usage whose token fields cannot be read: not a dict,
-    a present token field that is not a count, or a present `cache_creation` that is
-    not a dict of counts (#212/AC6). Part of `check_priceable`."""
+    """Refuse (`Unpriceable`) a usage whose token fields cannot be read (#212/AC6).
+    Part of `check_priceable`."""
     if not isinstance(usage, dict):
         raise Unpriceable("usage is not a dict: %r" % (usage,))
     for f in USAGE_FIELDS:
