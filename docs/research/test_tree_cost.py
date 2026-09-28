@@ -167,6 +167,15 @@ class TreeCostTests(unittest.TestCase):
         self.assertIn("no_id=1", out)
         self.assertIn("ids in >1 file=1", out)
 
+    def test_no_id_lines_in_a_subagent_file_count_too(self):
+        """The count covers every file of the session, not only the parent's."""
+        noid = rec(M55)
+        del noid["message"]["id"]
+        self.session("aaaaaaaa", [rec(M55)], [[rec(M55), noid], [dict(noid)]])
+        counts = {}
+        T.survey(self.root, counts)
+        self.assertEqual(counts["aaaaaaaa"]["no_id"], 2)
+
     def test_a_zero_usage_synthetic_record_is_skipped_not_refused(self):
         syn = {"type": "assistant", "message": {"model": "<synthetic>", "usage": {
             "input_tokens": 0, "output_tokens": 0, "cache_creation_input_tokens": 0,

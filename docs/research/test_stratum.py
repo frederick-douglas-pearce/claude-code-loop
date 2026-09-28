@@ -743,6 +743,17 @@ class EngineCostSpecTests(Sessions, unittest.TestCase):
         self.assertIn("n = 1 sessions (1 priced)", out)
         self.assertIn("(no_id=0 api_error=0)", out)
 
+    def test_rounds_vs_turns_prints_the_profiles_own_counts(self):
+        """Non-zero counts, so a hard-coded 0 cannot print the same line."""
+        import rounds_vs_turns
+        recs = budget_session(M55, "high", 1, 3)
+        noid = arec(M55, "high")
+        del noid["message"]["id"]
+        err = arec(M55, "high", mid="err")
+        err["isApiErrorMessage"] = True
+        path = self.session("countsss", recs + [noid, noid, err])
+        self.assertIn("(no_id=2 api_error=1)", run(rounds_vs_turns.main, ["r", path]))
+
     def test_a_result_landing_mid_call_is_credited_to_the_next_call(self):
         """t1's engine result is written BETWEEN two lines of call m1 (parallel calls).
         It first enters m2's input, so m2's growth is split between the engine read and
