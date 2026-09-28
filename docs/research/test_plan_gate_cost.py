@@ -370,7 +370,7 @@ def turn_line(turn_id, context, output_tokens=0, calls=(), **extra):
 
 
 class SpecDedupeTests(unittest.TestCase):
-    """#212/AC2 and D7: a global `message.id` merge, the max-output line's usage, and
+    """#212/AC2: a global `message.id` merge, the max-output line's usage, and
     the zero-context skip applied AFTER the merge."""
 
     @staticmethod

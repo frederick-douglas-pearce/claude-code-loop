@@ -23,9 +23,16 @@ merging across a mutation would reorder effects.
 
 Every session prints its `stratum` line, and **corpus totals are grouped by the
 parent's stratum** (`stratum.py`), never pooled across one; an unstratified session
-is excluded and named. Input bills use the session's own model's weights
-(`stratum.PRICING`); a session that refuses to price is excluded from the WEIGHTED
-totals only, named, and still counted in the turn and call totals.
+is excluded and named. Each turn's input bill uses its OWN model's weights
+(`stratum.PRICING`, #212/AC5), in ratio units -- so a session whose turns carry more
+than one model refuses to price, since ratio units are one unit only on one model. A
+session that refuses to price is excluded from the WEIGHTED totals only, named, and
+still counted in the turn and call totals.
+
+Turns follow the cost spec (#212, `stratum.turns`): one turn per `message.id`, billed
+on the max-`output_tokens` line, its calls collected from EVERY line; a line with no
+id is its own turn and is counted. A session whose usage cannot be read at all is
+excluded outright and named.
 
 Stdlib only.
 """
@@ -36,8 +43,8 @@ import sys
 from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from stratum import UnknownModel, group_by_stratum, input_equiv, label, \
-    session_strata, stratum_line, weights_for  # noqa: E402
+from stratum import Unpriced, group_by_stratum, input_equiv, label, one_model, \
+    session_strata, stratum_line, turns, weights_for  # noqa: E402
 
 READ_TOOLS = {"Read", "Grep", "Glob", "NotebookRead", "WebFetch", "WebSearch"}
 # Any of these in a Bash command makes it a mutation for our purposes.
@@ -88,54 +95,54 @@ def load(path):
                     continue
 
 
-def profile_turns(path, weights=None):
-    """-> ordered list of per-turn dicts for the PARENT thread only.
+def profile_turns(path):
+    """-> (per-turn dicts for the PARENT thread only, stratum.TurnCounts).
 
-    `weights` prices each turn's input bill; with None, every `bill` is None."""
-    turns, order = {}, []
-    for rec in load(path):
-        if rec.get("isSidechain") or rec.get("type") != "assistant":
-            continue
-        msg = rec.get("message") or {}
-        mid = msg.get("id")
-        if not mid:
-            continue
-        if mid not in turns:
-            order.append(mid)
-            turns[mid] = {"calls": [], "seen": set(),
-                          "bill": 0.0 if weights else None}
-        t = turns[mid]
-        u = msg.get("usage") or {}
+    Each turn's `bill` is its input side on its own model's weights, or None with
+    `refused` naming why. Raises `Unpriced` if a line's usage cannot be read."""
+    records = [r for r in load(path) if isinstance(r, dict) and not r.get("isSidechain")]
+    ts, counts = turns(records)
+    out = []
+    for t in ts:
         # A merged-away turn saves ITS OWN input bill, not the corpus average.
         # Paging runs sit early in a session where context is still small, so
         # pricing them at the average materially overstates the saving.
-        if weights:
-            t["bill"] = max(t["bill"], input_equiv(u, weights))
-        for b in (msg.get("content") or []):
-            if not (isinstance(b, dict) and b.get("type") == "tool_use"):
-                continue
-            # streaming repeats blocks across snapshots of one logical turn
-            if b.get("id") in t["seen"]:
-                continue
-            t["seen"].add(b.get("id"))
-            t["calls"].append((b.get("name", "?"), b.get("input")))
-    return [turns[m] for m in order]
+        try:
+            bill, refused = input_equiv(t.usage, weights_for(t.model)), None
+        except Unpriced as exc:
+            bill, refused = None, "turn %s: %s" % (t.key, exc)
+        calls, seen = [], set()
+        for rec in t.records:
+            for b in ((rec.get("message") or {}).get("content") or []):
+                if not (isinstance(b, dict) and b.get("type") == "tool_use"):
+                    continue
+                # streaming repeats blocks across snapshots of one logical turn
+                if b.get("id") in seen:
+                    continue
+                seen.add(b.get("id"))
+                calls.append((b.get("name", "?"), b.get("input")))
+        out.append({"calls": calls, "bill": bill, "refused": refused,
+                    "model": t.model, "turn": t})
+    return out, counts
 
 
 def analyse(path):
+    """Raises `Unpriced` when a line's usage cannot be read at all."""
     stratum = session_strata(path)
-    weights, refused = None, None
+    ts, counts = profile_turns(path)
+    if not ts:
+        return None
+    refused = None
     if not stratum.stratified:
         refused = "unstratified: %s" % stratum.reason
     else:
-        try:
-            weights = weights_for(stratum.parent[0])
-        except UnknownModel as exc:
-            refused = str(exc)
-    ts = profile_turns(path, weights)
-    if not ts:
-        return None
-    priced = weights is not None
+        refused = next((t["refused"] for t in ts if t["refused"]), None)
+        if refused is None:
+            try:
+                one_model([t["turn"] for t in ts])
+            except Unpriced as exc:
+                refused = str(exc)
+    priced = refused is None
     hist = Counter(len(t["calls"]) for t in ts)
     total_calls = sum(len(t["calls"]) for t in ts)
 
@@ -190,6 +197,7 @@ def analyse(path):
         "runlens": runlens, "recoverable": sum(max(0, k - 2) for k in runlens),
         "total_bill": sum(t["bill"] for t in ts) if priced else None,
         "stratum": stratum, "price_refused": refused,
+        "no_id": counts.no_id, "api_error": counts.api_error,
     }
 
 
@@ -198,15 +206,22 @@ def main(argv):
     if not args:
         print(__doc__)
         return 1
-    rows = []
+    rows, refused = [], []
     for p in args:
-        a = analyse(p)
+        try:
+            a = analyse(p)
+        except Unpriced as exc:
+            refused.append((p, exc))
+            continue
         if a:
             rows.append(a)
+    for p, exc in refused:
+        print(f"  EXCLUDED {os.path.basename(p)[:8]}: refused -- {exc}")
     if not rows:
         return 1
     for r in rows:
-        print(f"{os.path.basename(r['path'])[:8]:<10}{stratum_line(r['stratum'])}")
+        print(f"{os.path.basename(r['path'])[:8]:<10}{stratum_line(r['stratum'])}"
+              f"  (no_id={r['no_id']} api_error={r['api_error']})")
     groups, excluded = group_by_stratum(rows, key=lambda r: r["stratum"])
     for r, why in excluded:
         print(f"  EXCLUDED {os.path.basename(r['path'])[:8]}: {why}")

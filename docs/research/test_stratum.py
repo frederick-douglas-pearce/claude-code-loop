@@ -317,7 +317,7 @@ class PricingTests(unittest.TestCase):
     def test_a_present_malformed_token_field_never_prices_as_zero(self):
         """An absent field is 0, but a usage carrying NO token field (`{}`), a present
         malformed value -- null, a bool, a string -- or a non-dict usage refuses by
-        name (#212/AC6, D4). None of them is a $0 turn."""
+        name (#212/AC6). None of them is a $0 turn."""
         w = S.weights_for(M5)
         for bad in ({}, {"input_tokens": None}, {"cache_creation_input_tokens": True},
                     {"output_tokens": "1000000"}, [1, 2]):
@@ -505,7 +505,7 @@ class LeverTests(unittest.TestCase):
 
 
 class UsageShapeTests(unittest.TestCase):
-    """AC6 / D4: a usage that is not a well-formed dict refuses its session by name,
+    """#212/AC6: a usage that is not a well-formed dict refuses its session by name,
     checked on EVERY line of a turn -- never only the winner."""
 
     def test_a_non_dict_or_absent_usage_refuses(self):
@@ -695,12 +695,12 @@ class EngineCostSpecTests(Sessions, unittest.TestCase):
 
     def test_rounds_vs_turns_names_a_refused_session_and_keeps_the_rest(self):
         import rounds_vs_turns
-        good = self.session("good", budget_session(M55, "high", 1, 3))
+        good = self.session("goodgood", budget_session(M55, "high", 1, 3))
         recs = budget_session(M55, "high", 1, 3)
         recs[1]["message"]["usage"] = [1]
-        bad = self.session("bad", recs)
+        bad = self.session("badbadba", recs)       # 8 chars: the script prints [:8]
         out = run(rounds_vs_turns.main, ["r", good, bad])
-        self.assertIn("EXCLUDED bad: refused", out)
+        self.assertIn("EXCLUDED badbadba: refused", out)
         self.assertIn("n = 1 sessions (1 priced)", out)
 
 

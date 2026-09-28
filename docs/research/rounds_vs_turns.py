@@ -32,7 +32,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from engine_cost import profile  # noqa: E402
-from stratum import group_by_stratum, label, stratum_line  # noqa: E402
+from stratum import Unpriced, group_by_stratum, label, stratum_line  # noqa: E402
 
 # Budget lines are LINE-WRAPPED in the ledger, so `gate-rounds=` routinely sits on
 # a continuation line. A single-line regex captures the prefix, finds no rounds,
@@ -121,7 +121,12 @@ def main(argv):
     paths = [a for a in argv[1:] if not a.startswith("-")]
     rows = []
     for p in paths:
-        prof = profile(p)
+        try:
+            prof = profile(p)
+        except Unpriced as exc:
+            # Unreadable usage: every figure in the profile reads those fields.
+            print(f"  EXCLUDED {os.path.basename(p)[:8]}: refused -- {exc}")
+            continue
         if not prof:
             continue
         bs = budgets(p)

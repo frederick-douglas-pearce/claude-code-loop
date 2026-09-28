@@ -25,7 +25,13 @@ received, over-counting spilled reads by up to 13x, and engine reads are exactly
 One transcript shape decides whether any of this is right. **A single API turn appears as
 several entries, one per content block, each repeating the turn's `usage`.** Treating an entry
 as a turn inflates turn counts, resident-turn tokens and output tokens by 2-3x at once, and the
-result still looks plausible. Entries are merged on `message.id` before anything is counted.
+result still looks plausible. Entries are merged on `message.id` before anything is counted --
+by the cost spec's dedupe (#212, `stratum.turns`), globally rather than only when adjacent: the
+turn sits at its FIRST entry's position, carries every entry's calls and output blocks, and
+takes its context and output from the max-`output_tokens` entry. A zero-context turn is skipped
+only AFTER the merge, so a zero-context entry's calls (a plan-file `Write` among them) still
+count. An entry with no id is its own turn; API-error and ignorable `<synthetic>` entries are
+not turns. Both are counted and printed. A session whose usage cannot be read is refused by name.
 
 **The anchor is a pattern, so it can false-positive.** Any session whose transcript merely
 *contains* an `issue-<N>.plan.md` path — a session editing this file, or one discussing a plan
@@ -54,7 +60,8 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from stratum import session_strata, stratum_line  # noqa: E402
+from stratum import Unpriced, _tok, session_strata, stratum_line, turn_key, \
+    turns  # noqa: E402
 
 #: A context drop larger than this between consecutive assistant turns is a compaction,
 #: not ordinary accounting jitter.
@@ -68,14 +75,13 @@ _READERS = ("cat", "sed", "head", "tail", "awk", "nl", "wc")
 
 
 def context_tokens(usage):
-    """Total context the model saw on this turn: fresh input + both cache tiers."""
+    """Total context the model saw on this turn: fresh input + both cache tiers. An
+    absent usage is 0 here; a turn LINE with no usage never reaches this -- `turns`
+    refuses it by name first."""
     if not usage:
         return 0
-    return (
-        usage.get("input_tokens", 0)
-        + usage.get("cache_read_input_tokens", 0)
-        + usage.get("cache_creation_input_tokens", 0)
-    )
+    return (_tok(usage, "input_tokens") + _tok(usage, "cache_read_input_tokens")
+            + _tok(usage, "cache_creation_input_tokens"))
 
 
 def classify(name, tool_input):
@@ -136,47 +142,63 @@ def _classify_read(blob):
     return "repo file read"
 
 
-def _timeline(path):
-    """Flatten a transcript into assistant turns and the tool results that follow each."""
-    calls_by_id = {}
-    events = []
+def _calls(message):
+    return [(block.get("id"), block.get("name"), block.get("input"))
+            for block in (message.get("content") or [])
+            if isinstance(block, dict) and block.get("type") == "tool_use"]
+
+
+def _scan(path):
+    """-> (calls_by_id, events, stratum.TurnCounts). Raises `Unpriced` on unreadable usage."""
+    records = []
     with open(path) as handle:
         for line in handle:
             try:
                 entry = json.loads(line)
             except ValueError:
                 continue
-            message = entry.get("message") or {}
-            if entry.get("type") == "assistant":
-                usage = message.get("usage") or {}
-                context = context_tokens(usage)
-                calls = [
-                    (block["id"], block.get("name"), block.get("input"))
-                    for block in (message.get("content") or [])
-                    if isinstance(block, dict) and block.get("type") == "tool_use"
-                ]
-                for call_id, name, tool_input in calls:
-                    calls_by_id[call_id] = (name, tool_input)
-                if not context:
-                    continue
-                # ONE API turn is written as SEVERAL transcript entries -- one per content
-                # block -- all sharing `message.id` and REPEATING the same `usage`. Summing
-                # entries counts a turn 2-3 times over, inflating turn counts, resident-turn
-                # tokens, and output tokens alike. Merge by id; never treat an entry as a turn.
-                turn_id = message.get("id")
-                if turn_id is not None and events and events[-1][0] == "assistant" \
-                        and events[-1][5] == turn_id:
-                    previous = events[-1]
-                    previous[3].extend(calls)
-                    previous[4].update(_output_blocks(message.get("content") or []))
-                    continue
-                events.append(["assistant", context, usage.get("output_tokens", 0), list(calls),
-                               _output_blocks(message.get("content") or []), turn_id])
-            elif entry.get("type") == "user" and isinstance(message.get("content"), list):
-                for block in message["content"]:
-                    if isinstance(block, dict) and block.get("type") == "tool_result":
-                        events.append(["result", block.get("tool_use_id"), _result_size(block),
-                                       None, None, None])
+            if isinstance(entry, dict):
+                records.append(entry)
+    # ONE API turn is written as SEVERAL transcript entries -- one per content block --
+    # all sharing `message.id` and REPEATING the same `usage`. Summing entries counts a
+    # turn 2-3 times over, inflating turn counts, resident-turn tokens, and output
+    # tokens alike. Merge by id (the spec's dedupe); never treat an entry as a turn.
+    grouped, counts = turns(records)
+    by_key = {t.key: t for t in grouped}
+    calls_by_id, events, emitted = {}, [], set()
+    for index, entry in enumerate(records):
+        message = entry.get("message") or {}
+        if entry.get("type") == "assistant":
+            for call_id, name, tool_input in _calls(message):
+                calls_by_id[call_id] = (name, tool_input)
+            key = turn_key(entry, index)
+            turn = by_key.get(key)
+            if turn is None or key in emitted:     # excluded, or already placed
+                continue
+            emitted.add(key)
+            context = context_tokens(turn.usage)
+            if not context:                        # AFTER the merge, never before
+                continue
+            calls, seen, blocks = [], set(), collections.Counter()
+            for line in turn.records:
+                for call in _calls(line.get("message") or {}):
+                    if call[0] not in seen:
+                        seen.add(call[0])
+                        calls.append(call)
+                blocks.update(_output_blocks((line.get("message") or {}).get("content") or []))
+            events.append(["assistant", context, _tok(turn.usage, "output_tokens"), calls,
+                           blocks, key])
+        elif entry.get("type") == "user" and isinstance(message.get("content"), list):
+            for block in message["content"]:
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    events.append(["result", block.get("tool_use_id"), _result_size(block),
+                                   None, None, None])
+    return calls_by_id, events, counts
+
+
+def _timeline(path):
+    """Flatten a transcript into assistant turns and the tool results that follow each."""
+    calls_by_id, events, _ = _scan(path)
     return calls_by_id, events
 
 
@@ -258,8 +280,9 @@ def _find_anchor(events):
 
 
 def analyze(path):
-    """Attribute one session's pre-plan-gate context. Returns None if it never wrote a plan."""
-    calls_by_id, events = _timeline(path)
+    """Attribute one session's pre-plan-gate context. Returns None if it never wrote a plan.
+    Raises `Unpriced` if a line's usage cannot be read."""
+    calls_by_id, events, counts = _scan(path)
     anchor = _find_anchor(events)
     if anchor is None:
         return None
@@ -322,6 +345,8 @@ def analyze(path):
         "by_source": by_source,
         "multi_call_estimated": multi_call_estimated,
         "compactions": compactions,
+        "no_id": counts.no_id, "api_error": counts.api_error,
+        "synthetic": counts.synthetic,
     }
 
 
@@ -330,6 +355,8 @@ def _report(result):
     print("\n=== %s   resident at plan-file write: %s tokens"
           % (result["session"], format(result["resident_at_plan_gate"], ",")))
     print("    " + stratum_line(result["stratum"]))
+    print("    turns (cost spec): no_id=%d api_error=%d synthetic=%d"
+          % (result["no_id"], result["api_error"], result["synthetic"]))
     print("    cumulative arrivals: %s   (over-attribution %s = %.0f%%, the output-token bound)"
           % (format(round(result["arrivals"]), ","),
              format(round(result["over_attribution"]), ","),
@@ -371,7 +398,11 @@ def main(argv):
         return 2
     seen = 0
     for path in argv:
-        result = analyze(path)
+        try:
+            result = analyze(path)
+        except Unpriced as exc:
+            print("\n=== %s: REFUSED -- %s" % (os.path.basename(path)[:8], exc))
+            continue
         if result is None:
             print("\n=== %s: no plan-file write — not a plan-writing session" % os.path.basename(path)[:8])
             continue

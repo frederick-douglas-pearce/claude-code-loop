@@ -30,7 +30,7 @@ All stdlib-only, all read Claude Code session transcripts from `~/.claude/projec
 | `calls_per_turn.py` | How many tool calls per turn, and how many turns could have been merged? (Finding 12) | `test_calls_per_turn.py` |
 | ~~`context_profile.py`~~ | **RETIRED 2026-08-26** → `deprecated/`. Kept only to reproduce Findings 6–9; its payload bug over-counts spilled reads by up to 13×, so **P4 and the "~50% of every byte" figure are withdrawn**. | — |
 | `budget_stats.py` | Ledger `- Budget:` aggregates by engine era. **`--era` resolves N eras and caps BOTH the date and marker columns at the repo's installed version**, so a held-back control cannot read as treated. An installed version missing from `ERAS` raises rather than silently dropping the cap. | `test_budget_stats.py` |
-| `tree_cost.py` | Parent **+ subagent** transcripts priced together, each record on its own model's weights and summed in USD — sizes the bill Finding 11 leaves unpriced. **Scouting only; output is not a finding.** | `test_tree_cost.py` (stratification and per-model pricing only) |
+| `tree_cost.py` | Parent **+ subagent** transcripts priced together, each turn on its own model's weights and summed in USD — sizes the bill Finding 11 leaves unpriced. **Scouting only; output is not a finding.** | `test_tree_cost.py`; the spec arithmetic itself in `test_stratum.py` |
 | `stratum.py` | Which `(model, effort)` stratum a session ran on, plus its CLI version range — the **one** extractor every transcript script above imports, and the per-model `PRICING` table. Every per-session profile prints its `stratum` line; every aggregate groups by parent stratum and names what it excluded. An unpriced model refuses to price, never falls back. (#207) | `test_stratum.py` |
 
 ```bash
@@ -39,7 +39,7 @@ python3 docs/research/engine_cost.py      $SLUG/<session>.jsonl
 python3 docs/research/plan_gate_cost.py  $SLUG/*.jsonl
 python3 docs/research/rounds_vs_turns.py  $SLUG/*.jsonl
 python3 docs/research/calls_per_turn.py   $SLUG/*.jsonl
-for t in docs/research/test_*.py; do python3 "$t" -q || break; done   # each module prints its own count
+fail=0; for t in docs/research/test_*.py; do python3 "$t" -q || fail=1; done; [ "$fail" = 0 ]   # each module prints its own count; `|| break; done` exits 0 on a failure
 ```
 
 **Always record the installed plugin version with any measurement** —

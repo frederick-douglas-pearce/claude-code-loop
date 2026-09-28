@@ -17,10 +17,21 @@ Quantities, each labelled:
                            session length and so cannot be compared across runs.
   * **billable-equiv**  -- priced, on the session's OWN model's weights
                            (`stratum.PRICING`; e.g. cache-read is 0.1x input on
-                           `claude-opus-5` and 0.05x on `claude-opus-5-5`). A
-                           session whose parent is unstratified, or whose model has
-                           no PRICING entry, REFUSES to price -- it never falls back
-                           to a default. Every other figure is unpriced and prints.
+                           `claude-opus-5` and 0.05x on `claude-opus-5-5`), in ratio
+                           units, with US dollars printed beside it. Ratio units are
+                           one unit only on one model, so a session whose priced
+                           turns carry more than one model REFUSES (`one_model`). A
+                           session whose parent is unstratified, whose model has no
+                           PRICING entry, or whose usage the spec cannot price
+                           (a lever, a cache split that disagrees with its total)
+                           REFUSES to price -- it never falls back to a default.
+                           Every other figure is unpriced and prints.
+
+Turns follow the cost spec (#212, `stratum.turns`): one turn per `message.id`, the
+max-`output_tokens` line's usage, a line with no id counted as its own turn, and
+API-error and ignorable `<synthetic>` lines excluded. A usage whose token fields
+cannot be read at all refuses the WHOLE session, named -- every figure here reads
+those fields.
 
 Every profile prints a `stratum` line (`stratum.py`) beside the `engine era` line.
 This script profiles one session at a time and never pools, so it cannot cross
@@ -54,8 +65,8 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from stratum import UnknownModel, input_equiv, output_equiv, session_strata, \
-    stratum_line, weights_for  # noqa: E402
+from stratum import Unpriced, _tok, input_equiv, one_model, output_equiv, \
+    session_strata, stratum_line, turn_key, turn_usd, turns, weights_for  # noqa: E402
 
 CTX = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
 
@@ -247,32 +258,28 @@ def blocks(rec):
 def profile(path, target="loop-engine.md", kinds=("load",), floor=None):
     """`floor=None` derives the admissibility floor from the engine version this
     session actually loaded. Pass a number to override (the `--floor` flag)."""
-    turns, order, tools = {}, [], {}
+    tools = {}
     pending, arrivals = [], {}
     spills, kind_counts = {}, {}
     versions = {}
     compactions = 0
 
-    for rec in load(path):
-        if rec.get("isSidechain"):
-            continue
+    records = [r for r in load(path) if isinstance(r, dict) and not r.get("isSidechain")]
+    ts, counts = turns(records)          # raises Unpriced on unreadable usage (#212/AC6)
+    known = {t.key for t in ts}
+
+    for i, rec in enumerate(records):
         if rec.get("isCompactSummary"):
             compactions += 1
         if rec.get("type") == "assistant":
-            msg = rec.get("message") or {}
-            mid = msg.get("id")
-            if not mid:
+            key = turn_key(rec, i)
+            if key not in known:         # an excluded line: API error, synthetic
                 continue
-            usage = msg.get("usage") or {}
-            if mid not in turns:
-                order.append(mid)
-            if mid not in turns or usage.get("output_tokens", 0) > turns[mid].get("output_tokens", 0):
-                turns[mid] = usage
             for b in blocks(rec):
                 if isinstance(b, dict) and b.get("type") == "tool_use":
                     tools[b.get("id")] = (b.get("name", "?"), b.get("input"))
             if pending:
-                arrivals[mid] = pending
+                arrivals.setdefault(key, []).extend(pending)
                 pending = []
         elif rec.get("type") == "user":
             for b in blocks(rec):
@@ -291,33 +298,34 @@ def profile(path, target="loop-engine.md", kinds=("load",), floor=None):
                         spills[sp] = kind
                 pending.append((name, _received(rec, b), kind in kinds, kind))
 
-    if not order:
+    if not ts:
         return None
+    order = [t.key for t in ts]
 
-    ctx = [sum(turns[m].get(f, 0) or 0 for f in CTX) for m in order]
-    out = [turns[m].get("output_tokens", 0) or 0 for m in order]
+    ctx = [sum(_tok(t.usage, f) for f in CTX) for t in ts]
+    out = [_tok(t.usage, "output_tokens") for t in ts]
 
     stratum = session_strata(path)
     weights, refused = None, None
+    bill_in = bill_out = bill_total = bill_usd = None
     if not stratum.stratified:
         refused = "unstratified: %s" % stratum.reason
     else:
         try:
-            weights = weights_for(stratum.parent[0])
-        except UnknownModel as exc:
+            weights = weights_for(one_model(ts))
+            bill_in = [input_equiv(t.usage, weights) for t in ts]
+            bill_out = [output_equiv(t.usage, weights) for t in ts]
+            bill_total = sum(bill_in) + sum(bill_out)
+            bill_usd = sum(turn_usd(t) for t in ts)
+        except Unpriced as exc:
             refused = str(exc)
+            weights = bill_in = bill_out = bill_total = bill_usd = None
     # Input and output are billed separately AND attributed separately: the
     # engine occupies context, so it takes a share of the INPUT side only. It does
     # not cause output tokens. Folding output into the per-turn weight and then
     # multiplying by the engine's context share silently credited the engine with
     # a slice of the model's own writing, which cancelled the dilution that
     # including output is supposed to produce.
-    if weights:
-        bill_in = [input_equiv(turns[m], weights) for m in order]
-        bill_out = [output_equiv(turns[m], weights) for m in order]
-        bill_total = sum(bill_in) + sum(bill_out)
-    else:
-        bill_in = bill_out = bill_total = None
 
     reads, by_tool, per_turn, calib = 0, {}, {}, []
     for i, mid in enumerate(order):
@@ -371,7 +379,9 @@ def profile(path, target="loop-engine.md", kinds=("load",), floor=None):
         "reads": reads, "by_tool": by_tool, "kind_counts": kind_counts,
         "ingested": ingested, "calib": calib, "spills": len(spills),
         "peak_ctx": max(ctx), "processed": sum(ctx),
-        "billable_total": bill_total,
+        "billable_total": bill_total, "billable_usd": bill_usd,
+        "lines": counts.lines, "no_id": counts.no_id, "api_error": counts.api_error,
+        "synthetic": counts.synthetic,
         "billable_in": sum(bill_in) if bill_in is not None else None,
         "billable_out": sum(bill_out) if bill_out is not None else None,
         "output_total": sum(out), "models": models,
@@ -388,6 +398,8 @@ def render(p):
     # naming no engine version is not interpretable.
     print(f"  engine era              {(p['era'] or 'UNKNOWN -- floor defaults to the widest known engine'):>12}{mixed}")
     print(f"  {stratum_line(p['stratum'])}")
+    print(f"  turns (cost spec)       {n:>12}   (lines={p['lines']} no_id={p['no_id']} "
+          f"api_error={p['api_error']} synthetic={p['synthetic']})")
     print(f"  peak context            {p['peak_ctx']:>12,}")
     print(f"  no-cache input basis    {proc:>12,}")
     w = p["weights"]
@@ -397,7 +409,7 @@ def render(p):
         # The label is derived from the weights actually applied, never typed.
         print(f"  billable-equiv          {p['billable_total']:>12,.0f}   "
               f"(input {p['billable_in']:,.0f} + output {p['billable_out']:,.0f}"
-              f" @{w.label()}, {p['stratum'].parent[0]})")
+              f" @{w.label()}, {p['stratum'].parent[0]}) = ${p['billable_usd']:.4f}")
     kc = ", ".join(f"{k}:{v}" for k, v in sorted(p["kind_counts"].items())) or "none"
     print(f"  engine reads counted    {p['reads']:>12}   [all matches: {kc}]")
     if not ing:
@@ -453,7 +465,11 @@ def main(argv):
         print(__doc__)
         return 1
     for path in args:
-        p = profile(path, kinds=kinds, floor=floor)
+        try:
+            p = profile(path, kinds=kinds, floor=floor)
+        except Unpriced as exc:
+            print(f"\n=== {os.path.basename(path)[:8]}: REFUSED -- {exc}")
+            continue
         if p is None:
             print(f"\n=== {os.path.basename(path)}: no parent turns")
         else:
