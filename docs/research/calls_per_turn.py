@@ -25,14 +25,12 @@ Every session prints its `stratum` line, and **corpus totals are grouped by the
 parent's stratum** (`stratum.py`), never pooled across one; an unstratified session
 is excluded and named. Each turn's input bill uses its OWN model's weights
 (`stratum.PRICING`, #212/AC5), in ratio units -- so a session whose turns carry more
-than one model refuses to price, since ratio units are one unit only on one model. A
-session that refuses to price is excluded from the WEIGHTED totals only, named, and
-still counted in the turn and call totals.
+than one model refuses to price, since ratio units are one unit only on one model.
 
 Turns follow the cost spec (#212, `stratum.turns`): one turn per `message.id`, billed
 on the max-`output_tokens` line, its calls collected from EVERY line; a line with no
-id is its own turn and is counted. A session whose usage cannot be read at all is
-excluded outright and named.
+id is its own turn and is counted. A session `stratum.turns`
+refuses is excluded outright, named.
 
 Stdlib only.
 """
@@ -99,7 +97,7 @@ def profile_turns(path):
     """-> (per-turn dicts for the PARENT thread only, stratum.TurnCounts).
 
     Each turn's `bill` is its input side on its own model's weights, or None with
-    `refused` naming why. Raises `Unpriced` if a line's usage cannot be read."""
+    `refused` naming why. Raises `Unpriced` when `stratum.turns` does."""
     records = [r for r in load(path) if isinstance(r, dict) and not r.get("isSidechain")]
     ts, counts = turns(records)
     out = []
@@ -127,7 +125,7 @@ def profile_turns(path):
 
 
 def analyse(path):
-    """Raises `Unpriced` when a line's usage cannot be read at all."""
+    """Raises `Unpriced` when `stratum.turns` does."""
     stratum = session_strata(path)
     ts, counts = profile_turns(path)
     if not ts:
@@ -232,8 +230,7 @@ def main(argv):
 
 def naive_verdict(naive, priced):
     """Which way the naive average-priced figure misses the per-turn one. The word is
-    chosen by the ratio, never fixed: once 1-hour writes price at 2x (#212) the
-    naive figure can land on either side."""
+    chosen by the ratio, never fixed."""
     ratio = naive / priced
     if ratio >= 1:
         return "overstates by %.1fx" % ratio

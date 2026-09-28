@@ -29,9 +29,9 @@ result still looks plausible. Entries are merged on `message.id` before anything
 by the cost spec's dedupe (#212, `stratum.turns`), globally rather than only when adjacent: the
 turn sits at its FIRST entry's position, carries every entry's calls and output blocks, and
 takes its context and output from the max-`output_tokens` entry. A zero-context turn is skipped
-only AFTER the merge, so a zero-context entry's calls (a plan-file `Write` among them) still
-count when another entry of the same turn carries context. An entry with no id is its own turn; API-error and ignorable `<synthetic>` entries are
-not turns. Both are counted and printed. A session whose usage cannot be read is refused by name.
+only AFTER the merge. An entry with no id is its own turn; API-error and ignorable `<synthetic>`
+entries are not turns. Both are counted and printed. A session `stratum.turns` refuses is
+refused by name.
 
 **The anchor is a pattern, so it can false-positive.** Any session whose transcript merely
 *contains* an `issue-<N>.plan.md` path — a session editing this file, or one discussing a plan
@@ -154,7 +154,7 @@ def _calls(message):
 
 
 def _scan(path):
-    """-> (calls_by_id, events, stratum.TurnCounts). Raises `Unpriced` on unreadable usage."""
+    """-> (calls_by_id, events, stratum.TurnCounts). Raises `Unpriced` when `stratum.turns` does."""
     records = []
     with open(path) as handle:
         for line in handle:
@@ -286,7 +286,7 @@ def _find_anchor(events):
 
 def analyze(path):
     """Attribute one session's pre-plan-gate context. Returns None if it never wrote a plan.
-    Raises `Unpriced` if a line's usage cannot be read."""
+    Raises `Unpriced` when `stratum.turns` does."""
     calls_by_id, events, counts = _scan(path)
     anchor = _find_anchor(events)
     if anchor is None:

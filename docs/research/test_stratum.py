@@ -539,6 +539,16 @@ class UsageShapeTests(unittest.TestCase):
                 with self.assertRaises(S.Unpriceable):
                     S.usd(bad, S.weights_for(M5))
 
+    def test_a_malformed_cache_breakdown_on_a_losing_line_still_refuses(self):
+        """Pricing reads only the winner's `cache_creation`, so the check has to run
+        where every line is seen -- in `turns`."""
+        good = line("t", dict(ONE_M_IN, output_tokens=9))
+        for cc in ([1], {"ephemeral_1h_input_tokens": None}, {"ephemeral_5m_input_tokens": "5"}):
+            with self.subTest(cc=cc):
+                bad = line("t", dict(ONE_M_IN, output_tokens=1, cache_creation=cc))
+                with self.assertRaisesRegex(S.Unpriceable, "cache_creation"):
+                    S.turns([good, bad])
+
     def test_a_lever_on_a_losing_line_still_refuses(self):
         good = line("t", dict(ONE_M_IN, output_tokens=9))
         fast = line("t", dict(ONE_M_IN, output_tokens=1, speed="fast"))
@@ -735,10 +745,9 @@ class EngineCostSpecTests(Sessions, unittest.TestCase):
 
     def test_a_result_landing_mid_call_is_credited_to_the_next_call(self):
         """t1's engine result is written BETWEEN two lines of call m1 (parallel calls).
-        It first enters m2's input, so m2's 50,000-token growth is split between the
-        engine (600 chars) and the other read (400 chars): ~30,000 each tool. Handing
-        it to m1's second line credited it to m1's growth instead -- and made
-        engine_cost disagree with plan_gate_cost on the same session."""
+        It first enters m2's input, so m2's growth is split between the engine read and
+        the other read by result size. Handing it to m1's second line credited it to
+        m1's growth instead -- and made engine_cost disagree with plan_gate_cost."""
         import plan_gate_cost as pgc
         other = {"type": "tool_use", "id": "t2", "name": "Read", "input": {"file_path": "/r/x.md"}}
         plan = {"type": "tool_use", "id": "p", "name": "Write",

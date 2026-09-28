@@ -19,10 +19,8 @@ session that closed zero issues is excluded rather than counted as zero.
 **Every correlation and fit runs once per parent stratum** (`stratum.py`): a
 before/after pooled across a model or effort change credits the treatment with
 it (#207). An unstratified session is excluded from every statistic and named with
-its reason. A session that REFUSED to price is excluded only from the bill-based
-statistics, named with its reason, and kept in the turns-based ones, which need no
-price. A session whose usage cannot be read at all is excluded from every statistic
-and named (#212). Each session line reports its `no_id` count.
+its reason. A session `stratum.turns` refuses is excluded from every
+statistic, named. Each session line reports its `no_id` count.
 
 Stdlib only.
 """
@@ -125,7 +123,6 @@ def main(argv):
         try:
             prof = profile(p)
         except Unpriced as exc:
-            # Unreadable usage: every figure in the profile reads those fields.
             print(f"  EXCLUDED {os.path.basename(p)[:8]}: refused -- {exc}")
             continue
         if not prof:

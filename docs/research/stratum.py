@@ -153,12 +153,21 @@ CACHE_TIERS = ("ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens")
 
 def check_shape(usage):
     """Refuse (`Unpriceable`) a usage whose token fields cannot be read: not a dict,
-    or a present token field that is not a count (#212/AC6). Part of `check_priceable`."""
+    a present token field that is not a count, or a present `cache_creation` that is
+    not a dict of counts (#212/AC6). Part of `check_priceable`."""
     if not isinstance(usage, dict):
         raise Unpriceable("usage is not a dict: %r" % (usage,))
     for f in USAGE_FIELDS:
         if f in usage and not _is_count(usage[f]):
             raise Unpriceable("malformed token field %s=%r" % (f, usage[f]))
+    cc = usage.get("cache_creation")
+    if cc is None:
+        return
+    if not isinstance(cc, dict):
+        raise Unpriceable("cache_creation is not a dict: %r" % (cc,))
+    for f in CACHE_TIERS:
+        if f in cc and not _is_count(cc[f]):
+            raise Unpriceable("malformed cache_creation.%s=%r" % (f, cc[f]))
 
 
 def cache_split(usage):
@@ -214,8 +223,7 @@ def check_priceable(usage):
     """Everything a usage must pass before it is counted or priced. `turns` runs it on
     every line that survives the exclusions, and `input_equiv` and `output_equiv` run
     it again themselves (`usd` reaches it through them), so no caller can count or
-    price around it. One predicate, so what a script counts and what it prices can
-    never disagree about which usages are readable."""
+    price around it."""
     check_shape(usage)
     if not any(f in usage for f in USAGE_FIELDS):
         raise Unpriceable("usage carries no token field: %r" % (usage,))
@@ -302,10 +310,8 @@ def turns(records):
             counts.synthetic += 1
             continue
         msg = rec.get("message") or {}
-        if "usage" not in msg:
-            raise Unpriceable("assistant line %d has no usage" % i)
         try:
-            check_priceable(msg["usage"])
+            check_priceable(msg.get("usage"))
         except Unpriceable as exc:
             raise Unpriceable("assistant line %d: %s" % (i, exc)) from None
         key = turn_key(rec, i)

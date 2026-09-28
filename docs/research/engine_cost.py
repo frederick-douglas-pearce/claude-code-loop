@@ -21,17 +21,14 @@ Quantities, each labelled:
                            units, with US dollars printed beside it. Ratio units are
                            one unit only on one model, so a session whose priced
                            turns carry more than one model REFUSES (`one_model`). A
-                           session whose parent is unstratified, whose model has no
-                           PRICING entry, or whose usage the spec cannot price
-                           (a lever, a cache split that disagrees with its total)
-                           REFUSES to price -- it never falls back to a default.
-                           Every other figure is unpriced and prints.
+                           session whose parent is unstratified, or whose model has no
+                           PRICING entry, REFUSES to price -- it never falls back to a
+                           default.
 
 Turns follow the cost spec (#212, `stratum.turns`): one turn per `message.id`, the
 max-`output_tokens` line's usage, a line with no id counted as its own turn, and
-API-error and ignorable `<synthetic>` lines excluded. A usage whose token fields
-cannot be read at all refuses the WHOLE session, named -- every figure here reads
-those fields.
+API-error and ignorable `<synthetic>` lines excluded. If
+`stratum.turns` refuses a session, the whole profile is refused, named.
 
 Every profile prints a `stratum` line (`stratum.py`) beside the `engine era` line.
 This script profiles one session at a time and never pools, so it cannot cross
@@ -265,7 +262,7 @@ def profile(path, target="loop-engine.md", kinds=("load",), floor=None):
     compactions = 0
 
     records = [r for r in load(path) if isinstance(r, dict) and not r.get("isSidechain")]
-    ts, counts = turns(records)          # raises Unpriced on unreadable usage (#212/AC6)
+    ts, counts = turns(records)          # raises Unpriced: the whole session is refused
     known = {t.key for t in ts}
     placed = set()
 
