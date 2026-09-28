@@ -428,6 +428,8 @@ after on a real session. No engine-size change should land without that pair of 
 
 ### Finding 10 — ingestion is not cost: the engine is carried for ~91% of a run
 
+> ⚠ **The vote rows span two strata (#207/AC9):** `claude-opus-5@xhigh` ×4 and `claude-opus-5@high` ×2. The two admissible loop rows are `claude-opus-5@xhigh`; the excluded `a587e8e4` is UNSTRATIFIED. So the pooled n=8 fit below (`cost ≈ turns × ~33k`, the ~8× cache discount) spans `@xhigh` ×6 and `@high` ×2. Not recomputed; see `stratum-reprofile-2026-09-27.md`.
+
 *(added 2026-08-26. **Rewritten twice the same day**, each time because the measuring instrument was
 wrong — see "Three detection bugs" below. Every number is a frozen snapshot, not a maintained
 figure. Reproduce with `engine_cost.py`; its detection is pinned by `test_engine_cost.py`.)*
