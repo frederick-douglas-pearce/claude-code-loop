@@ -45,7 +45,7 @@ here, was not re-profiled or labelled; treat it as not stratified.**
 | Convergence, 0.2.0 era only | `baseline-2026-08-25.md` → *Convergence* | all four | **0 / 12: no session set recorded** (these are ledger rows) | unknown | **cannot be stratified** |
 | v0.2.1 n=10 | #126 comment (*"AC3's ≥5 precondition is discharged — n=10 and n=13"*) | loop | 10/10 | `opus-5@xhigh` ×10 | none: single stratum |
 | v0.2.1 n=13 | same comment | vote | 13/13 | `opus-5@xhigh` ×13 | none: single stratum |
-| 0.3.0 | #126's body: n=0 as of 2026-09-13 | any | none recorded | — | n/a |
+| 0.3.0: none harvested, so no reading exists | #126's body: n=0 as of 2026-09-13 | any | 0 / 0 | — | n/a: no reading to label |
 
 **Where the v0.2.1 list was found.** Searched #126's body and comments, #128, #133, #207, every
 `progress.md` under this repo's `.claude/loop/` and the vote repo's, and `docs/research/*.md`. The
