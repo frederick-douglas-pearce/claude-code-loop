@@ -28,7 +28,7 @@ matches, and sanity-check the distribution against what the system can physicall
 squeezed between the compaction ceiling above and the starting footprint below, so it barely varies;
 turn count has no ceiling. Regress cost on anything and the fit is dominated by its own arithmetic.
 
-> ↳ **#212:** figures here predate #212's cost arithmetic; `cost-arithmetic-rerun-2026-09-28.md` reports how far each moves.
+> ↳ **#212:** figures here predate #212's cost arithmetic; see `cost-arithmetic-rerun-2026-09-28.md`.
 
 The consequence is not cosmetic. It fixes the dependent variable (DV) — the outcome a model is
 fit to predict:
@@ -62,7 +62,7 @@ and subagent transcripts on one 1× / 1.25× / 0.1× / 5× schedule:
 *Dated snapshot, 2026-08-29, from an untested script. Regenerate before citing; see the warning
 above.*
 
-> ↳ **#212:** figures here predate #212's cost arithmetic; `cost-arithmetic-rerun-2026-09-28.md` reports how far each moves.
+> ↳ **#212:** figures here predate #212's cost arithmetic; see `cost-arithmetic-rerun-2026-09-28.md`.
 
 Three things follow, and the third is the one that reaches an existing finding.
 
@@ -217,7 +217,7 @@ makes the trade real. Scouting run over the same four projects, per assistant re
 | parent | **~26k** | rises, r = **+0.54** |
 | subagent | **~15k** | flat, r = +0.21 |
 
-> ↳ **#212:** figures here predate #212's cost arithmetic; `cost-arithmetic-rerun-2026-09-28.md` reports how far each moves.
+> ↳ **#212:** figures here predate #212's cost arithmetic; see `cost-arithmetic-rerun-2026-09-28.md`.
 
 **The flatness is the load-bearing part, and it refutes the obvious hypothesis.** The natural guess
 is that subagents look cheap only because they are short — less accumulated context, lower per-turn

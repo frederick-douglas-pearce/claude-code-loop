@@ -432,7 +432,7 @@ after on a real session. No engine-size change should land without that pair of 
 wrong — see "Three detection bugs" below. Every number is a frozen snapshot, not a maintained
 figure. Reproduce with `engine_cost.py`; its detection is pinned by `test_engine_cost.py`.)*
 
-> ↳ **#212:** figures here predate #212's cost arithmetic; `cost-arithmetic-rerun-2026-09-28.md` reports how far each moves.
+> ↳ **#212:** figures here predate #212's cost arithmetic; see `cost-arithmetic-rerun-2026-09-28.md`.
 
 Findings 6–9 measure **ingestion**: engine tokens counted once, when they land. That tracks the
 lever, but it is not a cost proxy — a token arriving at turn 12 of a 109-turn session is
@@ -589,7 +589,7 @@ yet.**
 turns, Finding 10's ranking of convergence above sharding was wrong. Reproduce with
 `rounds_vs_turns.py`.)*
 
-> ↳ **#212:** figures here predate #212's cost arithmetic; `cost-arithmetic-rerun-2026-09-28.md` reports how far each moves.
+> ↳ **#212:** figures here predate #212's cost arithmetic; see `cost-arithmetic-rerun-2026-09-28.md`.
 
 `- Budget:` lines are written by the parent into `progress.md`, so the session that produced one
 also contains it. Joining those to parent turn counts, across eight sessions in two repos:
@@ -688,7 +688,7 @@ invocation; ingestion ≥ one engine copy). Do both before believing any transcr
 
 *(added 2026-08-26. Reproduce with `calls_per_turn.py`.)*
 
-> ↳ **#212:** figures here predate #212's cost arithmetic; `cost-arithmetic-rerun-2026-09-28.md` reports how far each moves.
+> ↳ **#212:** figures here predate #212's cost arithmetic; see `cost-arithmetic-rerun-2026-09-28.md`.
 
 Cost is `turns × context` (Finding 10), and **a turn issuing five parallel tool calls bills the same
 as one issuing a single call.** So batching is the only lever that reduces turns without touching a

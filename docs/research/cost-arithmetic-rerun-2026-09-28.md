@@ -6,8 +6,7 @@ turn priced on its own model. `engine_cost.py` also stopped crediting a tool res
 of the call that issued it, and `plan_gate_cost.py` gained a `user/other input` row. This file
 reports how much that moves each figure.
 
-**Nothing is rewritten.** Published figures stand as published, and their sections carry a one-line
-pointer to this file. **A figure computed before #212 that this file does not report as re-run has
+**Nothing is rewritten.** Published figures stand as published. **A figure computed before #212 that this file does not report as re-run has
 not been re-checked; treat it as moved.**
 
 **"Materially" was fixed in PR #215 before any number here existed:** a move of **≥ 5% relative**
@@ -21,7 +20,7 @@ Session IDs and aggregates only; no transcript content leaves the machine.
 - **Old** is `docs/research/` at `bce5e62` (`main` before PR #215). **New** is `43245b5` (PR #215
   merged). Each was extracted with `git archive <sha> docs/research` and run unchanged.
 - **§2 re-runs each figure on the session set it was published on, pooled across strata where the
-  published figure was**, except where a row says the script now splits by stratum.
+  published figure was**, except where a row says otherwise.
 - **Two session sets.** (1) The readings #207/AC9 re-profiled, which AC8 names: the 32 sessions in
   `stratum-reprofile-2026-09-27.md`. (2) The session set behind each published figure AC8 names,
   because **none of those figures was computed over the 32**. Finding 10's n=8 includes `9b188aba`
@@ -69,7 +68,7 @@ before #212, now cost 2× base input. INGESTED and P2c move in both directions a
 The totals roughly halve, mainly because the old `tree_cost.py` summed every streamed line of a response
 rather than one record per `message.id`.
 
-**`calls_per_turn.py` (Finding 12's lever)** — per-session means within each stratum, as the script prints them.
+**`calls_per_turn.py` (Finding 12's lever)** — per-session means within each stratum; the % of input is the stratum's pooled share, as the script prints them.
 
 | reading | stratum | ceiling (all mergeable) | floor (paging only) | realistic floor |
 |---|---|---|---|---|
@@ -94,7 +93,7 @@ Token amounts rise 9–25%. The shares of input bill move by 0.8 pp or less.
 The addendum is one session and yields no fit. The loop second-baseline fit rests on two sessions,
 and its slope changes sign.
 
-**`plan_gate_cost.py` (token counts, not prices)** — medians over every session in the reading. The script does not split by stratum, so the vote n=5 row spans strata and the loop row includes `a587e8e4`.
+**`plan_gate_cost.py` (token counts, not prices)** — medians over every session in the reading; the over-attribution column is the min…max range. The script does not split by stratum, so the vote n=5 row spans strata and the loop row includes `a587e8e4`.
 
 | reading | n | cumulative arrivals | model output | pre-plan turns | selection-phase share | over-attribution |
 |---|---:|---|---|---|---|---|
