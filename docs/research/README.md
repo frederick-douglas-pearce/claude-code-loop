@@ -49,6 +49,31 @@ not name both strata:** a model or effort change is a treatment too (`cost-model
 environment is a treatment*), so compare only within one parent `(model, effort)` stratum, as each
 script's `stratum` line reports it.
 
+## The cost spec is canonical
+
+**The canonical cost arithmetic is
+[`claude-code-sessions/reference/cost-model.md`](https://github.com/frederick-douglas-pearce/claude-code-sessions/blob/main/reference/cost-model.md).**
+Every script here that prices anything does so through `stratum.py`'s shared path (#212). Where this
+directory and the spec disagree, the spec describes the bill, and the difference is one of these
+known departures:
+
+- **A cache-write split that disagrees with its total refuses** the session. The spec defines the
+  total as the sum of the 5-minute and 1-hour parts.
+- **Unreadable usage refuses:** a `usage` that is absent or not a dict, one carrying none of the four
+  token fields, and a token field that is present but not a number.
+- **Pricing levers refuse** rather than being priced: a `speed` or `service_tier` other than
+  `"standard"`, an `inference_geo` other than `""`, `"not_available"` or `"global"`, and any
+  `server_tool_use` entry that is not a zero count. The spec describes how fast mode, batch, priority
+  tier, US data residency and web search are billed.
+- **Model IDs match exactly.** An alias or a dated variant with no `PRICING` entry of its own
+  refuses. The spec resolves aliases to the canonical rate table.
+- **No long-context tier is modelled.** Every model is priced at its flat rates.
+- **`engine_cost.py` refuses a session whose priced turns span models**, because its ratio units need
+  one weight set. The USD scripts price such a session.
+- **Named limit, not a refusal: a usage key the code does not know is ignored**, so a new lever would
+  price at standard rates. The spec says to ignore unknown fields, so this cannot be refused by
+  default.
+
 ---
 
 ## What the metrics mean
@@ -63,20 +88,22 @@ These were misread once, so they are pinned here rather than left to inference.
 | **carry / carry-per-turn** | resident-turn ÷ ingested (÷ turns) | **use carry/turn** — raw carry scales with session length and cannot be compared across runs |
 | **% of bill** | engine's share of billable-equivalent input | engine takes a share of the **input** side only; it does not cause output tokens |
 | **peak context** | the high-water mark of a **single turn** | *not* a total for the run; compaction *lowers* it |
-| **bill/turn** | billable-equivalent per parent turn | near-constant (~28–33k) — that is the point, not a coincidence. *Finding 10, n=8, pooled across `claude-opus-5@xhigh` and `@high`* |
+| **bill/turn** | billable-equivalent per parent turn | near-constant (~28–33k) — that is the point, not a coincidence. *Finding 10, n=8, pooled across `claude-opus-5@xhigh` and `@high`.* ↳ *#212's arithmetic moves it +9%: [`cost-arithmetic-rerun-2026-09-28.md`](cost-arithmetic-rerun-2026-09-28.md).* |
 
 **Pricing is per model** (`stratum.PRICING`, from the
-[pricing page](https://platform.claude.com/docs/en/about-claude/pricing), checked 2026-09-27). Input
-splits fresh / cache-write / cache-read at 1× / 1.25× / **0.1×** on `claude-opus-5`, `-4-8` and `-4-7`,
-and 1× / 1.25× / **0.05×** on `claude-opus-5-5`; output is 5× input on all of them. A model with no
+[pricing page](https://platform.claude.com/docs/en/about-claude/pricing), checked 2026-09-28). Input
+splits fresh / 5-minute cache write / 1-hour cache write / cache read at 1× / 1.25× / 2× / **0.1×**,
+except a **0.05×** cache read on `claude-opus-5-5`; output is 5× input on every entry. A model with no
 entry refuses to price. 97.6–98.9% of input is cache-read, so **share of context ≈ share of cost** and
 cache is a uniform ~8× discount rather than a lever — *Finding 10's n=8 on `claude-opus-5`, pooled
 across `@xhigh` and `@high`; re-measure per stratum.*
+↳ *#212's arithmetic moves that discount to ~7.7× (−9%): [`cost-arithmetic-rerun-2026-09-28.md`](cost-arithmetic-rerun-2026-09-28.md).*
 
 **The cost model in one line:** `cost ≈ turns × ~33k` (*Finding 10's n=8 on `claude-opus-5`, pooled
 across `@xhigh` and `@high`; re-measure per stratum*). Average context is bounded above by the
 compaction ceiling and below by the starting footprint, so it varies little; turn count has no
 ceiling. **Turns is the free variable.**
+↳ *The ~33k predates #212; its arithmetic moves it to ~38k (+9%): [`cost-arithmetic-rerun-2026-09-28.md`](cost-arithmetic-rerun-2026-09-28.md).*
 
 ---
 
@@ -153,6 +180,9 @@ The three levers this work ranks, in the same units:
 | avoid one gate round | ~561–850k **input+output, per issue** | r=+0.79 + Finding 2's mechanism | correlational |
 | batch same-file paging reads | ~176k **input-only, per session** (358k theoretical) | run-length corrected | rough order |
 | shard the engine (#128) | ~4–5% of a run | modelled, not measured | low |
+
+↳ *#212's arithmetic moves the first two rows' amounts by 9–19%, and the third row could not be
+re-run: [`cost-arithmetic-rerun-2026-09-28.md`](cost-arithmetic-rerun-2026-09-28.md).*
 
 **These are not in the same units and an earlier version of this table said they were.** The gate-round
 figure is input+output per *issue*; the batching figure is input-only per *session*. On a common
