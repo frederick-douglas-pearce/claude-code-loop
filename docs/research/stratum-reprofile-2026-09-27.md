@@ -5,6 +5,9 @@ The readings #207/AC9 names — the frozen 0.2.0 baselines, the v0.2.1 n=10 / n=
 `stratum.py` **as merged in `9b68f05`** (PR #213; the last commit to touch the extractor is
 `3454b4e`). A later change to `stratum.py` invalidates this file until it is re-run.
 
+↳ **Re-run at `43245b5` (#212 changed `stratum.py`):** every session's `stratum` line is unchanged,
+so the verdicts below stand. See `cost-arithmetic-rerun-2026-09-28.md`.
+
 **Nothing here is recomputed.** A reading in this file that is not positively single-stratum is
 **labelled** in its source doc with a one-line pointer to this file. Its figures stand as published,
 and the label tells a reader not to compare them across a stratum. The rule behind this, and why a
