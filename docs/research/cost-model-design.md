@@ -28,7 +28,7 @@ matches, and sanity-check the distribution against what the system can physicall
 squeezed between the compaction ceiling above and the starting footprint below, so it barely varies;
 turn count has no ceiling. Regress cost on anything and the fit is dominated by its own arithmetic.
 
-> ↳ **#212:** the ~33k predates #212's arithmetic, which moves it to ~38k (+9%). See `cost-arithmetic-rerun-2026-09-28.md`.
+> ↳ **#212:** figures here predate #212's cost arithmetic; `cost-arithmetic-rerun-2026-09-28.md` reports how far each moves.
 
 The consequence is not cosmetic. It fixes the dependent variable (DV) — the outcome a model is
 fit to predict:
@@ -50,7 +50,7 @@ transcripts living in `<session>/subagents/` that neither script opens. That is 
 caveat. It is larger than a caveat.
 
 Scouting run over every **delegating** session in each consumer's project directory, pricing parent
-and subagent transcripts on the same 1× / 1.25× / 0.1× / 5× schedule the README pins:
+and subagent transcripts on one 1× / 1.25× / 0.1× / 5× schedule:
 
 | project | delegating sessions | subagent share of bill | per-session median | range |
 |---|---:|---:|---:|---:|
@@ -62,8 +62,7 @@ and subagent transcripts on the same 1× / 1.25× / 0.1× / 5× schedule the REA
 *Dated snapshot, 2026-08-29, from an untested script. Regenerate before citing; see the warning
 above.*
 
-> ↳ **#212:** the corrected arithmetic moves the subagent share by −1.6 to −2.6 pp, past 2 pp for
-> `us-presidential-vote-analysis` and `agentfluent`. See `cost-arithmetic-rerun-2026-09-28.md`.
+> ↳ **#212:** figures here predate #212's cost arithmetic; `cost-arithmetic-rerun-2026-09-28.md` reports how far each moves.
 
 Three things follow, and the third is the one that reaches an existing finding.
 
@@ -218,8 +217,7 @@ makes the trade real. Scouting run over the same four projects, per assistant re
 | parent | **~26k** | rises, r = **+0.54** |
 | subagent | **~15k** | flat, r = +0.21 |
 
-> ↳ **#212:** this table and the length table below predate #212's arithmetic and were not re-run,
-> because no script in this directory produces them. See `cost-arithmetic-rerun-2026-09-28.md`.
+> ↳ **#212:** figures here predate #212's cost arithmetic; `cost-arithmetic-rerun-2026-09-28.md` reports how far each moves.
 
 **The flatness is the load-bearing part, and it refutes the obvious hypothesis.** The natural guess
 is that subagents look cheap only because they are short — less accumulated context, lower per-turn
