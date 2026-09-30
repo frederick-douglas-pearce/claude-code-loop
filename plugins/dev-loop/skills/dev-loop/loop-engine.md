@@ -45,10 +45,9 @@ never lets its gate be skipped. Per unit:
   and the row cannot merge: journal a `- gate-error:` and escalate to the human (Gate-outcome
   invariant). On Resume, if the unfinished-mutation check sends you to the unit and it is not
   loaded, that is a STOP: touch nothing in the tree, and never `git restore`.
-- `reference` — an appendix, not a gate: Initialization and the `queue.md` skeleton it writes,
-  needed only when step 0 initializes a new run. Everything that decides whether anything passes,
-  stops or merges stays in core. Without it loaded, do not initialize — create nothing under
-  `LEDGER_ROOT` — and do not invent a queue shape: STOP and tell the human.
+- `reference` — Initialization and the `queue.md` skeleton it writes. Without it loaded, do not
+  initialize — create nothing under `LEDGER_ROOT` — and do not invent a queue shape: STOP and tell
+  the human.
 - `reviewing` — still in core; nothing is missing.
 - `implementing` — still in core; nothing is missing.
 
@@ -65,9 +64,8 @@ invocation resumes correctly.
    `BACKLOG_SOURCE` (milestone/label/`TODO.md`) to run, then **read the `reference` unit now**
    — `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/initialization.md`, in full, under the load
    protocol (preamble), before creating anything under `LEDGER_ROOT` — and INITIALIZE per its
-   Initialization procedure. **If it is not loaded, do not initialize:** create nothing, and STOP
-   and tell the human (preamble → *What holds without each unit loaded*). Otherwise find the
-   **most recent** run-state sentinel in `progress.md` — the
+   Initialization procedure. Otherwise find the **most recent** run-state sentinel in
+   `progress.md` — the
    last of `{RUN COMPLETE, RUN PARKED, RUN RESUMED}` by append order (the log is append-only, so
    a superseded sentinel still sits above; last one wins) — and act only on it. **Find it by
    searching the file for those three strings and taking the last hit that is a sentinel; never
@@ -165,7 +163,7 @@ count ≥ `iteration-cap`, OR the **prior** iteration's journaled `- Budget:` li
 it and proceed (the human who invoked is the budget authority); **the driver halts.** Inert while
 both caps are `none`.
 
-**Roster reconciliation (iteration start).** The queue built at init (see Initialization) is the
+**Roster reconciliation (iteration start).** The queue built at init is the
 authoritative work set — the *curated subset*; `BACKLOG_SOURCE` membership may drift afterward, and
 drift is **surfaced to the human once, never auto-applied** — neither auto-added on join nor
 auto-ejected on leave. Compute the delta between the live `BACKLOG_SOURCE` roster (one enumeration,
@@ -1469,7 +1467,7 @@ slices whose *requested* ranges tile the file can still arrive with the middle m
 cannot confirm the file's extent, it is not known, and you page it one turn at a time.** This governs
 *slices of one file you have already sized*; it is **not** a licence to merge independent tool calls
 in general, because in general nothing distinguishes a dependent read from an independent one and
-merging across a dependency reorders effects. (The engine — core and every phase unit — must still
+merging across a dependency reorders effects. (The engine — core and every unit — must still
 be read with `Read` rather than shell slices — see the engine-read protocol in `SKILL.md`.)
 
 **The working tree is parent-owned state; any agent that must write to it gets its own copy.** This
@@ -1660,7 +1658,7 @@ apply this rule; the sets it closes over are the ones enumerated above.
   **parked cheap path** re-derives selectability from `queue.md` without that scan. The upgrade rule
   in `README.md` is what addresses the second of those, and nothing here enforces it.
 
-**Curated-subset invariant.** The queue built at init (see Initialization) is the authoritative
+**Curated-subset invariant.** The queue built at init is the authoritative
 work set; `BACKLOG_SOURCE` membership may drift afterward, and that drift is **surfaced to the
 human once, never auto-applied** — neither auto-added on join nor auto-ejected on leave (step-1
 roster reconciliation). A corollary is a Notes discipline: **write a `parked`/`blocked` row's Notes
@@ -1731,7 +1729,7 @@ the way a graduated `mode:` is — re-set it after init if the run's posture sho
 mode default.
 
 **`plan-gate:` is human-owned.** Initialization writes it once, deriving the default from the mode
-branch it already takes (below); every value after that first write is a human decision recorded in
+branch it already takes; every value after that first write is a human decision recorded in
 the header, exactly like `mode:`, `graduated-routes:` and the budget caps. **The orchestrator never
 rewrites this field after Initialization** — not at step 5, and not on the observation that recent
 approvals looked routine. A gate that can switch itself off on its own reading of its own history is
@@ -1750,10 +1748,6 @@ starting the next. On breach the behavior is **advisory in manual re-invoke** (j
 it and proceed — the human who invoked is the budget authority) and **halting under the driver**
 (see Convergence). The caps bound `escalation-only`'s runaway-consumption risk; bad-merge risk is
 already covered by the default-deny/always-escalate machinery above.
-
-The header-and-table skeleton that Initialization writes lives with Initialization, in the
-`reference` unit (phase index). It is provenance only: every field and Status it shows is defined
-above, so reading or updating an existing `queue.md` never needs it.
 
 ### `progress.md` — append-only journal (survives /clear + compaction)
 The orchestrator APPENDS one block **per gate decision** and, over an iteration, the two records
@@ -2297,7 +2291,7 @@ plan. Never regenerated and never back-dated — see Resume.>
 ```
 
 ### Lifecycle & commit policy
-- **Init:** orchestrator creates the dir + `queue.md` from `BACKLOG_SOURCE` (see Initialization).
+- **Init:** orchestrator creates the dir + `queue.md` from `BACKLOG_SOURCE`.
 - **Per iteration:** update one `queue.md` row through its statuses; append the **open record** at
   step 7 and the **close record** at step 12, each owed only by an iteration that reaches that step,
   plus a block wherever a gate resolves (see `progress.md` above); write/update `issue-<N>.plan.md`.

@@ -7,11 +7,6 @@ active run and you are about to initialize one. Read it in full, under core's lo
 (*What holds without each unit loaded*), never here: its absence never makes a gate pass and never
 lets one be skipped.
 
-It is an appendix, not a gate. Core keeps everything that governs a ledger after it exists — the
-`queue.md` status sets and the meaning of every header field (`mode:`, `graduated-routes:`,
-`plan-gate:`, the budget caps), the whole `progress.md` vocabulary, the plan template, the Router,
-and Resume. This unit holds only what a new run needs in order to write them the first time.
-
 ## Initialization procedure (new run)
 1. Derive `<run-slug>` from `BACKLOG_SOURCE`: milestone → the milestone name; label → the label
    (slugified); `TODO.md` → its basename. `mkdir -p LEDGER_ROOT/<run-slug>`.
@@ -36,9 +31,6 @@ and Resume. This unit holds only what a new run needs in order to write them the
 5. Append an "init" block to `progress.md`. (Ledger is gitignored — not committed.)
 
 ### The `queue.md` skeleton
-
-Step 4 above writes `queue.md` in this shape. The meaning of each header field and each Status is
-stated in core, not here.
 
 ```markdown
 # Loop run: <run-slug>

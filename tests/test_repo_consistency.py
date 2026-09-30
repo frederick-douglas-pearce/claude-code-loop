@@ -3034,8 +3034,7 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
         "Tool surface": ("### Tool surface —", "## Ledger format"),
         "Ledger format": ("## Ledger format", "## Router — classification"),
         # Ends on the unit's own closing line: the only text that marks the end of
-        # ``phases/accepting.md`` and occurs in no other source. Any end anchor that
-        # could also occur in a later-sorting source would let the span run on into it.
+        # ``phases/accepting.md`` and occurs in no other source.
         "AC-verifier": ("## AC-verifier", "*End of the `accepting` unit.*"),
         "Gates": ("## Gates, convergence & resting states", "**Convergence & the resting"),
     }

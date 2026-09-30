@@ -114,7 +114,7 @@ project means editing only the config — never the engine. If a change to the e
 knowing something project-specific, that is the signal to introduce a new `CAPS` parameter instead.
 
 A fourth file participates: `plugins/dev-loop/commands/init-loop.md` embeds a **skeleton of
-`loop.config.md`**. When you add or rename a `CAPS` parameter in the engine (core or a phase unit), the `/init-loop`
+`loop.config.md`**. When you add or rename a `CAPS` parameter in the engine (core or a unit), the `/init-loop`
 skeleton (§1 binding table) and its inference map must be updated in the same change, or
 newly-onboarded repos will be missing the binding the engine now reads.
 
@@ -381,7 +381,7 @@ loop runs in this repo, so editing it is a behavior change. Note the engine sepa
 orchestrator from editing its own config mid-run — config changes are human work, landed outside a
 loop iteration.
 
-`plugins/dev-loop/skills/dev-loop/loop-engine.md` and its phase units under `phases/`,
+`plugins/dev-loop/skills/dev-loop/loop-engine.md` and its units,
 `plugins/dev-loop/skills/dev-loop/SKILL.md`, and `plugins/dev-loop/commands/init-loop.md` are
 markdown, but they are **the product** — an agent executes them at runtime. Editing them is a
 behavior change and takes the PR path, however prose-like the diff looks. When unsure which side a
