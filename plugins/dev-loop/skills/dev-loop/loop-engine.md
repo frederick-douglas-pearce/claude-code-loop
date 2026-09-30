@@ -23,7 +23,7 @@ load.
 | Unit | File | Read it at |
 |---|---|---|
 | `accepting` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/phases/accepting.md` | step 10; and Resume, when its unfinished-mutation check sends you to this unit |
-| `reference` | — (in core) | — |
+| `reference` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/initialization.md` | step 0, when no run exists and you are about to initialize one |
 | `reviewing` | — (in core) | — |
 | `implementing` | — (in core) | — (contingent: may never be extracted) |
 
@@ -45,7 +45,9 @@ never lets its gate be skipped. Per unit:
   and the row cannot merge: journal a `- gate-error:` and escalate to the human (Gate-outcome
   invariant). On Resume, if the unfinished-mutation check sends you to the unit and it is not
   loaded, that is a STOP: touch nothing in the tree, and never `git restore`.
-- `reference` — still in core; nothing is missing.
+- `reference` — Initialization and the `queue.md` skeleton it writes. Without it loaded, do not
+  initialize — create nothing under `LEDGER_ROOT` — and do not invent a queue shape: STOP and tell
+  the human.
 - `reviewing` — still in core; nothing is missing.
 - `implementing` — still in core; nothing is missing.
 
@@ -59,8 +61,11 @@ invocation resumes correctly.
 
 ### 0. Load or initialize state
 1. Identify the active run (most recent `LEDGER_ROOT/<run>/`). If none exists, ask the user which
-   `BACKLOG_SOURCE` (milestone/label/`TODO.md`) to run, then INITIALIZE per the Initialization
-   procedure below. Otherwise find the **most recent** run-state sentinel in `progress.md` — the
+   `BACKLOG_SOURCE` (milestone/label/`TODO.md`) to run, then **read the `reference` unit now**
+   — `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/initialization.md`, in full, under the load
+   protocol (preamble), before creating anything under `LEDGER_ROOT` — and INITIALIZE per its
+   Initialization procedure. Otherwise find the **most recent** run-state sentinel in
+   `progress.md` — the
    last of `{RUN COMPLETE, RUN PARKED, RUN RESUMED}` by append order (the log is append-only, so
    a superseded sentinel still sits above; last one wins) — and act only on it. **Find it by
    searching the file for those three strings and taking the last hit that is a sentinel; never
@@ -158,7 +163,7 @@ count ≥ `iteration-cap`, OR the **prior** iteration's journaled `- Budget:` li
 it and proceed (the human who invoked is the budget authority); **the driver halts.** Inert while
 both caps are `none`.
 
-**Roster reconciliation (iteration start).** The queue built at init (see Initialization) is the
+**Roster reconciliation (iteration start).** The queue built at init is the
 authoritative work set — the *curated subset*; `BACKLOG_SOURCE` membership may drift afterward, and
 drift is **surfaced to the human once, never auto-applied** — neither auto-added on join nor
 auto-ejected on leave. Compute the delta between the live `BACKLOG_SOURCE` roster (one enumeration,
@@ -1462,7 +1467,7 @@ slices whose *requested* ranges tile the file can still arrive with the middle m
 cannot confirm the file's extent, it is not known, and you page it one turn at a time.** This governs
 *slices of one file you have already sized*; it is **not** a licence to merge independent tool calls
 in general, because in general nothing distinguishes a dependent read from an independent one and
-merging across a dependency reorders effects. (The engine — core and every phase unit — must still
+merging across a dependency reorders effects. (The engine — core and every unit — must still
 be read with `Read` rather than shell slices — see the engine-read protocol in `SKILL.md`.)
 
 **The working tree is parent-owned state; any agent that must write to it gets its own copy.** This
@@ -1653,7 +1658,7 @@ apply this rule; the sets it closes over are the ones enumerated above.
   **parked cheap path** re-derives selectability from `queue.md` without that scan. The upgrade rule
   in `README.md` is what addresses the second of those, and nothing here enforces it.
 
-**Curated-subset invariant.** The queue built at init (see Initialization) is the authoritative
+**Curated-subset invariant.** The queue built at init is the authoritative
 work set; `BACKLOG_SOURCE` membership may drift afterward, and that drift is **surfaced to the
 human once, never auto-applied** — neither auto-added on join nor auto-ejected on leave (step-1
 roster reconciliation). A corollary is a Notes discipline: **write a `parked`/`blocked` row's Notes
@@ -1724,7 +1729,7 @@ the way a graduated `mode:` is — re-set it after init if the run's posture sho
 mode default.
 
 **`plan-gate:` is human-owned.** Initialization writes it once, deriving the default from the mode
-branch it already takes (below); every value after that first write is a human decision recorded in
+branch it already takes; every value after that first write is a human decision recorded in
 the header, exactly like `mode:`, `graduated-routes:` and the budget caps. **The orchestrator never
 rewrites this field after Initialization** — not at step 5, and not on the observation that recent
 approvals looked routine. A gate that can switch itself off on its own reading of its own history is
@@ -1743,24 +1748,6 @@ starting the next. On breach the behavior is **advisory in manual re-invoke** (j
 it and proceed — the human who invoked is the budget authority) and **halting under the driver**
 (see Convergence). The caps bound `escalation-only`'s runaway-consumption risk; bad-merge risk is
 already covered by the default-deny/always-escalate machinery above.
-
-```markdown
-# Loop run: <run-slug>
-_mode: calibration_
-_graduated-routes: none_
-_plan-gate: always_         # always | conditional; absent or unrecognized = always
-_iteration-cap: none_       # max issues per run; none = uncapped
-_subagent-cap: none_        # max subagent runs per iteration; none = uncapped
-_Last updated: <ISO8601 by orchestrator>_
-
-| # | Issue | Route | Status | Depends on | PR | Notes |
-|---|-------|-------|--------|-----------|----|----|
-| 1 | #<a> precondition fix | code | done | — | #<pr> | precondition |
-| 2 | #<b> probe | research | queued | — | — | first in epic #<epic> |
-| 3 | #<c> follow-on | research | blocked | #<b> | — | needs #<b> findings |
-| 4 | #<d> stub | stub-defer | deferred | — | — | not implementation-ready |
-| 5 | #<e> post-release re-measure | code | parked | — | — | awaiting: <external condition> |
-```
 
 ### `progress.md` — append-only journal (survives /clear + compaction)
 The orchestrator APPENDS one block **per gate decision** and, over an iteration, the two records
@@ -2304,7 +2291,7 @@ plan. Never regenerated and never back-dated — see Resume.>
 ```
 
 ### Lifecycle & commit policy
-- **Init:** orchestrator creates the dir + `queue.md` from `BACKLOG_SOURCE` (see Initialization).
+- **Init:** orchestrator creates the dir + `queue.md` from `BACKLOG_SOURCE`.
 - **Per iteration:** update one `queue.md` row through its statuses; append the **open record** at
   step 7 and the **close record** at step 12, each owed only by an iteration that reaches that step,
   plus a block wherever a gate resolves (see `progress.md` above); write/update `issue-<N>.plan.md`.
@@ -2342,31 +2329,6 @@ an **external event** (a release cut, a dogfood window — not an in-run issue) 
 Else if any `Depends on` issue is not `done` → `blocked` (record the dep in Notes; the semantic
 Route is retained so the row resumes as that route once the dependency clears, step 1). Else →
 `routed`.
-
----
-
-## Initialization procedure (new run)
-1. Derive `<run-slug>` from `BACKLOG_SOURCE`: milestone → the milestone name; label → the label
-   (slugified); `TODO.md` → its basename. `mkdir -p LEDGER_ROOT/<run-slug>`.
-2. Enumerate `BACKLOG_SOURCE` (e.g. `gh issue list --milestone <run> --state open --json
-   number,title,labels` for a milestone; `--label <name>` for a label/epic source).
-3. For each issue: determine route (Router) and dependencies (parse "Depends on"/"blocked by"
-   refs in the body; respect epic ordering notes). An epic *tracker* issue is not a work row —
-   carry it terminal (`deferred`) if the source enumerates it (the loop does not close epics).
-4. Topologically order by dependency, then by `PRIORITY_LABELS` (tiebreak issue-number asc).
-   Write `queue.md` with header `mode: calibration` **unless the human has already graduated routes
-   for this project** — check the decision log and, if so, init `mode: escalation-only` + the
-   graduated `graduated-routes:` instead, so a prior graduation persists across runs rather than
-   silently resetting to calibration. Step 11 reads `mode`/`graduated-routes` to gate **the merge
-   gate**, per route; it never affects the plan gate. **Set `plan-gate:` on the same branch you just
-   took** — `calibration` ⇒ `plan-gate: always`; the prior-graduation branch ⇒
-   `plan-gate: conditional` — so the plan gate's posture starts consistent with the trust level the
-   project has actually established. Write it explicitly even though an absent field would read as
-   `always` (step 5): the human tunes what they can see, and a field that only exists once someone
-   needs to loosen it is one they will not know to look for. After init the two are independent —
-   a later `mode:` change never rewrites `plan-gate:`. Also set `iteration-cap: none` and
-   `subagent-cap: none` (the human sets them when loosening).
-5. Append an "init" block to `progress.md`. (Ledger is gitignored — not committed.)
 
 ---
 

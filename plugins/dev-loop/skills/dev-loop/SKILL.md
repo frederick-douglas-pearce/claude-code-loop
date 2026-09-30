@@ -21,9 +21,10 @@ invariants below without them:
 2. **`${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/loop-engine.md`** — the generic engine's core: the numbered pipeline
    (step 0 load/resume → 1 select → 2 route → 3 plan → 4 architect → 5 human gate → 6 implement →
    7 commit/PR → 8 code-review → 9 security → 10 AC-verify → 11 merge → 12 journal), plus the
-   ledger format, router, initialization, resume, routing table, and
+   ledger format, router, resume, routing table, and
    gate/convergence/park-hold/budget semantics. Its **phase index** names each phase unit, the
-   file it lives in, and when to read it — the AC-verifier, for one, lives in the `accepting` unit.
+   file it lives in, and when to read it — the AC-verifier, for one, lives in the `accepting` unit,
+   and Initialization in the `reference` unit.
 
    **Read it with `Read`, never with `cat`/`sed`/`head`.** The engine is far larger than the Bash
    output cap, so a shell read returns a **silently truncated fragment** that ends inside the

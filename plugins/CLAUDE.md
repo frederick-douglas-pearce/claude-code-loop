@@ -62,7 +62,8 @@ even though nothing will fail loudly:
   them either.** The list in the always-on plan-gate bullet below is scoped to a *different*
   invariant (the material-architect-rewrite stop) and does not cover posture sites — #29 changed at
   least five that the always-on bullet's site list below does not cover: step 0.2's header read,
-  Initialization step 4, the `queue.md` skeleton fence, Ledger format's `- Human gate:` paragraph,
+  Initialization step 4 and the `queue.md` skeleton fence (both in the `reference` unit,
+  `reference/initialization.md`, since #131), Ledger format's `- Human gate:` paragraph,
   and `SKILL.md`'s plan-gate bullet (that list names `SKILL.md`'s fail-safe list for the *other*
   invariant, not this one).
   Do not read that list as the posture's site list. **#35 was to reduce all of this to one canonical
