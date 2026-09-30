@@ -85,9 +85,12 @@ and **thin entry point**:
    **fail-safe invariants** so that a *partial* load over-escalates (safe) rather than under-gates.
    Sibling files are read on demand, not auto-injected, hence the explicit "read both first"
    instruction.
-2. `plugins/dev-loop/skills/dev-loop/loop-engine.md` — the whole operating procedure: pipeline
-   steps 0–12, ledger format, router, AC-verifier, initialization, resume, convergence/park/hold
-   semantics, budget caps. **Project-agnostic — contains no project-specific values, ever.**
+2. `plugins/dev-loop/skills/dev-loop/loop-engine.md` — the engine's **core**: pipeline steps
+   0–12, ledger format, router, initialization, resume, convergence/park/hold semantics, budget
+   caps, and the **phase index** naming each on-demand unit under
+   `plugins/dev-loop/skills/dev-loop/phases/` (since #130, `accepting.md`: step 10's procedure and
+   the AC-verifier). Core is read in full every invocation; a unit is read at its point of use.
+   **Core and every unit are project-agnostic — no project-specific values, ever.**
 3. `${CLAUDE_PROJECT_DIR}/.claude/loop.config.md` (lives in the *consuming* repo, not here) — the
    binding seam. Every `CAPS` name in the engine (`BACKLOG_SOURCE`, `SCOPE_AGENT`,
    `DESIGN_AGENT`, `LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`, `BRANCH_FMT`,
@@ -110,7 +113,7 @@ project means editing only the config — never the engine. If a change to the e
 knowing something project-specific, that is the signal to introduce a new `CAPS` parameter instead.
 
 A fourth file participates: `plugins/dev-loop/commands/init-loop.md` embeds a **skeleton of
-`loop.config.md`**. When you add or rename a `CAPS` parameter in `loop-engine.md`, the `/init-loop`
+`loop.config.md`**. When you add or rename a `CAPS` parameter in the engine (core or a phase unit), the `/init-loop`
 skeleton (§1 binding table) and its inference map must be updated in the same change, or
 newly-onboarded repos will be missing the binding the engine now reads.
 
@@ -191,8 +194,8 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
   and `CLAUDE.md` stay at the repo root and stop shipping. The front-door `README.md` also stays
   at the repo root, but its **content does ship**, as the byte-identical payload copy above.
 - **`plugins/dev-loop/tools/` holds executables meant to be run by path rather than wired to a
-  tool event** — currently `mutate_verify.py`, which ships because `loop-engine.md` (AC-verifier →
-  Part 2) invokes it at runtime as `${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py`. **The root
+  tool event** — currently `mutate_verify.py`, which ships because the engine's `accepting` unit
+  (`phases/accepting.md`, AC-verifier → Part 2) invokes it at runtime as `${CLAUDE_PLUGIN_ROOT}/tools/mutate_verify.py`. **The root
   `tools/` holds only *inputs* to it** — currently `mutation-specs/self-check.json`, the hand-run
   self-check that keeps #60's mutation numbers reproducible — and does **not** ship, because
   nothing reads it at runtime. It holds no executables; a root executable belongs in `tooling/`,
@@ -377,7 +380,7 @@ loop runs in this repo, so editing it is a behavior change. Note the engine sepa
 orchestrator from editing its own config mid-run — config changes are human work, landed outside a
 loop iteration.
 
-`plugins/dev-loop/skills/dev-loop/loop-engine.md`,
+`plugins/dev-loop/skills/dev-loop/loop-engine.md` and its phase units under `phases/`,
 `plugins/dev-loop/skills/dev-loop/SKILL.md`, and `plugins/dev-loop/commands/init-loop.md` are
 markdown, but they are **the product** — an agent executes them at runtime. Editing them is a
 behavior change and takes the PR path, however prose-like the diff looks. When unsure which side a

@@ -28,8 +28,8 @@ that used to sit here went stale the first time a module was added):
   not converge because **every review round re-derived its correctness by reading** — there was
   nothing to execute. These tests are what make a green suite say something about it. They are
   behavioral: what the harness does to a tree, and what it refuses to do. The harness was inert with
-  respect to the engine when it shipped; **#60's second PR wired it in** — `loop-engine.md`'s Part 2
-  now names it as the thing a due mutation pass runs, so these tests are the only executable
+  respect to the engine when it shipped; **#60's second PR wired it in** — Part 2 (in the engine's
+  `accepting` unit, `phases/accepting.md`, since #130) now names it as the thing a due mutation pass runs, so these tests are the only executable
   evidence behind a gate that edits source code.
 
   **No claim is made here about these tests being mechanism-shaped rather than outcome-shaped, and

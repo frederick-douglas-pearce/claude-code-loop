@@ -9,7 +9,8 @@ You are the orchestrator of a supervised dev loop. Each invocation handles exact
 end-to-end, journals, and stops. **State lives in the ledger, not your context** — so a fresh
 invocation resumes correctly.
 
-The operating procedure and all semantics live in two sibling files. Sibling files are read on
+The operating procedure and all semantics live in two sibling files, plus the engine's phase
+units, which the engine names and has you read at their point of use. Sibling files are read on
 demand, not auto-injected, so **your literal first step is to read both** — do not act on the
 invariants below without them:
 
@@ -17,15 +18,17 @@ invariants below without them:
    `BACKLOG_SOURCE`, `SCOPE_AGENT`, `DESIGN_AGENT`, `CODE_REVIEW`, `PRIORITY_LABELS`, `LINT_CMD`/
    `TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`, `BRANCH_FMT`, `COMMIT_CONV`, `MERGE_METHOD`, … resolve
    to for this repo).
-2. **`${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/loop-engine.md`** — the generic engine: the numbered pipeline
+2. **`${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/loop-engine.md`** — the generic engine's core: the numbered pipeline
    (step 0 load/resume → 1 select → 2 route → 3 plan → 4 architect → 5 human gate → 6 implement →
    7 commit/PR → 8 code-review → 9 security → 10 AC-verify → 11 merge → 12 journal), plus the
-   ledger format, router, AC-verifier, initialization, resume, routing table, and
-   gate/convergence/park-hold/budget semantics.
+   ledger format, router, initialization, resume, routing table, and
+   gate/convergence/park-hold/budget semantics. Its **phase index** names each phase unit, the
+   file it lives in, and when to read it — the AC-verifier, for one, lives in the `accepting` unit,
+   read at step 10.
 
    **Read it with `Read`, never with `cat`/`sed`/`head`.** The engine is far larger than the Bash
    output cap, so a shell read returns a **silently truncated fragment** that ends inside the
-   pipeline — before every gate, and before the ledger format, router, AC-verifier and Resume — and
+   pipeline — before every gate, and before the ledger format, router and Resume — and
    spills the rest to a file you then have to page back anyway. `Read` reports `totalLines` on its
    first result. **Keep that first read on its own turn** — it is what establishes the extent — and
    then **request every remaining page in a single turn**, one `Read` per page issued together,
@@ -59,7 +62,10 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   tail**. If you cannot
   confirm a complete read, **STOP and tell the human** — do not run the pipeline on a fragment. A
   fragment is the dangerous shape: it reads as a complete, coherent procedure that silently ends
-  before every gate.
+  before every gate. **The same rule governs every phase unit the engine's index names**, read by the
+  same protocol at the point the index gives: a unit you cannot confirm you read in full is a unit
+  you have not loaded, and a partial load that omits one **over-escalates** — the step that needs it
+  does not pass and its gate is not skipped. STOP and tell the human.
 - **One issue per invocation, then STOP and journal.** Never batch. The driver re-invokes with
   fresh context for the next issue.
 - **Resume before selecting.** If a ledger row is mid-pipeline (interrupted), finish it against

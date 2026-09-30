@@ -79,9 +79,9 @@ even though nothing will fail loudly:
   evidence** — the latter is contradicted by the next re-check and destabilizes resume.
 - **The tree-isolation / staging rule is a new multi-site invariant with no test guarding it** (#25).
   "Any agent that must write to the tree gets its own copy", and the explicit-path staging rule that
-  backstops it, are now restated across `loop-engine.md` (step 6, step 7, **step 10's own commit
-  boundary, added by #31**, Tool surface, the
-  `- Restore:` line, the AC-verifier untracked scan, Part 2's envelope, Resume), plus `SKILL.md`'s
+  backstops it, are now restated across `loop-engine.md` (step 6, step 7, Tool surface, the
+  `- Restore:` line, Resume) and the `accepting` unit, `phases/accepting.md` (**step 10's own
+  commit boundary, added by #31**, the AC-verifier untracked scan, Part 2's envelope), plus `SKILL.md`'s
   fail-safe list and the README trust model. Nothing checks their agreement, so an edit to one
   desyncs the rest silently — the same shape as the `mode:`-gating restatements above. The scope
   split this bullet used to carry — isolation live, mutation pass dormant — **closed with #60's

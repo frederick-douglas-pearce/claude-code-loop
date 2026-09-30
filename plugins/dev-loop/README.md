@@ -89,7 +89,9 @@ claude-code-loop/
 │       ├── skills/
 │       │   └── dev-loop/
 │       │       ├── SKILL.md         # thin orchestrator entry point (reads the one below)
-│       │       └── loop-engine.md   # the generic engine: pipeline + all semantics
+│       │       ├── loop-engine.md   # the engine's core: pipeline, semantics, and the phase index
+│       │       └── phases/
+│       │           └── accepting.md # phase unit: step 10 + the AC-verifier, read at step 10
 │       ├── hooks/
 │       │   ├── hooks.json           # wires the PreToolUse guard via ${CLAUDE_PLUGIN_ROOT}
 │       │   ├── guard_append_only.py # append-only guard (config-driven; stdlib only)
