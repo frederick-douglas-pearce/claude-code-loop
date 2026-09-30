@@ -331,6 +331,7 @@ _PAYLOAD_INVENTORY = frozenset({
     "skills/dev-loop/SKILL.md",
     "skills/dev-loop/loop-engine.md",
     "skills/dev-loop/phases/accepting.md",
+    "skills/dev-loop/reference/initialization.md",
     "tools/mutate_verify.py",
 })
 
@@ -618,7 +619,7 @@ class CapsVocabularyTests(unittest.TestCase):
 
     def _engine_parameters(self) -> set[str]:
         names: set[str] = set()
-        # SKILL.md is scanned alongside every engine source (core + phase units): it restates a subset of
+        # SKILL.md is scanned alongside every engine source (core + its units): it restates a subset of
         # the bindings, and a name introduced only there needs the skeleton too.
         for path in (*_engine_sources(), _SKILL):
             text = path.read_text(encoding="utf-8")
@@ -3033,10 +3034,8 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
         "Tool surface": ("### Tool surface —", "## Ledger format"),
         "Ledger format": ("## Ledger format", "## Router — classification"),
         # Ends on the unit's own closing line: the only text that marks the end of
-        # ``phases/accepting.md`` and occurs in no other source. ``## Initialization
-        # procedure`` stayed in core, which sorts first, so it can no longer end this
-        # region; any end anchor that could also occur in a later-sorting unit would let
-        # the span run on into it.
+        # ``phases/accepting.md`` and occurs in no other source. Any end anchor that
+        # could also occur in a later-sorting source would let the span run on into it.
         "AC-verifier": ("## AC-verifier", "*End of the `accepting` unit.*"),
         "Gates": ("## Gates, convergence & resting states", "**Convergence & the resting"),
     }

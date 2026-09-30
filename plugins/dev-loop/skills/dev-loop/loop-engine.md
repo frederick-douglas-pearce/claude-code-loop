@@ -23,7 +23,7 @@ load.
 | Unit | File | Read it at |
 |---|---|---|
 | `accepting` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/phases/accepting.md` | step 10; and Resume, when its unfinished-mutation check sends you to this unit |
-| `reference` | — (in core) | — |
+| `reference` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/initialization.md` | step 0, when no run exists and you are about to initialize one |
 | `reviewing` | — (in core) | — |
 | `implementing` | — (in core) | — (contingent: may never be extracted) |
 
@@ -45,7 +45,10 @@ never lets its gate be skipped. Per unit:
   and the row cannot merge: journal a `- gate-error:` and escalate to the human (Gate-outcome
   invariant). On Resume, if the unfinished-mutation check sends you to the unit and it is not
   loaded, that is a STOP: touch nothing in the tree, and never `git restore`.
-- `reference` — still in core; nothing is missing.
+- `reference` — an appendix, not a gate: Initialization and the `queue.md` skeleton it writes,
+  needed only when step 0 initializes a new run. Everything that decides whether anything passes,
+  stops or merges stays in core. Without it loaded, do not initialize — create nothing under
+  `LEDGER_ROOT` — and do not invent a queue shape: STOP and tell the human.
 - `reviewing` — still in core; nothing is missing.
 - `implementing` — still in core; nothing is missing.
 
@@ -59,8 +62,12 @@ invocation resumes correctly.
 
 ### 0. Load or initialize state
 1. Identify the active run (most recent `LEDGER_ROOT/<run>/`). If none exists, ask the user which
-   `BACKLOG_SOURCE` (milestone/label/`TODO.md`) to run, then INITIALIZE per the Initialization
-   procedure below. Otherwise find the **most recent** run-state sentinel in `progress.md` — the
+   `BACKLOG_SOURCE` (milestone/label/`TODO.md`) to run, then **read the `reference` unit now**
+   — `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/initialization.md`, in full, under the load
+   protocol (preamble), before creating anything under `LEDGER_ROOT` — and INITIALIZE per its
+   Initialization procedure. **If it is not loaded, do not initialize:** create nothing, and STOP
+   and tell the human (preamble → *What holds without each unit loaded*). Otherwise find the
+   **most recent** run-state sentinel in `progress.md` — the
    last of `{RUN COMPLETE, RUN PARKED, RUN RESUMED}` by append order (the log is append-only, so
    a superseded sentinel still sits above; last one wins) — and act only on it. **Find it by
    searching the file for those three strings and taking the last hit that is a sentinel; never
@@ -1744,23 +1751,9 @@ it and proceed — the human who invoked is the budget authority) and **halting 
 (see Convergence). The caps bound `escalation-only`'s runaway-consumption risk; bad-merge risk is
 already covered by the default-deny/always-escalate machinery above.
 
-```markdown
-# Loop run: <run-slug>
-_mode: calibration_
-_graduated-routes: none_
-_plan-gate: always_         # always | conditional; absent or unrecognized = always
-_iteration-cap: none_       # max issues per run; none = uncapped
-_subagent-cap: none_        # max subagent runs per iteration; none = uncapped
-_Last updated: <ISO8601 by orchestrator>_
-
-| # | Issue | Route | Status | Depends on | PR | Notes |
-|---|-------|-------|--------|-----------|----|----|
-| 1 | #<a> precondition fix | code | done | — | #<pr> | precondition |
-| 2 | #<b> probe | research | queued | — | — | first in epic #<epic> |
-| 3 | #<c> follow-on | research | blocked | #<b> | — | needs #<b> findings |
-| 4 | #<d> stub | stub-defer | deferred | — | — | not implementation-ready |
-| 5 | #<e> post-release re-measure | code | parked | — | — | awaiting: <external condition> |
-```
+The header-and-table skeleton that Initialization writes lives with Initialization, in the
+`reference` unit (phase index). It is provenance only: every field and Status it shows is defined
+above, so reading or updating an existing `queue.md` never needs it.
 
 ### `progress.md` — append-only journal (survives /clear + compaction)
 The orchestrator APPENDS one block **per gate decision** and, over an iteration, the two records
@@ -2342,31 +2335,6 @@ an **external event** (a release cut, a dogfood window — not an in-run issue) 
 Else if any `Depends on` issue is not `done` → `blocked` (record the dep in Notes; the semantic
 Route is retained so the row resumes as that route once the dependency clears, step 1). Else →
 `routed`.
-
----
-
-## Initialization procedure (new run)
-1. Derive `<run-slug>` from `BACKLOG_SOURCE`: milestone → the milestone name; label → the label
-   (slugified); `TODO.md` → its basename. `mkdir -p LEDGER_ROOT/<run-slug>`.
-2. Enumerate `BACKLOG_SOURCE` (e.g. `gh issue list --milestone <run> --state open --json
-   number,title,labels` for a milestone; `--label <name>` for a label/epic source).
-3. For each issue: determine route (Router) and dependencies (parse "Depends on"/"blocked by"
-   refs in the body; respect epic ordering notes). An epic *tracker* issue is not a work row —
-   carry it terminal (`deferred`) if the source enumerates it (the loop does not close epics).
-4. Topologically order by dependency, then by `PRIORITY_LABELS` (tiebreak issue-number asc).
-   Write `queue.md` with header `mode: calibration` **unless the human has already graduated routes
-   for this project** — check the decision log and, if so, init `mode: escalation-only` + the
-   graduated `graduated-routes:` instead, so a prior graduation persists across runs rather than
-   silently resetting to calibration. Step 11 reads `mode`/`graduated-routes` to gate **the merge
-   gate**, per route; it never affects the plan gate. **Set `plan-gate:` on the same branch you just
-   took** — `calibration` ⇒ `plan-gate: always`; the prior-graduation branch ⇒
-   `plan-gate: conditional` — so the plan gate's posture starts consistent with the trust level the
-   project has actually established. Write it explicitly even though an absent field would read as
-   `always` (step 5): the human tunes what they can see, and a field that only exists once someone
-   needs to loosen it is one they will not know to look for. After init the two are independent —
-   a later `mode:` change never rewrites `plan-gate:`. Also set `iteration-cap: none` and
-   `subagent-cap: none` (the human sets them when loosening).
-5. Append an "init" block to `progress.md`. (Ledger is gitignored — not committed.)
 
 ---
 

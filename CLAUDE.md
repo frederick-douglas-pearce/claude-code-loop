@@ -86,9 +86,11 @@ and **thin entry point**:
    Sibling files are read on demand, not auto-injected, hence the explicit "read both first"
    instruction.
 2. `plugins/dev-loop/skills/dev-loop/loop-engine.md` — the engine's **core**: pipeline steps
-   0–12, ledger format, router, initialization, resume, convergence/park/hold semantics, budget
-   caps, and the **phase index** naming each on-demand unit and its file (since #130,
-   `phases/accepting.md`: step 10's procedure and the AC-verifier). Core is read in full every invocation; a unit is read at its point of use.
+   0–12, ledger format, router, resume, convergence/park/hold semantics, budget caps, and the
+   **phase index** naming each on-demand unit and its file (since #130, `phases/accepting.md`:
+   step 10's procedure and the AC-verifier; since #131, the `reference` appendix,
+   `reference/initialization.md`: Initialization and the `queue.md` skeleton). Core is read in full
+   every invocation; a unit is read at its point of use.
    **Core and every unit are project-agnostic — no project-specific values, ever.**
 3. `${CLAUDE_PROJECT_DIR}/.claude/loop.config.md` (lives in the *consuming* repo, not here) — the
    binding seam. Every `CAPS` name in the engine (`BACKLOG_SOURCE`, `SCOPE_AGENT`,
