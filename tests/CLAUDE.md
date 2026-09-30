@@ -146,8 +146,7 @@ that used to sit here went stale the first time a module was added):
   deciding to invoke the skill, so a behavior surface, not prose), and the engine's in-prose
   `step N` cross-references. The naive grep
   (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' plugins/dev-loop/skills/dev-loop/loop-engine.md | wc -l`) does
-  **not** find them all: some are line-wrapped, which is exactly how they went unguarded until
-  review caught it. **No site count is stated here, deliberately** — the figures this sentence used
+  **not** find them all. **No site count is stated here, deliberately** — the figures this sentence used
   to carry went stale where they stood. The assertion is a deliberately loose floor
   (`_MIN_STEP_REFERENCES`), not a measurement, so there is no *maintained* count anywhere to cite:
   the figures in `tests/test_repo_consistency.py`'s docstrings are unmaintained prose and were

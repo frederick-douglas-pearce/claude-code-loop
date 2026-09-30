@@ -22,7 +22,7 @@ load.
 
 | Unit | File | Read it at |
 |---|---|---|
-| `accepting` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/phases/accepting.md` | step 10; and Resume, when its unfinished-mutation check sends you here |
+| `accepting` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/phases/accepting.md` | step 10; and Resume, when its unfinished-mutation check sends you to this unit |
 | `reference` | — (in core) | — |
 | `reviewing` | — (in core) | — |
 | `implementing` | — (in core) | — (contingent: may never be extracted) |
@@ -2461,12 +2461,12 @@ always; **if (a) escalates, stop there — (b) is not reached**; otherwise apply
 
 **(a) The unfinished-mutation check, which runs on every resume whatever the row's status.** Before
 any other work on the tree, run `git worktree list` and list the system temp dir for a retained
-snapshot directory (`mutate-verify-*`). **If either is present, or you cannot tell, read the
+snapshot directory (`mutate-verify-*`). **If either is present, read the
 `accepting` unit now** (phase index; load
 protocol) **and hand off to AC-verifier → Part 2, *Interrupted-pass
 recovery*, which owns the diagnosis, the repair, and when to escalate — do not re-derive it here.**
-**If the unit is not loaded, STOP and escalate to the human: touch nothing in the tree, and never
-`git restore`.**
+**If the unit is not loaded, or you cannot tell whether either is present, STOP and escalate to the
+human: touch nothing in the tree, and never `git restore`.**
 Two things are worth knowing before you hand off, because they decide whether you hand off at all:
 the trigger is the *artifacts*, never the status (a crash can leave a status stale, so keying this
 check on one would let a mislabeled row carry a live mutation straight past it), and `git restore`

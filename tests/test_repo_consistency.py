@@ -666,12 +666,6 @@ class PipelineStepOrderTests(unittest.TestCase):
         grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' \\
             skills/dev-loop/loop-engine.md | wc -l
 
-    The ones it misses are line-wrapped -- which is the point: a one-line grep
-    cannot see them, ``_STEP_REFERENCE``'s newline branch can, and before review
-    caught it neither could. (Deliberately not enumerated, and not counted: this
-    sentence carried a literal list and an exact count, and both went stale on
-    essentially every structural edit to the engine.)
-
     **There was a sixth, and #113 removed it.** ``commands/init-loop.md``'s
     ``(engine step 8)`` and ``engine step 6`` skeleton rows -- the first added by
     #10 (as ``engine step 9``, rotated by #31), the second by #39, and both
