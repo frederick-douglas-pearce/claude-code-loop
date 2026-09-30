@@ -28,7 +28,7 @@ even though nothing will fail loudly:
   (its `ultra` argument is gated, and degrades silently rather than refusing). What #74 retracts is
   **F7's invocability claim only** — F7's *second half*, that finder angles should be chosen from the
   diff's risk surface rather than a fixed list, is untouched and **already ships** as engine prose
-  (`loop-engine.md`, "Pick finder angles from the diff's risk surface", from #10); what remains open
+  (the `reviewing` unit, `phases/reviewing.md`, "Pick finder angles from the diff's risk surface", from #10); what remains open
   under [#38](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/38) is only whether
   to formalize it as a `REVIEW_TIERS` matrix.
   The rule stands on its own — F14 (#21) generalizes it to the whole class, where an

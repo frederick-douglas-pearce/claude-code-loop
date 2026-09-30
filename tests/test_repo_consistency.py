@@ -331,6 +331,7 @@ _PAYLOAD_INVENTORY = frozenset({
     "skills/dev-loop/SKILL.md",
     "skills/dev-loop/loop-engine.md",
     "skills/dev-loop/phases/accepting.md",
+    "skills/dev-loop/phases/reviewing.md",
     "skills/dev-loop/reference/initialization.md",
     "tools/mutate_verify.py",
 })
@@ -2708,8 +2709,7 @@ class FindingClassAgreementTests(unittest.TestCase):
     reword.
 
     **Coupling 1 -- the round bound is written twice.** Step 8 states it
-    mid-step ("Bounded to 2 rounds ... escalate to the human, do not loop", with
-    ~90 further lines of step 8 after it); the Fresh-re-check invariant restates
+    mid-step ("Bounded to 2 rounds ... escalate to the human, do not loop"); the Fresh-re-check invariant restates
     the same bound under "there is no ladder".
     #121 changed the *semantics* of both -- only BLOCKING re-arms. Drop a class
     from one and the engine names different classes in its two statements of the
@@ -2811,7 +2811,7 @@ class FindingClassAgreementTests(unittest.TestCase):
         return {
             "step 8 (the gate's own bound)": self._span(
                 " rounds (round 1 being the review",
-                "**Round 1 reads the whole change",
+                "**A BLOCKING finding that raises a design question consults",
                 "step 8 bound",
             ),
             "Fresh-re-check invariant (restates it)": self._span(
@@ -3036,20 +3036,24 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
         # Ends on the unit's own closing line: the only text that marks the end of
         # ``phases/accepting.md`` and occurs in no other source.
         "AC-verifier": ("## AC-verifier", "*End of the `accepting` unit.*"),
+        # Step 8's procedure (#166): the unit's own title to its own closing line, so
+        # the section never straddles a source boundary. The core half of step 8 --
+        # the floor's due-ness -- stays under "step 8" above.
+        "reviewing": ("# Phase unit `reviewing`", "*End of the `reviewing` unit.*"),
         "Gates": ("## Gates, convergence & resting states", "**Convergence & the resting"),
     }
     # (outer, inner-start, inner-end) -- every inner start anchor excludes the label.
     _REGIONS = {
         "step 8's floor (mandates the lens)": (
-            "step 8", "**One lens is a floor, not a choice:", "**What it asks.**"),
+            "step 8", "**One lens is a floor, not a choice:", "**Finding classes"),
         "step 8's Class B distinction table": (
-            "step 8", "**This lens is NOT the acceptance gate's Class B pass",
+            "reviewing", "**This lens is NOT the acceptance gate's Class B pass",
             "**A surviving mutant is step 10's"),
         "step 8's journal-slot separation": (
-            "step 8", "**A surviving mutant is step 10's",
+            "reviewing", "**A surviving mutant is step 10's",
             "**Record the round's lens roster"),
         "step 8's roster naming duty": (
-            "step 8", "**Every round-1 roster names",
+            "reviewing", "**Every round-1 roster names",
             "**Keep the floor lens out of any later tier"),
         "Tool surface's bound on the fan-out": (
             "Tool surface", "Other bounds are unaffected:", "- **Isolated.**"),
@@ -3263,11 +3267,14 @@ class LensDifferentialAgreementTests(unittest.TestCase):
     _TERM = "differential"
 
     def _step8(self) -> str:
+        # Both passages live in the `reviewing` unit since #166, so the span is the
+        # unit's own title to its own closing line -- never core's step-8 heading to a
+        # line in the unit, which would straddle a source boundary.
         text = _engine_text()
-        i = text.find("### 8. Code review")
-        j = text.find("### 9. Security review", i + 1)
-        self.assertNotEqual(i, -1, "cannot locate step 8 in the engine corpus (_engine_text())")
-        self.assertNotEqual(j, -1, "cannot locate step 9 in the engine corpus (_engine_text())")
+        i = text.find("# Phase unit `reviewing`")
+        j = text.find("*End of the `reviewing` unit.*", i + 1)
+        self.assertNotEqual(i, -1, "cannot locate the `reviewing` unit in the engine corpus (_engine_text())")
+        self.assertNotEqual(j, -1, "cannot locate the end of the `reviewing` unit in the engine corpus (_engine_text())")
         return re.sub(r"\s+", " ", text[i:j])
 
     def _span(self, name: str, anchors: "tuple[str, str]") -> str:

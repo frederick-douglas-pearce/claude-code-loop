@@ -637,3 +637,28 @@ this skips only the zero-usage ones. A `<synthetic>` record that carries tokens 
 placeholder shape anyone has described, so it is an unknown, and unknown lands on the excluded side.
 If #212 (which conforms this directory's cost arithmetic to that reference) finds the broader rule is
 right, it amends this entry by appending, not by editing it.
+
+## D017 — 2026-09-30 — #128/AC1 is a ≥20% cut against 0.3.0; the ≤32,000 cap is withdrawn and `implementing` is out
+
+**Decided by the human at #166's plan gate**, after re-modelling the footprint with `reviewing`.
+
+1. **#128/AC1 is restated as a floor:** the always-loaded footprint (`SKILL.md` + core
+   `loop-engine.md`, `wc -c ÷ 4`) is cut **≥20%** against the release installed immediately before
+   this one. For 0.3.0 that is 69,457 ⇒ **≤55,565**. It is measured on #166's merge candidate and
+   re-confirmed on the release commit (#133). The achieved % is reported; only the floor gates.
+2. **The ≤32,000 cap is withdrawn.** No safe extraction reaches it: the floor is ≈43.3k even with
+   steps 6 and 8 moved wholesale (#131's plan).
+3. **`implementing` (step 6) is not extracted.** Only the hermetic tier and the AC-walk tripwire
+   could defer (≈2.4k tok). The staging rule and the authoring rule are consumed at every commit
+   boundary and on every surface, and the hermetic tier is re-armed at steps 8 and 10.
+
+### Why
+
+pm recommended ≥18%, a floor that fails only if the extraction was not made, never because a
+safety-motivated byte stayed in core. The human chose **≥20%**: a round number, a little more
+ambitious, and it keeps core well under a single tool read's size limit. At 20% there is less
+margin. **A miss at merge escalates to the human.** It is never closed by deferring more fail-safe
+text out of core, and never by quietly restating X.
+
+The issue amendments carrying this (#128 AC1, P1 and Scope; #166 AC1, AC4 and AC7; #133 AC3; the
+`v0.3.1` milestone description) were applied on 2026-09-30.

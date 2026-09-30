@@ -89,7 +89,8 @@ and **thin entry point**:
    0–12, ledger format, router, resume, convergence/park/hold semantics, budget caps, and the
    **phase index** naming each on-demand unit and its file (since #130, `phases/accepting.md`:
    step 10's procedure and the AC-verifier; since #131, the `reference` appendix,
-   `reference/initialization.md`: Initialization and the `queue.md` skeleton). Core is read in full
+   `reference/initialization.md`: Initialization and the `queue.md` skeleton; since #166,
+   `phases/reviewing.md`: step 8's code-review procedure, its fail-safe half kept in core). Core is read in full
    every invocation; a unit is read at its point of use.
    **Core and every unit are project-agnostic — no project-specific values, ever.**
 3. `${CLAUDE_PROJECT_DIR}/.claude/loop.config.md` (lives in the *consuming* repo, not here) — the
