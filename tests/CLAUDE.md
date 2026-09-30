@@ -140,14 +140,13 @@ that used to sit here went stale the first time a module was added):
   `plugins/CLAUDE.md`'s always-on plan-gate bullet for why that string, and only that string, is
   checkable — and why per-region rather than a global count);
   and `PipelineStepOrderTests` — the pipeline's **step *ordering*** agrees across the **five**
-  restatements of it, in **three** files: `loop-engine.md`'s `### N.` headings, `SKILL.md`'s numbered
+  restatements of it: `loop-engine.md`'s `### N.` headings, `SKILL.md`'s numbered
   chain, `plugin.json`'s `description` (published with the plugin), `SKILL.md`'s **frontmatter
   `description`** (`plan→architect→implement→review→merge` — the string the model reads when
   deciding to invoke the skill, so a behavior surface, not prose), and the engine's in-prose
-  `step N` cross-references. (`loop-engine.md` ×2, `SKILL.md` ×2, `plugin.json` — which is why five
-  restatements live in three files.) The naive grep
+  `step N` cross-references. The naive grep
   (`grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' plugins/dev-loop/skills/dev-loop/loop-engine.md | wc -l`) does
-  **not** find them all: the rest are line-wrapped, which is exactly how they went unguarded until
+  **not** find them all: some are line-wrapped, which is exactly how they went unguarded until
   review caught it. **No site count is stated here, deliberately** — the figures this sentence used
   to carry went stale where they stood. The assertion is a deliberately loose floor
   (`_MIN_STEP_REFERENCES`), not a measurement, so there is no *maintained* count anywhere to cite:

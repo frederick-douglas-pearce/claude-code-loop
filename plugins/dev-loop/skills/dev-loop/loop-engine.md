@@ -14,8 +14,7 @@ Cross-references are by **named section** (e.g. "the Resume procedure below"), a
 steps are numbered 0–12. The live skill (`SKILL.md`) is the thin entry point that loads this engine
 plus the config. **This file is the engine's core, read in full on every invocation. Part of the
 procedure lives in phase units — one file each, read at the point of use the index below names.**
-Each rule is still stated once, in core or in exactly one unit, and a named section may live in a
-unit.
+A named section may live in a unit.
 
 **Phase index.** Every planned unit is listed here, extracted or not. A row whose file reads
 `— (in core)` has not been extracted: its content is still in this file, so there is nothing to
@@ -23,7 +22,7 @@ load.
 
 | Unit | File | Read it at |
 |---|---|---|
-| `accepting` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/phases/accepting.md` | step 10; and Resume, when the unfinished-mutation check finds a mutation artifact |
+| `accepting` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/phases/accepting.md` | step 10; and Resume, when its unfinished-mutation check sends you here |
 | `reference` | — (in core) | — |
 | `reviewing` | — (in core) | — |
 | `implementing` | — (in core) | — (contingent: may never be extracted) |
@@ -35,18 +34,17 @@ loaded.** Read it at the point its row names, before acting on anything there. T
 to rows with a file; a `— (in core)` row has nothing to load.
 
 **Pointers into a unit.** Core names unit content in two ways. An **operative** pointer sends you
-to text you must act on, and carries a read-this-now instruction at its site. A **provenance**
+to text you must act on. A **provenance**
 pointer only says where detail lives; the decision at its site is stated in core without it. **A
 pointer into a unit you have not loaded is never permission to skip, improvise, or proceed — load
 it, or STOP.** If you cannot tell which kind a pointer is, it is operative.
 
 **What holds without each unit loaded.** A unit you have not loaded never makes its step pass and
 never lets its gate be skipped. Per unit:
-- `accepting` — the acceptance gate (step 10) is due on every issue with acceptance criteria and is
-  the last gate before merge. Without the unit it cannot run, so it has no verdict and the row
-  cannot merge: journal a `- gate-error:` and escalate to the human (Gate-outcome invariant). On
-  Resume, a mutation artifact you cannot hand to the unit is a STOP: touch nothing in the tree, and
-  never `git restore`.
+- `accepting` — the acceptance gate (step 10) cannot run without the unit, so it has no verdict
+  and the row cannot merge: journal a `- gate-error:` and escalate to the human (Gate-outcome
+  invariant). On Resume, if the unfinished-mutation check sends you to the unit and it is not
+  loaded, that is a STOP: touch nothing in the tree, and never `git restore`.
 - `reference` — still in core; nothing is missing.
 - `reviewing` — still in core; nothing is missing.
 - `implementing` — still in core; nothing is missing.
@@ -1264,8 +1262,9 @@ clause** (under Gates).
 Advance the row to `in-acceptance`. **Read the `accepting` unit now** —
 `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/phases/accepting.md`, in full, under the load protocol
 (preamble). It holds this step's procedure and the AC-verifier; act on none of this step without
-it. **If it will not load, this gate has no verdict:** journal a `- gate-error:`, escalate to the
-human, and do not merge (preamble → *What holds without each unit loaded*).
+it. **If it is not loaded, this gate has no verdict:** journal
+`- gate-error: acceptance — phases/accepting.md not loaded — <first line of the error>` (or
+`no-stderr` where the read raised none), escalate to the human, and do not merge (preamble → *What holds without each unit loaded*).
 
 **A source-changing fix here has no gate downstream of it.** Steps 8 and 9 already ran against a
 head that did not contain this code, so a Class A fix that **adds or changes source** — implementing
@@ -2462,10 +2461,11 @@ always; **if (a) escalates, stop there — (b) is not reached**; otherwise apply
 
 **(a) The unfinished-mutation check, which runs on every resume whatever the row's status.** Before
 any other work on the tree, run `git worktree list` and list the system temp dir for a retained
-snapshot directory. **If either is present, read the `accepting` unit now** (phase index; load
+snapshot directory (`mutate-verify-*`). **If either is present, or you cannot tell, read the
+`accepting` unit now** (phase index; load
 protocol) **and hand off to AC-verifier → Part 2, *Interrupted-pass
 recovery*, which owns the diagnosis, the repair, and when to escalate — do not re-derive it here.**
-**If the unit will not load, STOP and escalate to the human: touch nothing in the tree, and never
+**If the unit is not loaded, STOP and escalate to the human: touch nothing in the tree, and never
 `git restore`.**
 Two things are worth knowing before you hand off, because they decide whether you hand off at all:
 the trigger is the *artifacts*, never the status (a crash can leave a status stale, so keying this
@@ -2729,8 +2729,8 @@ your *conclusions*, not the instructions the checker needs).
      treat anything unmarked as unverified.
 
   **The mechanism blockquote** — "Part 2's blockquote" wherever this engine names it. It is kept
-  here in core rather than in the `accepting` unit, because two callers need it before step 10:
-  this recipe and step 8's `guard-efficacy` lens. It is quoted verbatim from the project
+  here in core rather than in the `accepting` unit, because step 8's `guard-efficacy` lens needs it
+  before step 10. It is quoted verbatim from the project
   retrospective that first made the mechanism nameable:
 
   > **The mechanism, stated precisely** (round 4 made it nameable): *asserting the outcome is not

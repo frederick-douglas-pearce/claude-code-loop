@@ -89,11 +89,10 @@ _REFERENCE = _PAYLOAD_ROOT / "skills" / "dev-loop" / "reference"
 # into the next source's first.
 #
 # **Nothing asserts this, and it is the second standing gap.** Mutating this constant to
-# ``"\n"`` -- or to ``""`` -- leaves the whole suite green (measured at #130, with
-# ``phases/accepting.md`` present): every real source and every fixture ends in a
-# newline, so the paragraph break survives either way. It becomes checkable only once a
-# real source lacking a trailing newline exists; until then it is review's at each
-# extraction PR, like the high-end bound above.
+# ``"\n"`` leaves the whole suite green (measured at #130, with ``phases/accepting.md``
+# present): every real source and every fixture ends in a newline, so the paragraph
+# break survives. It becomes checkable only once a real source lacking a trailing
+# newline exists; until then it is review's at each extraction PR.
 _SOURCE_JOIN = "\n\n"
 
 
@@ -171,11 +170,6 @@ guard = _load_hook()
 
 class EngineSeamTests(unittest.TestCase):
     """The seam's own behavior, asserted rather than assumed (#167/AC1, AC3, AC4).
-
-    The real corpus cannot pin core-first order or the per-directory sort: it holds at
-    most one unit per directory, so there is no ordering between units to observe, and a
-    mutation battery over engine prose exercises the guards rather than the seam. So
-    they are pinned here against fixture directories instead.
 
     **The glob is only partly pinned, and the unpinned half is the one to know about.**
     *Narrowing* its pattern is caught -- the fixtures stop being found and the ordering
@@ -667,8 +661,7 @@ class PipelineStepOrderTests(unittest.TestCase):
     breaks: ``SKILL.md``'s **frontmatter** ``description`` chain -- the string
     the model reads when deciding whether to invoke the skill, so a behavior
     surface rather than internal prose -- and the engine's in-prose ``step N``
-    / ``Stages N/M`` cross-references: **179 reference sites, 182 numbers** once
-    ``/``- and dash-separated runs are expanded. This grep finds 175 of the 179::
+    / ``Stages N/M`` cross-references. A one-line grep over core misses some::
 
         grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' \\
             skills/dev-loop/loop-engine.md | wc -l
@@ -2323,9 +2316,7 @@ class ResumeHandoffPointerTests(unittest.TestCase):
     def _regions(self):
         return {
             "Part 2 (defines the block)": self._span(
-                # The full heading, not the ``"**Part 2 "`` prefix: core keeps Part 2's
-                # blockquote under Gates, so a prefix match could resolve in core first and
-                # run the span across Resume -- the one region this test compares against.
+                # The full heading, not the ``"**Part 2 "`` prefix (#130 architect recheck).
                 "**Part 2 \u2014 Class B: mutation survivors.**",
                 "*End of the `accepting` unit.*", "Part 2",
             ),

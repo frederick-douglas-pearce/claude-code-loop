@@ -2,15 +2,14 @@
 
 This file is a **phase unit** of the dev-loop engine, not a standalone document. Core
 (`loop-engine.md`) lists it in its phase index and has you read it at step 10, and on Resume when
-the unfinished-mutation check finds a mutation artifact. Read it in full, under core's load
+its unfinished-mutation check sends you here. Read it in full, under core's load
 protocol. What holds when it is not loaded is stated in core (*What holds without each unit
 loaded*), never here: its absence never makes this gate pass and never lets it be skipped.
 
 Core keeps three things this unit relies on, because other steps act on them without it: the
 mechanism blockquote (Gates → Fresh-re-check invariant), the rule for a source-changing fix made
 at this gate together with its three constraints (core's step 10), and this gate's fail-safe half
-(core's preamble). Section names used below without a file — step 6, Tool surface, Gates, Ledger
-format, Resume — are core's.
+(core's preamble).
 
 ## Step 10 — the procedure
 
@@ -38,7 +37,7 @@ boundary immediately downstream of it, and the untracked scan cannot see a copy 
 granularities.** Class A and Class B are this gate's own vocabulary; BLOCKING and EDITORIAL are step
 8's. The engine calls an item in either a "finding", so **"a Class B finding" carries no finding class
 at all** — it is a result of this gate, which emits none. **Neither of this gate's classes may ever be
-swept**: "either class blocks" below means exactly that.
+swept.**
 
 The gate returns **two result classes, and they are never summed into one "findings" count**:
 **Class A — AC-satisfaction findings** (a criterion judged not met) and **Class B — mutation
@@ -139,9 +138,8 @@ distinguished at that step.)
 
 *Why a checklist cannot find these* — the mechanism, quoted verbatim from the project retrospective
 that first made it nameable, is **the mechanism blockquote in core** (Gates → Fresh-re-check
-invariant, inside the Class B recipe). It is kept there, not here, because two callers need it
-before this unit is loaded: step 8's `guard-efficacy` lens and that recipe. Core is always loaded,
-so read it there.
+invariant, inside the Class B recipe). It is kept there, not here, because step 8's `guard-efficacy` lens needs it
+before this unit is loaded. Core is always loaded, so read it there.
 
 "A property of the assertion, not of the author's care" is the whole argument: the answer is a
 mechanical pass, never an instruction to be more careful.
