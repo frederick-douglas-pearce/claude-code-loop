@@ -68,9 +68,9 @@ _INIT_LOOP = _PAYLOAD_ROOT / "commands" / "init-loop.md"
 _README = _REPO_ROOT / "README.md"
 _PLUGIN_README = _PAYLOAD_ROOT / "README.md"
 
-# The engine is being sharded into a lean core plus on-demand units (#128). Neither
-# directory exists yet -- #167 lands the seam BEFORE any unit is extracted, so that an
-# extraction re-points one definition instead of twelve call sites.
+# The engine is being sharded into a lean core plus on-demand units (#128). #167 landed
+# the seam BEFORE any unit was extracted, so that an extraction re-points one definition
+# instead of twelve call sites.
 #
 # **Both unit directories the design defines are globbed, not just ``phases/``.**
 # ``.claude/specs/prd-engine-sharding.md`` charters S3 (#131) into ``reference/*.md``
@@ -89,11 +89,10 @@ _REFERENCE = _PAYLOAD_ROOT / "skills" / "dev-loop" / "reference"
 # into the next source's first.
 #
 # **Nothing asserts this, and it is the second standing gap.** Mutating this constant to
-# ``"\n"`` -- or to ``""`` -- leaves every test in ``EngineSeamTests`` green: with no unit
-# directory ``join`` never inserts a separator at all, and the fixtures are written with
-# trailing newlines, so the paragraph break survives either way. It becomes checkable
-# only once a real source lacking a trailing newline exists; until then it is review's at
-# the extraction PR, like the high-end bound above.
+# ``"\n"`` leaves the whole suite green (measured at #130, with ``phases/accepting.md``
+# present): every real source and every fixture ends in a newline, so the paragraph
+# break survives. It becomes checkable only once a real source lacking a trailing
+# newline exists; until then it is review's at each extraction PR.
 _SOURCE_JOIN = "\n\n"
 
 
@@ -149,8 +148,9 @@ def _engine_text() -> str:
     anchor stays in one source while its end anchor moves to a later one resolves
     forward across the join to an oversized span, which containment assertions, being
     monotone in region size, still pass. Verifying that a given extraction kept every
-    re-pointed guard's span correctly scoped is **review's responsibility at that PR**,
-    not a property this seam establishes.
+    re-pointed guard's span correctly scoped is **review's responsibility at that PR**
+    (#130/AC8 made it a read), not a property this seam establishes. The mechanical
+    bound is #217.
     """
     return _SOURCE_JOIN.join(
         path.read_text(encoding="utf-8") for path in _engine_sources()
@@ -171,22 +171,14 @@ guard = _load_hook()
 class EngineSeamTests(unittest.TestCase):
     """The seam's own behavior, asserted rather than assumed (#167/AC1, AC3, AC4).
 
-    With both unit directories absent, ``_engine_text()`` and a stub returning
-    ``_ENGINE.read_text()`` are **indistinguishable**. Core-first order and the
-    per-directory sort are unasserted on today's corpus -- and a mutation battery over
-    engine prose cannot reach them either, since it exercises the guards against a tree
-    on which seam and stub agree. So they are pinned here against fixture directories
-    instead.
-
     **The glob is only partly pinned, and the unpinned half is the one to know about.**
     *Narrowing* its pattern is caught -- the fixtures stop being found and the ordering
     tests go red. *Widening* it is not: every fixture is a flat ``.md`` file, so
     ``glob("*")`` or ``rglob`` passes every test here. Those are exactly the two
     properties ``_engine_sources`` warns a caller must not assume away.
 
-    Fixtures are ``tempfile`` directories patched over ``_PHASES``/``_REFERENCE``. No
-    real unit content is created anywhere in the repo, which is what keeps #167/AC5
-    true while this class exists.
+    Fixtures are ``tempfile`` directories patched over ``_PHASES``/``_REFERENCE``, so
+    this class does not depend on which real units exist.
     """
 
     # **Deliberately not real unit names** (#167/AC5 -- this change names no unit), and
@@ -194,7 +186,7 @@ class EngineSeamTests(unittest.TestCase):
     # sorting yields alpha, gamma, beta, delta; one sorted pass over both would yield
     # alpha, beta, delta, gamma. A fixture set that sorted the same either way would
     # leave the rule untested, and real unit names would couple this class to an
-    # inventory that does not exist yet and may still be renamed.
+    # inventory that is still growing and may still be renamed.
     _PHASE_FIXTURES = {"gamma.md": "GAMMA-BODY", "alpha.md": "ALPHA-BODY"}
     _REFERENCE_FIXTURES = {"delta.md": "DELTA-BODY", "beta.md": "BETA-BODY"}
 
@@ -338,6 +330,7 @@ _PAYLOAD_INVENTORY = frozenset({
     "hooks/loop.append-guard.example.json",
     "skills/dev-loop/SKILL.md",
     "skills/dev-loop/loop-engine.md",
+    "skills/dev-loop/phases/accepting.md",
     "tools/mutate_verify.py",
 })
 
@@ -390,9 +383,10 @@ class PayloadContentsTests(unittest.TestCase):
 
     The inventory is **file-exact and default-deny**, which is what AC4's "loudly on
     addition" asks for. One consequence, stated so it does not read as a spurious break:
-    the engine is being sharded (#128), so #130 and #131 add ``skills/dev-loop/phases/*.md``
-    and ``skills/dev-loop/reference/*.md`` to the payload. **Each of those PRs will fail
-    this test until it extends the inventory, and that deliberate edit is the point.**
+    the engine is being sharded (#128), so each extraction adds a unit under
+    ``skills/dev-loop/phases/`` or ``skills/dev-loop/reference/`` to the payload (#130
+    added ``phases/accepting.md``). **Each such PR fails this test until it extends the
+    inventory, and that deliberate edit is the point.**
     """
 
     @staticmethod
@@ -624,7 +618,7 @@ class CapsVocabularyTests(unittest.TestCase):
 
     def _engine_parameters(self) -> set[str]:
         names: set[str] = set()
-        # SKILL.md is scanned alongside loop-engine.md: it restates a subset of
+        # SKILL.md is scanned alongside every engine source (core + phase units): it restates a subset of
         # the bindings, and a name introduced only there needs the skeleton too.
         for path in (*_engine_sources(), _SKILL):
             text = path.read_text(encoding="utf-8")
@@ -667,17 +661,10 @@ class PipelineStepOrderTests(unittest.TestCase):
     breaks: ``SKILL.md``'s **frontmatter** ``description`` chain -- the string
     the model reads when deciding whether to invoke the skill, so a behavior
     surface rather than internal prose -- and the engine's in-prose ``step N``
-    / ``Stages N/M`` cross-references: **179 reference sites, 182 numbers** once
-    ``/``- and dash-separated runs are expanded. This grep finds 175 of the 179::
+    / ``Stages N/M`` cross-references. A one-line grep over core misses some::
 
         grep -oE '[Ss]teps?[ -][0-9]|[Ss]tages?[ -][0-9]' \\
             skills/dev-loop/loop-engine.md | wc -l
-
-    The ones it misses are line-wrapped -- which is the point: a one-line grep
-    cannot see them, ``_STEP_REFERENCE``'s newline branch can, and before review
-    caught it neither could. (Deliberately not enumerated, and not counted: this
-    sentence carried a literal list and an exact count, and both went stale on
-    essentially every structural edit to the engine.)
 
     **There was a sixth, and #113 removed it.** ``commands/init-loop.md``'s
     ``(engine step 8)`` and ``engine step 6`` skeleton rows -- the first added by
@@ -1147,7 +1134,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         self.assertGreaterEqual(
             len(references),
             self._MIN_STEP_REFERENCES,
-            f"suspiciously few loop-engine.md step cross-references: "
+            f"suspiciously few step cross-references in the engine corpus (_engine_text()): "
             f"{len(references)} < {self._MIN_STEP_REFERENCES}. Either the engine "
             "shrank dramatically or _STEP_REFERENCE no longer matches the form the "
             "engine writes -- in which case this check is passing vacuously.",
@@ -1400,7 +1387,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         self.assertEqual(
             dangling,
             [],
-            f"loop-engine.md cross-references step(s) {dangling} that no '### N.' "
+            f"the engine corpus (_engine_text()) cross-references step(s) {dangling} that no '### N.' "
             f"heading defines (headings are {sorted(valid)}). A renumber must "
             "update the in-prose references in the same change. NOTE: this check "
             "is resolvability-only -- references that stay in range but now point "
@@ -1543,7 +1530,7 @@ class MutationNaReasonTests(unittest.TestCase):
         self.assertEqual(
             len(self._stated_counts()),
             self._EXPECTED_RESTATEMENTS,
-            "loop-engine.md states the size of the mutation-survivors n/a list in "
+            "the engine corpus (_engine_text()) states the size of the mutation-survivors n/a list in "
             f"{self._EXPECTED_RESTATEMENTS} passages; the matcher found "
             f"{len(self._stated_counts())}. Either a restatement was deleted, one was "
             "added without updating _EXPECTED_RESTATEMENTS, or one was reworded past "
@@ -1556,7 +1543,7 @@ class MutationNaReasonTests(unittest.TestCase):
         self.assertEqual(
             len(counts),
             1,
-            "loop-engine.md disagrees with itself about how many legal `n/a` reasons "
+            "the engine corpus (_engine_text()) disagrees with itself about how many legal `n/a` reasons "
             f"the mutation-survivors slot has: found {sorted(counts)}. Retiring or "
             "adding a reason is a multi-site edit -- every passage stating the size "
             "must change in the same commit, or a partially-loaded engine reads a "
@@ -1591,7 +1578,7 @@ class MutationNaReasonTests(unittest.TestCase):
         self.assertEqual(
             offenders,
             [],
-            "loop-engine.md uses the retired `n/a: apparatus pending` reason in a "
+            "the engine corpus (_engine_text()) uses the retired `n/a: apparatus pending` reason in a "
             f"passage that does not mark it retired: {offenders}. The apparatus "
             "shipped, so that reason names a gap that no longer exists -- writing it "
             "would report a missing capability as the reason for not using the "
@@ -1627,14 +1614,14 @@ class MutationNaReasonTests(unittest.TestCase):
         harness = _PAYLOAD_ROOT / "tools" / "mutate_verify.py"
         self.assertTrue(
             harness.is_file(),
-            "plugins/dev-loop/tools/mutate_verify.py is missing, but loop-engine.md tells the "
+            "plugins/dev-loop/tools/mutate_verify.py is missing, but the engine corpus (_engine_text()) tells the "
             "orchestrator to run it.",
         )
         roots = self._HARNESS_REFERENCE.findall(self.engine_text)
         self.assertEqual(
             len(roots),
             self._EXPECTED_HARNESS_REFERENCES,
-            "loop-engine.md names the harness "
+            "the engine corpus (_engine_text()) names the harness "
             f"{self._EXPECTED_HARNESS_REFERENCES} times and the matcher found "
             f"{len(roots)}. Pinned exactly, not as a floor: with a floor of one, "
             "deleting the runnable command block -- reverting the wiring this whole "
@@ -1642,7 +1629,7 @@ class MutationNaReasonTests(unittest.TestCase):
         )
         self.assertTrue(
             self._has_runnable_invocation(self.engine_text),
-            "loop-engine.md still mentions the harness in prose but no single fenced "
+            "the engine corpus (_engine_text()) still mentions the harness in prose but no single fenced "
             "code block carries a runnable invocation of it -- one block containing "
             f"all of {self._INVOCATION_PARTS}. Naming a tool is not wiring it in: "
             "without the command, the engine authorizes a mutation pass and leaves the "
@@ -1651,7 +1638,7 @@ class MutationNaReasonTests(unittest.TestCase):
         self.assertEqual(
             sorted(set(roots)),
             ["CLAUDE_PLUGIN_ROOT"],
-            "loop-engine.md reaches the mutation harness through "
+            "the engine corpus (_engine_text()) reaches the mutation harness through "
             f"{sorted(set(roots))}. **Every** reference must be rooted at "
             "${CLAUDE_PLUGIN_ROOT}: the script ships with the installed plugin, while "
             "${CLAUDE_PROJECT_DIR} is the consumer's repository -- the very tree the "
@@ -1709,12 +1696,12 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
         i = text.find(start)
         self.assertNotEqual(
             i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
-            "loop-engine.md -- re-anchor this test before trusting it."
+            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it."
         )
         j = text.find(end, i + len(start))
         self.assertNotEqual(
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
-            "loop-engine.md -- re-anchor this test before trusting it."
+            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it."
         )
         return text[i:j]
 
@@ -1769,7 +1756,7 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
         self.assertEqual(
             missing,
             [],
-            "these region(s) of loop-engine.md do not carry the frozen-approach "
+            "these region(s) of the engine corpus (_engine_text()) do not carry the frozen-approach "
             f"heading: {missing}.\n\n"
             f"Expected (normalized): {self._HEADING!r}\n\n"
             "A MISMATCH IS SILENT. Step 5 looks the block up by name, so a heading "
@@ -1948,7 +1935,7 @@ class VerdictFirstInvariantTests(unittest.TestCase):
         self.assertEqual(
             text.count(start), 1,
             f"the start anchor for the {label} region occurs {text.count(start)} "
-            f"times in loop-engine.md ({start!r}); it must occur exactly once. More "
+            f"times in the engine corpus (_engine_text()) ({start!r}); it must occur exactly once. More "
             "than one lets the span silently widen past this region and find the "
             "name in a neighbour's text.",
         )
@@ -1956,7 +1943,7 @@ class VerdictFirstInvariantTests(unittest.TestCase):
         j = text.find(end, i + len(start))
         self.assertNotEqual(
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
-            "loop-engine.md -- re-anchor this test before trusting it."
+            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it."
         )
         return text[i:j]
 
@@ -2016,7 +2003,7 @@ class VerdictFirstInvariantTests(unittest.TestCase):
         self.assertEqual(
             missing,
             [],
-            f"these region(s) of loop-engine.md no longer name the {self._NAME}: "
+            f"these region(s) of the engine corpus (_engine_text()) no longer name the {self._NAME}: "
             f"{missing}.\n\n"
             "A MISMATCH IS SILENT. Each region is the recipe telling the orchestrator "
             "what to put in a prompt it composes; a region that drops the reference "
@@ -2184,14 +2171,14 @@ class RelayInvariantTests(unittest.TestCase):
         self.assertEqual(
             text.count(start), 1,
             f"the start anchor for the {label} region occurs {text.count(start)} "
-            f"times in loop-engine.md ({start!r}); it must occur exactly once.",
+            f"times in the engine corpus (_engine_text()) ({start!r}); it must occur exactly once.",
         )
         i = text.find(start)
         j = text.find(end, i + len(start))
         self.assertNotEqual(
             j, -1,
             f"cannot locate the end of the {label} region ({end!r}) in "
-            "loop-engine.md -- re-anchor this test before trusting it.",
+            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it.",
         )
         return text[i:j]
 
@@ -2311,19 +2298,21 @@ class ResumeHandoffPointerTests(unittest.TestCase):
         i = text.find(start)
         self.assertNotEqual(
             i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
-            "loop-engine.md -- re-anchor this test before trusting it.",
+            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it.",
         )
         j = text.find(end, i + len(start))
         self.assertNotEqual(
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
-            "loop-engine.md -- re-anchor this test before trusting it.",
+            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it.",
         )
         return text[i:j]
 
     def _regions(self):
         return {
             "Part 2 (defines the block)": self._span(
-                "**Part 2 ", "## Initialization procedure", "Part 2",
+                # The full heading, not the ``"**Part 2 "`` prefix (#130 architect recheck).
+                "**Part 2 \u2014 Class B: mutation survivors.**",
+                "*End of the `accepting` unit.*", "Part 2",
             ),
             "Resume (points at it)": self._span(
                 "## Resume after", "## Routing table", "Resume",
@@ -2478,13 +2467,13 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
         self.assertEqual(
             text.count(start), 1,
             f"the start anchor for the {label} region occurs {text.count(start)} "
-            f"times in loop-engine.md ({start!r}); it must occur exactly once.",
+            f"times in the engine corpus (_engine_text()) ({start!r}); it must occur exactly once.",
         )
         i = text.find(start)
         j = text.find(end, i + len(start))
         self.assertNotEqual(
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
-            "loop-engine.md -- re-anchor this test before trusting it.",
+            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it.",
         )
         return text[i:j]
 
@@ -2533,7 +2522,7 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
         self.assertEqual(
             missing,
             [],
-            f"these region(s) of loop-engine.md no longer name {self._NOTATION!r}: "
+            f"these region(s) of the engine corpus (_engine_text()) no longer name {self._NOTATION!r}: "
             f"{missing}.\n\n"
             "A MISMATCH IS SILENT. Step 8 and the Gates recipe both fix what a round "
             "after the first reads; if one reverts to the full `main...HEAD` while "
@@ -2642,12 +2631,12 @@ class CurrencyExemptionAgreementTests(unittest.TestCase):
         i = text.find(start)
         self.assertNotEqual(
             i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
-            "loop-engine.md -- re-anchor this test before trusting it.",
+            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it.",
         )
         j = text.find(end, i + len(start))
         self.assertNotEqual(
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
-            "loop-engine.md -- re-anchor this test before trusting it.",
+            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it.",
         )
         return text[i:j]
 
@@ -2806,12 +2795,12 @@ class FindingClassAgreementTests(unittest.TestCase):
         i = text.find(start)
         self.assertNotEqual(
             i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
-            "loop-engine.md -- re-anchor this test before trusting it.",
+            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it.",
         )
         j = text.find(end, i + len(start))
         self.assertNotEqual(
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
-            "loop-engine.md -- re-anchor this test before trusting it.",
+            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it.",
         )
         return text[i:j]
 
@@ -3030,12 +3019,12 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
         i = text.find(start)
         self.assertNotEqual(
             i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
-            "loop-engine.md -- re-anchor this test before trusting it."
+            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it."
         )
         j = text.find(end, i + len(start))
         self.assertNotEqual(
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
-            "loop-engine.md -- re-anchor this test before trusting it."
+            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it."
         )
         return text[i:j]
 
@@ -3043,7 +3032,12 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
         "step 8": ("### 8. Code review", "### 9. Security review"),
         "Tool surface": ("### Tool surface —", "## Ledger format"),
         "Ledger format": ("## Ledger format", "## Router — classification"),
-        "AC-verifier": ("## AC-verifier", "## Initialization procedure"),
+        # Ends on the unit's own closing line: the only text that marks the end of
+        # ``phases/accepting.md`` and occurs in no other source. ``## Initialization
+        # procedure`` stayed in core, which sorts first, so it can no longer end this
+        # region; any end anchor that could also occur in a later-sorting unit would let
+        # the span run on into it.
+        "AC-verifier": ("## AC-verifier", "*End of the `accepting` unit.*"),
         "Gates": ("## Gates, convergence & resting states", "**Convergence & the resting"),
     }
     # (outer, inner-start, inner-end) -- every inner start anchor excludes the label.
@@ -3223,7 +3217,7 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
             if self._LABEL not in self._normalize(body))
         self.assertEqual(
             missing, [],
-            "these region(s) of loop-engine.md do not carry the mandatory review "
+            "these region(s) of the engine corpus (_engine_text()) do not carry the mandatory review "
             f"lens label: {missing}.\n\n"
             f"Expected (normalized): {self._LABEL!r}\n\n"
             "A MISMATCH IS SILENT AND FAILS OPEN. The floor is satisfied by a roster "
@@ -3274,8 +3268,8 @@ class LensDifferentialAgreementTests(unittest.TestCase):
         text = _engine_text()
         i = text.find("### 8. Code review")
         j = text.find("### 9. Security review", i + 1)
-        self.assertNotEqual(i, -1, "cannot locate step 8 in loop-engine.md")
-        self.assertNotEqual(j, -1, "cannot locate step 9 in loop-engine.md")
+        self.assertNotEqual(i, -1, "cannot locate step 8 in the engine corpus (_engine_text())")
+        self.assertNotEqual(j, -1, "cannot locate step 9 in the engine corpus (_engine_text())")
         return re.sub(r"\s+", " ", text[i:j])
 
     def _span(self, name: str, anchors: "tuple[str, str]") -> str:
