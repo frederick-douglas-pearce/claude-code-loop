@@ -1788,6 +1788,157 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
                 )
 
 
+class PhaseIndexIdentityTests(unittest.TestCase):
+    """The phase index in core, guarded by identity and existence -- never truth (#132, B3).
+
+    Core's **Phase index** table names each unit, the file it lives in, and where it is
+    read; the **What holds without each unit loaded** list states each unit's fail-safe
+    half. Four checks over the index, each identity or existence over arbitrary strings
+    where any change is a real change, so they are checkable (``tests/CLAUDE.md`` -> the
+    ceiling on a prose guard):
+
+    (a) the table's unit set equals the What-holds list's unit set;
+    (b) every File the table names is ``— (in core)`` or a
+        ``${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/{phases,reference}/<name>.md`` path that
+        exists in the payload, and the table never names ``reference/resume.md`` or
+        ``reference/router.md``;
+    (c) every ``step N`` that ``PipelineStepOrderTests._STEP_REFERENCE`` finds in a row's
+        read-at cell is a real ``### N.`` heading -- scoped to rows that cite one, and at
+        least one row must cite one (the extractor's vacuity check). Like that grammar
+        everywhere, it does not follow an ``and``/``,`` list past its first number;
+    (d) ``{"accepting", "reference"}`` is a subset of the table's units -- the vacuity
+        guard, with no numeric floor (D005).
+
+    **Non-assertions:** it does not check that a fail-safe half correctly states its
+    posture, does not check gate→unit assignment, does not check that any posture is
+    right. **A green run means the index is internally consistent and its files exist —
+    never that the fail-safe halves are correct.** Nor does it check that a step's own
+    section tells you to read the unit its row names; that gap is F183 on #1. It checks
+    index -> disk only: a unit file the index does not name, or a row that wrongly reads
+    ``— (in core)``, is not detected. The never-indexed ban covers two literal paths; it
+    does not establish that Resume or the Router stays in core.
+
+    **Reads ``_ENGINE`` directly, not ``_engine_text()``** -- the same "not for structure"
+    exception ``PipelineStepOrderTests._engine_steps`` takes. The index is core's
+    enumeration: core is read in full and units are reached through it, so an index that
+    moved into a unit should fail here rather than be found across the join.
+    """
+
+    _INDEX_MARKER = "**Phase index.**"
+    _HOLDS_MARKER = "**What holds without each unit loaded.**"
+    _IN_CORE = "— (in core)"
+    _UNIT_CELL = re.compile(r"`([a-z][a-z0-9-]*)`")
+    _FILE_CELL = re.compile(
+        r"`\$\{CLAUDE_PLUGIN_ROOT\}/(skills/dev-loop/(?:phases|reference)/[a-z][a-z0-9-]*\.md)`"
+    )
+    _HOLDS_BULLET = re.compile(r"^- `([^`]+)`", re.MULTILINE)
+    _NEVER_INDEXED = ("reference/resume.md", "reference/router.md")
+    _NAMED_UNITS = frozenset({"accepting", "reference"})
+
+    def _core(self) -> str:
+        return _ENGINE.read_text(encoding="utf-8")
+
+    def _after(self, marker: str) -> str:
+        text = self._core()
+        i = text.find(marker)
+        self.assertNotEqual(i, -1, f"cannot locate {marker!r} in {_ENGINE.name}")
+        return text[i + len(marker):]
+
+    def _table_lines(self) -> list[str]:
+        """The first contiguous run of ``|`` lines after the index marker."""
+        lines: list[str] = []
+        for line in self._after(self._INDEX_MARKER).splitlines():
+            if line.startswith("|"):
+                lines.append(line)
+            elif lines:
+                break
+        self.assertGreater(len(lines), 2, "no phase-index table follows the index marker")
+        return lines
+
+    def _table_rows(self) -> list[tuple[str, str, str]]:
+        """[(unit, file, read-at)] for every body row. An unrecognised row fails."""
+        _header, separator, *body = self._table_lines()
+        self.assertRegex(separator, r"^\|(\s*:?-+:?\s*\|)+\s*$", "table separator row")
+        rows = []
+        for line in body:
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            self.assertEqual(len(cells), 3, f"phase-index row is not 3 cells: {line!r}")
+            unit = self._UNIT_CELL.fullmatch(cells[0])
+            self.assertIsNotNone(
+                unit, f"unrecognised Unit cell {cells[0]!r} -- expected one backticked name"
+            )
+            rows.append((unit.group(1), cells[1], cells[2]))
+        return rows
+
+    def _table_units(self) -> set[str]:
+        return {unit for unit, _, _ in self._table_rows()}
+
+    def _holds_units(self) -> set[str]:
+        """Backticked names opening the bullets of the What-holds paragraph."""
+        chunk = self._after(self._HOLDS_MARKER).split("\n\n", 1)[0]
+        return set(self._HOLDS_BULLET.findall(chunk))
+
+    def test_table_units_equal_the_what_holds_units(self) -> None:
+        table, holds = self._table_units(), self._holds_units()
+        self.assertEqual(
+            table,
+            holds,
+            f"phase-index units without a What-holds half: {sorted(table - holds)}; "
+            f"What-holds halves for no indexed unit: {sorted(holds - table)}. Every "
+            "unit in the index states what holds without it, and nothing else does.",
+        )
+
+    def test_every_indexed_file_exists(self) -> None:
+        for unit, file_cell, _ in self._table_rows():
+            with self.subTest(unit=unit):
+                if file_cell == self._IN_CORE:
+                    continue
+                match = self._FILE_CELL.fullmatch(file_cell)
+                self.assertIsNotNone(
+                    match,
+                    f"unrecognised File cell {file_cell!r}: expected {self._IN_CORE!r} or "
+                    "one backticked ${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/{phases,reference}/<name>.md",
+                )
+                self.assertTrue(
+                    (_PAYLOAD_ROOT / match.group(1)).is_file(),
+                    f"the index sends {unit!r} to {match.group(1)}, which does not "
+                    "exist in the payload -- the load protocol would STOP there",
+                )
+        table = "\n".join(self._table_lines())
+        for path in self._NEVER_INDEXED:
+            with self.subTest(path=path):
+                self.assertNotIn(
+                    path, table, f"{path} stays in core by construction; the index must not name it"
+                )
+
+    def test_cited_steps_resolve(self) -> None:
+        # Reuses PipelineStepOrderTests' heading run and reference grammar, as B3 specifies;
+        # instantiated only to call ``_engine_steps``, which asserts nothing.
+        steps = PipelineStepOrderTests()
+        valid = {number for number, _ in steps._engine_steps()}
+        cited = []
+        for unit, _, read_at in self._table_rows():
+            for run in steps._STEP_REFERENCE.findall(read_at):
+                for token in steps._REFERENCE_SEPARATORS.split(run):
+                    cited.append((unit, token, int(token.split(".")[0])))
+        self.assertNotEqual(cited, [], "no phase-index row cites a step -- extractor broken?")
+        dangling = [(unit, token) for unit, token, number in cited if number not in valid]
+        self.assertEqual(
+            dangling,
+            [],
+            f"phase-index rows cite steps no '### N.' heading defines: {dangling} "
+            f"(headings are {sorted(valid)})",
+        )
+
+    def test_named_units_are_a_subset_of_the_table(self) -> None:
+        found = self._table_units()
+        self.assertTrue(
+            self._NAMED_UNITS <= found,
+            f"the table extractor did not find {sorted(self._NAMED_UNITS - found)} "
+            f"(found {sorted(found)}) -- a renamed or removed unit, or a broken extractor",
+        )
+
+
 class VerdictFirstInvariantTests(unittest.TestCase):
     """#119's Verdict-first invariant reaches its gates by NAME, at located sites.
 
