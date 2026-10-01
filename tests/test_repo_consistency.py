@@ -1793,15 +1793,19 @@ class PhaseIndexIdentityTests(unittest.TestCase):
 
     Core's **Phase index** table names each unit, the file it lives in, and where it is
     read; the **What holds without each unit loaded** list states each unit's fail-safe
-    half. Four couplings between them are arbitrary strings, where any change is a real
-    change, so they are checkable (``tests/CLAUDE.md`` -> the ceiling on a prose guard):
+    half. Four checks over the index, each identity or existence over arbitrary strings
+    where any change is a real change, so they are checkable (``tests/CLAUDE.md`` -> the
+    ceiling on a prose guard):
 
     (a) the table's unit set equals the What-holds list's unit set;
-    (b) every File the table names is ``— (in core)`` or a ``${CLAUDE_PLUGIN_ROOT}`` path
-        that exists in the payload, and the table never names ``reference/resume.md`` or
+    (b) every File the table names is ``— (in core)`` or a
+        ``${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/{phases,reference}/<name>.md`` path that
+        exists in the payload, and the table never names ``reference/resume.md`` or
         ``reference/router.md``;
-    (c) every ``step N`` a row's read-at cell cites is a real ``### N.`` heading -- scoped
-        to rows that cite one;
+    (c) every ``step N`` that ``PipelineStepOrderTests._STEP_REFERENCE`` finds in a row's
+        read-at cell is a real ``### N.`` heading -- scoped to rows that cite one, and at
+        least one row must cite one (the extractor's vacuity check). Like that grammar
+        everywhere, it does not follow an ``and``/``,`` list past its first number;
     (d) ``{"accepting", "reference"}`` is a subset of the table's units -- the vacuity
         guard, with no numeric floor (D005).
 
@@ -1809,7 +1813,10 @@ class PhaseIndexIdentityTests(unittest.TestCase):
     posture, does not check gate→unit assignment, does not check that any posture is
     right. **A green run means the index is internally consistent and its files exist —
     never that the fail-safe halves are correct.** Nor does it check that a step's own
-    section tells you to read the unit its row names; that gap is F183 on #1.
+    section tells you to read the unit its row names; that gap is F183 on #1. It checks
+    index -> disk only: a unit file the index does not name, or a row that wrongly reads
+    ``— (in core)``, is not detected. The never-indexed ban covers two literal paths; it
+    does not establish that Resume or the Router stays in core.
 
     **Reads ``_ENGINE`` directly, not ``_engine_text()``** -- the same "not for structure"
     exception ``PipelineStepOrderTests._engine_steps`` takes. The index is core's
@@ -1821,7 +1828,9 @@ class PhaseIndexIdentityTests(unittest.TestCase):
     _HOLDS_MARKER = "**What holds without each unit loaded.**"
     _IN_CORE = "— (in core)"
     _UNIT_CELL = re.compile(r"`([a-z][a-z0-9-]*)`")
-    _FILE_CELL = re.compile(r"`\$\{CLAUDE_PLUGIN_ROOT\}/([^`]+)`")
+    _FILE_CELL = re.compile(
+        r"`\$\{CLAUDE_PLUGIN_ROOT\}/(skills/dev-loop/(?:phases|reference)/[a-z][a-z0-9-]*\.md)`"
+    )
     _HOLDS_BULLET = re.compile(r"^- `([^`]+)`", re.MULTILINE)
     _NEVER_INDEXED = ("reference/resume.md", "reference/router.md")
     _NAMED_UNITS = frozenset({"accepting", "reference"})
@@ -1887,8 +1896,8 @@ class PhaseIndexIdentityTests(unittest.TestCase):
                 match = self._FILE_CELL.fullmatch(file_cell)
                 self.assertIsNotNone(
                     match,
-                    f"unrecognised File cell {file_cell!r}: expected {self._IN_CORE!r} "
-                    "or one backticked ${CLAUDE_PLUGIN_ROOT}/<path>",
+                    f"unrecognised File cell {file_cell!r}: expected {self._IN_CORE!r} or "
+                    "one backticked ${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/{phases,reference}/<name>.md",
                 )
                 self.assertTrue(
                     (_PAYLOAD_ROOT / match.group(1)).is_file(),
@@ -1903,6 +1912,8 @@ class PhaseIndexIdentityTests(unittest.TestCase):
                 )
 
     def test_cited_steps_resolve(self) -> None:
+        # Reuses PipelineStepOrderTests' heading run and reference grammar, as B3 specifies;
+        # instantiated only to call ``_engine_steps``, which asserts nothing.
         steps = PipelineStepOrderTests()
         valid = {number for number, _ in steps._engine_steps()}
         cited = []
