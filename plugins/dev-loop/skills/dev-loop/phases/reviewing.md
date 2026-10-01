@@ -84,7 +84,7 @@ evidence shows; a count is what it does not.** Choosing one, or a per-route rost
 **review-tier matrix** question, which this step does not answer. **This step
 deliberately mints no route-to-lens matrix and no fixed roster.**
 
-**What it asks.** *Do this change's guards assert the **mechanism** that would break, or only an
+**What the `guard-efficacy` lens asks.** *Do this change's guards assert the **mechanism** that would break, or only an
 **outcome** a broken implementation would still produce?* That question is the Class B limit-case
 re-checker's (Gates → Fresh-re-check invariant), and its answering discipline governs here too: the
 lens decides by **reading**, never by running, editing or breaking anything, and **"cannot tell" is
@@ -186,8 +186,7 @@ lenses keep firing" would answer the review-tier question with evidence this flo
 Read the tier question off the lenses the risk surface *chose*.
 
 **This is deliberately a lowercase `roster:` record inside the gate-decision block, not a `- Name:`
-element, and it is not repeated in the close record.** The per-finding ID record (below) and the declines
-record (core, step 8) are specified **here rather than in Ledger format** too. **Never the
+element, and it is not repeated in the close record.** **Never the
 `- Code-review:` element, and never the `code-review=` parenthetical** on the `- Budget:` line:
 that parenthetical is per-iteration and label-only, while this is per-round and carries the
 differential and the outcome. Collapsing either into the other loses that.
@@ -277,9 +276,8 @@ them. **A round that is one lighter checker rather than a fan-out has no lens**:
 **new record in the gate-decision block**, not the `code-review=` parenthetical on the `- Budget:`
 line, which records **angles only** and carries no per-finding detail.
 
-**The editorial sweep — one pass, contained, at the close of THIS step.** It is specified here,
-beside the classes it discharges, but it **runs last** — after the round paragraphs and the round
-bound in core (step 8). Read the two together rather than in file order.
+**The editorial sweep — one pass, contained, at the close of THIS step.** It **runs last** — after the round paragraphs and the round
+bound in core (step 8).
 Run it when this gate resolves with **no unresolved BLOCKING finding**, as its own commit at this
 step's commit boundary, under step 6's explicit-path staging rule like any other boundary. **Take the
 set to sweep from every round's gate-decision block in `progress.md`, not from memory** — that is what

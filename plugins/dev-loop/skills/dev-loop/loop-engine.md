@@ -697,7 +697,7 @@ hold is disposed of by its class:** every one is BLOCKING, a design-question fin
 `- gate-error: code-review — phases/reviewing.md not loaded — <first line of the error>` (or
 `no-stderr` where the read raised none), escalate to the human, and do not merge (preamble → *What
 holds without each unit loaded*). **A reference elsewhere in this engine to step 8 that the text
-under this heading does not resolve points into the `reviewing` unit, and is operative.**
+under this heading does not resolve points into the `reviewing` unit.**
 
 **One lens is a floor, not a choice: `guard-efficacy`.** The `reviewing` unit picks angles from the
 risk surface, and that judgment stands — this puts a floor beneath it and **never a ceiling**.

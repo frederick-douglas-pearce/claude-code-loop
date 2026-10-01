@@ -3037,8 +3037,7 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
         # ``phases/accepting.md`` and occurs in no other source.
         "AC-verifier": ("## AC-verifier", "*End of the `accepting` unit.*"),
         # Step 8's procedure (#166): the unit's own title to its own closing line, so
-        # the section never straddles a source boundary. The core half of step 8 --
-        # the floor's due-ness -- stays under "step 8" above.
+        # the section never straddles a source boundary.
         "reviewing": ("# Phase unit `reviewing`", "*End of the `reviewing` unit.*"),
         "Gates": ("## Gates, convergence & resting states", "**Convergence & the resting"),
     }
