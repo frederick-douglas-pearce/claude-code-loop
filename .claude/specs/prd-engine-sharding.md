@@ -98,7 +98,8 @@ explicit load protocol**, not the fail-safe halves alone.
 ## 3. Epic acceptance criteria
 
 1. **Always-loaded footprint drops to ~30k tokens** (`SKILL.md` + `loop-engine.md` core), verified by
-   `wc -c`, down from 45,937.
+   `wc -c`, down from 45,937. *(Superseded 2026-09-30 by D017: ≥20% cut against 0.3.0, ≤55,565; the
+   figure here is the pre-freeze target and is not quoted.)*
 2. **Every safety decision still resolves inside core.** No `(step N)` cross-reference in core that
    decides whether a gate is due, whether it passed, whether to stop/proceed, or what may merge,
    resolves against text that now lives in a deferred unit. (B1 closes the one known such reference.)
