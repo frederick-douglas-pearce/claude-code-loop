@@ -12,7 +12,8 @@ rather than remembered.
 | file | what it is |
 |---|---|
 | **`loop-cost-and-convergence.md`** | The notebook. Findings 1–12, each with method, numbers, and what would falsify it. **The primary document** — everything else supports it. |
-| `baseline-2026-08-25.md` | Frozen pre-change metrics and the P1–P9 predictions the sharding epic is judged against. |
+| `baseline-2026-10-04.md` | **The sharding epic's before-baseline** (#126): 0.3.0, stratum `claude-opus-5-5`@`high`, per repo. It also states the 0.3.0-relative predictions #133 is judged against. |
+| `baseline-2026-08-25.md` | Frozen **0.2.0** metrics and the original P1–P10 predictions. Kept as published; superseded as the sharding before-baseline by `baseline-2026-10-04.md`. |
 | `context-architecture-refactor.md` | Design note: why shard the engine, compared against `obra/superpowers`. |
 | `draft-core.md` | The seven-unit **target** architecture. Not the increment being shipped — do not implement from it. |
 | `core-self-sufficiency-audit.md` | Which engine references a shrunken core would break, and the replacement wording. |
@@ -78,7 +79,7 @@ These were misread once, so they are pinned here rather than left to inference.
 | term | definition | what it is **not** |
 |---|---|---|
 | **engine reads** | count of tool calls returning engine text | *not* complete reads of the file — under 0.2.0 they are overlapping partial slices, ~1.0–1.5× the file in total. Also **filter-dependent**; treat as approximate. |
-| **ingested** (P2) | engine tokens that entered the parent, measured from context deltas | *not* the file's size, and *not* `chars/4` — this corpus runs 3.25–3.82 chars per context token |
+| **ingested** (P2) | engine tokens that entered the parent, measured from context deltas | *not* the file's size, and *not* `chars/4`. The 0.2.0 corpus ran 3.25–3.82 chars per context token; the 0.3.0 sessions in `baseline-2026-10-04.md` run 2.87–2.89 |
 | **resident-turn** (P2c) | Σ over turns of engine tokens sitting in that turn's input | the cost quantity; ingestion counts each read once, this counts every turn it is carried |
 | **carry / carry-per-turn** | resident-turn ÷ ingested (÷ turns) | **use carry/turn** — raw carry scales with session length and cannot be compared across runs |
 | **% of bill** | engine's share of billable-equivalent input | engine takes a share of the **input** side only; it does not cause output tokens |
@@ -128,7 +129,7 @@ Two defences, both cheap, and they are the only things that have worked:
   found 3. None was found by reasoning about the pattern.
 - **Sanity-check the output distribution against what the system can physically do.** One issue per
   invocation; engine ingestion ≥ one copy of the engine. `engine_cost.py` enforces the latter as an
-  **admissibility precondition** (`DEFAULT_FLOOR`, override with `--floor`) — a session below it is
+  **admissibility precondition** (derived per session from the engine era; override with `--floor`) — a session below it is
   *unmeasured*, not cheap, and is refused loudly rather than averaged in.
 
   *This sentence asserted that behaviour for a day before the code had it: the rule was documented
@@ -149,7 +150,7 @@ which is the kind of prose that goes stale between releases:
 | era | installed | repos |
 |---|---|---|
 | 0.2.0 | 2026-08-21 | **held deliberately** on `agentfluent`, `claude-code-sessions` — the untreated control |
-| 0.2.1 | 2026-08-26 | `claude-code-loop`, `us_presidential_vote_analysis` — **n=10 / n=13** admissible sessions |
+| 0.2.1 | 2026-08-26 | `claude-code-loop`, `us_presidential_vote_analysis` — **n=10 / n=12** admissible sessions (vote `d53db569` excluded as 0.2.0-era, F170) |
 | **0.3.0** | **2026-09-11** (local; `installed_plugins.json` stamps it `2026-09-12T00:39Z`) | `claude-code-loop`, `us_presidential_vote_analysis`, `sportswear-esg-news-classifier` |
 
 ⚠ **The v0.3.0 release grew the engine 50.8%** (177,529 → 267,647 bytes; always-loaded 45,937 →
