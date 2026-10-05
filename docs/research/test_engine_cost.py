@@ -25,6 +25,9 @@ from engine_cost import (  # noqa: E402
 
 CACHE = "/home/u/.claude/plugins/cache/claude-code-loop/dev-loop/0.2.0/skills/dev-loop/loop-engine.md"
 TREE = "/home/u/Documents/Projects/git/claude-code-loop/skills/dev-loop/loop-engine.md"
+# Since #170 the working tree itself lives under `plugins/dev-loop/`.
+TREE_PAYLOAD = ("/home/u/Documents/Projects/git/claude-code-loop/"
+                "plugins/dev-loop/skills/dev-loop/loop-engine.md")
 SPILL = "/home/u/.claude/projects/-slug/abc123/tool-results/bz0uty70f.txt"
 
 
@@ -46,6 +49,14 @@ class ClassifyTests(unittest.TestCase):
         """BUG 2. This repo develops the engine, so it reads the in-tree copy as a
         work product. Counting it as a loop cost inflated one session by ~44%."""
         self.assertEqual(classify("Read", {"file_path": TREE}), "tree")
+
+    def test_payload_working_tree_read_is_tree_not_load(self):
+        """BUG 4 (#126). #170 moved the working tree under `plugins/dev-loop/`, so a
+        bare `/plugins/` test scored in-repo edits as loads: one 0.3.0 session read
+        as 127,654 ingested against 101,828 actually loaded. Only the plugin cache
+        is a load."""
+        self.assertEqual(classify("Read", {"file_path": TREE_PAYLOAD}), "tree")
+        self.assertEqual(bash("sed -n '1,200p' " + TREE_PAYLOAD), "tree")
 
     def test_heredoc_write_mentioning_engine_is_not_a_read(self):
         """BUG 1. Scored 9 reads in a session that had 1."""
