@@ -28,6 +28,14 @@ TREE = "/home/u/Documents/Projects/git/claude-code-loop/skills/dev-loop/loop-eng
 # Since #170 the working tree itself lives under `plugins/dev-loop/`.
 TREE_PAYLOAD = ("/home/u/Documents/Projects/git/claude-code-loop/"
                 "plugins/dev-loop/skills/dev-loop/loop-engine.md")
+# Copies under `~/.claude/` that are still not the engine that runs.
+MARKETPLACE = ("/home/u/.claude/plugins/marketplaces/claude-code-loop/"
+               "plugins/dev-loop/skills/dev-loop/loop-engine.md")
+WORKTREE = ("/home/u/Documents/Projects/git/claude-code-loop/.claude/worktrees/w1/"
+            "plugins/dev-loop/skills/dev-loop/loop-engine.md")
+# A checkout whose path merely contains "cache" is not the plugin cache either.
+CACHE_DIR_CLONE = ("/home/u/.cache/src/claude-code-loop/"
+                   "plugins/dev-loop/skills/dev-loop/loop-engine.md")
 SPILL = "/home/u/.claude/projects/-slug/abc123/tool-results/bz0uty70f.txt"
 
 
@@ -51,12 +59,21 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(classify("Read", {"file_path": TREE}), "tree")
 
     def test_payload_working_tree_read_is_tree_not_load(self):
-        """BUG 4 (#126). #170 moved the working tree under `plugins/dev-loop/`, so a
+        """BUG 2, recurrence (#126). #170 moved the working tree under `plugins/dev-loop/`, so a
         bare `/plugins/` test scored in-repo edits as loads: one 0.3.0 session read
         as 127,654 ingested against 101,828 actually loaded. Only the plugin cache
         is a load."""
         self.assertEqual(classify("Read", {"file_path": TREE_PAYLOAD}), "tree")
         self.assertEqual(bash("sed -n '1,200p' " + TREE_PAYLOAD), "tree")
+
+    def test_non_cache_copies_under_dot_claude_are_not_loads(self):
+        """Only the plugin cache runs. The marketplace clone and a worktree both sit
+        under `/.claude/`, so a discriminator widened to `/.claude/plugins/` or
+        `/.claude/` would score them as loads; a bare `cache` test would score
+        any checkout under `~/.cache/`."""
+        for path in (MARKETPLACE, WORKTREE, CACHE_DIR_CLONE):
+            self.assertEqual(classify("Read", {"file_path": path}), "tree")
+            self.assertEqual(bash("sed -n '1,200p' " + path), "tree")
 
     def test_heredoc_write_mentioning_engine_is_not_a_read(self):
         """BUG 1. Scored 9 reads in a session that had 1."""

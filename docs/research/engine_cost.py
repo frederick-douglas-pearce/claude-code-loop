@@ -46,7 +46,9 @@ was silent and each moved the number in a believable direction, so read
      that develops it, and is not a loop cost. Only plugin-cache paths
      (`/.claude/plugins/cache/`) are loads: since #170 the working tree itself
      sits under `plugins/dev-loop/`, so a bare `/plugins/` test scored in-repo
-     edits as loads (#126).
+     edits as loads (#126). Any other copy is not a load either: Claude Code's
+     own marketplace clone (`~/.claude/plugins/marketplaces/`, the source it
+     installs from) and worktree checkouts are not the engine that runs.
   3. **Spill files.** A `cat` of the engine exceeds the inline limit, so the
      harness writes it to `<session>/tool-results/<id>.txt` and hands the model a
      2KB preview. The recovery reads then target THE SPILL PATH, which contains no
@@ -189,7 +191,7 @@ def engine_version(name, inp):
 
 
 def classify(name, inp, target="loop-engine.md", spills=None):
-    """-> 'load' (plugin cache), 'tree' (working copy), or None.
+    """-> 'load' (plugin cache), 'tree' (any other copy), or None.
 
     `spills` maps a spill-file path to the kind of the read that produced it, so
     the recovery reads inherit it.

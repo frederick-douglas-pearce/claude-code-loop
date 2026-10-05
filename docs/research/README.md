@@ -13,7 +13,7 @@ rather than remembered.
 |---|---|
 | **`loop-cost-and-convergence.md`** | The notebook. Findings 1–12, each with method, numbers, and what would falsify it. **The primary document** — everything else supports it. |
 | `baseline-2026-10-04.md` | **The sharding epic's before-baseline** (#126): 0.3.0, stratum `claude-opus-5-5`@`high`, per repo. It also states the 0.3.0-relative predictions #133 is judged against. |
-| `baseline-2026-08-25.md` | Frozen **0.2.0** metrics and the original P1–P10 predictions. Kept as published; superseded as the sharding before-baseline by `baseline-2026-10-04.md`. |
+| `baseline-2026-08-25.md` | Frozen **0.2.0** metrics and its P1–P9 sharding predictions (P10 is #135's). Kept as published; superseded as the sharding before-baseline by `baseline-2026-10-04.md`. |
 | `context-architecture-refactor.md` | Design note: why shard the engine, compared against `obra/superpowers`. |
 | `draft-core.md` | The seven-unit **target** architecture. Not the increment being shipped — do not implement from it. |
 | `core-self-sufficiency-audit.md` | Which engine references a shrunken core would break, and the replacement wording. |
@@ -112,6 +112,8 @@ plausible direction**, and pattern-matching caught none of them:
    (9 reads in a session that had 1).
 2. **Working tree vs plugin cache** — reading `skills/dev-loop/loop-engine.md` is an agent *editing*
    the engine, not the loop loading it. Only happens in this repo; inflated one session ~44%.
+   **Recurred after #170** moved the working tree under `plugins/dev-loop/`, so a bare `/plugins/`
+   test scored in-repo reads as loads; only `/.claude/plugins/cache/` is a load now (#126).
 3. **Spill files** — an over-large `cat` is parked at `<session>/tool-results/<id>.txt` and the model
    gets a 2KB preview; recovery reads target the **spill path**, which contains no `loop-engine.md`
    substring. Scored a full load as ~10% of one, and that was written up as a real finding before it
