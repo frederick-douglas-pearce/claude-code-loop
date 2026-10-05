@@ -43,7 +43,10 @@ was silent and each moved the number in a believable direction, so read
      that had 1.
   2. **Working-tree vs plugin-cache.** Reading `skills/dev-loop/loop-engine.md` is
      an agent EDITING the engine as a work product -- only happens in the repo
-     that develops it, and is not a loop cost. Only `/plugins/` paths are loads.
+     that develops it, and is not a loop cost. Only plugin-cache paths
+     (`/.claude/plugins/cache/`) are loads: since #170 the working tree itself
+     sits under `plugins/dev-loop/`, so a bare `/plugins/` test scored in-repo
+     edits as loads (#126).
   3. **Spill files.** A `cat` of the engine exceeds the inline limit, so the
      harness writes it to `<session>/tool-results/<id>.txt` and hands the model a
      2KB preview. The recovery reads then target THE SPILL PATH, which contains no
@@ -89,10 +92,11 @@ CHARS_PER_TOKEN = 3.5
 # Add a row when a version is retired, never instead of reading the payload.
 KNOWN_ENGINE_BYTES = {"0.2.0": 177529, "0.2.1": 177529, "0.3.0": 267647}
 
+CACHE_SEGMENT = "/.claude/plugins/cache/"
 PLUGIN_CACHE = os.path.expanduser(
     "~/.claude/plugins/cache/claude-code-loop/dev-loop")
 # The installed path carries its own version: .../dev-loop/<version>/skills/...
-# This is the same path `classify` already requires to contain `/plugins/`, so
+# This is the same path `classify` already requires to be the plugin cache, so
 # era attribution costs no extra detection surface and inherits its correctness.
 VERSION_IN_PATH = re.compile(r"/dev-loop/(\d+\.\d+\.\d+)/")
 
@@ -208,8 +212,9 @@ def classify(name, inp, target="loop-engine.md", spills=None):
             return kind
     if target not in path:
         return None
-    # `/dev-loop/` matches the working tree too; `/plugins/` is the discriminator.
-    return "load" if "/plugins/" in path else "tree"
+    # `/dev-loop/` and, since #170, `/plugins/` match the working tree too; only
+    # the plugin cache is a load.
+    return "load" if CACHE_SEGMENT in path else "tree"
 
 
 
