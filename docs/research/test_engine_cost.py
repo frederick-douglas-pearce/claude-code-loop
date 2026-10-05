@@ -68,9 +68,10 @@ class ClassifyTests(unittest.TestCase):
 
     def test_non_cache_copies_under_dot_claude_are_not_loads(self):
         """Only the plugin cache runs. The marketplace clone and a worktree both sit
-        under `/.claude/`, so a discriminator widened to `/.claude/plugins/` or
-        `/.claude/` would score them as loads; a bare `cache` test would score
-        any checkout under `~/.cache/`."""
+        under `/.claude/`, so a discriminator widened to `/.claude/` would score
+        both as loads, and one widened to `/.claude/plugins/` would score the
+        marketplace clone; a bare `cache` test would score any checkout under
+        `~/.cache/`."""
         for path in (MARKETPLACE, WORKTREE, CACHE_DIR_CLONE):
             self.assertEqual(classify("Read", {"file_path": path}), "tree")
             self.assertEqual(bash("sed -n '1,200p' " + path), "tree")
