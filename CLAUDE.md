@@ -252,6 +252,13 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
   Anything later that lands here inherits the same terms. #181's OG-card renderer was the
   candidate this sentence used to anticipate; it has landed, on exactly those terms, and settling
   it is what replaced the directory-scoped rule above with the reach predicate.
+- **`incubator/` holds skills under development that are meant to reach the payload but have not
+  yet earned it, and it does not ship** — positionally, by the payload rule above. A skill there
+  is loaded as a **personal** skill through a symlink from `~/.claude/skills/<name>`, so it is live
+  only on the maintainer's machine and only while the checked-out tree contains it. Graduation is a
+  `git mv` into `plugins/dev-loop/skills/` through a PR, at which point every rule for the payload
+  applies — including the higher evidence bar the payload carries. No inventory is kept here; read
+  the directory, and each skill's epic for its status.
 - **`posts/` holds the blog series sources and does not ship.** The `claude-code-loop` series,
   published to the Pages site that two sibling repos already publish into. The boundary with
   `social/` is what matters: `social/` is **gitignored working state** —
