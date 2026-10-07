@@ -6,7 +6,7 @@ disable-model-invocation: true
 context: fork
 agent: general-purpose
 background: false
-allowed-tools: Bash(gh pr view *) Bash(gh pr diff *) Bash(gh pr list *) Bash(gh issue view *) Bash(gh release list *) Bash(git log *) Bash(git tag *) Read Grep Glob
+allowed-tools: Bash(gh pr view *) Bash(gh pr diff *) Bash(gh pr list *) Bash(gh issue view *) Bash(gh release list *) Bash(gh run list *) Bash(git log *) Bash(git tag *) Bash(wc *) Bash(mkdir *) Read Grep Glob Write Agent
 ---
 
 # PR brief
@@ -30,8 +30,9 @@ The reader often oversees several projects at once and comes to this PR cold.
 Each source answers a different question, and the gaps between them are some of the most useful
 things to report.
 
-1. **The PR** — `gh pr view <N> --json title,body,state,mergedAt,files,closingIssuesReferences,url`
-   and `gh pr diff <N>`. For a large diff, read the file list first. Test files name the behaviors
+1. **The PR** — `gh pr view <N> --json title,body,state,mergedAt,files,commits,closingIssuesReferences,url`
+   and `gh pr diff <N>`. The brief covers the **whole PR** — every commit, whether it is open or
+   merged — so work from the full diff, not the last commit. For a large diff, read the file list first. Test files name the behaviors
    the author meant to guarantee, often more plainly than the code does.
 2. **The linked issue(s) and their comments** — `gh issue view <M> --comments`. The issue is the
    **spec**: its problem statement says why the work mattered, its acceptance criteria say what was
@@ -45,9 +46,13 @@ things to report.
 4. **The project's stated constraints** — skim the README and any `CLAUDE.md` for design rules
    ("no external dependencies", "runs offline", a chosen hosting platform, a budget ceiling).
 5. **Since merge** (merged PRs only) — has this reached users? Compare the merge date with
-   `gh release list` or `git tag`. Has later work changed what someone would see today? Check
+   `gh release list` or `git tag`. Where the project deploys from CI, `gh run list` on the deploy
+   workflow shows what is live: a later PR is deployed only if a successful deploy ran after it
+   merged. Report that as fact rather than "couldn't confirm". Has later work changed what someone would see today? Check
    `git log --oneline <merge-commit>..origin/HEAD -- <the PR's main files>` or later PRs that cite
-   this issue. A reviewer testing today sees today's behavior, not this PR's.
+   this issue. A reviewer testing today sees today's behavior, not this PR's. Describe each later
+   change by what it actually changed (read it — don't infer from its title), so the reader knows
+   which of today's behavior came from this PR.
 
 Work from these sources, not from memory of the session that built the PR — that session's own
 account is exactly what this brief is meant to check.
@@ -79,8 +84,22 @@ keep the other sections.
 
 ## Write the brief
 
-**Length: about 1,000 words (800–1,200), scaled to the PR's complexity.** A small fix can be much
-shorter; a large feature can reach the top of the range. Cut detail before cutting a section.
+**Length: up to 1,400 words; 1,000 is a soft floor.** The reader's time is the constraint, so
+the range does not scale with the size of the PR, and a small PR should not be padded to reach the
+floor. Count with `wc -w` before returning; if the brief is over, tighten using the rules below
+rather than dropping a section.
+
+**What never gets cut:** status and risk facts — whether it is released or deployed, anything
+merged without review or past an unresolved finding, a missed target, an open decision for the
+owner, and evidence of whether the feature is actually being used. Cut descriptive detail first.
+
+**Write tight:**
+- State each fact once. The executive summary restates headlines; nothing else repeats.
+- Each cost row is one line. The full breakdown of decisions and review rounds stays in the
+  journal; the brief gives the count and how it ended.
+- Journeys stay at product level: what a user does and sees. No parser rules, API internals or
+  file formats.
+- The sources line is one line.
 
 ```markdown
 # <What changed, in plain words> (#<N>, <open | merged on DATE>)
@@ -130,7 +149,7 @@ Omit the section if there is nothing — don't invent concerns.>
 **Scope check:** <anything touched that the spec didn't call for, and anything new that conflicts
 with the project's stated constraints — or "nothing outside the expected scope">
 
-**Built:** <one sentence: "Built X with Y.">
+**Built:** <one sentence, "Built X with Y." — only if it says something the summary and table don't>
 
 <sub>Sources: PR #N, issue #M (+comments), <ledger files>, <since-merge checks>. Not available: …</sub>
 ```
@@ -158,10 +177,16 @@ and name what is not.
   spent waiting for a human*; say so. Without a ledger, use the issue-to-merge dates and say
   that's calendar time.
 - **Human involvement** — how many times a person had to decide: plan approval, merge approval,
-  escalations, holds. Read the `- Human gate:` lines and any held or escalated stops. How long each
+  escalations, holds, scope or backlog rulings. Count them from this issue's journal blocks
+  (`- Human gate:` lines, held or escalated stops, and any decision the journal attributes to the
+  human), not from the PR body. How long each
   decision took is not recorded; don't guess it.
 - **Review effort** — summarize, don't list: "passed code review on the third round", "the
   acceptance check ran twice". The `gate-rounds=` and `justification=` slots say how many and why.
+  Say how each review *ended*: a review a person closed after unresolved findings is not a clean
+  pass, and a business reader needs that distinction. Describe what was reviewed as "the PR's
+  final state" — a squash merge creates a new commit, so "the merged commit" is not what a review
+  certified.
 - **Compute** — token usage is not yet attributed to individual PRs. Write "Not yet measured"
   rather than estimating.
 - **New running costs** — the cost of *operating* what was built: new cloud services, hosting,
@@ -188,11 +213,61 @@ Engineering-only concerns belong in the scope check, briefly, or nowhere.
 
 For a business reader to see what the feature is built on, and for a technical lead to confirm it
 matches expectations. List **technologies only** — languages, libraries, services, platforms,
-vendors — not activities like "analysis" or "design". Only what this PR touched or exercised, not
-the project's whole stack. Put **new external services and vendors first**: they carry running
-cost and lock-in. "What it is" is a plain phrase ("a Python toolkit for web dashboards"); usually
-3–8 rows. The **Built** line states what was built and with what, and claims nothing the evidence
-doesn't show.
+vendors — not activities like "analysis" or "design". Put **new external services and vendors first**: they carry running
+cost and lock-in. "What it is" is a plain phrase ("a Python toolkit for web dashboards").
+
+List **every technology the diff changes or newly depends on, and nothing else**: libraries
+imported or upgraded in changed code (including standard-library modules the change relies on),
+dependency manifests, CI/deploy/infrastructure config, cloud services and permissions the diff
+configures. Leave out the project's **standing toolchain** — CI runners, linters, type checkers,
+the test runner — unless the diff itself changes it; it appears on every PR and tells the reader
+nothing about this one. The **Built** line is optional: include it only when it adds something the
+executive summary and the table don't already say.
+
+## Self-review (a pre-filter, not the check)
+
+Before verification, re-read the draft against its sources. Confirm claims about what the PR
+does — especially what a new check, guard or warning *catches or prevents*; authors often state
+the limits of their own guards — and recount every number from its source. Delete anything you
+can't point to a source for. This catches the easy errors; it does not replace the verifier,
+because a drafter re-reading its own work tends to keep believing it.
+
+## Independent verification
+
+One wrong fact in front of an executive costs the whole brief its credibility, so every brief is
+fact-checked by an agent that did not write it.
+
+1. **Launch the verifier.** Start a fresh subagent with the Agent tool. Its prompt is the full
+   text of `verifier.md` (in this skill's directory), followed by the PR number, the repository
+   path, and the draft brief. Give it nothing else — not your notes, sources list, or reasoning.
+   Its independence is what makes it useful.
+2. **Apply the verdicts — default-deny.** A claim ships only if the verifier marked it
+   `confirmed` *with a citation*.
+   - `confirmed` with no citation → treat as `unsupported`.
+   - `wrong` → before using the correction, check that the cited source exists and says what the
+     verifier claims. If it does, replace the claim with the correction. If it doesn't, the claim
+     is disputed: **delete it** — ship neither version, and don't argue it out in another round.
+   - `unsupported` → delete the claim. Don't soften it into a hedge.
+   - Each **contradiction** → keep the sentence the sources support and delete the other; if
+     neither is confirmed, delete both.
+   - Repair the prose around deletions so it still reads cleanly; don't add new claims while
+     doing so.
+3. **Rewrite the executive summary** from the corrected sections, so it agrees with them.
+4. **If the verifier could not run, or its coverage was partial,** the brief's first line is:
+   `> **NOT INDEPENDENTLY VERIFIED — do not forward.** <what wasn't checked and why>`
+   Only a complete verdict list removes that line. Never withhold the brief; never omit the
+   banner.
+
+Deletions can leave the brief under the 1,000-word floor. That's fine — never pad it back up.
+
+## Deliver
+
+Write the final brief to `<dir>/pr-<N>.md` and the verifier's verdicts to
+`<dir>/pr-<N>.verification.md`, where `<dir>` is `LEDGER_ROOT/briefs/` if the repo has a dev-loop
+ledger, and `${TMPDIR:-/tmp}/pr-brief/<repo-name>/` otherwise (create it). Save the verifier's
+output **verbatim** — it is the audit record, so never condense or edit it; add your note on how
+each wrong, unsupported or contradictory item was handled below it, under its own heading. The
+brief file is the authoritative copy. Return the file path, then the brief exactly as written.
 
 ## Honesty about uncertainty
 
