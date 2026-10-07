@@ -1,0 +1,80 @@
+{
+  "skill_name": "pr-brief",
+  "evals": [
+    {
+      "id": 1,
+      "name": "agentfluent-663-stale-acs",
+      "repo": "~/Documents/Projects/git/agentfluent",
+      "prompt": "brief me on agentfluent PR #663 for my status update: what it delivered, what it cost, and how I'd check it against the spec",
+      "expected_output": "Three-part brief. The linked issue's body carries ACs (AC2's premise, AC6's attribution) that a comment refuted; the brief should reflect the comment, not report the PR as falling short of the refuted ACs or repeat the false attribution. Stack names genai-prices and the version bump.",
+      "files": [],
+      "assertions": [
+        "exec-summary-top: the brief opens with a short executive summary covering value, cost, status (released / merged-not-released / changed since), and the top risk, and each line agrees with the section below it",
+        "value-specific: the value section names who benefits and a concrete change, and names the kind of value honestly (feature / fix / risk reduction / groundwork) rather than inflating it",
+        "numbers-faithful: every number checked (at least 3, against PR/issue/ledger/diff) keeps its source's unit and meaning; no figure is estimated without a source; parts quoted with a total add up",
+        "cost-measured-only: the cost section reports elapsed time (saying it includes waiting for a human, if from the ledger), how many human decisions were needed, and review effort in summary form; compute/tokens is stated as not measured and no compute dollar figure is invented",
+        "running-cost: new running costs (services, hosting, paid APIs, budget ceilings) are named from the diff/config with correct amounts, or the brief explicitly says there are none",
+        "walkthrough-journeys: the walkthrough gives a 'how to get to it' line and user journeys, each tied to an acceptance criterion or user story, with concrete steps and a concrete expectation",
+        "walkthrough-product-level: journeys are written from a product/user perspective (what a PM would click/run/look at), not as code-level or unit-test checks",
+        "since-merge: the brief states whether the change has reached a release and whether later work changed what a reviewer would see today",
+        "spec-vs-delivery: the brief surfaces real differences between the spec (issue + comments + plan) and what was delivered, with confidence, and invents none (graded against sources)",
+        "tech-technologies-only: the technology table lists only technologies (not activities like 'analysis' or 'design'), only those this PR touched, each with a plain-language 'what it is'",
+        "scope-check: a scope check states anything touched outside the spec's scope or conflicting with stated project constraints, or says there is nothing",
+        "plain-language: an executive or PM could read it \u2014 technical terms are explained on first use and the body is not code-centric",
+        "length-in-range: word count is 800-1200, or below 800 for a small PR where the brevity is proportionate (count words in brief.md)",
+        "fable-dropped: spec-vs-delivery notes that an issue comment asked for claude-fable-5 in the same change and it was deferred to #664",
+        "not-released: the status line says the fix is merged but not yet in a published release"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "vote-292-dashboard-deploy",
+      "repo": "~/Documents/Projects/git/us_presidential_vote_analysis",
+      "prompt": "I wasn't watching the loop that shipped PR #292 in the vote analysis repo. Give me the stakeholder brief.",
+      "expected_output": "Large diff (+3415). Web surface: test steps in terms of pages/URLs. Stack lists the hosting platform and cloud services actually configured, marked new where introduced; fit check against the repo's stated constraints.",
+      "files": [],
+      "assertions": [
+        "exec-summary-top: the brief opens with a short executive summary covering value, cost, status (released / merged-not-released / changed since), and the top risk, and each line agrees with the section below it",
+        "value-specific: the value section names who benefits and a concrete change, and names the kind of value honestly (feature / fix / risk reduction / groundwork) rather than inflating it",
+        "numbers-faithful: every number checked (at least 3, against PR/issue/ledger/diff) keeps its source's unit and meaning; no figure is estimated without a source; parts quoted with a total add up",
+        "cost-measured-only: the cost section reports elapsed time (saying it includes waiting for a human, if from the ledger), how many human decisions were needed, and review effort in summary form; compute/tokens is stated as not measured and no compute dollar figure is invented",
+        "running-cost: new running costs (services, hosting, paid APIs, budget ceilings) are named from the diff/config with correct amounts, or the brief explicitly says there are none",
+        "walkthrough-journeys: the walkthrough gives a 'how to get to it' line and user journeys, each tied to an acceptance criterion or user story, with concrete steps and a concrete expectation",
+        "walkthrough-product-level: journeys are written from a product/user perspective (what a PM would click/run/look at), not as code-level or unit-test checks",
+        "since-merge: the brief states whether the change has reached a release and whether later work changed what a reviewer would see today",
+        "spec-vs-delivery: the brief surfaces real differences between the spec (issue + comments + plan) and what was delivered, with confidence, and invents none (graded against sources)",
+        "tech-technologies-only: the technology table lists only technologies (not activities like 'analysis' or 'design'), only those this PR touched, each with a plain-language 'what it is'",
+        "scope-check: a scope check states anything touched outside the spec's scope or conflicting with stated project constraints, or says there is nothing",
+        "plain-language: an executive or PM could read it \u2014 technical terms are explained on first use and the body is not code-centric",
+        "length-in-range: word count is 800-1200, or below 800 for a small PR where the brevity is proportionate (count words in brief.md)",
+        "hosting-cost-correct: running cost names App Engine hosting and states the budget figures correctly (the kill-switch/alert amount and the monthly ceiling are not conflated)",
+        "superseded-since: notes that later PRs (e.g. #305/#312/#316) changed what the live site shows today"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "loop-51-agent-instructions",
+      "repo": "~/Documents/Projects/git/claude-code-loop",
+      "prompt": "what did PR #51 in claude-code-loop actually deliver, what did it cost, and how would I check it against what was asked for?",
+      "expected_output": "Surface is agent instructions: tests describe how the loop's journal output changes in a run, not code. Value is internal/observability, named honestly. Stack is small (Markdown engine prose, Python unittest) and not inflated.",
+      "files": [],
+      "assertions": [
+        "exec-summary-top: the brief opens with a short executive summary covering value, cost, status (released / merged-not-released / changed since), and the top risk, and each line agrees with the section below it",
+        "value-specific: the value section names who benefits and a concrete change, and names the kind of value honestly (feature / fix / risk reduction / groundwork) rather than inflating it",
+        "numbers-faithful: every number checked (at least 3, against PR/issue/ledger/diff) keeps its source's unit and meaning; no figure is estimated without a source; parts quoted with a total add up",
+        "cost-measured-only: the cost section reports elapsed time (saying it includes waiting for a human, if from the ledger), how many human decisions were needed, and review effort in summary form; compute/tokens is stated as not measured and no compute dollar figure is invented",
+        "running-cost: new running costs (services, hosting, paid APIs, budget ceilings) are named from the diff/config with correct amounts, or the brief explicitly says there are none",
+        "walkthrough-journeys: the walkthrough gives a 'how to get to it' line and user journeys, each tied to an acceptance criterion or user story, with concrete steps and a concrete expectation",
+        "walkthrough-product-level: journeys are written from a product/user perspective (what a PM would click/run/look at), not as code-level or unit-test checks",
+        "since-merge: the brief states whether the change has reached a release and whether later work changed what a reviewer would see today",
+        "spec-vs-delivery: the brief surfaces real differences between the spec (issue + comments + plan) and what was delivered, with confidence, and invents none (graded against sources)",
+        "tech-technologies-only: the technology table lists only technologies (not activities like 'analysis' or 'design'), only those this PR touched, each with a plain-language 'what it is'",
+        "scope-check: a scope check states anything touched outside the spec's scope or conflicting with stated project constraints, or says there is nothing",
+        "plain-language: an executive or PM could read it \u2014 technical terms are explained on first use and the body is not code-centric",
+        "length-in-range: word count is 800-1200, or below 800 for a small PR where the brevity is proportionate (count words in brief.md)",
+        "operator-surface: the walkthrough is framed as what the person running the loop will see differently in the next run's journal",
+        "no-running-cost: running cost is stated as none (no new services or dependencies)"
+      ]
+    }
+  ]
+}
