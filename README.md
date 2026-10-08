@@ -186,7 +186,8 @@ from yours, and says nothing when it infers your plan-gate posture. An installed
 its own verdict never counts as passed, no gate-currency expiry, no offline test
 tier, no mutation pass and no orphan-PR scan, and it runs the acceptance gate before
 review rather than last. If you are already running the loop, re-install before
-relying on any of this, and read "Upgrading with a live ledger" first.
+relying on any of this — *Upgrading the plugin* says how — and read "Upgrading with a
+live ledger" first.
 
 Worth reading before you install. This plugin drives a real development workflow on
 your behalf: it creates branches, commits, opens pull requests, runs your project's
@@ -508,6 +509,31 @@ harness; it does nothing until the consuming repo supplies the per-project confi
 harness the acceptance gate runs — the engine's own instructions are prompt
 artifacts and need nothing installed. Both are launched with bare `python3`, use
 the standard library only, and are tested on 3.9 through 3.13 in CI.
+
+### Upgrading the plugin
+
+**`/plugin install` does not upgrade.** On a plugin that is already installed it reports
+`already installed` and exits successfully without changing the version. A third-party
+marketplace like this one also does not auto-update by default. Read *Upgrading with a live
+ledger* below first, then run, from inside the consuming repo:
+
+```
+claude plugin marketplace update claude-code-loop
+claude plugin update dev-loop@claude-code-loop --scope project
+```
+
+The first command refreshes the marketplace's copy of this repo. Without it, `update` has
+no newer version to find. Pass the `--scope` you installed at; `project` is shown here. The
+running session keeps the engine it already loaded, so start a new session (or run
+`/reload-plugins`) before the next loop run.
+
+**Confirm the version from the files, never from the command's output.** In
+`~/.claude/plugins/installed_plugins.json`, the `dev-loop@claude-code-loop` entry for your
+scope (at `project` or `local` scope, the one whose `projectPath` is your repo) must show the
+new `version`, and
+`~/.claude/plugins/cache/claude-code-loop/dev-loop/<version>/` must exist.
+`claude plugin list` is not enough: it prints one entry per repo without saying which repo
+each belongs to. If you cannot confirm the new version, you have not upgraded.
 
 ### Upgrading with a live ledger
 
