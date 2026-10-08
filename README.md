@@ -23,18 +23,18 @@ issue per invocation, with human gates on uncertainty and durable ledger state.
 > here. As of the v0.3.0 cut (2026-09-11) three repos took that release — this one,
 > `us-presidential-vote-analysis` and `sportswear-esg-news-classifier` — while AgentFluent
 > and `claude-code-sessions` stay held on v0.2.0 as an untreated control for the cost
-> research in [`docs/research/`](docs/research/). The same three take v0.3.1, and the
-> control stays where it is. **111 issues had been carried to `done` by
+> research in [`docs/research/`](docs/research/). The same three are to take v0.3.1 at its
+> re-install, and the control stays where it is. **111 issues had been carried to `done` by
 > the loop as of that cut**, across all five repos. That is enough to say the plugin/config
 > seam holds and that the hardening works under load; it is not enough to call it stable.
 >
 > **v0.3.1 is a patch: it changes how the engine is loaded.** The engine is now a core
-> that every invocation reads in full, plus units it reads at their point of use — code
-> review, the acceptance gate, and Initialization. A unit the loop cannot confirm it read in
-> full counts as not loaded, and the step that needs it stops for you rather than passing.
-> The plugin now ships its runtime tree only
-> ([#128](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/128),
-> [#170](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/170)).
+> that every invocation reads in full, plus units it reads at their point of use. A unit
+> the loop cannot confirm it read in full counts as not loaded, and the step that needs it
+> stops for you rather than passing
+> ([#128](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/128)). The
+> plugin now ships its runtime tree only
+> ([#170](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/170)).
 >
 > **v0.3.0 is a minor bump because it adds a gate.** When code review returns a **blocking**
 > finding that raises a design question — whether the approach is right, whether a fix
