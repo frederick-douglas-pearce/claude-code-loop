@@ -84,9 +84,9 @@ own single-file reads.
 
 What this tool cannot see: whether a unit the session never read was DUE. That is
 a fact about the session's journal; `before-side-2026-10-09.md` pre-registers the
-check PR C applies. It is also the backstop for reads this detector misses, such
-as a `cd` into the skill directory in one Bash call and a relative read in a later
-one. Per-unit read counts and arrival centroids are printed for that check.
+check PR C applies. A read this detector misses lowers P2, and nothing here
+guarantees a refusal for it; F194 on #1 logs the known shapes. Per-unit read
+counts and arrival centroids are printed for that check.
 
 Per-file levels are sums of context tokens, so they cannot tell a complete read
 from the same partial range read twice. They catch a short load, not a wrong one.
@@ -142,22 +142,22 @@ KNOWN_ENGINE_BYTES = {v: f[CORE] for v, f in KNOWN_FILE_BYTES.items()}
 # among every session on disk (2026-10-10, claude-opus-5 / -5-5 parents) whose
 # Read results cover every line of that file -- `file.startLine`/`numLines`
 # against `totalLines`, less the trailing line Read counts after a final newline.
-# Rows are measurements; each names the session that set it and how many verified
-# complete loads it is the minimum of. A required file with NO row refuses: there
+# Rows are measurements; each names the session that set it. A required file with
+# NO row refuses: there
 # is no rate to size it from, because small files run denser (per-read overhead)
 # and the densest rate seen is not a bound on the next file's.
 LOAD_TOKENS = {
     # 0.2.0 and 0.2.1 are one file: `cmp` of the 0.2.1 release commit be29a79
-    # against the cached 0.2.0 payload is clean. Minimum over both eras' 40
-    # verified loads: vote ab6d955b (0.2.1). A 0.2.0 session that truncated its
-    # load -- the defect 0.2.1 fixed -- refuses.
+    # against the cached 0.2.0 payload is clean. Minimum over both eras: vote
+    # ab6d955b (0.2.1). A 0.2.0 session that truncated its load -- the defect
+    # 0.2.1 fixed -- refuses.
     ("0.2.0", CORE): 68116,
     ("0.2.1", CORE): 68116,
-    ("0.3.0", CORE): 101825,                           # vote 9b13c205; n=69
-    ("0.3.1", CORE): 76897,                            # claude-hook-validator f60e1176; n=7
-    ("0.3.1", "phases/accepting.md"): 14042,           # claude-hook-validator 7b6d7a80; n=3
-    ("0.3.1", "phases/reviewing.md"): 11826,           # vote 76f03bf5, a4a60fb7; n=5
-    ("0.3.1", "reference/initialization.md"): 1510,    # f60e1176; n=1
+    ("0.3.0", CORE): 101825,                           # vote 9b13c205
+    ("0.3.1", CORE): 76897,                            # claude-hook-validator f60e1176
+    ("0.3.1", "phases/accepting.md"): 14042,           # claude-hook-validator 7b6d7a80
+    ("0.3.1", "phases/reviewing.md"): 11826,           # vote 76f03bf5, a4a60fb7
+    ("0.3.1", "reference/initialization.md"): 1510,    # f60e1176
 }
 
 # Every row was measured on one tokenizer family (claude-opus-5 / -5-5 parents).
@@ -338,8 +338,8 @@ def engine_file(name, inp):
     RELATIVE to it, and such a token counts when that relative path exists in a
     known payload. Both shapes are real (#130's extraction sessions). The relative
     form is therefore only as wide as the payloads on disk; a cached-directory read
-    it cannot resolve is not dropped -- `classify` scores it a load and `profile`
-    refuses the session as an unattributable engine read. A name in a command that
+    it cannot resolve, if `classify` counts it, refuses the session as an
+    unattributable engine read. A name in a command that
     never mentions the directory is not a read of it: `grep -v '^loop-engine.md'
     notes.txt` reads notes.
 
@@ -362,9 +362,9 @@ def names_cached_skill_dir(path):
 def classify(name, inp, spills=None):
     """-> 'load' (plugin cache), 'tree' (any other copy), or None.
 
-    A read that names the CACHED skill directory is a load even when no single
-    engine file can be attributed to it -- default-deny: `profile` refuses the
-    session rather than lose the text. `spills` maps a spill-file path to the kind
+    A read `classify` counts that names the CACHED skill directory is a load even
+    when no single engine file can be attributed to it, and `profile` refuses that
+    session. `spills` maps a spill-file path to the kind
     of the read that produced it, so the recovery reads inherit it.
     """
     spills = spills or {}
@@ -623,7 +623,7 @@ def render(p):
           f"{p['compactions']} compaction(s), {p['spills']} spill file(s)")
     # Printed unconditionally: the directory's standing rule is that a before/after
     # naming no engine version is not interpretable.
-    print(f"  engine era              {(p['era'] or 'UNKNOWN -- floor defaults to the widest known engine'):>12}{mixed}")
+    print(f"  engine era              {(p['era'] or 'UNKNOWN'):>12}{mixed}")
     print(f"  {stratum_line(p['stratum'])}")
     print(f"  turns (cost spec)       {n:>12}   (lines={p['lines']} no_id={p['no_id']} "
           f"api_error={p['api_error']} synthetic={p['synthetic']})")
@@ -698,7 +698,7 @@ def table_row(p):
     s = p["stratum"]
     units = ",".join(f"{f}:{d['reads']}@{d['centroid']:.2f}"
                      for f, d in sorted(p["files"].items())
-                     if is_unit(f) and d["centroid"] is not None) or "-"
+                     if is_unit(f) and f != CORE and d["centroid"] is not None) or "-"
     cells = (os.path.basename(p["path"])[:8], p["era"] or "UNKNOWN",
              "%s@%s" % s.parent if s.stratified else "UNSTRATIFIED",
              "yes" if p["admissible"] else "NO",

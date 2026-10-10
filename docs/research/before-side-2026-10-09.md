@@ -37,8 +37,7 @@ From `~/.claude/plugins/installed_plugins.json`, read 2026-10-09:
 markdown file named by its full path under the cached `skills/dev-loop/`, so a unit a later release
 adds is counted from its first install. A command that `cd`s into that directory, or names it in a
 variable, may name a file relative to it. Such a token counts when the relative path exists in a
-payload on disk. That form is only as wide as the payloads seen, which is why a read it cannot
-resolve refuses the session (below) instead of disappearing. `SKILL.md` counts only when a tool
+payload on disk. That form is only as wide as the payloads seen. `SKILL.md` counts only when a tool
 reads it. Arriving as the skill's prompt is not a tool read, and it is counted on neither side.
 
 **Admissibility is per file, in context tokens** (F191), and default-deny. The floor used to be
@@ -57,9 +56,8 @@ and every other file except `SKILL.md` once read. Three things refuse a session 
 A read naming several files at once (`grep -n x phases/a.md phases/b.md`) makes each of them
 required and credits none of them. They must each clear the floor through single-file reads.
 
-**What the tool cannot see, and the check that covers it.** Whether a unit the session never read was
-*due* is a fact about the session's journal. So is a read this detector misses, for example a `cd`
-into the skill directory in one Bash call and a relative read in a later one. **Pre-registered here
+**What the tool cannot see.** Whether a unit the session never read was *due* is a fact about the
+session's journal. **Pre-registered here
 for PR C, before any after-side data is seen:** in a 0.3.1 session, a unit is **due** when the
 session's own journal names its step:
 
@@ -72,19 +70,22 @@ session's own journal names its step:
 load was skipped or the detector missed it, and the session is unmeasured either way. PR C applies
 this check with the frozen tool's per-unit read counts. It is not tuned after the data is seen.
 
+A read the detector misses lowers P2, and neither this check nor the floors guarantee a refusal for
+it. F194 on #1 logs the known shapes, and PR C's duty toward them.
+
 **One complete load, per file, as measured** (`LOAD_TOKENS`). Each row is the **smallest**
 ingestion among every session on disk (2026-10-10, `claude-opus-5` and `-5-5` parents) whose `Read`
 results cover every line of that file. Coverage is checked as `file.startLine`/`numLines` against
 `totalLines`, less the trailing empty line `Read` counts after a final newline:
 
-| era | file | bytes | one complete load (context tokens) | set by | verified complete loads |
-|---|---|---:|---:|---|---:|
-| 0.2.0, 0.2.1 | `loop-engine.md` | 177,529 | 68,116 | vote `ab6d955b`. The two eras' cores are byte-identical (`cmp`). | 40 |
-| 0.3.0 | `loop-engine.md` | 267,647 | 101,825 | vote `9b13c205` | 69 |
-| 0.3.1 | `loop-engine.md` | 200,789 | 76,897 | claude-hook-validator `f60e1176` | 7 |
-| 0.3.1 | `phases/accepting.md` | 38,409 | 14,042 | claude-hook-validator `7b6d7a80` | 3 |
-| 0.3.1 | `phases/reviewing.md` | 32,344 | 11,826 | vote `76f03bf5`, `a4a60fb7` | 5 |
-| 0.3.1 | `reference/initialization.md` | 3,489 | 1,510 | claude-hook-validator `f60e1176` | 1 |
+| era | file | bytes | one complete load (context tokens) | set by |
+|---|---|---:|---:|---|
+| 0.2.0, 0.2.1 | `loop-engine.md` | 177,529 | 68,116 | vote `ab6d955b`. The two eras' cores are byte-identical (`cmp`). |
+| 0.3.0 | `loop-engine.md` | 267,647 | 101,825 | vote `9b13c205` |
+| 0.3.1 | `loop-engine.md` | 200,789 | 76,897 | claude-hook-validator `f60e1176` |
+| 0.3.1 | `phases/accepting.md` | 38,409 | 14,042 | claude-hook-validator `7b6d7a80` |
+| 0.3.1 | `phases/reviewing.md` | 32,344 | 11,826 | vote `76f03bf5`, `a4a60fb7` |
+| 0.3.1 | `reference/initialization.md` | 3,489 | 1,510 | claude-hook-validator `f60e1176` |
 
 Single verified loads of one file land up to 1.4% apart: the 0.3.1 core runs 76,897–77,974, and the
 0.2.x core 68,116 to about 68,800. Ingestion is a context delta shared out across a turn's tool
@@ -133,19 +134,8 @@ unattributable, so the default-deny rules cost no n so far.
 The interval is the narrowest symmetric pair of order statistics covering the median with ≥90%
 probability. At n=5 and n=6 that is the full range.
 
-**One column moved, and on purpose:** `tree`, the working-tree engine reads, which sit in processed
-context but never in P2. The 0.3.0 tool matched any command containing `loop-engine.md`, so it
-missed unit reads and scored bare mentions as reads. The new tool reads units and needs the skill
-directory in the command. Against the old tool, per session:
-
-| session | gained (now counted) | lost (no longer counted) | count |
-|---|---|---|---|
-| `b5129651` | `phases/accepting.md`, `reference/initialization.md`, a `SKILL.md` read | a relative `git diff -U0 loop-engine.md`, whose directory the command does not name | 11 → 13 |
-| `de7e4367` | two `phases/reviewing.md` reads (one with `SKILL.md`) | two commands naming `loop-engine.md` only as a pattern or in a scratch file | 11 → 11 |
-| `7be48522` | `SKILL.md`, `phases/accepting.md` | `grep -n 'loop-engine.md' tests/…`, and a `CLAUDE.md` read naming it | 8 → 8 |
-| `22736589` | `phases/reviewing.md` | a `gh api` call naming it | 3 → 3 |
-
-The last three are unchanged **in count only**.
+**One column moved:** `tree`, the working-tree engine reads, which sit in processed context but
+never in P2. Its counts come from the new detector and do not compare with the 0.3.0 tool's.
 
 ---
 

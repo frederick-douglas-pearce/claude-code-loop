@@ -163,8 +163,7 @@ which is the kind of prose that goes stale between releases:
 
 - `engine_cost.py`'s admissibility floor was a **hardcoded 0.2.0 constant** and so turned fail-open
   the moment 0.3.0 installed — a session holding 66–99% of its engine scored `ADMISSIBLE`. The floor
-  is now derived **per session** from the era in the read path, and an unknown era defaults to the
-  widest known engine. Do not reintroduce a constant.
+  is now derived **per session** from the era in the read path. Do not reintroduce a constant.
 - **The floor's unit was wrong too (F191), and #133 fixed it.** It was `bytes / 3.5` chars per token,
   but engine text enters the context at ~0.38 context tokens per byte, so the floor admitted ~75% of
   a 0.3.0 load. It is now **one complete load per file, in context tokens**, measured from sessions

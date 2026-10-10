@@ -454,13 +454,18 @@ class PerFileAdmissibilityTests(unittest.TestCase):
         self.assertEqual(p["incomplete"], [f])
 
     def test_an_unmeasured_required_file_refuses(self):
-        """Round-1 ruling: no rate sizing. 0.3.0's SKILL.md has bytes and no row,
-        and a unit with bytes and no row must refuse rather than be estimated --
-        the densest rate measured is not a bound on the next file's."""
+        """Round-1 ruling: no rate sizing. A unit with BYTES and no row must refuse
+        rather than be estimated -- the densest rate measured is not a bound on the
+        next file's. The bytes are what make this discriminating: a file with none
+        refused under the old rate sizing too (round 2, r2.recheck.3)."""
+        from unittest import mock
+        import engine_cost
         f = "phases/zz-never-shipped-133.md"
-        self.assertIsNone(load_level("0.3.1", f))
-        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
-                                    (ENG31 % f, 10 ** 6)]))
+        with mock.patch.dict(engine_cost.KNOWN_FILE_BYTES["0.3.1"], {f: 30000}):
+            self.assertIsNotNone(file_bytes("0.3.1", f))
+            self.assertIsNone(load_level("0.3.1", f))
+            p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                        (ENG31 % f, 10 ** 6)]))
         self.assertFalse(p["admissible"])
         self.assertIn(f, p["incomplete"])
 
@@ -605,6 +610,19 @@ class TableTests(unittest.TestCase):
         out = self._table([good, short])
         self.assertIn("P2c over 1 admissible", out)
         self.assertIn("order statistics 1 and 1", out)
+
+    def test_the_units_column_lists_units_and_never_the_core(self):
+        """r2.recheck.4: PR C reads this column for per-unit counts."""
+        from engine_cost import TABLE_COLUMNS
+        d = os.path.join(self.root, "repo")
+        os.makedirs(d)
+        f = "phases/reviewing.md"
+        path = self._write(d, "u.jsonl", transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                                     (ENG31 % f, full("0.3.1", f))]))
+        row = self._table([path]).splitlines()[1].split("\t")
+        units = row[TABLE_COLUMNS.index("units")]
+        self.assertIn(f + ":1@", units)
+        self.assertNotIn(CORE, units)
 
     def test_sessions_from_two_projects_are_not_pooled(self):
         paths = []
