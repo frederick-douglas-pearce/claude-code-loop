@@ -13,6 +13,7 @@ rather than remembered.
 |---|---|
 | **`loop-cost-and-convergence.md`** | The notebook. Findings 1–12, each with method, numbers, and what would falsify it. **The primary document** — everything else supports it. |
 | `baseline-2026-10-04.md` | **The sharding epic's before-baseline** (#126): 0.3.0, stratum `claude-opus-5-5`@`high`, per repo. It also states the 0.3.0-relative predictions #133 is judged against. |
+| `before-side-2026-10-09.md` | #133's **PR B**: the per-file instrument the sharding release is measured with, frozen at its merge commit; the 0.3.0 before side re-admitted through it; and that side **priced** (parent and subagents, per repo). |
 | `baseline-2026-08-25.md` | Frozen **0.2.0** metrics and its P1–P9 sharding predictions (P10 is #135's). Kept as published; superseded as the sharding before-baseline by `baseline-2026-10-04.md`. |
 | `context-architecture-refactor.md` | Design note: why shard the engine, compared against `obra/superpowers`. |
 | `draft-core.md` | The seven-unit **target** architecture. Not the increment being shipped — do not implement from it. |
@@ -25,13 +26,13 @@ All stdlib-only, all read Claude Code session transcripts from `~/.claude/projec
 
 | script | answers | tests |
 |---|---|---|
-| `engine_cost.py` | What does carrying `loop-engine.md` cost across a whole run? (P2, P2c, P8/P9) **Admissibility floor is per-session, sized from the engine era in the read path** — never a constant. | `test_engine_cost.py` |
+| `engine_cost.py` | What does carrying the engine — core, on-demand units, and tool reads of `SKILL.md` — cost across a whole run? (P2, P2c, P6, P9, per-unit reads and arrival centroids; `--table` adds the P2c median's order-statistic interval) **Admissibility is per file, in context tokens: the core and every unit the session read must each clear one complete load of that file, measured for the session's own engine era** — never a chars-per-token constant (F191). | `test_engine_cost.py` |
 | `plan_gate_cost.py` | What is the parent carrying when the plan is written, and where did all of it come from? Attributes **everything** before implementation starts — including the two buckets no delta-based instrument sees: the always-loaded baseline and the model's own output. Splits that output by block type (only some of it stays resident) and prices the **selection phase** in resident-turn tokens. | `test_plan_gate_cost.py` |
 | `rounds_vs_turns.py` | Do gate rounds predict parent turns and bill? (Finding 11) | `test_rounds_vs_turns.py` |
 | `calls_per_turn.py` | How many tool calls per turn, and how many turns could have been merged? (Finding 12) | `test_calls_per_turn.py` |
 | ~~`context_profile.py`~~ | **RETIRED 2026-08-26** → `deprecated/`. Kept only to reproduce Findings 6–9; its payload bug over-counts spilled reads by up to 13×, so **P4 and the "~50% of every byte" figure are withdrawn**. | — |
 | `budget_stats.py` | Ledger `- Budget:` aggregates by engine era. **`--era` resolves N eras and caps BOTH the date and marker columns at the repo's installed version**, so a held-back control cannot read as treated. An installed version missing from `ERAS` raises rather than silently dropping the cap. | `test_budget_stats.py` |
-| `tree_cost.py` | Parent **+ subagent** transcripts priced together, each turn on its own model's weights and summed in USD — sizes the bill Finding 11 leaves unpriced. **Scouting only; output is not a finding.** | `test_tree_cost.py`; the spec arithmetic itself in `test_stratum.py` |
+| `tree_cost.py` | Parent **+ subagent** transcripts priced together, each turn on its own model's weights and summed in USD — sizes the bill Finding 11 leaves unpriced. `--sessions` prices named sessions, delegating or not, parent and subagents apart. **Citable since #133**: a hand-checked sample agreed to the cent, and a turn outside the physical bounds refuses its session. | `test_tree_cost.py`; the spec arithmetic itself in `test_stratum.py` |
 | `stratum.py` | Which `(model, effort)` stratum a session ran on, plus its CLI version range — the **one** extractor every transcript script above imports, and the per-model `PRICING` table. Every per-session profile prints its `stratum` line; every aggregate groups by parent stratum and names what it excluded. An unpriced model refuses to price, never falls back. (#207) | `test_stratum.py` |
 
 ```bash
@@ -145,7 +146,7 @@ Two defences, both cheap, and they are the only things that have worked:
 
 Findings 1–12 are recorded in the notebook and were **all measured on 0.2.0**.
 
-**Three eras are now on disk, and the rollout is a staggered-adoption design with a live control.**
+**Several eras are now on disk, and the rollout is a staggered-adoption design with a live control.**
 Read the current split from `~/.claude/plugins/installed_plugins.json` — never from this paragraph,
 which is the kind of prose that goes stale between releases:
 
@@ -153,7 +154,8 @@ which is the kind of prose that goes stale between releases:
 |---|---|---|
 | 0.2.0 | 2026-08-21 | **held deliberately** on `agentfluent`, `claude-code-sessions` — the untreated control |
 | 0.2.1 | 2026-08-26 | `claude-code-loop`, `us_presidential_vote_analysis` — **n=10 / n=12** admissible sessions (vote `d53db569` excluded as 0.2.0-era, F170) |
-| **0.3.0** | **2026-09-11** (local; `installed_plugins.json` stamps it `2026-09-12T00:39Z`) | `claude-code-loop`, `us_presidential_vote_analysis`, `sportswear-esg-news-classifier` |
+| 0.3.0 | 2026-09-11 (local; `installed_plugins.json` stamps it `2026-09-12T00:39Z`) | `claude-code-loop`, `us_presidential_vote_analysis`, `sportswear-esg-news-classifier` — the sharding epic's before side (`baseline-2026-10-04.md`) |
+| **0.3.1** | **2026-10-08** loop and vote (~15:55 local); **2026-10-09** esg (21:40 local) | the three above — **#133-treated**. Also **`claude-hook-validator`**, onboarded at 0.3.1 on 2026-10-09: **baseline-only, not #133-treated** — it has no 0.3.0 before side, and D007 forbids pooling, so its 0.3.1 sessions are its own before-baseline for the next engine-changing release |
 
 ⚠ **The v0.3.0 release grew the engine 50.8%** (177,529 → 267,647 bytes; always-loaded 45,937 →
 69,457 tokens). Two consequences, both of which bit the instruments before anyone measured anything:
@@ -162,6 +164,13 @@ which is the kind of prose that goes stale between releases:
   the moment 0.3.0 installed — a session holding 66–99% of its engine scored `ADMISSIBLE`. The floor
   is now derived **per session** from the era in the read path, and an unknown era defaults to the
   widest known engine. Do not reintroduce a constant.
+- **The floor's unit was wrong too (F191), and #133 fixed it.** It was `bytes / 3.5` chars per token,
+  but engine text enters the context at ~0.38 context tokens per byte, so the floor admitted ~75% of
+  a 0.3.0 load. It is now **one complete load per file, in context tokens**, measured from sessions
+  whose reads cover every line (`LOAD_TOKENS`, which names its sessions). A file with no measured
+  row is sized at the **strictest** measured rate, so it can be wrongly refused but never wrongly
+  admitted. Rows are per tokenizer family as well as per file: re-measure them before scoring a
+  parent model on a different tokenizer.
 - **Every frozen baseline in `baseline-2026-08-25.md` is against a 45,937-token engine.** P1's
   ~30,000 target was a ~35% cut from that; the same cut against 69,457 lands near ~45,100. Anything
   comparing across this boundary must say which engine each side ran.
@@ -169,7 +178,9 @@ which is the kind of prose that goes stale between releases:
 **`budget_stats.py --era` now resolves N eras, not two**, and caps the date-derived era at the
 version a repo actually has installed — without that cap a held-back control reads as treated, which
 does not make the DiD noisier, it inverts it. Note 0.2.1 writes no ledger vocabulary of its own, so
-marker attribution returns a **bound** (`0.2.0|0.2.1`) rather than a false exact era.
+marker attribution returns a **bound** (`0.2.0|0.2.1`) rather than a false exact era. 0.3.1 is the
+same (`0.3.0|0.3.1`), and its date boundary in `ERAS` is 2026-10-10, the first day no treated repo
+could still be on 0.3.0.
 
 The three levers this work ranks, in the same units:
 
