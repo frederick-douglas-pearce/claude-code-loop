@@ -106,6 +106,25 @@ ERAS = [
     # EARLIER era: under-treating biases a DiD toward the null, over-treating
     # manufactures the effect.
     ("0.3.0", "2026-09-11", re.compile(r"Plan-gate-inferred|guard-efficacy")),
+    # 0.3.1 is the engine sharding (#128): like 0.2.1 it changes what the
+    # orchestrator READS -- a lean core plus on-demand units -- and writes no
+    # routine journal vocabulary of its own (its unit names reach the journal only
+    # inside a `- gate-error:`). Date-only, deliberately.
+    #
+    # THE DATE IS THE FIRST UNAMBIGUOUS DAY, not the first install. The three
+    # treated repos re-installed on different local days: claude-code-loop and
+    # us_presidential_vote_analysis 2026-10-08 ~15:55, sportswear-esg 2026-10-09
+    # 21:40 (all -0700). A ledger `## ` header carries a date and no time, so a row
+    # dated 10-08 or 10-09 can be either era depending on the repo and the hour.
+    # Both days take the EARLIER era, per the rule above: under-treating biases
+    # toward the null, over-treating manufactures the effect. #133's measurement
+    # does not read this table -- `engine_cost.py` takes each session's era from
+    # its own read path -- so the cost of the conservative date falls on the DiD
+    # here only. ONE KNOWN MISFILING: claude-hook-validator onboarded AT 0.3.1 on
+    # 2026-10-09 and never ran 0.3.0, so its 10-09 rows are 0.3.1 and this rule
+    # files them as 0.3.0. It is baseline-only and never pooled (D007), so no DiD
+    # reads it today; a per-repo lower bound is logged on #1 rather than built here.
+    ("0.3.1", "2026-10-10", None),
 ]
 
 # `era_by_date` scans ERAS in order and breaks at the first future row, and the

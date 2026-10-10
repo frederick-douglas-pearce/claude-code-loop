@@ -21,6 +21,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from engine_cost import (  # noqa: E402
     classify, strip_heredocs, profile, main,
     engine_version, engine_bytes, floor_for, KNOWN_ENGINE_BYTES,
+    engine_file, file_bytes, load_level, median_interval,
+    LOAD_TOKENS, LOAD_TOLERANCE, CORE, ENTRY,
 )
 
 CACHE = "/home/u/.claude/plugins/cache/claude-code-loop/dev-loop/0.2.0/skills/dev-loop/loop-engine.md"
@@ -224,39 +226,506 @@ class EraFloorTests(unittest.TestCase):
         """THE REGRESSION. A wider engine must demand more before admitting."""
         self.assertGreater(floor_for("0.3.0"), floor_for("0.2.1"))
 
-    def test_floor_tracks_engine_size_rather_than_a_constant(self):
-        """Mechanism, not magnitude: floor is proportional to the era's bytes."""
-        for a, b in (("0.2.0", "0.3.0"), ("0.2.1", "0.3.0")):
-            ratio_bytes = engine_bytes(b) / engine_bytes(a)
-            ratio_floor = floor_for(b) / floor_for(a)
-            self.assertAlmostEqual(ratio_bytes, ratio_floor, places=6)
+    def test_floor_is_the_measured_load_not_bytes_over_a_constant(self):
+        """F191. The floor was `bytes / 3.5`, which admitted ~75% of a 0.3.0 load.
+        Mechanism: every measured row IS the floor (less the tolerance), and the
+        row is in context tokens, so no chars-per-token constant enters it."""
+        for (v, f), tok in LOAD_TOKENS.items():
+            self.assertAlmostEqual(floor_for(v, f), tok * LOAD_TOLERANCE)
+        self.assertGreater(floor_for("0.3.0"), engine_bytes("0.3.0") / 3.5)
 
     def test_a_partial_load_of_the_wider_engine_is_inadmissible(self):
         """The exact false-admit: enough for a 0.2.0 copy, short of a 0.3.0 one."""
-        partial = engine_bytes("0.2.0") / 3.5        # a whole 0.2.0 engine
+        partial = load_level("0.2.0")                # a whole 0.2.0 engine
         self.assertGreaterEqual(partial, floor_for("0.2.0"))   # fine as 0.2.0
         self.assertLess(partial, floor_for("0.3.0"))           # short as 0.3.0
 
-    def test_unknown_era_defaults_to_the_widest_engine_not_the_narrowest(self):
-        """Default-deny. Sizing an unattributable session off the SMALLEST engine
-        would rebuild the fail-open this function replaced.
-
-        Asserted as a RELATION, not against `max(KNOWN_ENGINE_BYTES)`: the
-        resolver also scans the live plugin cache, so an equality would fail on
-        the first machine to install a wider engine -- the single event this
-        module exists to survive.
-        """
-        for v in KNOWN_ENGINE_BYTES:
-            self.assertGreaterEqual(floor_for(None), floor_for(v))
-        self.assertGreater(floor_for(None), 0)
+    def test_unknown_era_has_no_floor_and_its_session_refuses(self):
+        """Default-deny, round-1 ruling on #133 PR B. An unknown era was sized off
+        the widest engine known; with no rate to size from, it now has no level,
+        and a session that cannot be sized is not measured."""
+        self.assertIsNone(floor_for(None))
+        recs = transcript([("/home/u/.claude/plugins/cache/claude-code-loop/"
+                            "dev-loop/skills/dev-loop/loop-engine.md", 10 ** 6)])
+        p = run_profile(recs)
+        self.assertIsNone(p["era"])
+        self.assertFalse(p["admissible"])
+        self.assertEqual(p["incomplete"], [CORE])
 
     def test_an_evicted_version_falls_back_to_the_table_not_to_zero(self):
         """A version no longer in the plugin cache must not size the floor at 0."""
         self.assertEqual(engine_bytes("0.2.0"), KNOWN_ENGINE_BYTES["0.2.0"])
 
-    def test_an_entirely_unknown_version_still_yields_a_usable_floor(self):
+    def test_an_entirely_unknown_version_has_no_floor(self):
         self.assertIsNone(engine_bytes("9.9.9"))
-        self.assertGreater(floor_for("9.9.9"), 0)
+        self.assertIsNone(floor_for("9.9.9"))
+
+
+ENG31 = "/home/u/.claude/plugins/cache/claude-code-loop/dev-loop/0.3.1/skills/dev-loop/%s"
+TREE31 = "/home/u/Documents/Projects/git/claude-code-loop/plugins/dev-loop/skills/dev-loop/%s"
+
+
+def transcript(steps):
+    """Records for a session whose parent takes one turn per step, plus a final one.
+
+    A step is `(path, tokens)` -- a Read of `path` whose result raises the next
+    turn's input by exactly `tokens` -- `("Bash", command, tokens)`, `("Grep",
+    path, tokens)`, or "idle". A read at step k ARRIVES at turn
+    k + 1, so its arrival fraction is (k + 1) / (len(steps) + 1). Ingestion is set
+    through the context delta because that is what `profile` measures."""
+    recs, ctx, out = [], 10, 5
+    for k, step in enumerate(list(steps) + ["idle"]):
+        use = None if step == "idle" else step
+        if use and use[0] in ("Bash", "Grep"):
+            tool, inp = use[0], ({"command": use[1]} if use[0] == "Bash"
+                                 else {"pattern": "step", "path": use[1]})
+            use = (None, use[2])
+        elif use:
+            tool, inp = "Read", {"file_path": use[0]}
+        content = ([{"type": "tool_use", "id": "t%d" % k, "name": tool,
+                     "input": inp}] if use
+                   else [{"type": "text", "text": "."}])
+        recs.append({"type": "assistant", "message": {"id": "m%d" % k, "usage": {
+            "input_tokens": ctx, "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0, "output_tokens": out},
+            "content": content}})
+        if use:
+            recs.append({"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "t%d" % k,
+                 "content": "engine text"}]}})
+        ctx += out + (use[1] if use else 0)
+    return recs
+
+
+def run_profile(recs, **kw):
+    import json as _json
+    import tempfile
+    fh = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+    for r in recs:
+        fh.write(_json.dumps(r) + "\n")
+    fh.close()
+    try:
+        return profile(fh.name, **kw)
+    finally:
+        os.unlink(fh.name)
+
+
+def full(version, f):
+    return load_level(version, f)
+
+
+class UnitDetectionTests(unittest.TestCase):
+    """#133/AC4: P2 is core plus units, so a unit read must count as engine text."""
+
+    def test_a_unit_in_the_cache_is_a_load_and_names_its_file(self):
+        for f in ("phases/reviewing.md", "phases/accepting.md",
+                  "reference/initialization.md"):
+            self.assertEqual(classify("Read", {"file_path": ENG31 % f}), "load")
+            self.assertEqual(engine_file("Read", {"file_path": ENG31 % f}), f)
+
+    def test_a_unit_no_release_has_shipped_yet_is_still_counted(self):
+        """The set is a path pattern, never a list of names: a list would miss the
+        next unit and understate P2 in exactly the release that added it."""
+        f = "phases/zz-never-shipped-133.md"
+        self.assertEqual(classify("Read", {"file_path": ENG31 % f}), "load")
+        self.assertEqual(engine_file("Read", {"file_path": ENG31 % f}), f)
+
+    def test_a_tool_read_of_skill_md_counts(self):
+        self.assertEqual(classify("Read", {"file_path": ENG31 % ENTRY}), "load")
+
+    def test_a_working_tree_unit_is_tree_not_load(self):
+        self.assertEqual(classify("Read", {"file_path": TREE31 % "phases/reviewing.md"}),
+                         "tree")
+
+    def test_a_unit_named_relative_to_a_cd_into_the_skill_dir_is_found(self):
+        """#130's sessions read units this way; the full-path pattern alone
+        missed them."""
+        d = (ENG31 % "x").rsplit("/", 1)[0]
+        cmd = "cd %s; head -16 phases/accepting.md; tail -4 phases/accepting.md" % d
+        self.assertEqual(classify("Bash", {"command": cmd}), "load")
+        self.assertEqual(engine_file("Bash", {"command": cmd}), "phases/accepting.md")
+        self.assertEqual(engine_version("Bash", {"command": cmd}), "0.3.1")
+
+    def test_a_file_named_through_a_directory_variable_is_found(self):
+        d = (TREE31 % "x").rsplit("/", 1)[0]
+        cmd = "D=%s; sed -n 1739,1741p $D/loop-engine.md" % d
+        self.assertEqual(classify("Bash", {"command": cmd}), "tree")
+        self.assertEqual(engine_file("Bash", {"command": cmd}), CORE)
+
+    def test_a_relative_md_that_is_not_in_the_payload_is_not_engine(self):
+        d = (TREE31 % "x").rsplit("/", 1)[0]
+        cmd = "cd %s; sed -n 1,20p README.md" % d
+        self.assertIsNone(engine_file("Bash", {"command": cmd}))
+        self.assertIsNone(classify("Bash", {"command": cmd}))
+
+    def test_an_engine_name_without_the_skill_dir_is_not_a_read_of_it(self):
+        """The old substring test scored this as a tree read of the engine."""
+        cmd = "grep -v '^loop-engine.md' /tmp/s/ac5-groups.txt"
+        self.assertIsNone(classify("Bash", {"command": cmd}))
+
+    def test_a_command_naming_two_files_is_one_unattributable_key(self):
+        cmd = "cat %s %s" % (ENG31 % "phases/reviewing.md", ENG31 % "phases/accepting.md")
+        self.assertEqual(engine_file("Bash", {"command": cmd}),
+                         "phases/accepting.md+phases/reviewing.md")
+
+    def test_a_spill_recovery_read_inherits_the_unit(self):
+        """BUG 3 again, per file: the spill path names no engine file."""
+        sp = "/home/u/.claude/projects/-s/abc/tool-results/x.txt"
+        recs = transcript([(ENG31 % CORE, full("0.3.1", CORE))])
+        recs += [
+            {"type": "assistant", "message": {"id": "u0", "usage": {
+                "input_tokens": 10 ** 6, "output_tokens": 5}, "content": [
+                {"type": "tool_use", "id": "s0", "name": "Bash",
+                 "input": {"command": "cat " + ENG31 % "phases/reviewing.md"}}]}},
+            {"type": "user", "toolUseResult": {"persistedOutputPath": sp},
+             "message": {"content": [{"type": "tool_result", "tool_use_id": "s0",
+                                      "content": "preview"}]}},
+            {"type": "assistant", "message": {"id": "u1", "usage": {
+                "input_tokens": 10 ** 6 + 10, "output_tokens": 5}, "content": [
+                {"type": "tool_use", "id": "s1", "name": "Bash",
+                 "input": {"command": "sed -n '1,400p' " + sp}}]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "s1", "content": "body"}]}},
+            {"type": "assistant", "message": {"id": "u2", "usage": {
+                "input_tokens": 10 ** 6 + 20 + 500, "output_tokens": 5},
+                "content": [{"type": "text", "text": "."}]}},
+        ]
+        p = run_profile(recs)
+        self.assertEqual(p["files"]["phases/reviewing.md"]["reads"], 2)
+
+
+class PerFileAdmissibilityTests(unittest.TestCase):
+    """The core always, and each unit the session read, must clear one complete
+    load of that file (#133/AC4, F191). A partial unit load understates P2c in
+    exactly the direction the sharding release predicts, so it must refuse."""
+
+    def test_complete_core_and_no_unit_is_admissible(self):
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE))]))
+        self.assertTrue(p["admissible"])
+        self.assertEqual(p["era"], "0.3.1")
+
+    def test_a_partial_unit_refuses_and_is_named(self):
+        f = "phases/reviewing.md"
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    (ENG31 % f, int(full("0.3.1", f) * 0.7))]))
+        self.assertFalse(p["admissible"])
+        self.assertEqual(p["incomplete"], [f])
+
+    def test_complete_core_and_unit_is_admissible_and_both_are_in_p2(self):
+        f = "phases/accepting.md"
+        core, unit = full("0.3.1", CORE), full("0.3.1", f)
+        p = run_profile(transcript([(ENG31 % CORE, core), (ENG31 % f, unit)]))
+        self.assertTrue(p["admissible"])
+        self.assertAlmostEqual(p["ingested"], core + unit)
+
+    def test_f191_a_three_quarter_core_load_refuses(self):
+        """F191's case: ~75% of a load cleared `bytes / 3.5`. It must not now."""
+        old_floor = engine_bytes("0.3.1") / 3.5
+        p = run_profile(transcript([(ENG31 % CORE, int(old_floor * 1.01))]))
+        self.assertFalse(p["admissible"])
+        self.assertEqual(p["incomplete"], [CORE])
+
+    def test_a_session_that_never_read_the_core_refuses(self):
+        f = "phases/reviewing.md"
+        p = run_profile(transcript([(ENG31 % f, full("0.3.1", f))]))
+        self.assertFalse(p["admissible"])
+        self.assertIn(CORE, p["incomplete"])
+
+    def test_a_unit_nothing_can_size_refuses(self):
+        """Default-deny: no measured row and no bytes means not complete."""
+        f = "phases/zz-never-shipped-133.md"
+        self.assertIsNone(file_bytes("0.3.1", f))
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    (ENG31 % f, 10 ** 6)]))
+        self.assertFalse(p["admissible"])
+        self.assertEqual(p["incomplete"], [f])
+
+    def test_skill_md_counts_in_p2_but_is_never_required(self):
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    (ENG31 % ENTRY, 50)]))
+        self.assertTrue(p["admissible"])
+        self.assertAlmostEqual(p["ingested"], full("0.3.1", CORE) + 50)
+
+    def test_the_floor_flag_overrides_the_core_only(self):
+        f = "phases/reviewing.md"
+        p = run_profile(transcript([(ENG31 % CORE, 100),
+                                    (ENG31 % f, int(full("0.3.1", f) * 0.5))]), floor=1)
+        self.assertNotIn(CORE, p["incomplete"])
+        self.assertEqual(p["incomplete"], [f])
+
+    def test_an_unmeasured_required_file_refuses(self):
+        """Round-1 ruling: no rate sizing. A unit with BYTES and no row must refuse
+        rather than be estimated -- the densest rate measured is not a bound on the
+        next file's. The bytes are what make this discriminating: a file with none
+        refused under the old rate sizing too (round 2, r2.recheck.3)."""
+        from unittest import mock
+        import engine_cost
+        f = "phases/zz-never-shipped-133.md"
+        with mock.patch.dict(engine_cost.KNOWN_FILE_BYTES["0.3.1"], {f: 30000}):
+            self.assertIsNotNone(file_bytes("0.3.1", f))
+            self.assertIsNone(load_level("0.3.1", f))
+            p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                        (ENG31 % f, 10 ** 6)]))
+        self.assertFalse(p["admissible"])
+        self.assertIn(f, p["incomplete"])
+
+    def test_a_partial_core_is_not_rescued_by_a_complete_unit(self):
+        """ge.1. The pre-#133 check compared the AGGREGATE against the core floor.
+        80% of the core plus a whole accepting unit clears that aggregate, so only
+        a per-file core check refuses this session."""
+        core, unit = full("0.3.1", CORE), full("0.3.1", "phases/accepting.md")
+        partial = int(core * 0.8)
+        self.assertGreater(partial + unit, floor_for("0.3.1"))    # the trap is live
+        p = run_profile(transcript([(ENG31 % CORE, partial),
+                                    (ENG31 % "phases/accepting.md", unit)]))
+        self.assertFalse(p["admissible"])
+        self.assertEqual(p["incomplete"], [CORE])
+
+    def test_a_top_level_unit_is_required_too(self):
+        """mc.3. Required was decided by a `/` in the path; a unit a release adds
+        beside the core must still be checked, and with no row it refuses."""
+        f = "zz-top-level-unit-133.md"
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    (ENG31 % f, 10 ** 6)]))
+        self.assertIn(f, p["files"])
+        self.assertFalse(p["admissible"])
+
+
+class AttributionRefusalTests(unittest.TestCase):
+    """Round-1 ruling on #133 PR B (mc.1, mc.2, ge.3, ge.4)."""
+
+    DIR = (ENG31 % "x").rsplit("/", 1)[0]
+
+    def test_a_multi_file_read_requires_each_member_and_credits_none(self):
+        a, b = "phases/accepting.md", "phases/reviewing.md"
+        both = full("0.3.1", a) + full("0.3.1", b)
+        cmd = "cat %s %s" % (ENG31 % a, ENG31 % b)
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    ("Bash", cmd, both)]))
+        self.assertFalse(p["admissible"])
+        self.assertEqual(sorted(p["incomplete"]), [a, b])
+        self.assertAlmostEqual(p["ingested"], full("0.3.1", CORE) + both)
+
+    def test_a_multi_file_grep_after_full_single_reads_admits(self):
+        a, b = "phases/accepting.md", "phases/reviewing.md"
+        cmd = "grep -n step %s %s" % (ENG31 % a, ENG31 % b)
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    (ENG31 % a, full("0.3.1", a)),
+                                    (ENG31 % b, full("0.3.1", b)),
+                                    ("Bash", cmd, 200)]))
+        self.assertTrue(p["admissible"])
+
+    def test_a_glob_over_the_units_refuses(self):
+        cmd = "head -40 %s/phases/*.md" % self.DIR
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    ("Bash", cmd, 3000)]))
+        self.assertFalse(p["admissible"])
+        self.assertTrue(p["unattributed"])
+
+    def test_an_unresolvable_relative_read_refuses(self):
+        cmd = "cd %s && cat ./phases/accepting.md" % self.DIR
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    ("Bash", cmd, 3000)]))
+        self.assertFalse(p["admissible"])
+        self.assertEqual(len(p["unattributed"]), 1)
+
+    def test_the_grep_tool_on_the_skill_directory_refuses(self):
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    ("Grep", self.DIR, 500)]))
+        self.assertFalse(p["admissible"])
+        self.assertTrue(p["unattributed"])
+
+    def test_a_working_tree_read_of_the_directory_is_not_unattributable(self):
+        """Only the CACHED directory is the engine that runs; tree reads stay out."""
+        tree_dir = (TREE31 % "x").rsplit("/", 1)[0]
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    ("Bash", "grep -rn step %s" % tree_dir, 500)]))
+        self.assertTrue(p["admissible"])
+
+
+class TolerancePinTests(unittest.TestCase):
+    """ge.2. F191's second door: `LOAD_TOLERANCE` lowered toward 0.75 re-admits a
+    three-quarter load with the 3.5 constant gone. Pin the band through the
+    product path: for every measured row, 95% of a load refuses and a whole one
+    admits -- so 0.95 < tolerance <= 1.0."""
+
+    ENG = "/home/u/.claude/plugins/cache/claude-code-loop/dev-loop/%s/skills/dev-loop/%s"
+
+    def _session(self, v, f, frac):
+        steps = [] if f == CORE else [(self.ENG % (v, CORE), full(v, CORE))]
+        if f == CORE:
+            steps = [(self.ENG % (v, CORE), int(full(v, CORE) * frac))]
+        else:
+            steps.append((self.ENG % (v, f), int(full(v, f) * frac)))
+        return run_profile(transcript(steps))
+
+    def test_95_percent_of_any_measured_load_refuses(self):
+        for v, f in LOAD_TOKENS:
+            with self.subTest(v=v, f=f):
+                p = self._session(v, f, 0.95)
+                self.assertFalse(p["admissible"])
+                self.assertEqual(p["incomplete"], [f])
+
+    def test_a_whole_measured_load_admits(self):
+        for v, f in LOAD_TOKENS:
+            with self.subTest(v=v, f=f):
+                self.assertTrue(self._session(v, f, 1.0)["admissible"])
+
+
+class TableTests(unittest.TestCase):
+    """ge.9 and the pooling rule: `--table` is the one place this script pools, so
+    the product path is what these run, not the library underneath it."""
+
+    def _write(self, d, name, recs):
+        import json as _json
+        path = os.path.join(d, name)
+        with open(path, "w") as fh:
+            for r in recs:
+                fh.write(_json.dumps(r) + "\n")
+        return path
+
+    def _table(self, paths):
+        import io
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            main(["engine_cost.py", "--table"] + paths)
+        return buf.getvalue()
+
+    def setUp(self):
+        import tempfile
+        self.root = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.root)
+
+    def test_the_median_pools_only_admissible_sessions_and_names_its_statistics(self):
+        d = os.path.join(self.root, "repo")
+        os.makedirs(d)
+        good = self._write(d, "good.jsonl", transcript([(ENG31 % CORE, full("0.3.1", CORE))]))
+        short = self._write(d, "short.jsonl",
+                            transcript([(ENG31 % CORE, int(full("0.3.1", CORE) * 0.5))]))
+        out = self._table([good, short])
+        self.assertIn("P2c over 1 admissible", out)
+        self.assertIn("order statistics 1 and 1", out)
+
+    def test_the_units_column_lists_units_and_never_the_core(self):
+        """r2.recheck.4: PR C reads this column for per-unit counts."""
+        from engine_cost import TABLE_COLUMNS
+        d = os.path.join(self.root, "repo")
+        os.makedirs(d)
+        f = "phases/reviewing.md"
+        path = self._write(d, "u.jsonl", transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                                     (ENG31 % f, full("0.3.1", f))]))
+        row = self._table([path]).splitlines()[1].split("\t")
+        units = row[TABLE_COLUMNS.index("units")]
+        self.assertIn(f + ":1@", units)
+        self.assertNotIn(CORE, units)
+
+    def test_a_multi_file_read_is_not_a_unit_in_the_units_column(self):
+        """Class B survivor E3: a `+` key credits no single file, so it is not a
+        unit and must stay out of the per-unit column PR C reads."""
+        from engine_cost import TABLE_COLUMNS
+        d = os.path.join(self.root, "repo")
+        os.makedirs(d)
+        a, b = "phases/accepting.md", "phases/reviewing.md"
+        path = self._write(d, "m.jsonl", transcript([
+            (ENG31 % CORE, full("0.3.1", CORE)),
+            ("Bash", "grep -n step %s %s" % (ENG31 % a, ENG31 % b), 300)]))
+        row = self._table([path]).splitlines()[1].split("\t")
+        self.assertEqual(row[TABLE_COLUMNS.index("units")], "-")
+
+    def test_sessions_from_two_projects_are_not_pooled(self):
+        paths = []
+        for repo in ("repo-a", "repo-b"):
+            d = os.path.join(self.root, repo)
+            os.makedirs(d)
+            paths.append(self._write(d, "s.jsonl",
+                                     transcript([(ENG31 % CORE, full("0.3.1", CORE))])))
+        out = self._table(paths)
+        self.assertIn("NOT POOLED", out)
+        self.assertNotIn("median", out.split("NOT POOLED")[1])
+
+
+class CentroidTests(unittest.TestCase):
+    """Arrival centroid: where in the session (0 = first turn, 1 = past the last)
+    a file's text arrived, weighted by tokens. #133 measures what the baseline's
+    predictions assumed (reviewing at 55%, accepting at 75%)."""
+
+    def test_a_unit_read_once_arrives_at_its_turn_fraction(self):
+        f = "phases/reviewing.md"
+        steps = [(ENG31 % CORE, full("0.3.1", CORE))] + ["idle"] * 4 + \
+                [(ENG31 % f, full("0.3.1", f))] + ["idle"] * 3
+        p = run_profile(transcript(steps))
+        n = len(steps) + 1
+        self.assertAlmostEqual(p["files"][f]["centroid"], 6 / n)
+        self.assertAlmostEqual(p["files"][CORE]["centroid"], 1 / n)
+
+    def test_two_equal_reads_average_their_arrivals(self):
+        f = "phases/reviewing.md"
+        whole = full("0.3.1", f)
+        steps = [(ENG31 % CORE, full("0.3.1", CORE)), (ENG31 % f, whole),
+                 "idle", (ENG31 % f, whole)]
+        p = run_profile(transcript(steps))
+        self.assertAlmostEqual(p["files"][f]["centroid"], ((2 + 4) / 2) / 5)
+        self.assertEqual(p["files"][f]["reads"], 2)
+
+
+class MedianIntervalTests(unittest.TestCase):
+    """Order-statistic interval for a median. The baseline quotes n=8 as order
+    statistics 2 and 7 at ~93%; the helper must reproduce that."""
+
+    def test_n8_is_order_statistics_2_and_7(self):
+        """ge.8: values that differ from their ranks, so returning positions or the
+        rank median cannot pass."""
+        iv = median_interval([80, 10, 70, 20, 60, 30, 50, 40])
+        self.assertEqual(iv["order"], (2, 7))
+        self.assertEqual((iv["lo"], iv["hi"]), (20, 70))
+        self.assertAlmostEqual(iv["coverage"], 1 - 2 * 9 / 256)
+        self.assertEqual(iv["median"], 45)
+
+    def test_n5_needs_the_full_range(self):
+        iv = median_interval([5, 4, 3, 2, 1])
+        self.assertEqual(iv["order"], (1, 5))
+        self.assertTrue(iv["met"])
+
+    def test_a_coverage_exactly_reached_narrows_the_interval(self):
+        """Class B survivor E12: coverage is a floor (>=). At n=8, order statistics
+        2 and 7 cover exactly 1 - 2*9/256; asked for exactly that, the helper must
+        take them, where a strict comparison would fall back to the full range."""
+        iv = median_interval([1, 2, 3, 4, 5, 6, 7, 8], coverage=1 - 2 * 9 / 256)
+        self.assertEqual(iv["order"], (2, 7))
+        self.assertTrue(iv["met"])
+
+    def test_n4_cannot_reach_90_and_says_so(self):
+        iv = median_interval([1, 2, 3, 4])
+        self.assertEqual(iv["order"], (1, 4))
+        self.assertFalse(iv["met"])
+        self.assertAlmostEqual(iv["coverage"], 0.875)
+
+    def test_empty_is_none(self):
+        self.assertIsNone(median_interval([]))
+
+
+class SubagentCountTests(unittest.TestCase):
+    def test_p6_counts_transcripts_beside_the_session(self):
+        import tempfile
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "s1.jsonl")
+        recs = transcript([(ENG31 % CORE, full("0.3.1", CORE))])
+        with open(path, "w") as fh:
+            import json as _json
+            for r in recs:
+                fh.write(_json.dumps(r) + "\n")
+        os.makedirs(os.path.join(d, "s1", "subagents"))
+        for name in ("a.jsonl", "b.jsonl", "a.meta.json"):
+            open(os.path.join(d, "s1", "subagents", name), "w").close()
+        try:
+            self.assertEqual(profile(path)["subagents"], 2)
+        finally:
+            import shutil
+            shutil.rmtree(d)
 
 
 class CliFloorTests(unittest.TestCase):
