@@ -690,12 +690,12 @@ class MedianIntervalTests(unittest.TestCase):
         self.assertEqual(iv["order"], (1, 5))
         self.assertTrue(iv["met"])
 
-    def test_a_coverage_exactly_reached_is_met(self):
-        """Class B survivor E12: coverage is a floor (>=), so n=4 at exactly its
-        full-range coverage, 0.875, is met. At the 0.90 default the two
-        comparisons agree, which is why this needs its own case."""
-        iv = median_interval([1, 2, 3, 4], coverage=0.875)
-        self.assertEqual(iv["order"], (1, 4))
+    def test_a_coverage_exactly_reached_narrows_the_interval(self):
+        """Class B survivor E12: coverage is a floor (>=). At n=8, order statistics
+        2 and 7 cover exactly 1 - 2*9/256; asked for exactly that, the helper must
+        take them, where a strict comparison would fall back to the full range."""
+        iv = median_interval([1, 2, 3, 4, 5, 6, 7, 8], coverage=1 - 2 * 9 / 256)
+        self.assertEqual(iv["order"], (2, 7))
         self.assertTrue(iv["met"])
 
     def test_n4_cannot_reach_90_and_says_so(self):
