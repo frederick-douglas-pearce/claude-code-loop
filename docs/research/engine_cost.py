@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Cost of CARRYING `loop-engine.md` through a whole loop run, not just ingesting it.
+"""Cost of CARRYING the engine through a whole loop run, not just ingesting it.
+
+"The engine" is every markdown file under the cached `skills/dev-loop/`: the core
+`loop-engine.md`, the on-demand units (`phases/`, `reference/`) since 0.3.1, and
+`SKILL.md` when a tool reads it. A full path naming any markdown file under that
+directory counts, so a unit a later release adds is counted rather than silently
+missed (#133/AC4). `SKILL.md` reaching the context as the skill's own prompt is not
+a tool read and is counted on neither side of any comparison.
 
 `context_profile.py` answers "what entered the parent, via which tool". That is an
 INGESTION metric: each read counted once, when it lands. It tracks the lever, but
@@ -31,8 +38,11 @@ API-error and ignorable `<synthetic>` lines excluded. If
 `stratum.turns` refuses a session, the whole profile is refused, named.
 
 Every profile prints a `stratum` line (`stratum.py`) beside the `engine era` line.
-This script profiles one session at a time and never pools, so it cannot cross
-strata itself; anything that pools its output must group by that line.
+A profile is one session. `--table` is the one place this script pools: it prints
+a P2c median only when every admissible session it was given shares one project
+directory, engine era and stratum, and otherwise names the groups and prints none.
+Session class is the one grouping it cannot see -- that is the caller's to apply,
+by passing one class per call.
 
 DETECTION IS THE HARD PART, and it has been wrong three separate ways. Each bug
 was silent and each moved the number in a believable direction, so read
@@ -59,9 +69,30 @@ Bug 3 also corrupts sizing: on a spilled record `toolUseResult.stdout` holds the
 full output while the model only ever received the preview. We size from the
 tool_result BLOCK content, which is what actually entered the context window.
 
+ADMISSIBILITY IS PER FILE, IN CONTEXT TOKENS (F191, #133), and default-deny. A
+session is measured only if every engine file it read at all -- the core always,
+every other file but `SKILL.md` once read -- cleared its floor: 98% of one measured
+complete load of that file (`LOAD_TOKENS`). These refuse it outright:
+  * a required file with no measured row, or an unknown era -- nothing sizes it;
+  * a short load of any required file.
+A read naming several files (`grep x phases/a.md phases/b.md`) makes each of them
+required and credits none of them, so they must clear their floors through their
+own single-file reads.
+
+What this tool cannot see: whether a unit the session never read was DUE. That is
+a fact about the session's journal; `before-side-2026-10-09.md` pre-registers the
+check PR C applies. A read this detector misses lowers P2, and nothing here
+guarantees a refusal for it; F194 on #1 logs the known shapes. Per-unit read
+counts and arrival centroids are printed for that check.
+
+Per-file levels are sums of context tokens, so they cannot tell a complete read
+from the same partial range read twice. They catch a short load, not a wrong one.
+
 Stdlib only.  Self-test: `python3 test_engine_cost.py`
 """
+import functools
 import json
+import math
 import os
 import re
 import sys
@@ -72,27 +103,73 @@ from stratum import Unpriced, _tok, input_equiv, one_model, output_equiv, \
 
 CTX = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
 
-# ADMISSIBILITY FLOOR. A session counts only if measured ingestion clears one copy
-# of what should have loaded. Below it, the engine either never fully loaded or the
-# detector missed reads -- and in BOTH cases the session is *unmeasured*, not cheap.
-# Default-deny: unknown ⇒ inadmissible, excluded loudly, never quietly averaged in.
-# Without this, a broken run reads as the cheapest run in the corpus, which is
-# exactly how a truncated load got written up as a finding once already.
-#
-# THE FLOOR IS PER-SESSION, because "one copy of the engine" is not one number.
-# It was `177529 / 3.5` -- one 0.2.0 copy -- from the first version of this file
-# until 2026-09-12, and the v0.3.0 release grew the engine 50.8% (177,529 ->
-# 267,647 bytes) and so turned that constant fail-OPEN: a 0.3.0 session that
-# ingested 50,722-76,469 tokens had loaded 66-99% of its engine and was scored
-# ADMISSIBLE. That is the precise failure this floor exists to refuse, arriving
-# silently and in the reassuring direction. A hardcoded size cannot survive a
-# release, so the size is now read off the era the session actually ran.
-CHARS_PER_TOKEN = 3.5
+CORE = "loop-engine.md"
+ENTRY = "SKILL.md"
 
-# Fallback sizes for engines no longer in the plugin cache. The cache is the
-# primary source; this table is only consulted when a version has been evicted.
-# Add a row when a version is retired, never instead of reading the payload.
-KNOWN_ENGINE_BYTES = {"0.2.0": 177529, "0.2.1": 177529, "0.3.0": 267647}
+# ADMISSIBILITY. A session counts only if what it ingested of each required file
+# clears one complete load of that file. Below it, the engine either never fully
+# loaded or the detector missed reads -- and in BOTH cases the session is
+# *unmeasured*, not cheap. Default-deny: unknown ⇒ inadmissible, excluded loudly,
+# never quietly averaged in. Without this, a broken run reads as the cheapest run
+# in the corpus, which is exactly how a truncated load got written up once.
+#
+# HOW THE FLOOR WAS WRONG BEFORE, twice, both times fail-open:
+#   * It was `177529 / 3.5` -- one 0.2.0 copy -- until 2026-09-12, and v0.3.0 grew
+#     the engine 50.8%, so a 0.3.0 session holding 66-99% of its engine was scored
+#     ADMISSIBLE. Hence the size is read off the era the session actually ran.
+#   * It was `bytes / CHARS_PER_TOKEN` with the constant 3.5 until #133 (F191).
+#     Engine text enters the context at about 0.38 context tokens per file byte, so
+#     one complete 0.3.0 load is ~101,830 context tokens while that floor was
+#     76,471: it admitted a session holding ~75% of a load. The floor is now one
+#     complete load in CONTEXT TOKENS, the unit P2 is measured in, per file.
+#
+# Per-file bytes, consulted only when a version is no longer in the plugin cache.
+# The cache is the primary source. Add a version's row when it is installed.
+KNOWN_FILE_BYTES = {
+    "0.2.0": {CORE: 177529},
+    "0.2.1": {CORE: 177529},
+    "0.3.0": {CORE: 267647, ENTRY: 10182},
+    "0.3.1": {CORE: 200789, ENTRY: 10829, "phases/accepting.md": 38409,
+              "phases/reviewing.md": 32344, "reference/initialization.md": 3489},
+}
+# The core's bytes per version, kept under its old name for callers that import it.
+KNOWN_ENGINE_BYTES = {v: f[CORE] for v, f in KNOWN_FILE_BYTES.items()}
+
+# One complete load of a file, in context tokens: the SMALLEST per-file ingestion
+# among every session on disk (2026-10-10, claude-opus-5 / -5-5 parents) whose
+# Read results cover every line of that file -- `file.startLine`/`numLines`
+# against `totalLines`, less the trailing line Read counts after a final newline.
+# Rows are measurements; each names the session that set it. A required file with
+# NO row refuses: there is no rate to size it from, because small files run denser
+# (per-read overhead) and the densest rate seen is not a bound on the next file's.
+LOAD_TOKENS = {
+    # 0.2.0 and 0.2.1 are one file: `cmp` of the 0.2.1 release commit be29a79
+    # against the cached 0.2.0 payload is clean. Minimum over both eras: vote
+    # ab6d955b (0.2.1). A 0.2.0 session that truncated its load -- the defect
+    # 0.2.1 fixed -- refuses.
+    ("0.2.0", CORE): 68116,
+    ("0.2.1", CORE): 68116,
+    ("0.3.0", CORE): 101825,                           # vote 9b13c205
+    ("0.3.1", CORE): 76897,                            # claude-hook-validator f60e1176
+    ("0.3.1", "phases/accepting.md"): 14042,           # claude-hook-validator 7b6d7a80
+    ("0.3.1", "phases/reviewing.md"): 11826,           # vote 76f03bf5, a4a60fb7
+    ("0.3.1", "reference/initialization.md"): 1510,    # f60e1176
+}
+
+# Every row was measured on one tokenizer family (claude-opus-5 / -5-5 parents).
+# A context-token level is a property of the file AND the tokenizer, so a parent
+# model on a different tokenizer needs its rows re-measured before its sessions
+# are scored against these.
+#
+# A complete load measures slightly differently from session to session:
+# ingestion is a context delta shared out across a turn's tool results by size,
+# and paging adds a few tokens per page. Single verified loads of one file land up
+# to 1.4% apart (0.3.1 core, 76,897-77,974; 0.2.x 68,116-~68,800). Since the row
+# is the minimum, the 2% below it is margin for a complete load measuring lower
+# than any yet seen, and nothing like a missing page: 2% of the 0.3.1 core is
+# ~1,540 tokens, where F191's admitted partial load was short by ~25,000. The band
+# is pinned in `test_engine_cost.py` (TolerancePinTests).
+LOAD_TOLERANCE = 0.98
 
 CACHE_SEGMENT = "/.claude/plugins/cache/"
 PLUGIN_CACHE = os.path.expanduser(
@@ -101,51 +178,90 @@ PLUGIN_CACHE = os.path.expanduser(
 # This is the same path `classify` already requires to be the plugin cache, so
 # era attribution costs no extra detection surface and inherits its correctness.
 VERSION_IN_PATH = re.compile(r"/dev-loop/(\d+\.\d+\.\d+)/")
+# Any markdown file under the skill directory is engine text. The capture is the
+# path relative to that directory: `loop-engine.md`, `phases/reviewing.md`, ...
+ENGINE_FILE = re.compile(r"skills/dev-loop/((?:[\w.*-]+/)*[\w.*-]+\.md)")
+
+
+def is_unit(f):
+    """An engine file that must clear its floor once read: every named file but
+    the entry point. Not a test of where it sits, so a unit a later release adds
+    at the top of the skill directory is required too."""
+    return bool(f) and f != ENTRY and "+" not in f and "*" not in f
+
+
+def file_bytes(version, f=CORE):
+    """Bytes of engine file `f` for `version`, preferring the payload on disk."""
+    if not version:
+        return None
+    try:
+        return os.path.getsize(os.path.join(
+            PLUGIN_CACHE, version, "skills", "dev-loop", f))
+    except OSError:
+        return KNOWN_FILE_BYTES.get(version, {}).get(f)
 
 
 def engine_bytes(version):
-    """One engine copy in bytes for `version`, preferring the payload on disk."""
-    if not version:
+    """One core copy in bytes for `version`, preferring the payload on disk."""
+    return file_bytes(version, CORE)
+
+
+def _cached_versions():
+    try:
+        return os.listdir(PLUGIN_CACHE)
+    except OSError:
+        return []
+
+
+def load_level(version, f=CORE):
+    """One measured complete load of file `f` under `version`, in context tokens,
+    or None -- an unknown era, or a file nobody has measured. None is not complete:
+    the caller refuses the session rather than estimate a level."""
+    return LOAD_TOKENS.get((version, f))
+
+
+def floor_for(version, f=CORE):
+    """Admissibility floor in context tokens for file `f` of engine `version`, or
+    None where there is no measured load (see `load_level`)."""
+    level = load_level(version, f)
+    return level * LOAD_TOLERANCE if level else None
+
+
+def median_interval(values, coverage=0.90):
+    """Distribution-free interval for the median of `values`, by order statistics.
+
+    Returns the narrowest symmetric pair (x_(j), x_(n+1-j)) whose coverage is at
+    least `coverage`, where coverage = 1 - 2 * P(Binomial(n, 1/2) <= j-1). When
+    even the full range falls short, it returns the range with `met` False --
+    a small n is reported as what it is, never widened into a claim it cannot
+    support. Positions are 1-based, as the order statistics are usually named."""
+    xs = sorted(values)
+    n = len(xs)
+    if not n:
         return None
-    cached = os.path.join(PLUGIN_CACHE, version, "skills", "dev-loop",
-                          "loop-engine.md")
+    med = xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
+
+    def cover(j):
+        return 1 - 2 * sum(math.comb(n, i) for i in range(j)) / 2 ** n
+
+    j = 1
+    while j + 1 <= (n + 1) // 2 and cover(j + 1) >= coverage:
+        j += 1
+    return {"n": n, "median": med, "lo": xs[j - 1], "hi": xs[n - j],
+            "order": (j, n + 1 - j), "coverage": cover(j),
+            "met": cover(j) >= coverage}
+
+
+def subagent_count(path):
+    """P6: transcripts in `<session>/subagents/`, never the ledger's self-report."""
+    d = os.path.join(os.path.splitext(path)[0], "subagents")
     try:
-        return os.path.getsize(cached)
+        return sum(1 for n in os.listdir(d) if n.endswith(".jsonl"))
     except OSError:
-        return KNOWN_ENGINE_BYTES.get(version)
+        return 0
 
 
-def _widest_known_engine():
-    """The largest engine we can see, for use when the era is unknown."""
-    sizes = list(KNOWN_ENGINE_BYTES.values())
-    try:
-        for v in os.listdir(PLUGIN_CACHE):
-            b = engine_bytes(v)
-            if b:
-                sizes.append(b)
-    except OSError:
-        pass
-    return max(sizes)
-
-
-def floor_for(version):
-    """Admissibility floor in tokens for a session that ran engine `version`.
-
-    Default-deny on an unknown era: fall back to the WIDEST engine known, so an
-    unattributable session must clear the strictest bar rather than the most
-    permissive one. Sizing an unknown era off the smallest engine would recreate
-    exactly the fail-open this function replaced.
-    """
-    return (engine_bytes(version) or _widest_known_engine()) / CHARS_PER_TOKEN
-
-
-# The 0.2.0 floor, retained ONLY so a caller that imported the name still
-# resolves. Nothing in this module consumes it: `--floor` parses its own value
-# and `main()` passes None so the floor is derived per session. Do not wire it
-# back into a default -- that is precisely the regression this comment records.
-DEFAULT_FLOOR = 177529 / CHARS_PER_TOKEN
-
-_READ_VERB = ("cat ", "sed ", "head ", "tail ", "awk ", "grep ", "less ", "more ")
+_READ_VERB =("cat ", "sed ", "head ", "tail ", "awk ", "grep ", "less ", "more ")
 # Shapes that name a file but return a scalar, not its text.
 _NOT_A_READ = re.compile(r"\bwc\b|\bgrep\b[^|;]*\s-[a-zA-Z]*[clL]\b|\bsed\b[^|;]*\s-i\b")
 _HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1")
@@ -190,7 +306,53 @@ def engine_version(name, inp):
     return m.group(1) if m else None
 
 
-def classify(name, inp, target="loop-engine.md", spills=None):
+# A `.md` token, with any `$VAR/` or `${VAR}/` prefix set aside.
+_MD_TOKEN = re.compile(r"(?:\$\{?\w+\}?/)?([\w./-]*\.md)\b")
+
+
+@functools.lru_cache(maxsize=None)
+def payload_files():
+    """Every engine file's relative path in any payload we know of: the installed
+    cache, then the bytes table for evicted versions. Derived from the payloads,
+    so a unit is recognised as soon as the release that adds it is installed."""
+    names = {f for files in KNOWN_FILE_BYTES.values() for f in files}
+    # Memoised: it walks the cache, and `engine_file` runs on every tool result.
+    for v in _cached_versions():
+        root = os.path.join(PLUGIN_CACHE, v, "skills", "dev-loop")
+        for d, _, fs in os.walk(root):
+            names.update(os.path.relpath(os.path.join(d, f), root)
+                         for f in fs if f.endswith(".md"))
+    return names
+
+
+def engine_file(name, inp):
+    """Which engine file a read touched, relative to `skills/dev-loop/`, or None.
+
+    Two forms. The full path names the file outright. A command that names the
+    skill directory -- `cd .../skills/dev-loop; head phases/accepting.md`, or
+    `D=.../skills/dev-loop; sed ... $D/loop-engine.md` -- can then name a file
+    RELATIVE to it, and such a token counts when that relative path exists in a
+    known payload. Both shapes are real (#130's extraction sessions). A name in a
+    command that never mentions the directory is not a read of it: `grep -v
+    '^loop-engine.md' notes.txt` reads notes.
+
+    A command naming several engine files returns them joined with `+`. That key
+    counts toward P2, makes every member required, and credits none of them: its
+    ingestion cannot be split between the files honestly."""
+    path = tool_path(name, inp)
+    files = set(ENGINE_FILE.findall(path))
+    if "skills/dev-loop" in path:
+        known = payload_files()
+        files.update(t for t in _MD_TOKEN.findall(path) if t in known)
+    return "+".join(sorted(files)) if files else None
+
+
+def names_cached_skill_dir(path):
+    """True when a tool's path string points into the installed skill directory."""
+    return CACHE_SEGMENT in path and "skills/dev-loop" in path
+
+
+def classify(name, inp, spills=None):
     """-> 'load' (plugin cache), 'tree' (any other copy), or None.
 
     `spills` maps a spill-file path to the kind of the read that produced it, so
@@ -212,14 +374,14 @@ def classify(name, inp, target="loop-engine.md", spills=None):
         if sp and sp in path:
             # A spill path carries no version, so it contributes no era evidence.
             return kind
-    if target not in path:
+    if not engine_file(name, inp):
+        # Glob lists paths and returns no engine text, so it is never a read here.
+        if name != "Glob" and names_cached_skill_dir(path):
+            return "load"
         return None
     # `/dev-loop/` and, since #170, `/plugins/` match the working tree too; only
     # the plugin cache is a load.
     return "load" if CACHE_SEGMENT in path else "tree"
-
-
-
 
 
 def _spill_path(rec, block):
@@ -259,13 +421,17 @@ def blocks(rec):
     return c if isinstance(c, list) else []
 
 
-def profile(path, target="loop-engine.md", kinds=("load",), floor=None):
-    """`floor=None` derives the admissibility floor from the engine version this
-    session actually loaded. Pass a number to override (the `--floor` flag)."""
+UNATTRIBUTED = "?"
+
+
+def profile(path, floor=None):
+    """`floor=None` derives each file's admissibility floor from the engine version
+    this session actually loaded. A number overrides the CORE's floor only (the
+    `--floor` flag); units keep theirs."""
     tools = {}
     pending, arrivals = [], {}
-    spills, kind_counts = {}, {}
-    versions = {}
+    spills, spill_files, kind_counts = {}, {}, {}
+    versions, unattributed = {}, []
     compactions = 0
 
     records = [r for r in load(path) if isinstance(r, dict) and not r.get("isSidechain")]
@@ -298,9 +464,18 @@ def profile(path, target="loop-engine.md", kinds=("load",), floor=None):
                 if not (isinstance(b, dict) and b.get("type") == "tool_result"):
                     continue
                 name, inp = tools.get(b.get("tool_use_id"), ("?", None))
-                kind = classify(name, inp, target, spills)
+                kind = classify(name, inp, spills)
+                f = None
                 if kind:
                     kind_counts[kind] = kind_counts.get(kind, 0) + 1
+                    # A spill recovery read names the spill path, not the file, so
+                    # it inherits the file of the read that spilled.
+                    f = engine_file(name, inp) or next(
+                        (sf for sp, sf in spill_files.items() if sp and sp in tool_path(name, inp)),
+                        None)
+                    if kind == "load" and (f is None or "*" in f):
+                        unattributed.append(f or tool_path(name, inp)[:120].replace("\n", " "))
+                        f = UNATTRIBUTED
                     if kind == "load":
                         v = engine_version(name, inp)
                         if v:
@@ -308,11 +483,13 @@ def profile(path, target="loop-engine.md", kinds=("load",), floor=None):
                     sp = _spill_path(rec, b)
                     if sp:
                         spills[sp] = kind
-                pending.append((name, _received(rec, b), kind in kinds, kind))
+                        spill_files[sp] = f
+                pending.append((name, _received(rec, b), kind == "load", kind, f))
 
     if not ts:
         return None
     order = [t.key for t in ts]
+    n = len(order)
 
     ctx = [sum(_tok(t.usage, f) for f in CTX) for t in ts]
     out = [_tok(t.usage, "output_tokens") for t in ts]
@@ -340,20 +517,26 @@ def profile(path, target="loop-engine.md", kinds=("load",), floor=None):
     # including output is supposed to produce.
 
     reads, by_tool, per_turn, calib = 0, {}, {}, []
+    file_reads, file_tokens, file_weight = {}, {}, {}
     for i, mid in enumerate(order):
         calls = arrivals.get(mid, [])
-        eng = [(n, sz) for n, sz, e, k in calls if e]
-        for n, sz in eng:
+        eng = [(nm, sz, f) for nm, sz, e, k, f in calls if e]
+        for nm, sz, f in eng:
             reads += 1
-            by_tool[n] = by_tool.get(n, 0) + sz
+            by_tool[nm] = by_tool.get(nm, 0) + sz
+            file_reads[f] = file_reads.get(f, 0) + 1
         if not eng or i == 0:
             continue
         added = max(0, ctx[i] - ctx[i - 1] - out[i - 1])
-        total = sum(sz for _, sz, _, _ in calls)
+        total = sum(c[1] for c in calls)
         if total:
-            per_turn[i] = added * sum(sz for _, sz in eng) / total
+            per_turn[i] = added * sum(sz for _, sz, _ in eng) / total
+            for _, sz, f in eng:
+                share = added * sz / total
+                file_tokens[f] = file_tokens.get(f, 0.0) + share
+                file_weight[f] = file_weight.get(f, 0.0) + share * i
         if len(calls) == len(eng) and added > 0:
-            calib.append((added, sum(sz for _, sz in eng)))
+            calib.append((added, sum(sz for _, sz, _ in eng)))
 
     ingested = sum(per_turn.values())
 
@@ -381,13 +564,36 @@ def profile(path, target="loop-engine.md", kinds=("load",), floor=None):
     # the WIDEST engine seen, never the average: a session that straddles a
     # release did not fully load either engine, and averaging would admit it.
     era = max(versions, key=lambda v: (engine_bytes(v) or 0)) if versions else None
-    if floor is None:
-        floor = floor_for(era)
+
+    # Required: the core always, and every other file but SKILL.md once the session
+    # read it -- alone, or as a member of a `+` key. Only a single-file read credits
+    # a file; a `+` key's ingestion counts in P2 and belongs to none of its members.
+    named = {m for k in file_reads if k != UNATTRIBUTED for m in k.split("+")}
+    files = {}
+    for f in sorted({CORE} | {m for m in named if is_unit(m)}):
+        got = file_tokens.get(f, 0.0)
+        fl = floor if (f == CORE and floor is not None) else floor_for(era, f)
+        files[f] = {
+            "reads": file_reads.get(f, 0), "ingested": got,
+            "level": load_level(era, f), "floor": fl,
+            "complete": fl is not None and got >= fl,
+            "centroid": file_weight[f] / got / n if got else None,
+        }
+    for f in file_reads:
+        if f not in files:
+            got = file_tokens.get(f, 0.0)
+            files[f] = {"reads": file_reads[f], "ingested": got, "level": None,
+                        "floor": None, "complete": None,
+                        "centroid": file_weight[f] / got / n if got else None}
+    incomplete = [f for f, d in files.items() if d["complete"] is False]
 
     return {
-        "path": path, "turns": len(order), "compactions": compactions,
+        "path": path, "turns": n, "compactions": compactions,
         "era": era, "eras_seen": dict(versions),
-        "floor": floor, "admissible": ingested >= floor,
+        "floor": files[CORE]["floor"],
+        "admissible": not incomplete and not unattributed,
+        "files": files, "incomplete": incomplete, "unattributed": unattributed,
+        "subagents": subagent_count(path),
         "reads": reads, "by_tool": by_tool, "kind_counts": kind_counts,
         "ingested": ingested, "calib": calib, "spills": len(spills),
         "peak_ctx": max(ctx), "processed": sum(ctx),
@@ -408,7 +614,7 @@ def render(p):
           f"{p['compactions']} compaction(s), {p['spills']} spill file(s)")
     # Printed unconditionally: the directory's standing rule is that a before/after
     # naming no engine version is not interpretable.
-    print(f"  engine era              {(p['era'] or 'UNKNOWN -- floor defaults to the widest known engine'):>12}{mixed}")
+    print(f"  engine era              {(p['era'] or 'UNKNOWN'):>12}{mixed}")
     print(f"  {stratum_line(p['stratum'])}")
     print(f"  turns (cost spec)       {n:>12}   (lines={p['lines']} no_id={p['no_id']} "
           f"api_error={p['api_error']} synthetic={p['synthetic']})")
@@ -427,10 +633,20 @@ def render(p):
     if not ing:
         print("  !! no engine tokens detected -- check the filter before believing this")
         return
-    print(f"  INGESTED (P2)           {ing:>12,.0f}")
+    print(f"  INGESTED (P2)           {ing:>12,.0f}   (core + units + SKILL.md reads)")
+    print(f"  P6 subagent transcripts {p['subagents']:>12}")
+    print(f"  {'file':<30}{'reads':>6}{'ingested':>11}{'floor':>10}{'complete':>10}{'centroid':>10}")
+    for f, d in sorted(p["files"].items()):
+        fl = f"{d['floor']:,.0f}" if d["floor"] is not None else "--"
+        ok = {True: "yes", False: "NO", None: "n/a"}[d["complete"]]
+        c = f"{d['centroid']:.2f}" if d["centroid"] is not None else "--"
+        print(f"  {f:<30}{d['reads']:>6}{d['ingested']:>11,.0f}{fl:>10}{ok:>10}{c:>10}")
     if not p["admissible"]:
-        print(f"  !! INADMISSIBLE -- {ing:,.0f} tokens is below the floor of "
-              f"{p['floor']:,.0f} (one engine copy).")
+        if p["incomplete"]:
+            print(f"  !! INADMISSIBLE -- below its floor, or no measured load: "
+                  f"{', '.join(p['incomplete'])}.")
+        for u in p["unattributed"]:
+            print(f"  !! INADMISSIBLE -- unattributable engine read: {u}")
         print("  !! This is an UNMEASURED run, not a cheap one: either the engine did not "
               "fully load")
         print("  !! or the detector missed reads. EXCLUDE it -- do not average it in.")
@@ -456,9 +672,51 @@ def render(p):
           f"the metric to accept on")
 
 
+def p2c(p):
+    """P2c: resident_turns / processed, on the PROP model. The acceptance metric."""
+    return p["models"]["PROP"][0] / p["processed"] if p["processed"] else None
+
+
+TABLE_COLUMNS = ("session", "era", "stratum", "admissible", "incomplete", "turns",
+                 "P2", "P2c", "P9", "P6", "P5", "tree", "units", "usd")
+
+
+def table_row(p):
+    """One tab-separated line per session, for a caller that selects and pools by
+    its own rules (session class, window). `units` is `file:reads@centroid` per
+    unit read; `tree` counts working-tree engine reads, which sit in processed
+    context but not in P2."""
+    s = p["stratum"]
+    units = ",".join(f"{f}:{d['reads']}@{d['centroid']:.2f}"
+                     for f, d in sorted(p["files"].items())
+                     if is_unit(f) and f != CORE and d["centroid"] is not None) or "-"
+    cells = (os.path.basename(p["path"])[:8], p["era"] or "UNKNOWN",
+             "%s@%s" % s.parent if s.stratified else "UNSTRATIFIED",
+             "yes" if p["admissible"] else "NO",
+             ",".join(p["incomplete"] + (["unattributable"] if p["unattributed"] else [])) or "-",
+             p["turns"], round(p["ingested"]),
+             "%.4f" % p2c(p) if p2c(p) is not None else "-",
+             p["compactions"], p["subagents"], p["peak_ctx"],
+             p["kind_counts"].get("tree", 0), units,
+             "%.4f" % p["billable_usd"] if p["billable_usd"] is not None else "REFUSED")
+    return "\t".join(str(c) for c in cells)
+
+
+def pool_key(p):
+    """What a P2c median may never pool across: project directory, era, stratum."""
+    s = p["stratum"]
+    return (os.path.basename(os.path.dirname(os.path.abspath(p["path"]))),
+            p["era"] or "UNKNOWN",
+            "%s@%s" % s.parent if s.stratified else "UNSTRATIFIED")
+
+
 def main(argv):
     args = [a for a in argv[1:] if not a.startswith("-")]
-    kinds = ("load", "tree") if "--all-reads" in argv else ("load",)
+    # --table: one line per session, then the P2c median over the ADMISSIBLE ones
+    # with its distribution-free interval -- but only when they share one project
+    # directory, engine era and stratum (`pool_key`). Session class it cannot see:
+    # pass one class per call.
+    table = "--table" in argv
     # None => profile() derives the floor from the era each session actually ran.
     # This read `DEFAULT_FLOOR` until 2026-09-12 and that made the per-session
     # floor unreachable from the CLI -- the only documented way to run the tool --
@@ -476,16 +734,37 @@ def main(argv):
     if not args:
         print(__doc__)
         return 1
+    if table:
+        print("\t".join(TABLE_COLUMNS))
+    admitted = []
     for path in args:
         try:
-            p = profile(path, kinds=kinds, floor=floor)
+            p = profile(path, floor=floor)
         except Unpriced as exc:
             print(f"\n=== {os.path.basename(path)[:8]}: REFUSED -- {exc}")
             continue
         if p is None:
             print(f"\n=== {os.path.basename(path)}: no parent turns")
+        elif table:
+            print(table_row(p))
+            if p["admissible"] and p2c(p) is not None:
+                admitted.append((pool_key(p), p2c(p)))
         else:
             render(p)
+    if table:
+        groups = sorted({k for k, _ in admitted})
+        iv = median_interval([v for _, v in admitted])
+        if iv is None:
+            print("# P2c: no admissible session")
+        elif len(groups) > 1:
+            print("# P2c: NOT POOLED -- the admissible sessions span %d groups "
+                  "(project, era, stratum): %s" % (len(groups), "; ".join(
+                      " / ".join(g) for g in groups)))
+        else:
+            print(f"# P2c over {iv['n']} admissible: median {iv['median']:.1%}, "
+                  f"interval {iv['lo']:.1%}-{iv['hi']:.1%} (order statistics "
+                  f"{iv['order'][0]} and {iv['order'][1]}, coverage {iv['coverage']:.1%}"
+                  + ("" if iv["met"] else ", BELOW the 90% target -- n too small") + ")")
     return 0
 
 

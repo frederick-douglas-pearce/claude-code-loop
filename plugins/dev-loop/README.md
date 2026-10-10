@@ -7,8 +7,9 @@ ran the v0.10.x / v0.11.0 releases). Install it once, drop a small per-project
 `loop.config.md` into a target repo, and run your backlog as a loop: one routed
 issue per invocation, with human gates on uncertainty and durable ledger state.
 
-> **Status — v0.3.0; not yet stable.** Four pieces ship: the
-> `dev-loop` skill (`SKILL.md` + `loop-engine.md`), the `/init-loop` onboarding
+> **Status — v0.3.1; not yet stable.** Four pieces ship: the
+> `dev-loop` skill (`SKILL.md`, a core `loop-engine.md`, and the units under `phases/` and
+> `reference/` that it reads on demand), the `/init-loop` onboarding
 > command, the append-only guard hook, and the mutation harness the acceptance gate
 > runs (`plugins/dev-loop/tools/mutate_verify.py`). **Five repos drive it**: the first external adoption
 > [us-presidential-vote-analysis](https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis),
@@ -19,12 +20,21 @@ issue per invocation, with human gates on uncertainty and durable ledger state.
 > is the source of most of the findings below. **They sit on different engine versions
 > deliberately — and this list is not the authority on which.** Version pinning is
 > per-project; read it from `~/.claude/plugins/installed_plugins.json`, never from prose
-> here. As of the v0.3.0 cut (2026-09-11) three repos take this release — this one,
+> here. As of the v0.3.0 cut (2026-09-11) three repos took that release — this one,
 > `us-presidential-vote-analysis` and `sportswear-esg-news-classifier` — while AgentFluent
 > and `claude-code-sessions` stay held on v0.2.0 as an untreated control for the cost
-> research in [`docs/research/`](docs/research/). **111 issues had been carried to `done` by
+> research in [`docs/research/`](docs/research/). The same three are to take v0.3.1 at its
+> re-install, and the control stays where it is. **111 issues had been carried to `done` by
 > the loop as of that cut**, across all five repos. That is enough to say the plugin/config
 > seam holds and that the hardening works under load; it is not enough to call it stable.
+>
+> **v0.3.1 is a patch: it changes how the engine is loaded.** The engine is now a core
+> that every invocation reads in full, plus units it reads at their point of use. A unit
+> the loop cannot confirm it read in full counts as not loaded, and the step that needs it
+> stops for you rather than passing
+> ([#128](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/128)). The
+> plugin now ships its runtime tree only
+> ([#170](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/170)).
 >
 > **v0.3.0 is a minor bump because it adds a gate.** When code review returns a **blocking**
 > finding that raises a design question — whether the approach is right, whether a fix
@@ -147,8 +157,8 @@ root README is the GitHub front door and the marketplace homepage target;
 `test_payload_readme_is_identical_to_the_front_door`. **Neither file silently became both** —
 the duplication is stated here and mechanically pinned.
 
-A slimmer consumer-facing README is the better end state, and it is deliberately **deferred to
-the release that ships this layout** rather than taken here. Shipping a short README now would
+A slimmer consumer-facing README is the better end state, and it is deliberately **deferred**
+rather than taken here. Shipping a short README now would
 strand two things the engine cross-references inside a consumer's cache — *How the limits are
 enforced* and *Upgrading with a live ledger*, both of which live only in this file — and
 repairing those references means editing `loop-engine.md`, whose bytes the sharding release
@@ -166,8 +176,8 @@ are not out of sync.**
 
 ## What the loop can do to your repo
 
-**This section describes v0.3.0.** Every older engine gates less at nearly every
-point below, and the lists here are illustrative, never the set — **assume nothing
+**This section describes v0.3.1.** Every engine older than v0.3.0 gates less at nearly
+every point below, and the lists here are illustrative, never the set — **assume nothing
 in this section is live until you have re-installed.** An installed **v0.2.0** has no
 design-question stop, no blocking/editorial split at code review, no guard-efficacy
 floor, no delta-scoped re-check, no refusal to mutate a tree it cannot tell apart
@@ -176,7 +186,8 @@ from yours, and says nothing when it infers your plan-gate posture. An installed
 its own verdict never counts as passed, no gate-currency expiry, no offline test
 tier, no mutation pass and no orphan-PR scan, and it runs the acceptance gate before
 review rather than last. If you are already running the loop, re-install before
-relying on any of this, and read "Upgrading with a live ledger" first.
+relying on any of this — *Upgrading the plugin* says how — and read "Upgrading with a
+live ledger" first.
 
 Worth reading before you install. This plugin drives a real development workflow on
 your behalf: it creates branches, commits, opens pull requests, runs your project's
@@ -498,6 +509,31 @@ harness; it does nothing until the consuming repo supplies the per-project confi
 harness the acceptance gate runs — the engine's own instructions are prompt
 artifacts and need nothing installed. Both are launched with bare `python3`, use
 the standard library only, and are tested on 3.9 through 3.13 in CI.
+
+### Upgrading the plugin
+
+**`/plugin install` does not upgrade.** On a plugin that is already installed it reports
+`already installed` and exits successfully without changing the version. A third-party
+marketplace like this one also does not auto-update by default. Read *Upgrading with a live
+ledger* below first, then run, from inside the consuming repo:
+
+```
+claude plugin marketplace update claude-code-loop
+claude plugin update dev-loop@claude-code-loop --scope project
+```
+
+The first command refreshes the marketplace's copy of this repo. Without it, `update` has
+no newer version to find. Pass the `--scope` you installed at; `project` is shown here. The
+running session keeps the engine it already loaded, so start a new session (or run
+`/reload-plugins`) before the next loop run.
+
+**Confirm the version from the files, never from the command's output.** In
+`~/.claude/plugins/installed_plugins.json`, the `dev-loop@claude-code-loop` entry for your
+scope (at `project` or `local` scope, the one whose `projectPath` is your repo) must show the
+new `version`, and
+`~/.claude/plugins/cache/claude-code-loop/dev-loop/<version>/` must exist.
+`claude plugin list` is not enough: it prints one entry per repo without saying which repo
+each belongs to. If you cannot confirm the new version, you have not upgraded.
 
 ### Upgrading with a live ledger
 

@@ -104,6 +104,13 @@ class EraTableIntegrityTests(unittest.TestCase):
     docstring tells maintainers to add a row at every release, so the edit that
     triggers this is the one the module invites."""
 
+    def test_the_0_3_1_boundary_is_the_first_unambiguous_day(self):
+        """Class B survivors B1/B2: 10-09 is ambiguous across the treated repos
+        and must take the EARLIER era; 10-10 is the first day none could still
+        be on 0.3.0. An earlier date over-treats, which the row's comment forbids."""
+        self.assertEqual(era_by_date("2026-10-09"), "0.3.0")
+        self.assertEqual(era_by_date("2026-10-10"), "0.3.1")
+
     def test_the_shipped_table_is_ordered(self):
         self.assertTrue(check_era_order(ERAS))
 
@@ -211,10 +218,13 @@ class EraByMarkerTests(unittest.TestCase):
     def test_a_later_marker_outranks_an_earlier_one_in_the_same_entry(self):
         """The plugin repo writes new vocabulary while running the old engine, so
         entries carrying both must resolve to the later bound, not the earlier."""
+        # The newest MARKED era, not ERAS[-1]: a date-only release (0.2.1,
+        # 0.3.1) has no vocabulary to write, and the table may end on one.
+        last = max(i for i, (_, _, m) in enumerate(ERAS) if m is not None)
         early = ERAS[1][2].pattern.split("|")[0]
-        late = ERAS[-1][2].pattern.split("|")[0]
+        late = ERAS[last][2].pattern.split("|")[0]
         both = era_by_marker("- Budget: %s and %s" % (early, late))
-        self.assertIn(ERAS[-1][0], both.split("|"))
+        self.assertIn(ERAS[last][0], both.split("|"))
         self.assertNotIn(ERAS[1][0], both.split("|"))
 
 

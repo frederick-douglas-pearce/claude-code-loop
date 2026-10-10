@@ -185,6 +185,88 @@ class TreeCostTests(unittest.TestCase):
         self.assertEqual(refused, [])
         self.assertEqual(rows[0][1], 1)
 
+    def sessions_out(self, *stems):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            T.main(["--sessions"] + [str(self.root / (s + ".jsonl")) for s in stems])
+        return buf.getvalue()
+
+    def test_sessions_mode_prices_a_session_that_never_delegated(self):
+        """`survey` skips these by design; a per-issue bill must not. Its
+        subagent bill is a measured 0."""
+        (self.root / "solo.jsonl").write_text(json.dumps(rec(M55)) + "\n")
+        r = T.price_session(self.root / "solo.jsonl")
+        self.assertIsNone(r["refused"])
+        self.assertEqual((r["subs"], r["sub_usd"]), (0, 0))
+        self.assertAlmostEqual(r["parent_usd"], 4.0)          # 1M fresh input @ $4
+
+    def test_sessions_mode_keeps_parent_and_subagents_separate(self):
+        self.session("s1", [rec(M55)], [[rec(M48)]])
+        r = T.price_session(self.root / "s1.jsonl")
+        self.assertAlmostEqual(r["parent_usd"], 4.0)
+        self.assertAlmostEqual(r["sub_usd"], 5.0)
+        self.assertIn("parent $4.00 | subagent $5.00 | total $9.00",
+                      self.sessions_out("s1"))
+
+    def test_context_counts_cache_writes_toward_the_bound(self):
+        """Class B survivor T5: an impossible context held in cache WRITES must
+        refuse as surely as one held in fresh input or cache reads."""
+        wide = {"input_tokens": 1, "output_tokens": 0, "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": T.MAX_CONTEXT}
+        (self.root / "cw.jsonl").write_text(json.dumps(rec(M55, usage=wide)) + "\n")
+        self.assertIn("physically impossible",
+                      T.price_session(self.root / "cw.jsonl")["refused"])
+
+    def test_a_turn_wider_than_any_context_window_refuses_the_session(self):
+        """A dedupe that merged several calls into one would produce exactly this."""
+        wide = dict(ONE_M, cache_read_input_tokens=T.MAX_CONTEXT)
+        self.session("w", [rec(M55)], [[rec(M55, usage=wide)]])
+        r = T.price_session(self.root / "w.jsonl")
+        self.assertIn("physically impossible", r["refused"])
+        self.assertIsNone(r["parent_usd"])
+        self.assertIn("REFUSED", self.sessions_out("w"))
+
+    def test_output_beyond_the_largest_max_tokens_refuses(self):
+        big = dict(ONE_M, input_tokens=10, output_tokens=T.MAX_OUTPUT + 1)
+        (self.root / "o.jsonl").write_text(json.dumps(rec(M55, usage=big)) + "\n")
+        self.assertIn("physically impossible",
+                      T.price_session(self.root / "o.jsonl")["refused"])
+
+    def test_a_turn_at_the_bounds_is_priced(self):
+        edge = {"input_tokens": T.MAX_CONTEXT, "output_tokens": T.MAX_OUTPUT,
+                "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
+        (self.root / "e.jsonl").write_text(json.dumps(rec(M55, usage=edge)) + "\n")
+        self.assertIsNone(T.price_session(self.root / "e.jsonl")["refused"])
+
+    def test_an_unpriced_subagent_refuses_the_named_session(self):
+        self.session("u", [rec(M55)], [[rec("claude-unpriced-9")]])
+        self.assertIn("REFUSED", self.sessions_out("u"))
+
+    def test_a_message_id_priced_in_two_files_refuses_the_session(self):
+        """mc.8: an id names one API call; in two files it is a turn priced twice."""
+        r0 = rec(M55)
+        twin = json.loads(json.dumps(r0))
+        self.session("d", [r0], [[twin]])
+        r = T.price_session(self.root / "d.jsonl")
+        self.assertIn("more than one file", r["refused"])
+        self.assertIsNone(r["parent_usd"])
+
+    def test_sessions_totals_never_pool_across_strata(self):
+        self.session("hi", [rec(M55, "high")], [[rec(M55, "high")]])
+        self.session("md", [rec(M55, "medium")], [[rec(M55, "medium")]])
+        out = self.sessions_out("hi", "md")
+        self.assertIn("# stratum claude-opus-5-5@high: 1 sessions", out)
+        self.assertIn("# stratum claude-opus-5-5@medium: 1 sessions", out)
+        self.assertNotIn("total $16.00", out)
+
+    def test_an_unstratified_session_is_excluded_from_totals_and_named(self):
+        bad = rec(M55)
+        del bad["effort"]
+        self.session("un", [bad], [[rec(M55)]])
+        out = self.sessions_out("un")
+        self.assertIn("EXCLUDED from totals un", out)
+        self.assertNotIn("# stratum", out)
+
     def test_every_session_prints_its_stratum_line(self):
         self.session("aaaaaaaa", [rec(M55)], [[rec(M48, "xhigh")]])
         self.assertIn("stratum  claude-opus-5-5@high", self.out())
