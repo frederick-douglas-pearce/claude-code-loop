@@ -72,11 +72,8 @@ tool_result BLOCK content, which is what actually entered the context window.
 ADMISSIBILITY IS PER FILE, IN CONTEXT TOKENS (F191, #133), and default-deny. A
 session is measured only if every engine file it read at all -- the core always,
 every other file but `SKILL.md` once read -- cleared its floor: 98% of one measured
-complete load of that file (`LOAD_TOKENS`). Three things refuse it outright:
+complete load of that file (`LOAD_TOKENS`). These refuse it outright:
   * a required file with no measured row, or an unknown era -- nothing sizes it;
-  * a read that names the cached skill directory but resolves to no single file
-    (a glob, a relative name this tool cannot resolve, a recursive grep, the Grep
-    tool on the directory) -- an "unattributable engine read";
   * a short load of any required file.
 A read naming several files (`grep x phases/a.md phases/b.md`) makes each of them
 required and credits none of them, so they must clear their floors through their
@@ -143,9 +140,8 @@ KNOWN_ENGINE_BYTES = {v: f[CORE] for v, f in KNOWN_FILE_BYTES.items()}
 # Read results cover every line of that file -- `file.startLine`/`numLines`
 # against `totalLines`, less the trailing line Read counts after a final newline.
 # Rows are measurements; each names the session that set it. A required file with
-# NO row refuses: there
-# is no rate to size it from, because small files run denser (per-read overhead)
-# and the densest rate seen is not a bound on the next file's.
+# NO row refuses: there is no rate to size it from, because small files run denser
+# (per-read overhead) and the densest rate seen is not a bound on the next file's.
 LOAD_TOKENS = {
     # 0.2.0 and 0.2.1 are one file: `cmp` of the 0.2.1 release commit be29a79
     # against the cached 0.2.0 payload is clean. Minimum over both eras: vote
@@ -336,12 +332,9 @@ def engine_file(name, inp):
     skill directory -- `cd .../skills/dev-loop; head phases/accepting.md`, or
     `D=.../skills/dev-loop; sed ... $D/loop-engine.md` -- can then name a file
     RELATIVE to it, and such a token counts when that relative path exists in a
-    known payload. Both shapes are real (#130's extraction sessions). The relative
-    form is therefore only as wide as the payloads on disk; a cached-directory read
-    it cannot resolve, if `classify` counts it, refuses the session as an
-    unattributable engine read. A name in a command that
-    never mentions the directory is not a read of it: `grep -v '^loop-engine.md'
-    notes.txt` reads notes.
+    known payload. Both shapes are real (#130's extraction sessions). A name in a
+    command that never mentions the directory is not a read of it: `grep -v
+    '^loop-engine.md' notes.txt` reads notes.
 
     A command naming several engine files returns them joined with `+`. That key
     counts toward P2, makes every member required, and credits none of them: its
@@ -362,10 +355,8 @@ def names_cached_skill_dir(path):
 def classify(name, inp, spills=None):
     """-> 'load' (plugin cache), 'tree' (any other copy), or None.
 
-    A read `classify` counts that names the CACHED skill directory is a load even
-    when no single engine file can be attributed to it, and `profile` refuses that
-    session. `spills` maps a spill-file path to the kind
-    of the read that produced it, so the recovery reads inherit it.
+    `spills` maps a spill-file path to the kind of the read that produced it, so
+    the recovery reads inherit it.
     """
     spills = spills or {}
     if not isinstance(inp, dict):

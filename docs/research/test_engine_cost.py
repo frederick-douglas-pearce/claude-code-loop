@@ -492,8 +492,7 @@ class PerFileAdmissibilityTests(unittest.TestCase):
 
 
 class AttributionRefusalTests(unittest.TestCase):
-    """Round-1 ruling on #133 PR B: a read that cannot be attributed to one file
-    refuses or requires, never vanishes (mc.1, mc.2, ge.3, ge.4)."""
+    """Round-1 ruling on #133 PR B (mc.1, mc.2, ge.3, ge.4)."""
 
     DIR = (ENG31 % "x").rsplit("/", 1)[0]
 

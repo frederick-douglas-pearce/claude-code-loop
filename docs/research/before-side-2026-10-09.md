@@ -44,22 +44,18 @@ reads it. Arriving as the skill's prompt is not a tool read, and it is counted o
 `bytes / 3.5`. Engine text actually enters the context at about 0.38 context tokens per byte, so
 that floor admitted ~75% of a load. Now a session counts only if every engine file it read at all
 cleared **its floor: 98% of one measured complete load of that file**. That means the core always,
-and every other file except `SKILL.md` once read. Three things refuse a session outright:
+and every other file except `SKILL.md` once read. These refuse a session outright:
 
 - a required file with no measured load, or an unknown era. Nothing sizes it, and the tool does not
   estimate one: small files run denser, so no measured rate bounds the next file's;
-- an **unattributable engine read**: a read that names the cached skill directory but resolves to
-  no single file, such as a glob, an unresolvable relative name, a recursive grep, or the Grep tool
-  on the directory;
 - a load of any required file below its floor.
 
 A read naming several files at once (`grep -n x phases/a.md phases/b.md`) makes each of them
 required and credits none of them. They must each clear the floor through single-file reads.
 
 **What the tool cannot see.** Whether a unit the session never read was *due* is a fact about the
-session's journal. **Pre-registered here
-for PR C, before any after-side data is seen:** in a 0.3.1 session, a unit is **due** when the
-session's own journal names its step:
+session's journal. **Pre-registered here for PR C, before any after-side data is seen:** in a
+0.3.1 session, a unit is **due** when the session's own journal names its step:
 
 - `phases/reviewing.md` is due when the session wrote a step-8 code-review round block or a
   `- Code-review:` line;
@@ -95,8 +91,8 @@ test pins that band (`TolerancePinTests`): for every row, 95% of a load refuses 
 admits. The rows were measured on one tokenizer family. A parent on another tokenizer needs them
 re-measured.
 
-**Two limits.** The floor is a sum, so it catches a short load but not the same partial range read
-twice. And `initialization.md`'s row rests on one session.
+**A limit.** The floor is a sum, so it catches a short load but not the same partial range read
+twice.
 
 **Also added:** each unit's **arrival centroid**, the token-weighted turn at which its text
 arrived, as a fraction of the session's turns. `baseline-2026-10-04.md` assumed 55% for `reviewing`

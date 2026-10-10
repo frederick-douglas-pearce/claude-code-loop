@@ -26,7 +26,7 @@ All stdlib-only, all read Claude Code session transcripts from `~/.claude/projec
 
 | script | answers | tests |
 |---|---|---|
-| `engine_cost.py` | What does carrying the engine — core, on-demand units, and tool reads of `SKILL.md` — cost across a whole run? (P2, P2c, P6, P9, per-unit reads and arrival centroids; `--table` adds the P2c median's order-statistic interval) **Admissibility is per file, in context tokens: every engine file the session read but `SKILL.md` must clear its floor, 98% of one measured complete load for the session's own era; an unmeasured file or an unattributable read refuses** — never a chars-per-token constant (F191). | `test_engine_cost.py` |
+| `engine_cost.py` | What does carrying the engine — core, on-demand units, and tool reads of `SKILL.md` — cost across a whole run? (P2, P2c, P6, P9, per-unit reads and arrival centroids; `--table` adds the P2c median's order-statistic interval) **Admissibility is per file, in context tokens: every engine file the session read but `SKILL.md` must clear its floor, 98% of one measured complete load for the session's own era; an unmeasured file refuses** — never a chars-per-token constant (F191). | `test_engine_cost.py` |
 | `plan_gate_cost.py` | What is the parent carrying when the plan is written, and where did all of it come from? Attributes **everything** before implementation starts — including the two buckets no delta-based instrument sees: the always-loaded baseline and the model's own output. Splits that output by block type (only some of it stays resident) and prices the **selection phase** in resident-turn tokens. | `test_plan_gate_cost.py` |
 | `rounds_vs_turns.py` | Do gate rounds predict parent turns and bill? (Finding 11) | `test_rounds_vs_turns.py` |
 | `calls_per_turn.py` | How many tool calls per turn, and how many turns could have been merged? (Finding 12) | `test_calls_per_turn.py` |
@@ -168,8 +168,7 @@ which is the kind of prose that goes stale between releases:
   but engine text enters the context at ~0.38 context tokens per byte, so the floor admitted ~75% of
   a 0.3.0 load. It is now **one complete load per file, in context tokens**, measured from sessions
   whose reads cover every line (`LOAD_TOKENS`, which names each row's source). The floor is 98% of
-  that load. A required file with **no** measured row refuses, as does a read of the cached skill
-  directory that names no single file; nothing is estimated. Rows are per tokenizer family as well
+  that load. A required file with **no** measured row refuses; nothing is estimated. Rows are per tokenizer family as well
   as per file: re-measure them before scoring a parent model on a different tokenizer.
 - **Every frozen baseline in `baseline-2026-08-25.md` is against a 45,937-token engine.** P1's
   ~30,000 target was a ~35% cut from that; the same cut against 69,457 lands near ~45,100. Anything
