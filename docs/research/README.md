@@ -26,13 +26,14 @@ All stdlib-only, all read Claude Code session transcripts from `~/.claude/projec
 
 | script | answers | tests |
 |---|---|---|
-| `engine_cost.py` | What does carrying the engine — core, on-demand units, and tool reads of `SKILL.md` — cost across a whole run? (P2, P2c, P6, P9, per-unit reads and arrival centroids; `--table` adds the P2c median's order-statistic interval) **Admissibility is per file, in context tokens: the core and every unit the session read must each clear one complete load of that file, measured for the session's own engine era** — never a chars-per-token constant (F191). | `test_engine_cost.py` |
+| `engine_cost.py` | What does carrying the engine — core, on-demand units, and tool reads of `SKILL.md` — cost across a whole run? (P2, P2c, P6, P9, per-unit reads and arrival centroids; `--table` adds the P2c median's order-statistic interval) **Admissibility is per file, in context tokens: every engine file the session read but `SKILL.md` must clear its floor, 98% of one measured complete load for the session's own era; an unmeasured file or an unattributable read refuses** — never a chars-per-token constant (F191). | `test_engine_cost.py` |
 | `plan_gate_cost.py` | What is the parent carrying when the plan is written, and where did all of it come from? Attributes **everything** before implementation starts — including the two buckets no delta-based instrument sees: the always-loaded baseline and the model's own output. Splits that output by block type (only some of it stays resident) and prices the **selection phase** in resident-turn tokens. | `test_plan_gate_cost.py` |
 | `rounds_vs_turns.py` | Do gate rounds predict parent turns and bill? (Finding 11) | `test_rounds_vs_turns.py` |
 | `calls_per_turn.py` | How many tool calls per turn, and how many turns could have been merged? (Finding 12) | `test_calls_per_turn.py` |
 | ~~`context_profile.py`~~ | **RETIRED 2026-08-26** → `deprecated/`. Kept only to reproduce Findings 6–9; its payload bug over-counts spilled reads by up to 13×, so **P4 and the "~50% of every byte" figure are withdrawn**. | — |
 | `budget_stats.py` | Ledger `- Budget:` aggregates by engine era. **`--era` resolves N eras and caps BOTH the date and marker columns at the repo's installed version**, so a held-back control cannot read as treated. An installed version missing from `ERAS` raises rather than silently dropping the cap. | `test_budget_stats.py` |
-| `tree_cost.py` | Parent **+ subagent** transcripts priced together, each turn on its own model's weights and summed in USD — sizes the bill Finding 11 leaves unpriced. `--sessions` prices named sessions, delegating or not, parent and subagents apart. **Citable since #133**: a hand-checked sample agreed to the cent, and a turn outside the physical bounds refuses its session. | `test_tree_cost.py`; the spec arithmetic itself in `test_stratum.py` |
+| `tree_cost.py` | Parent **+ subagent** transcripts priced together, each turn on its own model's weights and summed in USD — sizes the bill Finding 11 leaves unpriced. `--sessions` prices named sessions, delegating or not, parent and subagents apart, totals per stratum. **`--sessions` is citable since #133** (`handcheck_pricing.py` agreed to the cent; impossible usage refuses); directory mode stays scouting. | `test_tree_cost.py`; the spec arithmetic itself in `test_stratum.py`; `handcheck_pricing.py` re-run by hand |
+| `handcheck_pricing.py` | Does `tree_cost.bill` price a file the way an independent reading of the spec does? Re-prices a seeded sample of transcript files with **no code shared with `stratum.py`** and compares file by file. The hand-check behind `tree_cost --sessions`' citability; re-run it after any change to the arithmetic or the dedupe. | none, deliberately: a test of the hand-check is a guard on a guard |
 | `stratum.py` | Which `(model, effort)` stratum a session ran on, plus its CLI version range — the **one** extractor every transcript script above imports, and the per-model `PRICING` table. Every per-session profile prints its `stratum` line; every aggregate groups by parent stratum and names what it excluded. An unpriced model refuses to price, never falls back. (#207) | `test_stratum.py` |
 
 ```bash
@@ -167,10 +168,10 @@ which is the kind of prose that goes stale between releases:
 - **The floor's unit was wrong too (F191), and #133 fixed it.** It was `bytes / 3.5` chars per token,
   but engine text enters the context at ~0.38 context tokens per byte, so the floor admitted ~75% of
   a 0.3.0 load. It is now **one complete load per file, in context tokens**, measured from sessions
-  whose reads cover every line (`LOAD_TOKENS`, which names its sessions). A file with no measured
-  row is sized at the **strictest** measured rate, so it can be wrongly refused but never wrongly
-  admitted. Rows are per tokenizer family as well as per file: re-measure them before scoring a
-  parent model on a different tokenizer.
+  whose reads cover every line (`LOAD_TOKENS`, which names each row's source). The floor is 98% of
+  that load. A required file with **no** measured row refuses, as does a read of the cached skill
+  directory that names no single file; nothing is estimated. Rows are per tokenizer family as well
+  as per file: re-measure them before scoring a parent model on a different tokenizer.
 - **Every frozen baseline in `baseline-2026-08-25.md` is against a 45,937-token engine.** P1's
   ~30,000 target was a ~35% cut from that; the same cut against 69,457 lands near ~45,100. Anything
   comparing across this boundary must say which engine each side ran.

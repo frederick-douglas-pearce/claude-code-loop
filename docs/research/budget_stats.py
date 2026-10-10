@@ -120,7 +120,10 @@ ERAS = [
     # toward the null, over-treating manufactures the effect. #133's measurement
     # does not read this table -- `engine_cost.py` takes each session's era from
     # its own read path -- so the cost of the conservative date falls on the DiD
-    # here only.
+    # here only. ONE KNOWN MISFILING: claude-hook-validator onboarded AT 0.3.1 on
+    # 2026-10-09 and never ran 0.3.0, so its 10-09 rows are 0.3.1 and this rule
+    # files them as 0.3.0. It is baseline-only and never pooled (D007), so no DiD
+    # reads it today; a per-repo lower bound is logged on #1 rather than built here.
     ("0.3.1", "2026-10-10", None),
 ]
 

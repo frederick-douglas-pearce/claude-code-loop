@@ -34,37 +34,65 @@ From `~/.claude/plugins/installed_plugins.json`, read 2026-10-09:
 ## What the instrument now does
 
 **P2 is all engine text: core plus units** (#133/AC4). `engine_cost.py` counts a read of any
-markdown file under the cached `skills/dev-loop/`. The set is a path pattern, not a list, so a unit
-a later release adds is counted from its first install. A command that `cd`s into that directory, or
-names it in a variable, may name a file relative to it. Such a token counts when the relative path
-exists in a known payload. `SKILL.md` counts only when a tool reads it. Arriving as the skill's
-prompt is not a tool read, and it is counted on neither side.
+markdown file named by its full path under the cached `skills/dev-loop/`, so a unit a later release
+adds is counted from its first install. A command that `cd`s into that directory, or names it in a
+variable, may name a file relative to it. Such a token counts when the relative path exists in a
+payload on disk. That form is only as wide as the payloads seen, which is why a read it cannot
+resolve refuses the session (below) instead of disappearing. `SKILL.md` counts only when a tool
+reads it. Arriving as the skill's prompt is not a tool read, and it is counted on neither side.
 
-**Admissibility is per file, in context tokens** (F191). A session counts only if the core and each
-unit it read **at all** each cleared one complete load of that file. The floor used to be
+**Admissibility is per file, in context tokens** (F191), and default-deny. The floor used to be
 `bytes / 3.5`. Engine text actually enters the context at about 0.38 context tokens per byte, so
-that floor admitted ~75% of a load. A unit the session never read is not required. Whether it was
-due is a fact about the session's journal, which this tool does not read. The per-unit read counts
-are printed so PR C can check them against each session's class.
+that floor admitted ~75% of a load. Now a session counts only if every engine file it read at all
+cleared **its floor: 98% of one measured complete load of that file**. That means the core always,
+and every other file except `SKILL.md` once read. Three things refuse a session outright:
 
-**One complete load, per file, as measured.** Each row is the smallest ingestion among sessions
-whose `Read` results cover every line of that file (`file.startLine`/`numLines` against
-`totalLines`):
+- a required file with no measured load, or an unknown era. Nothing sizes it, and the tool does not
+  estimate one: small files run denser, so no measured rate bounds the next file's;
+- an **unattributable engine read**: a read that names the cached skill directory but resolves to
+  no single file, such as a glob, an unresolvable relative name, a recursive grep, or the Grep tool
+  on the directory;
+- a load of any required file below its floor.
 
-| era | file | bytes | one complete load (context tokens) | from |
-|---|---|---:|---:|---|
-| 0.2.0, 0.2.1 | `loop-engine.md` | 177,529 | 68,770 | vote `0baee1d7`, `098416fc`. The two eras' cores are byte-identical (`cmp`). |
-| 0.3.0 | `loop-engine.md` | 267,647 | 101,828 | `baseline-2026-10-04.md` |
-| 0.3.1 | `loop-engine.md` | 200,789 | 77,289 | claude-hook-validator `7b6d7a80`; vote `76f03bf5`, `a4a60fb7` at 77,509 |
-| 0.3.1 | `phases/accepting.md` | 38,409 | 14,042 | `7b6d7a80`; `76f03bf5`, `a4a60fb7` at 14,080 and 14,130 |
-| 0.3.1 | `phases/reviewing.md` | 32,344 | 11,826 | `76f03bf5`, `a4a60fb7`; `7b6d7a80` at 11,924 |
-| 0.3.1 | `reference/initialization.md` | 3,489 | 1,510 | claude-hook-validator `f60e1176`, the only one |
+A read naming several files at once (`grep -n x phases/a.md phases/b.md`) makes each of them
+required and credits none of them. They must each clear the floor through single-file reads.
 
-The floor is 98% of the row. Hand-checked complete loads of the same file land up to 0.9% apart, because
-ingestion is a context delta shared out across a turn's tool results. A file with no row is sized
-at the **highest** measured tokens-per-byte, so it can be refused wrongly but never admitted wrongly.
-The rows were measured on one tokenizer family, the `claude-opus-5` and `-5-5` parents. A parent on
-another tokenizer needs them re-measured.
+**What the tool cannot see, and the check that covers it.** Whether a unit the session never read was
+*due* is a fact about the session's journal. So is a read this detector misses, for example a `cd`
+into the skill directory in one Bash call and a relative read in a later one. **Pre-registered here
+for PR C, before any after-side data is seen:** in a 0.3.1 session, a unit is **due** when the
+session's own journal names its step:
+
+- `phases/reviewing.md` is due when the session wrote a step-8 code-review round block or a
+  `- Code-review:` line;
+- `phases/accepting.md` is due when it wrote an `- AC-verify:` line;
+- `reference/initialization.md` is due when it wrote an Initialization block.
+
+**A due unit that shows no load makes the session inadmissible**, whatever the reason. Either the
+load was skipped or the detector missed it, and the session is unmeasured either way. PR C applies
+this check with the frozen tool's per-unit read counts. It is not tuned after the data is seen.
+
+**One complete load, per file, as measured** (`LOAD_TOKENS`). Each row is the **smallest**
+ingestion among every session on disk (2026-10-10, `claude-opus-5` and `-5-5` parents) whose `Read`
+results cover every line of that file. Coverage is checked as `file.startLine`/`numLines` against
+`totalLines`, less the trailing empty line `Read` counts after a final newline:
+
+| era | file | bytes | one complete load (context tokens) | set by | verified complete loads |
+|---|---|---:|---:|---|---:|
+| 0.2.0, 0.2.1 | `loop-engine.md` | 177,529 | 68,116 | vote `ab6d955b`. The two eras' cores are byte-identical (`cmp`). | 40 |
+| 0.3.0 | `loop-engine.md` | 267,647 | 101,825 | vote `9b13c205` | 69 |
+| 0.3.1 | `loop-engine.md` | 200,789 | 76,897 | claude-hook-validator `f60e1176` | 7 |
+| 0.3.1 | `phases/accepting.md` | 38,409 | 14,042 | claude-hook-validator `7b6d7a80` | 3 |
+| 0.3.1 | `phases/reviewing.md` | 32,344 | 11,826 | vote `76f03bf5`, `a4a60fb7` | 5 |
+| 0.3.1 | `reference/initialization.md` | 3,489 | 1,510 | claude-hook-validator `f60e1176` | 1 |
+
+Single verified loads of one file land up to 1.4% apart: the 0.3.1 core runs 76,897–77,974, and the
+0.2.x core 68,116 to about 68,800. Ingestion is a context delta shared out across a turn's tool
+results. Since each row is the minimum, the 2% below it is margin for a complete load that measures
+lower than any yet seen. A missing page is far larger: 2% of the 0.3.1 core is ~1,540 tokens. A
+test pins that band (`TolerancePinTests`): for every row, 95% of a load refuses and a whole load
+admits. The rows were measured on one tokenizer family. A parent on another tokenizer needs them
+re-measured.
 
 **Two limits.** The floor is a sum, so it catches a short load but not the same partial range read
 twice. And `initialization.md`'s row rests on one session.
@@ -73,7 +101,9 @@ twice. And `initialization.md`'s row rests on one session.
 arrived, as a fraction of the session's turns. `baseline-2026-10-04.md` assumed 55% for `reviewing`
 and 75% for `accepting`, and PR C measures it. The tool also adds **P6** (`<session>/subagents/*.jsonl`) and
 `--table`, which prints one line per session and then the P2c median over the admissible sessions
-with its order-statistic interval. **P7** stays where it was, read from each session's own
+with its order-statistic interval. It prints the median only when they share one project
+directory, era and stratum, and otherwise names the groups. `--all-reads` is gone: admissibility
+counts plugin-cache loads only. **P7** stays where it was, read from each session's own
 `- Budget:` line (`budget_stats.py` parses it). **P9** is the compaction count it always printed.
 
 **Era registration.** `KNOWN_FILE_BYTES` holds 0.3.1's per-file sizes. `budget_stats.ERAS` has a
@@ -84,10 +114,15 @@ date-only 0.3.1 row: 0.3.1 writes no routine journal vocabulary of its own. Its 
 
 ## Re-admission: the frozen before side through the new check
 
-Re-admission can only remove sessions. **It removed none.** All 23 clear the per-file check. P2,
-P2c, P5, P6 and P9 reproduce `baseline-2026-10-04.md` for every session, at the precision it
-publishes. Every completed-
-iteration n stays at or above #126/AC3's bar of 5.
+Re-admission can only remove sessions. **It removed none**, run after the last edit to the
+instrument (2026-10-10). All 23 clear the per-file check, and none holds an unattributable read.
+P2, P2c, P5, P6 and P9 reproduce `baseline-2026-10-04.md` for every session, at the precision it
+publishes. Every completed-iteration n stays at or above #126/AC3's bar of 5.
+
+The same run admits each of the six 0.3.1 loop sessions this PR's calibration found:
+claude-hook-validator `f60e1176`, `09b8f45f`, `7b6d7a80`; vote `76f03bf5`, `a4a60fb7`,
+`0bec1f40`. None refuses as
+unattributable, so the default-deny rules cost no n so far.
 
 | | loop | vote | esg |
 |---|---|---|---|
@@ -99,10 +134,18 @@ The interval is the narrowest symmetric pair of order statistics covering the me
 probability. At n=5 and n=6 that is the full range.
 
 **One column moved, and on purpose:** `tree`, the working-tree engine reads, which sit in processed
-context but never in P2. `b5129651` reads 13, not 11. Its two extra are working-tree reads of
-`phases/accepting.md` and `reference/initialization.md`, which the 0.3.0 tool, counting only
-`loop-engine.md`, could not see. The other three loop sessions with tree reads are unchanged, at 8,
-11 and 3.
+context but never in P2. The 0.3.0 tool matched any command containing `loop-engine.md`, so it
+missed unit reads and scored bare mentions as reads. The new tool reads units and needs the skill
+directory in the command. Against the old tool, per session:
+
+| session | gained (now counted) | lost (no longer counted) | count |
+|---|---|---|---|
+| `b5129651` | `phases/accepting.md`, `reference/initialization.md`, a `SKILL.md` read | a relative `git diff -U0 loop-engine.md`, whose directory the command does not name | 11 → 13 |
+| `de7e4367` | two `phases/reviewing.md` reads (one with `SKILL.md`) | two commands naming `loop-engine.md` only as a pattern or in a scratch file | 11 → 11 |
+| `7be48522` | `SKILL.md`, `phases/accepting.md` | `grep -n 'loop-engine.md' tests/…`, and a `CLAUDE.md` read naming it | 8 → 8 |
+| `22736589` | `phases/reviewing.md` | a `gh api` call naming it | 3 → 3 |
+
+The last three are unchanged **in count only**.
 
 ---
 
@@ -159,17 +202,27 @@ arithmetic is checked by the hand-check below.
 
 ### Why these figures may be cited
 
-`tree_cost.py` was a scouting script whose output was not to be cited until it had passed two
-checks. It has now passed both:
+`tree_cost.py` was a scouting script whose output was not to be cited until it passed two checks.
+**Its `--sessions` mode now passes both. Directory mode does not and stays scouting.**
 
-- **A hand-checked sample.** 20 of the 243 transcript files behind these sessions (seed 133; 2
-  parents, 18 subagents) were re-priced by a separate script that shares no code with `stratum.py`.
-  That script did its own `message.id` dedupe, from raw JSONL, at the per-MTok rates on Anthropic's
-  model table. It agreed on every file to the cent, and on every turn count.
-- **Physical bounds, enforced on every run.** A session refuses to price if any turn has context or
-  output that no single API call could produce: more than 1M context tokens, or more than 128K
-  output. Those are the widest window and the largest `max_tokens` of any priced model. A turn past
-  them is a defect, typically a dedupe that merged several calls. None of these 243 files has one.
+- **A hand-checked sample**, by `handcheck_pricing.py`. The script shares no pricing or dedupe code
+  with `stratum.py`. It reads raw JSONL, does its own `message.id` dedupe, and prices from its own
+  rate table, typed from Anthropic's model table. Run with `--seed 133 --sample 20` over the 23
+  sessions in this page's order, it drew 2 parents and 18 subagents from 243 files. Every file
+  agreed to the cent, and so did every turn count. The 20 files: parents `22736589`, `eb04dfe5`;
+  subagents `agent-a2cabb03788d6f078`, `a0919388e185e34d2`, `a51a629f83f10e3b9`,
+  `ad4149c9dbba698b8`, `acdda09dd1d00356e`, `a14c320ac976b7d47`, `aa9a09385f873765b`,
+  `a3573bf2f5b68f930`, `aa4ecc51eac81478d`, `a442dc86ff5b40c41`, `ae2c55ab48de26ad8`,
+  `a1766a07ab8c1f6c1`, `ad9d8f6881eaa9be1`, `a17799db4b3f95eec`, `a493691463534cab1`,
+  `a4741b2534f060b85`, `a7d9b53878655e6cf`, `a8ed156415b2ffc3c`. A change to the arithmetic or the
+  dedupe voids this check; re-run the script.
+- **Impossible usage refuses, on every `--sessions` run.** A session refuses to price if any turn
+  has context or output no single API call could produce: more than 1M context tokens, or more than
+  128K output. Those are the widest window and the largest `max_tokens` of any priced model. It also
+  refuses if a `message.id` is priced in more than one of its files. Either is a defect, typically a
+  dedupe that merged or repeated calls. None of these 243 files has either.
+
+`--sessions` totals only within one parent stratum, and all 23 sessions here share one.
 
 ---
 
@@ -184,5 +237,9 @@ python3 $D/tree_cost.py --sessions $(s 680e0a04 ac1dea98 1b66dd78 50fe6a39 7be48
 ```
 
 Use the same commands for vote and esg, with their slugs and session lists from
-`baseline-2026-10-04.md`. **Pass one repo's sessions of one class per call.** Both tools pool
-whatever they are given, and neither can tell repos or classes apart itself.
+`baseline-2026-10-04.md`. **Pass one repo's sessions of one class per call.** `engine_cost.py
+--table` refuses to pool across project, era or stratum. `tree_cost.py --sessions` totals per
+stratum only. Neither can see session class, which is yours to apply.
+
+For the hand-check, pass all 23 sessions in this page's per-session order (loop, then vote, then
+esg) to `python3 $D/handcheck_pricing.py --seed 133 --sample 20`.

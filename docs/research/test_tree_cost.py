@@ -233,6 +233,31 @@ class TreeCostTests(unittest.TestCase):
         self.session("u", [rec(M55)], [[rec("claude-unpriced-9")]])
         self.assertIn("REFUSED", self.sessions_out("u"))
 
+    def test_a_message_id_priced_in_two_files_refuses_the_session(self):
+        """mc.8: an id names one API call; in two files it is a turn priced twice."""
+        r0 = rec(M55)
+        twin = json.loads(json.dumps(r0))
+        self.session("d", [r0], [[twin]])
+        r = T.price_session(self.root / "d.jsonl")
+        self.assertIn("more than one file", r["refused"])
+        self.assertIsNone(r["parent_usd"])
+
+    def test_sessions_totals_never_pool_across_strata(self):
+        self.session("hi", [rec(M55, "high")], [[rec(M55, "high")]])
+        self.session("md", [rec(M55, "medium")], [[rec(M55, "medium")]])
+        out = self.sessions_out("hi", "md")
+        self.assertIn("# stratum claude-opus-5-5@high: 1 sessions", out)
+        self.assertIn("# stratum claude-opus-5-5@medium: 1 sessions", out)
+        self.assertNotIn("total $16.00", out)
+
+    def test_an_unstratified_session_is_excluded_from_totals_and_named(self):
+        bad = rec(M55)
+        del bad["effort"]
+        self.session("un", [bad], [[rec(M55)]])
+        out = self.sessions_out("un")
+        self.assertIn("EXCLUDED from totals un", out)
+        self.assertNotIn("# stratum", out)
+
     def test_every_session_prints_its_stratum_line(self):
         self.session("aaaaaaaa", [rec(M55)], [[rec(M48, "xhigh")]])
         self.assertIn("stratum  claude-opus-5-5@high", self.out())

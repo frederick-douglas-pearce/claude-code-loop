@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
 """Whole-tree cost: parent transcript + its subagent transcripts, priced together.
 
-CITABLE since #133 (2026-10-09), through the two defences that have actually worked
-in this directory:
-  * **A hand-checked sample.** 20 of the 243 transcript files behind the 0.3.0
-    before-baseline (seed 133; 2 parents, 18 subagents) were re-priced by a script
-    sharing no code with `stratum.py`, from the per-MTok rates on Anthropic's model
-    table. Every file agreed to the cent, turn count included
-    (`before-side-2026-10-09.md`).
-  * **Physical bounds, enforced.** `price_session` refuses any session holding a
-    turn whose context or output no single API call could produce (`MAX_CONTEXT`,
-    `MAX_OUTPUT`). It is a check on every run, not a one-off.
-A change to the arithmetic or the dedupe voids the first: re-run the sample.
+TWO MODES, AND ONLY ONE IS CITABLE.
+
+**`--sessions` is citable since #133** (2026-10-10), through the two defences that
+have actually worked in this directory:
+  * **A hand-checked sample.** `handcheck_pricing.py` re-prices a seeded sample of
+    transcript files with no code shared with `stratum.py`, from the per-MTok rates
+    on Anthropic's model table, and compares each file with `bill`. On the 0.3.0
+    before side (seed 133: 20 of 243 files, 2 parents and 18 subagents) every file
+    agreed to the cent, turn count included (`before-side-2026-10-09.md`). A change
+    to the arithmetic or the dedupe voids it: re-run that script.
+  * **Impossible usage refuses.** `price_session` refuses a session holding a turn
+    whose context or output no single API call could produce (`MAX_CONTEXT`,
+    `MAX_OUTPUT`), or a `message.id` priced in more than one of its files.
+  `--sessions` prices named sessions whether or not they delegated, shows parent
+  and subagent bills apart, and totals only within one parent stratum.
+
+**Directory mode (`survey`) is a SCOUTING mode.** It applies neither check above,
+and nothing from it should be cited. The paragraphs below on delegation and on
+counted ids describe it.
 
 Why it exists: Finding 11 notes that subagent work is unpriced -- no `isSidechain`
 records in the parent, subagent transcripts living unopened in `<session>/subagents/`.
@@ -29,15 +37,17 @@ time: one turn per `message.id`, priced once on its max-`output_tokens` line, wi
 1-hour cache writes at 2x; API-error and ignorable `<synthetic>` lines are excluded.
 Lines with no id are counted per session, and so are ids seen in more than one file
 of the same session -- 0 on clean data, since an id names one API call, and the
-count is what makes that assumption evidence rather than belief.
+count is what makes that assumption evidence rather than belief. Directory mode
+prints both counts; `--sessions` refuses a session whose cross-file count is not 0.
 
 **Totals and shares are grouped by the parent's stratum** (`stratum.py`) and never
 pooled across one; an unstratified session is excluded and named with its reason.
 Every session prints its `stratum` line.
 
-Only sessions that delegated at least once are reported -- a non-delegating session
-has a subagent share of zero by construction and would deflate the aggregate. That
-makes "delegating" a selection on behaviour, which is a real limit on the numbers.
+In directory mode only sessions that delegated at least once are reported -- a
+non-delegating session has a subagent share of zero by construction and would
+deflate the aggregate. That makes "delegating" a selection on behaviour, which is a
+real limit on those numbers. `--sessions` makes no such selection.
 
 Usage:
     python3 docs/research/tree_cost.py ~/.claude/projects/<slug> [<slug> ...]
@@ -89,6 +99,16 @@ MAX_CONTEXT = 1_000_000
 MAX_OUTPUT = 128_000
 
 
+def cross_file_ids(files):
+    """How many `message.id`s appear in more than one of a session's priced files.
+    An id names one API call, so each such id is a turn priced twice."""
+    seen = {}
+    for f in files:
+        for key in {t.key for t in f.turns if isinstance(t.key, str)}:
+            seen[key] = seen.get(key, 0) + 1
+    return sum(1 for n in seen.values() if n > 1)
+
+
 def physical_problems(priced, name=""):
     """-> [str], one per priced turn whose usage no single API call could produce."""
     out = []
@@ -107,9 +127,9 @@ def price_session(parent):
     -> dict(name, parent_usd, sub_usd, subs, turns, stratum, refused). Unlike
     `survey` this prices a session that delegated nothing (its subagent bill is a
     measured 0, not a selection). A session refuses -- `refused` names why, and both
-    bills are None -- when any file will not price under the spec, or any turn is
-    outside the physical bounds above: a figure built on an impossible turn is a
-    defect, not a cost."""
+    bills are None -- when any file will not price under the spec, any turn is
+    outside the physical bounds above, or a `message.id` is priced in more than one
+    of its files: a figure built on an impossible turn is a defect, not a cost."""
     parent = pathlib.Path(parent)
     sub_dir = parent.parent / parent.stem / "subagents"
     subs = sorted(sub_dir.glob("*.jsonl")) if sub_dir.is_dir() else []
@@ -128,14 +148,19 @@ def price_session(parent):
     if bad:
         row["refused"] = "physically impossible usage: " + "; ".join(bad[:3])
         return row
+    dup = cross_file_ids(files)
+    if dup:
+        row["refused"] = "%d message.id(s) priced in more than one file" % dup
+        return row
     row.update(parent_usd=files[0].usd, sub_usd=sum(f.usd for f in files[1:]),
                turns=len(files[0].turns))
     return row
 
 
 def report_sessions(paths):
-    """`--sessions`: one line per named session, then totals over the priced ones.
-    Pools whatever it is given, so pass one repo's sessions of one stratum."""
+    """`--sessions`: one line per named session, then totals per parent stratum --
+    never across one; an unstratified session is excluded from totals and named.
+    It cannot see project or session class: pass one repo's sessions of one class."""
     rows = [price_session(p) for p in paths]
     print(f"{'session':9} {'turns':>6} {'parent $':>10} {'subs':>5} {'subagent $':>11} "
           f"{'total $':>10}  stratum")
@@ -147,12 +172,14 @@ def report_sessions(paths):
               f"{r['sub_usd']:11.2f} {r['parent_usd'] + r['sub_usd']:10.2f}  "
               f"{label(r['stratum'].parent) if r['stratum'].stratified else 'UNSTRATIFIED'}")
     ok = [r for r in rows if not r["refused"]]
-    if ok:
-        pt, st = sum(r["parent_usd"] for r in ok), sum(r["sub_usd"] for r in ok)
-        print(f"# {len(ok)} priced, {len(rows) - len(ok)} refused | parent ${pt:,.2f} | "
+    print(f"# {len(ok)} priced, {len(rows) - len(ok)} refused")
+    groups, excluded = group_by_stratum(ok, key=lambda r: r["stratum"])
+    for r, why in excluded:
+        print(f"# EXCLUDED from totals {r['name']}: {why}")
+    for key, grp in groups.items():
+        pt, st = sum(r["parent_usd"] for r in grp), sum(r["sub_usd"] for r in grp)
+        print(f"# stratum {label(key)}: {len(grp)} sessions | parent ${pt:,.2f} | "
               f"subagent ${st:,.2f} | total ${pt + st:,.2f}")
-    else:
-        print(f"# 0 priced, {len(rows)} refused")
     return rows
 
 
@@ -180,12 +207,8 @@ def survey(root, counts=None):
             refused.append((name, stratum, why))
             continue
         if counts is not None:
-            seen = {}
-            for f in files:
-                for key in {t.key for t in f.turns if isinstance(t.key, str)}:
-                    seen[key] = seen.get(key, 0) + 1
             counts[name] = {"no_id": sum(f.counts.no_id for f in files),
-                            "cross_file_ids": sum(1 for n in seen.values() if n > 1)}
+                            "cross_file_ids": cross_file_ids(files)}
         rows.append((name, len(priced.turns), priced.usd, len(subs),
                      sum(f.usd for f in files[1:]), stratum))
     return sorted(rows, key=lambda r: -(r[2] + r[4])), refused

@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from engine_cost import (  # noqa: E402
     classify, strip_heredocs, profile, main,
     engine_version, engine_bytes, floor_for, KNOWN_ENGINE_BYTES,
-    engine_file, file_bytes, load_level, strictest_rate, median_interval,
+    engine_file, file_bytes, load_level, median_interval,
     LOAD_TOKENS, LOAD_TOLERANCE, CORE, ENTRY,
 )
 
@@ -240,26 +240,25 @@ class EraFloorTests(unittest.TestCase):
         self.assertGreaterEqual(partial, floor_for("0.2.0"))   # fine as 0.2.0
         self.assertLess(partial, floor_for("0.3.0"))           # short as 0.3.0
 
-    def test_unknown_era_defaults_to_the_widest_engine_not_the_narrowest(self):
-        """Default-deny. Sizing an unattributable session off the SMALLEST engine
-        would rebuild the fail-open this function replaced.
-
-        Asserted as a RELATION, not against `max(KNOWN_ENGINE_BYTES)`: the
-        resolver also scans the live plugin cache, so an equality would fail on
-        the first machine to install a wider engine -- the single event this
-        module exists to survive.
-        """
-        for v in KNOWN_ENGINE_BYTES:
-            self.assertGreaterEqual(floor_for(None), floor_for(v))
-        self.assertGreater(floor_for(None), 0)
+    def test_unknown_era_has_no_floor_and_its_session_refuses(self):
+        """Default-deny, round-1 ruling on #133 PR B. An unknown era was sized off
+        the widest engine known; with no rate to size from, it now has no level,
+        and a session that cannot be sized is not measured."""
+        self.assertIsNone(floor_for(None))
+        recs = transcript([("/home/u/.claude/plugins/cache/claude-code-loop/"
+                            "dev-loop/skills/dev-loop/loop-engine.md", 10 ** 6)])
+        p = run_profile(recs)
+        self.assertIsNone(p["era"])
+        self.assertFalse(p["admissible"])
+        self.assertEqual(p["incomplete"], [CORE])
 
     def test_an_evicted_version_falls_back_to_the_table_not_to_zero(self):
         """A version no longer in the plugin cache must not size the floor at 0."""
         self.assertEqual(engine_bytes("0.2.0"), KNOWN_ENGINE_BYTES["0.2.0"])
 
-    def test_an_entirely_unknown_version_still_yields_a_usable_floor(self):
+    def test_an_entirely_unknown_version_has_no_floor(self):
         self.assertIsNone(engine_bytes("9.9.9"))
-        self.assertGreater(floor_for("9.9.9"), 0)
+        self.assertIsNone(floor_for("9.9.9"))
 
 
 ENG31 = "/home/u/.claude/plugins/cache/claude-code-loop/dev-loop/0.3.1/skills/dev-loop/%s"
@@ -270,14 +269,21 @@ def transcript(steps):
     """Records for a session whose parent takes one turn per step, plus a final one.
 
     A step is `(path, tokens)` -- a Read of `path` whose result raises the next
-    turn's input by exactly `tokens` -- or "idle". A read at step k ARRIVES at turn
+    turn's input by exactly `tokens` -- `("Bash", command, tokens)`, `("Grep",
+    path, tokens)`, or "idle". A read at step k ARRIVES at turn
     k + 1, so its arrival fraction is (k + 1) / (len(steps) + 1). Ingestion is set
     through the context delta because that is what `profile` measures."""
     recs, ctx, out = [], 10, 5
     for k, step in enumerate(list(steps) + ["idle"]):
         use = None if step == "idle" else step
-        content = ([{"type": "tool_use", "id": "t%d" % k, "name": "Read",
-                     "input": {"file_path": use[0]}}] if use
+        if use and use[0] in ("Bash", "Grep"):
+            tool, inp = use[0], ({"command": use[1]} if use[0] == "Bash"
+                                 else {"pattern": "step", "path": use[1]})
+            use = (None, use[2])
+        elif use:
+            tool, inp = "Read", {"file_path": use[0]}
+        content = ([{"type": "tool_use", "id": "t%d" % k, "name": tool,
+                     "input": inp}] if use
                    else [{"type": "text", "text": "."}])
         recs.append({"type": "assistant", "message": {"id": "m%d" % k, "usage": {
             "input_tokens": ctx, "cache_read_input_tokens": 0,
@@ -320,7 +326,7 @@ class UnitDetectionTests(unittest.TestCase):
     def test_a_unit_no_release_has_shipped_yet_is_still_counted(self):
         """The set is a path pattern, never a list of names: a list would miss the
         next unit and understate P2 in exactly the release that added it."""
-        f = "phases/implementing.md"
+        f = "phases/zz-never-shipped-133.md"
         self.assertEqual(classify("Read", {"file_path": ENG31 % f}), "load")
         self.assertEqual(engine_file("Read", {"file_path": ENG31 % f}), f)
 
@@ -427,7 +433,7 @@ class PerFileAdmissibilityTests(unittest.TestCase):
 
     def test_a_unit_nothing_can_size_refuses(self):
         """Default-deny: no measured row and no bytes means not complete."""
-        f = "phases/implementing.md"
+        f = "phases/zz-never-shipped-133.md"
         self.assertIsNone(file_bytes("0.3.1", f))
         p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
                                     (ENG31 % f, 10 ** 6)]))
@@ -447,14 +453,169 @@ class PerFileAdmissibilityTests(unittest.TestCase):
         self.assertNotIn(CORE, p["incomplete"])
         self.assertEqual(p["incomplete"], [f])
 
-    def test_an_unmeasured_file_is_sized_at_the_strictest_rate(self):
-        """0.3.0's SKILL.md has bytes and no row: it takes the highest measured
-        tokens-per-byte, so it can be wrongly refused but never wrongly admitted."""
-        self.assertNotIn(("0.3.0", ENTRY), LOAD_TOKENS)
-        self.assertAlmostEqual(load_level("0.3.0", ENTRY),
-                               file_bytes("0.3.0", ENTRY) * strictest_rate())
-        for (v, f), tok in LOAD_TOKENS.items():
-            self.assertGreaterEqual(strictest_rate(), tok / file_bytes(v, f))
+    def test_an_unmeasured_required_file_refuses(self):
+        """Round-1 ruling: no rate sizing. 0.3.0's SKILL.md has bytes and no row,
+        and a unit with bytes and no row must refuse rather than be estimated --
+        the densest rate measured is not a bound on the next file's."""
+        f = "phases/zz-never-shipped-133.md"
+        self.assertIsNone(load_level("0.3.1", f))
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    (ENG31 % f, 10 ** 6)]))
+        self.assertFalse(p["admissible"])
+        self.assertIn(f, p["incomplete"])
+
+    def test_a_partial_core_is_not_rescued_by_a_complete_unit(self):
+        """ge.1. The pre-#133 check compared the AGGREGATE against the core floor.
+        80% of the core plus a whole accepting unit clears that aggregate, so only
+        a per-file core check refuses this session."""
+        core, unit = full("0.3.1", CORE), full("0.3.1", "phases/accepting.md")
+        partial = int(core * 0.8)
+        self.assertGreater(partial + unit, floor_for("0.3.1"))    # the trap is live
+        p = run_profile(transcript([(ENG31 % CORE, partial),
+                                    (ENG31 % "phases/accepting.md", unit)]))
+        self.assertFalse(p["admissible"])
+        self.assertEqual(p["incomplete"], [CORE])
+
+    def test_a_top_level_unit_is_required_too(self):
+        """mc.3. Required was decided by a `/` in the path; a unit a release adds
+        beside the core must still be checked, and with no row it refuses."""
+        f = "zz-top-level-unit-133.md"
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    (ENG31 % f, 10 ** 6)]))
+        self.assertIn(f, p["files"])
+        self.assertFalse(p["admissible"])
+
+
+class AttributionRefusalTests(unittest.TestCase):
+    """Round-1 ruling on #133 PR B: a read that cannot be attributed to one file
+    refuses or requires, never vanishes (mc.1, mc.2, ge.3, ge.4)."""
+
+    DIR = (ENG31 % "x").rsplit("/", 1)[0]
+
+    def test_a_multi_file_read_requires_each_member_and_credits_none(self):
+        a, b = "phases/accepting.md", "phases/reviewing.md"
+        both = full("0.3.1", a) + full("0.3.1", b)
+        cmd = "cat %s %s" % (ENG31 % a, ENG31 % b)
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    ("Bash", cmd, both)]))
+        self.assertFalse(p["admissible"])
+        self.assertEqual(sorted(p["incomplete"]), [a, b])
+        self.assertAlmostEqual(p["ingested"], full("0.3.1", CORE) + both)
+
+    def test_a_multi_file_grep_after_full_single_reads_admits(self):
+        a, b = "phases/accepting.md", "phases/reviewing.md"
+        cmd = "grep -n step %s %s" % (ENG31 % a, ENG31 % b)
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    (ENG31 % a, full("0.3.1", a)),
+                                    (ENG31 % b, full("0.3.1", b)),
+                                    ("Bash", cmd, 200)]))
+        self.assertTrue(p["admissible"])
+
+    def test_a_glob_over_the_units_refuses(self):
+        cmd = "head -40 %s/phases/*.md" % self.DIR
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    ("Bash", cmd, 3000)]))
+        self.assertFalse(p["admissible"])
+        self.assertTrue(p["unattributed"])
+
+    def test_an_unresolvable_relative_read_refuses(self):
+        cmd = "cd %s && cat ./phases/accepting.md" % self.DIR
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    ("Bash", cmd, 3000)]))
+        self.assertFalse(p["admissible"])
+        self.assertEqual(len(p["unattributed"]), 1)
+
+    def test_the_grep_tool_on_the_skill_directory_refuses(self):
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    ("Grep", self.DIR, 500)]))
+        self.assertFalse(p["admissible"])
+        self.assertTrue(p["unattributed"])
+
+    def test_a_working_tree_read_of_the_directory_is_not_unattributable(self):
+        """Only the CACHED directory is the engine that runs; tree reads stay out."""
+        tree_dir = (TREE31 % "x").rsplit("/", 1)[0]
+        p = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE)),
+                                    ("Bash", "grep -rn step %s" % tree_dir, 500)]))
+        self.assertTrue(p["admissible"])
+
+
+class TolerancePinTests(unittest.TestCase):
+    """ge.2. F191's second door: `LOAD_TOLERANCE` lowered toward 0.75 re-admits a
+    three-quarter load with the 3.5 constant gone. Pin the band through the
+    product path: for every measured row, 95% of a load refuses and a whole one
+    admits -- so 0.95 < tolerance <= 1.0."""
+
+    ENG = "/home/u/.claude/plugins/cache/claude-code-loop/dev-loop/%s/skills/dev-loop/%s"
+
+    def _session(self, v, f, frac):
+        steps = [] if f == CORE else [(self.ENG % (v, CORE), full(v, CORE))]
+        if f == CORE:
+            steps = [(self.ENG % (v, CORE), int(full(v, CORE) * frac))]
+        else:
+            steps.append((self.ENG % (v, f), int(full(v, f) * frac)))
+        return run_profile(transcript(steps))
+
+    def test_95_percent_of_any_measured_load_refuses(self):
+        for v, f in LOAD_TOKENS:
+            with self.subTest(v=v, f=f):
+                p = self._session(v, f, 0.95)
+                self.assertFalse(p["admissible"])
+                self.assertEqual(p["incomplete"], [f])
+
+    def test_a_whole_measured_load_admits(self):
+        for v, f in LOAD_TOKENS:
+            with self.subTest(v=v, f=f):
+                self.assertTrue(self._session(v, f, 1.0)["admissible"])
+
+
+class TableTests(unittest.TestCase):
+    """ge.9 and the pooling rule: `--table` is the one place this script pools, so
+    the product path is what these run, not the library underneath it."""
+
+    def _write(self, d, name, recs):
+        import json as _json
+        path = os.path.join(d, name)
+        with open(path, "w") as fh:
+            for r in recs:
+                fh.write(_json.dumps(r) + "\n")
+        return path
+
+    def _table(self, paths):
+        import io
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            main(["engine_cost.py", "--table"] + paths)
+        return buf.getvalue()
+
+    def setUp(self):
+        import tempfile
+        self.root = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.root)
+
+    def test_the_median_pools_only_admissible_sessions_and_names_its_statistics(self):
+        d = os.path.join(self.root, "repo")
+        os.makedirs(d)
+        good = self._write(d, "good.jsonl", transcript([(ENG31 % CORE, full("0.3.1", CORE))]))
+        short = self._write(d, "short.jsonl",
+                            transcript([(ENG31 % CORE, int(full("0.3.1", CORE) * 0.5))]))
+        out = self._table([good, short])
+        self.assertIn("P2c over 1 admissible", out)
+        self.assertIn("order statistics 1 and 1", out)
+
+    def test_sessions_from_two_projects_are_not_pooled(self):
+        paths = []
+        for repo in ("repo-a", "repo-b"):
+            d = os.path.join(self.root, repo)
+            os.makedirs(d)
+            paths.append(self._write(d, "s.jsonl",
+                                     transcript([(ENG31 % CORE, full("0.3.1", CORE))])))
+        out = self._table(paths)
+        self.assertIn("NOT POOLED", out)
+        self.assertNotIn("median", out.split("NOT POOLED")[1])
 
 
 class CentroidTests(unittest.TestCase):
@@ -473,9 +634,9 @@ class CentroidTests(unittest.TestCase):
 
     def test_two_equal_reads_average_their_arrivals(self):
         f = "phases/reviewing.md"
-        half = full("0.3.1", f)
-        steps = [(ENG31 % CORE, full("0.3.1", CORE)), (ENG31 % f, half),
-                 "idle", (ENG31 % f, half)]
+        whole = full("0.3.1", f)
+        steps = [(ENG31 % CORE, full("0.3.1", CORE)), (ENG31 % f, whole),
+                 "idle", (ENG31 % f, whole)]
         p = run_profile(transcript(steps))
         self.assertAlmostEqual(p["files"][f]["centroid"], ((2 + 4) / 2) / 5)
         self.assertEqual(p["files"][f]["reads"], 2)
@@ -486,11 +647,13 @@ class MedianIntervalTests(unittest.TestCase):
     statistics 2 and 7 at ~93%; the helper must reproduce that."""
 
     def test_n8_is_order_statistics_2_and_7(self):
-        iv = median_interval([8, 1, 7, 2, 6, 3, 5, 4])
+        """ge.8: values that differ from their ranks, so returning positions or the
+        rank median cannot pass."""
+        iv = median_interval([80, 10, 70, 20, 60, 30, 50, 40])
         self.assertEqual(iv["order"], (2, 7))
-        self.assertEqual((iv["lo"], iv["hi"]), (2, 7))
+        self.assertEqual((iv["lo"], iv["hi"]), (20, 70))
         self.assertAlmostEqual(iv["coverage"], 1 - 2 * 9 / 256)
-        self.assertEqual(iv["median"], 4.5)
+        self.assertEqual(iv["median"], 45)
 
     def test_n5_needs_the_full_range(self):
         iv = median_interval([5, 4, 3, 2, 1])
