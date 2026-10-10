@@ -208,6 +208,15 @@ class TreeCostTests(unittest.TestCase):
         self.assertIn("parent $4.00 | subagent $5.00 | total $9.00",
                       self.sessions_out("s1"))
 
+    def test_context_counts_cache_writes_toward_the_bound(self):
+        """Class B survivor T5: an impossible context held in cache WRITES must
+        refuse as surely as one held in fresh input or cache reads."""
+        wide = {"input_tokens": 1, "output_tokens": 0, "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": T.MAX_CONTEXT}
+        (self.root / "cw.jsonl").write_text(json.dumps(rec(M55, usage=wide)) + "\n")
+        self.assertIn("physically impossible",
+                      T.price_session(self.root / "cw.jsonl")["refused"])
+
     def test_a_turn_wider_than_any_context_window_refuses_the_session(self):
         """A dedupe that merged several calls into one would produce exactly this."""
         wide = dict(ONE_M, cache_read_input_tokens=T.MAX_CONTEXT)

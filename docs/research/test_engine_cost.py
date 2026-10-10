@@ -623,6 +623,19 @@ class TableTests(unittest.TestCase):
         self.assertIn(f + ":1@", units)
         self.assertNotIn(CORE, units)
 
+    def test_a_multi_file_read_is_not_a_unit_in_the_units_column(self):
+        """Class B survivor E3: a `+` key credits no single file, so it is not a
+        unit and must stay out of the per-unit column PR C reads."""
+        from engine_cost import TABLE_COLUMNS
+        d = os.path.join(self.root, "repo")
+        os.makedirs(d)
+        a, b = "phases/accepting.md", "phases/reviewing.md"
+        path = self._write(d, "m.jsonl", transcript([
+            (ENG31 % CORE, full("0.3.1", CORE)),
+            ("Bash", "grep -n step %s %s" % (ENG31 % a, ENG31 % b), 300)]))
+        row = self._table([path]).splitlines()[1].split("\t")
+        self.assertEqual(row[TABLE_COLUMNS.index("units")], "-")
+
     def test_sessions_from_two_projects_are_not_pooled(self):
         paths = []
         for repo in ("repo-a", "repo-b"):
@@ -675,6 +688,14 @@ class MedianIntervalTests(unittest.TestCase):
     def test_n5_needs_the_full_range(self):
         iv = median_interval([5, 4, 3, 2, 1])
         self.assertEqual(iv["order"], (1, 5))
+        self.assertTrue(iv["met"])
+
+    def test_a_coverage_exactly_reached_is_met(self):
+        """Class B survivor E12: coverage is a floor (>=), so n=4 at exactly its
+        full-range coverage, 0.875, is met. At the 0.90 default the two
+        comparisons agree, which is why this needs its own case."""
+        iv = median_interval([1, 2, 3, 4], coverage=0.875)
+        self.assertEqual(iv["order"], (1, 4))
         self.assertTrue(iv["met"])
 
     def test_n4_cannot_reach_90_and_says_so(self):

@@ -104,6 +104,13 @@ class EraTableIntegrityTests(unittest.TestCase):
     docstring tells maintainers to add a row at every release, so the edit that
     triggers this is the one the module invites."""
 
+    def test_the_0_3_1_boundary_is_the_first_unambiguous_day(self):
+        """Class B survivors B1/B2: 10-09 is ambiguous across the treated repos
+        and must take the EARLIER era; 10-10 is the first day none could still
+        be on 0.3.0. An earlier date over-treats, which the row's comment forbids."""
+        self.assertEqual(era_by_date("2026-10-09"), "0.3.0")
+        self.assertEqual(era_by_date("2026-10-10"), "0.3.1")
+
     def test_the_shipped_table_is_ordered(self):
         self.assertTrue(check_era_order(ERAS))
 
