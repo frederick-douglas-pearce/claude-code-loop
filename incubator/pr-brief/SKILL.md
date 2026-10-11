@@ -27,6 +27,12 @@ you cannot tell whether a non-technical reader knows a word, they don't. Elsewhe
 technical term in a few words the first time. Never show an internal ID — a decision-log entry, a
 finding number — without saying in plain words what it is.
 
+**Glossaries.** Explain dev-loop terms (plan approval, review rounds, the acceptance check,
+escalation) with the **Plain** wording in `glossary.md`, in this skill's directory. If the
+briefed repo has a glossary (the file its `CLAUDE.md` names, otherwise `docs/glossary.md`), use
+its wording for the terms it defines; where both define a term, the repo's wins. A term in
+neither still follows the rule above.
+
 The reader often oversees several projects at once and comes to this PR cold.
 
 ## Inputs
@@ -189,8 +195,8 @@ and name what is not.
 - **Human involvement** — how many times a person had to decide: plan approval, merge approval,
   escalations, holds, scope or backlog rulings. Count them from this issue's journal blocks
   (`- Human gate:` lines, held or escalated stops, and any decision the journal attributes to the
-  human), not from the PR body. How long each
-  decision took is not recorded; don't guess it.
+  human), not from the PR body. A `- Human gate:` line reading `plan auto-approved` is not a
+  human decision. How long each decision took is not recorded; don't guess it.
 - **Review effort** — summarize, don't list: "passed code review on the third round", "the
   acceptance check ran twice". The `gate-rounds=` and `justification=` slots say how many and why.
   Say how each review *ended*: a review a person closed after unresolved findings is not a clean
@@ -250,7 +256,8 @@ fact-checked by an agent that did not write it.
 
 1. **Launch the verifier.** Start a fresh subagent with the Agent tool. Its prompt is the full
    text of `verifier.md` (in this skill's directory), followed by the PR number, the repository
-   path, and the draft brief. Give it nothing else — not your notes, sources list, or reasoning.
+   path, the path of each glossary you used, and the draft brief. Give it nothing else — not your
+   notes, sources list, or reasoning.
    Its independence is what makes it useful.
 2. **Apply the verdicts — default-deny.** A claim ships only if the verifier marked it
    `confirmed` *with a citation*.
@@ -279,7 +286,7 @@ ledger, and `${TMPDIR:-/tmp}/pr-brief/<repo-name>/` otherwise (create it). Save 
 output **verbatim** — it is the audit record, so never condense or edit it; add your note on how
 each wrong, unsupported or contradictory item was handled below it, under its own heading.
 
-After verification, end both files with this line, exactly: `<sub>pr-brief v0.2.0</sub>`. It
+After verification, end both files with this line, exactly: `<sub>pr-brief v0.3.0</sub>`. It
 records which version of these instructions wrote them; it is not a claim about the PR.
 
 The brief file is the authoritative copy. Return the file path, then the brief exactly as written.
