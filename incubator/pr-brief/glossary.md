@@ -130,8 +130,8 @@ is the plugin's front-door README.
 - **Precise:** A ledger status that counts as finished for the run. Reached three ways: the issue says it is not ready to implement (route `stub-defer`); a person ejected it at curation; or it is an epic's tracking issue, which the loop never works. The loop does not close the issue.
 - **Shown as:** not shown as a status; say which of the three happened.
 - **Source:** `loop-engine.md` → "Ledger format" → `queue.md` (Terminal statuses), "1. Select" (Roster reconciliation), "Routing table" (`stub-defer`); `reference/initialization.md` → "Initialization procedure (new run)", step 3.
-- **Not:** Not "postponed" in the backlog sense (an issue's priority lowered, or moved to a later milestone): briefs use "deferred" for that too, which is a second meaning (see Open decisions). Not `tokens=deferred`, which means "not yet measured".
-- **Status:** proposed (whether briefs reserve "deferred" for this ledger meaning and say "postponed" for the backlog meaning)
+- **Not:** Not an issue whose priority was lowered or that moved to a later milestone: say what happened ("deprioritized", "moved to <milestone>"), never "deferred". Not `tokens=deferred`, which means "not yet measured".
+- **Status:** settled
 
 ### Deploy
 - **Plain:** Putting a version live on a running service, such as a website; a merged change is live only after a successful deploy that ran after it merged.
@@ -170,7 +170,7 @@ is the plugin's front-door README.
 - **Precise:** Escalating "to the human" happens when the AI reviewers disagree or cannot decide, criteria cannot be resolved, an action is destructive or irreversible, a review finding is contested or still blocking after its rounds, a gate errored, the same step failed twice, the design review materially changed the plan, or a blocking finding raised a design question. Reaching a round cap is an escalation, not a verdict. Each escalation is one human decision; how long the person took is not recorded.
 - **Shown as:** `SKILL.md` → Cost, *Human involvement* ("escalations").
 - **Source:** `loop-engine.md` → "Escalation rubric (when unsure)"; "Gates, convergence & resting states" ("Reaching a cap is a handoff, never a terminal state").
-- **Not:** The engine also says "escalate to `SCOPE_AGENT`" for handing a question to an AI agent. In a brief, "escalation" means a person was asked; call the other "consulted the scope reviewer".
+- **Not:** The engine also says "escalate to `SCOPE_AGENT`" for handing a question to an AI agent. In a brief, "escalation" means a person was asked. For the other, name the agent the journal records ("consulted the product-manager agent", "consulted the architect agent"); say "the scope reviewer" only when the journal does not say which.
 - **Status:** settled
 
 ### Finding
@@ -495,9 +495,9 @@ Words that reach readers too often without help, and what to say instead.
 |---|---|---|
 | orchestrator | the loop | The reader does not need the agent's role name. |
 | finder | AI reviewer | Engine jargon for one code-review subagent. |
-| architect, pm (as actors) | the loop's design reviewer / scope reviewer, an AI agent | Read as people otherwise. |
+| architect, pm (as actors) | the architect agent / the product-manager agent (AI agents) | Read as people otherwise. Name the agent the journal records; fall back to "design reviewer" / "scope reviewer" only when it does not say. |
 | `tokens=deferred` | Not yet measured | "Deferred" here means no measurement exists, not a postponed decision. |
-| deferred (backlog sense: priority lowered, moved later) | postponed | The ledger's `deferred` means "taken out of this run"; see Open decisions. |
+| deferred (backlog sense) | deprioritized; moved to <milestone> | Say what happened. The ledger's `deferred` means "taken out of this run". |
 | AC1, AC2 (bare) | the first criterion (what it asks) | A bare ID tells the reader nothing. |
 | F57, D071, other bare IDs | a recorded finding / a recorded design decision (ID) | `SKILL.md` forbids an internal ID without a plain gloss. |
 | BLOCKING / EDITORIAL (caps) | blocking / editorial | Caps read as alarm; the meaning is in the glossary. |
@@ -531,7 +531,4 @@ Words that reach readers too often without help, and what to say instead.
 
 Terms whose meaning no source settles yet. Each line names the decision and who makes it.
 
-- deferred: reserve "deferred" in briefs for the ledger meaning (taken out of this run) and say "postponed" for the backlog meaning (priority lowered, moved later), or settle another pair of terms (owner).
-- wall-clock: the engine defines it as including waits for a person, but some recorded lines say `excl. gate-wait`; claude-code-loop#53 is open on which rule wins, and until it is settled briefs report what each line says (owner).
-- escalation: the engine uses "escalate" for asking a person and for handing a question to an AI agent; confirm briefs keep "escalation" for asking a person only (owner).
-- Scope: confirm technology terms (caches, hosting, libraries) stay out of this file and go in the Technology table or the briefed repo's glossary (owner).
+- wall-clock: the engine defines it as including waits for a person, but some recorded lines say `excl. gate-wait`; claude-code-loop#53 is open on which rule wins. Until it is settled, briefs report what each line says (owner agreed 2026-10-11).

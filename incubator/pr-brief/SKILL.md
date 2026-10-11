@@ -9,9 +9,9 @@ background: false
 allowed-tools: Bash(gh pr view *) Bash(gh pr diff *) Bash(gh pr list *) Bash(gh issue view *) Bash(gh release list *) Bash(gh run list *) Bash(git log *) Bash(git tag *) Bash(wc *) Bash(mkdir *) Read Grep Glob Write Agent
 ---
 
-<!-- Maintainers: bump the version in "Deliver" with every edit to this file or verifier.md.
-     Patch: wording. Minor: a section or rule added, removed or changed in behavior. Major: the
-     output contract changes. Trial-run findings and the version each ran: #250. -->
+<!-- Maintainers: bump the version in "Deliver" with every edit to this file, verifier.md or
+     glossary.md. Patch: wording. Minor: a section or rule added, removed or changed in behavior.
+     Major: the output contract changes. Trial-run findings and the version each ran: #250. -->
 
 # PR brief
 
@@ -286,7 +286,7 @@ ledger, and `${TMPDIR:-/tmp}/pr-brief/<repo-name>/` otherwise (create it). Save 
 output **verbatim** — it is the audit record, so never condense or edit it; add your note on how
 each wrong, unsupported or contradictory item was handled below it, under its own heading.
 
-After verification, end both files with this line, exactly: `<sub>pr-brief v0.3.0</sub>`. It
+After verification, end both files with this line, exactly: `<sub>pr-brief v0.3.1</sub>`. It
 records which version of these instructions wrote them; it is not a claim about the PR.
 
 The brief file is the authoritative copy. Return the file path, then the brief exactly as written.
