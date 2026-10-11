@@ -9,13 +9,23 @@ background: false
 allowed-tools: Bash(gh pr view *) Bash(gh pr diff *) Bash(gh pr list *) Bash(gh issue view *) Bash(gh release list *) Bash(gh run list *) Bash(git log *) Bash(git tag *) Bash(wc *) Bash(mkdir *) Read Grep Glob Write Agent
 ---
 
+<!-- Maintainers: bump the version in "Deliver" with every edit to this file or verifier.md.
+     Patch: wording. Minor: a section or rule added, removed or changed in behavior. Major: the
+     output contract changes. Trial-run findings and the version each ran: #250. -->
+
 # PR brief
 
 Write a brief of one pull request for **business readers**: an executive deciding whether the work
 was worth it, and a product manager checking that what was delivered matches what was asked for.
 Neither reviews code. A technical lead may also use the brief to talk with them, so it must hold up
 to someone who knows the code — but it is written for the business reader, in plain language
-throughout. When a technical term is unavoidable, explain it in a few words the first time.
+throughout.
+
+**Vocabulary.** The executive summary and **Value delivered** use no technical terms: say what a
+thing does for the reader ("the copy of the data kept near readers", not "the edge cache"). If
+you cannot tell whether a non-technical reader knows a word, they don't. Elsewhere, explain each
+technical term in a few words the first time. Never show an internal ID — a decision-log entry, a
+finding number — without saying in plain words what it is.
 
 The reader often oversees several projects at once and comes to this PR cold.
 
@@ -84,10 +94,9 @@ keep the other sections.
 
 ## Write the brief
 
-**Length: up to 1,400 words; 1,000 is a soft floor.** The reader's time is the constraint, so
-the range does not scale with the size of the PR, and a small PR should not be padded to reach the
-floor. Count with `wc -w` before returning; if the brief is over, tighten using the rules below
-rather than dropping a section.
+**Length: at most 1,400 words.** That is a ceiling, not a target: the reader's time is the
+constraint, and a small PR gets a short brief. Count with `wc -w` before returning; if the brief
+is over, tighten using the rules below rather than dropping a section.
 
 **What never gets cut:** status and risk facts — whether it is released or deployed, anything
 merged without review or past an unresolved finding, a missed target, an open decision for the
@@ -156,7 +165,8 @@ with the project's stated constraints — or "nothing outside the expected scope
 
 ### Executive summary
 
-Four lines an executive can read and stop. Each must agree with the section below it — write it
+Four lines an executive can read and stop. Each line is one plain sentence of at most 25 words;
+the detail belongs in the section below. Each must agree with that section — write the summary
 last.
 
 ### Value delivered
@@ -200,7 +210,8 @@ not a QA engineer checking code. Build it from **user journeys**: what someone a
 the feature, start to finish. Tie each journey to the acceptance criterion or user story it checks,
 so a failure points straight at the gap. Cover the states a user meets — empty, error, loading,
 the unusual-but-legitimate case — as a user would meet them. Every journey needs concrete steps
-and a concrete expectation; "verify it works" is not a step.
+and a concrete expectation; "verify it works" is not a step. A journey only an operator would
+take (running a procedure, reading a log) is marked *operators only* and comes after the others.
 
 ### Spec vs. delivery
 
@@ -258,7 +269,7 @@ fact-checked by an agent that did not write it.
    Only a complete verdict list removes that line. Never withhold the brief; never omit the
    banner.
 
-Deletions can leave the brief under the 1,000-word floor. That's fine — never pad it back up.
+Never pad the brief back up after deletions.
 
 ## Deliver
 
@@ -266,8 +277,12 @@ Write the final brief to `<dir>/pr-<N>.md` and the verifier's verdicts to
 `<dir>/pr-<N>.verification.md`, where `<dir>` is `LEDGER_ROOT/briefs/` if the repo has a dev-loop
 ledger, and `${TMPDIR:-/tmp}/pr-brief/<repo-name>/` otherwise (create it). Save the verifier's
 output **verbatim** — it is the audit record, so never condense or edit it; add your note on how
-each wrong, unsupported or contradictory item was handled below it, under its own heading. The
-brief file is the authoritative copy. Return the file path, then the brief exactly as written.
+each wrong, unsupported or contradictory item was handled below it, under its own heading.
+
+After verification, end both files with this line, exactly: `<sub>pr-brief v0.2.0</sub>`. It
+records which version of these instructions wrote them; it is not a claim about the PR.
+
+The brief file is the authoritative copy. Return the file path, then the brief exactly as written.
 
 ## Honesty about uncertainty
 
