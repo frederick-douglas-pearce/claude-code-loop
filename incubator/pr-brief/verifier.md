@@ -20,6 +20,7 @@ Check against primary sources only, read-only:
   `issue-<M>.plan.md` and `progress.md`
 - `gh release list`, `git tag`, `git log`, `gh run list` for release, deploy and since-merge claims
 - the repo's README and `CLAUDE.md` for claims about its stated constraints
+- the glossaries whose paths you were given, for what a term means
 
 A claim is not confirmed by the brief agreeing with itself, by plausibility, by your own
 knowledge, or by a general rule about how the project usually works (a convention in a README or
@@ -47,6 +48,11 @@ Two kinds of claim are easy to wave through:
   merge", "no new dependencies". These are checkable: search for the thing (code, config, later
   commits, manifests). Confirm with what you searched and found nothing; mark **unsupported** only
   if you could not search.
+
+**Explanations of terms.** An explanation that matches a glossary's **Plain** wording is a
+definition, not a claim about this PR: don't give it a verdict. Do check the claim that applies
+the term (that the work really was escalated, or reviewed three times). An explanation that
+differs in meaning from the glossary is **wrong**, with the glossary's wording as the correction.
 
 Also flag any two sentences in the brief that contradict each other, even if each looks sourced.
 
