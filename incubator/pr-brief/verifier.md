@@ -46,8 +46,14 @@ Two kinds of claim are easy to wave through:
   **wrong**, with the complete list as the correction.
 - **Claims that something is absent** — "usage isn't measured", "nothing has changed since
   merge", "no new dependencies". These are checkable: search for the thing (code, config, later
-  commits, manifests). Confirm with what you searched and found nothing; mark **unsupported** only
-  if you could not search.
+  commits, manifests). Confirm with what you searched and found nothing.
+
+**Silence is evidence only from a source you read in full.** If a source that could settle a claim
+was not read in full, for whatever reason, its silence supports no verdict: not `wrong`, not
+`unsupported`, and not `confirmed` for a claim that something is absent. Mark the claim
+**unchecked** unless a source you did read says outright that it is true or false. This overrides
+both bullets above: a list is wrong only if a source you read in full shows it differs, and an
+absence is confirmed only if you searched every place it could be.
 
 **Explanations of terms.** An explanation that matches a glossary's **Plain** wording is a
 definition, not a claim about this PR: don't give it a verdict. Do check the claim that applies
@@ -67,16 +73,23 @@ Return exactly this, and nothing else:
 | 1 | Cost | "…" | confirmed | progress.md, #<M> close record: "wall-clock=…" | |
 | 2 | Value | "…" | wrong | PR #<N> body: "…" (the figure applies to a different quantity) | "…" |
 | 3 | Technology | "…" | unsupported | not in the diff or the PR text | |
+| 4 | Cost | "…" | unchecked | progress.md could not be read (permission denied) | |
 
 ## Contradictions
 - "<sentence A>" vs "<sentence B>" — <why they conflict>   (or "none")
 
 ## Coverage
-complete | partial — <sections not checked, and why>
+complete | partial — <what was not checked, and why>
 ```
 
 - **confirmed** requires a citation: the source and the exact text or location that supports the
   claim. A verdict without one will be treated as unsupported.
 - **wrong** requires a citation and a correction stated in the brief's own plain language.
-- **unsupported** means you looked and found no source either way.
+- **unsupported** means you read the sources that could settle it and found nothing either way.
+- **unchecked** means the silence rule applies: a source that could settle the claim was not read
+  in full, and nothing you read settles it. The Source cell names that source and why it wasn't
+  read in full.
+- The Verdict cell holds exactly one of these four words and nothing else. If parts of a claim
+  earn different verdicts, give each part its own row.
 - Report **partial** coverage honestly. A partial check presented as complete is worse than none.
+  Any **unchecked** verdict makes coverage partial.
