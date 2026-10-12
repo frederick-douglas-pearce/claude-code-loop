@@ -106,7 +106,8 @@ is over, tighten using the rules below rather than dropping a section.
 
 **What never gets cut:** status and risk facts — whether it is released or deployed, anything
 merged without review or past an unresolved finding, a missed target, an open decision for the
-owner, and evidence of whether the feature is actually being used. Cut descriptive detail first.
+owner, evidence of whether the feature is actually being used, and the **Removed, not verified**
+note. Cut descriptive detail first.
 
 **Write tight:**
 - State each fact once. The executive summary restates headlines; nothing else repeats.
@@ -165,6 +166,9 @@ Omit the section if there is nothing — don't invent concerns.>
 with the project's stated constraints — or "nothing outside the expected scope">
 
 **Built:** <one sentence, "Built X with Y." — only if it says something the summary and table don't>
+
+**Removed, not verified:** <one line per claim removed at verification: topic · verdict · source
+to read — see Independent verification; omit if nothing was removed>
 
 <sub>Sources: PR #N, issue #M (+comments), <ledger files>, <since-merge checks>. Not available: …</sub>
 ```
@@ -265,18 +269,27 @@ fact-checked by an agent that did not write it.
    - `wrong` → before using the correction, check that the cited source exists and says what the
      verifier claims. If it does, replace the claim with the correction. If it doesn't, the claim
      is disputed: **delete it** — ship neither version, and don't argue it out in another round.
-   - `unsupported` → delete the claim. Don't soften it into a hedge.
+   - Any other verdict (`unsupported`, `unchecked`, or one not named here) → delete the claim.
+     Don't soften it into a hedge.
    - Each **contradiction** → keep the sentence the sources support and delete the other; if
      neither is confirmed, delete both.
    - Repair the prose around deletions so it still reads cleanly; don't add new claims while
      doing so.
+   - **No deletion is silent.** Every claim that leaves the body, except one replaced by a checked
+     correction, gets one line in the brief's closing **Removed, not verified** note: the topic as
+     a gap ("whether the owner approved the plan"), the verifier's verdict as written, and the
+     source that would settle it. Never restate the claim itself: the note says what is missing
+     and where to look, not what the draft said. (The Sources line's "Not available" is different:
+     it lists sources *you* could not read.)
 3. **Rewrite the executive summary** from the corrected sections, so it agrees with them.
-4. **If the verifier could not run, or its coverage was partial,** the brief's first line is:
+4. **Unless the verifier ran, reported `complete` coverage, and gave every row `confirmed`,
+   `wrong` or `unsupported`,** the brief's first line is:
    `> **NOT INDEPENDENTLY VERIFIED — do not forward.** <what wasn't checked and why>`
    Only a complete verdict list removes that line. Never withhold the brief; never omit the
    banner.
 
-Never pad the brief back up after deletions.
+Never pad the brief back up after deletions. The **Removed, not verified** note is not padding:
+it is one line per removed claim, it counts toward the length ceiling, and it is never cut.
 
 ## Deliver
 
@@ -284,9 +297,9 @@ Write the final brief to `<dir>/pr-<N>.md` and the verifier's verdicts to
 `<dir>/pr-<N>.verification.md`, where `<dir>` is `LEDGER_ROOT/briefs/` if the repo has a dev-loop
 ledger, and `${TMPDIR:-/tmp}/pr-brief/<repo-name>/` otherwise (create it). Save the verifier's
 output **verbatim** — it is the audit record, so never condense or edit it; add your note on how
-each wrong, unsupported or contradictory item was handled below it, under its own heading.
+each item that was not confirmed was handled below it, under its own heading.
 
-After verification, end both files with this line, exactly: `<sub>pr-brief v0.3.1</sub>`. It
+After verification, end both files with this line, exactly: `<sub>pr-brief v0.4.0</sub>`. It
 records which version of these instructions wrote them; it is not a claim about the PR.
 
 The brief file is the authoritative copy. Return the file path, then the brief exactly as written.

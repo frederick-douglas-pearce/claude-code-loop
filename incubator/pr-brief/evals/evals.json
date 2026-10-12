@@ -34,7 +34,8 @@
         "length-in-range: word count of brief.md (wc -w) is at most 1,400",
         "protected-facts: every status/risk fact present in the sources appears in the brief: release or deploy status, anything merged without review or past an unresolved finding, a missed target, an open owner decision, and evidence of whether the feature is in use",
         "verification-ran: verification.md exists with a verdict table (claim, verdict, citation), a contradictions list and a coverage line; if coverage is partial or missing, brief.md's first line is the NOT INDEPENDENTLY VERIFIED banner",
-        "verdicts-applied: every claim verification.md marks wrong or unsupported is corrected (with the cited correction) or absent from brief.md, and every listed contradiction is resolved",
+        "verdicts-applied: every claim verification.md does not mark confirmed with a citation is corrected (with a checked correction) or absent from brief.md's body, and every listed contradiction is resolved",
+        "removals-listed: every claim removed at verification appears in brief.md's closing Removed, not verified note as one line giving the topic, the verdict as written and the source to read, and the note never restates the removed claim",
         "version-stamped: brief.md and verification.md each end with the line <sub>pr-brief vX.Y.Z</sub>, naming the version in SKILL.md"
       ]
     },
@@ -70,7 +71,8 @@
         "length-in-range: word count of brief.md (wc -w) is at most 1,400",
         "protected-facts: every status/risk fact present in the sources appears in the brief: release or deploy status, anything merged without review or past an unresolved finding, a missed target, an open owner decision, and evidence of whether the feature is in use",
         "verification-ran: verification.md exists with a verdict table (claim, verdict, citation), a contradictions list and a coverage line; if coverage is partial or missing, brief.md's first line is the NOT INDEPENDENTLY VERIFIED banner",
-        "verdicts-applied: every claim verification.md marks wrong or unsupported is corrected (with the cited correction) or absent from brief.md, and every listed contradiction is resolved",
+        "verdicts-applied: every claim verification.md does not mark confirmed with a citation is corrected (with a checked correction) or absent from brief.md's body, and every listed contradiction is resolved",
+        "removals-listed: every claim removed at verification appears in brief.md's closing Removed, not verified note as one line giving the topic, the verdict as written and the source to read, and the note never restates the removed claim",
         "version-stamped: brief.md and verification.md each end with the line <sub>pr-brief vX.Y.Z</sub>, naming the version in SKILL.md"
       ]
     },
@@ -105,7 +107,8 @@
         "length-in-range: word count of brief.md (wc -w) is at most 1,400",
         "protected-facts: every status/risk fact present in the sources appears in the brief: release or deploy status, anything merged without review or past an unresolved finding, a missed target, an open owner decision, and evidence of whether the feature is in use",
         "verification-ran: verification.md exists with a verdict table (claim, verdict, citation), a contradictions list and a coverage line; if coverage is partial or missing, brief.md's first line is the NOT INDEPENDENTLY VERIFIED banner",
-        "verdicts-applied: every claim verification.md marks wrong or unsupported is corrected (with the cited correction) or absent from brief.md, and every listed contradiction is resolved",
+        "verdicts-applied: every claim verification.md does not mark confirmed with a citation is corrected (with a checked correction) or absent from brief.md's body, and every listed contradiction is resolved",
+        "removals-listed: every claim removed at verification appears in brief.md's closing Removed, not verified note as one line giving the topic, the verdict as written and the source to read, and the note never restates the removed claim",
         "version-stamped: brief.md and verification.md each end with the line <sub>pr-brief vX.Y.Z</sub>, naming the version in SKILL.md"
       ]
     }
