@@ -43,7 +43,8 @@ Two kinds of claim are easy to wave through:
 - **Lists presented as complete** — "since changed by #59 and #80", "the only reviewer", "all
   three rounds". These also claim that nothing else belongs on the list. Check that too (e.g.
   search later PRs and commits touching the same files); if the list is incomplete, it is
-  **wrong**, with the complete list as the correction.
+  **wrong**, with the complete list as the correction. Offer that correction only if you read in
+  full every source that could add to the list; otherwise the claim is **unchecked**.
 - **Claims that something is absent** — "usage isn't measured", "nothing has changed since
   merge", "no new dependencies". These are checkable: search for the thing (code, config, later
   commits, manifests). Confirm with what you searched and found nothing.

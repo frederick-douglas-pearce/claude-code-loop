@@ -35,8 +35,7 @@
         "protected-facts: every status/risk fact present in the sources appears in the brief: release or deploy status, anything merged without review or past an unresolved finding, a missed target, an open owner decision, and evidence of whether the feature is in use",
         "verification-ran: verification.md exists with a verdict table (claim, verdict, citation), a contradictions list and a coverage line; unless coverage is complete and every Verdict cell is exactly confirmed, wrong or unsupported, brief.md's first line is the NOT INDEPENDENTLY VERIFIED banner",
         "verdicts-applied: a claim stays in brief.md's body only if verification.md marks it exactly confirmed with a citation, or exactly wrong and the body carries its checked correction instead; every listed contradiction is resolved",
-        "removals-listed: everything deleted or narrowed at verification, including a contradiction's deleted side, appears in brief.md's Removed, not verified section as one line naming the topic as a gap and, in plain words, why it was removed; the only exception is a claim replaced by its checked correction; no line restates the removed claim",
-        "silence-not-evidence: no verification.md row marked wrong or unsupported says, in its Source cell, that a source could not be read or was read only in part",
+        "silence-not-evidence: no verification.md row is marked wrong or unsupported on the grounds that a source the verifier did not read in full fails to mention the claim; a wrong row whose Source cell notes such a source also quotes an outright statement from a source read in full",
         "version-stamped: brief.md and verification.md each end with the line <sub>pr-brief vX.Y.Z</sub>, naming the version in SKILL.md"
       ]
     },
@@ -73,8 +72,7 @@
         "protected-facts: every status/risk fact present in the sources appears in the brief: release or deploy status, anything merged without review or past an unresolved finding, a missed target, an open owner decision, and evidence of whether the feature is in use",
         "verification-ran: verification.md exists with a verdict table (claim, verdict, citation), a contradictions list and a coverage line; unless coverage is complete and every Verdict cell is exactly confirmed, wrong or unsupported, brief.md's first line is the NOT INDEPENDENTLY VERIFIED banner",
         "verdicts-applied: a claim stays in brief.md's body only if verification.md marks it exactly confirmed with a citation, or exactly wrong and the body carries its checked correction instead; every listed contradiction is resolved",
-        "removals-listed: everything deleted or narrowed at verification, including a contradiction's deleted side, appears in brief.md's Removed, not verified section as one line naming the topic as a gap and, in plain words, why it was removed; the only exception is a claim replaced by its checked correction; no line restates the removed claim",
-        "silence-not-evidence: no verification.md row marked wrong or unsupported says, in its Source cell, that a source could not be read or was read only in part",
+        "silence-not-evidence: no verification.md row is marked wrong or unsupported on the grounds that a source the verifier did not read in full fails to mention the claim; a wrong row whose Source cell notes such a source also quotes an outright statement from a source read in full",
         "version-stamped: brief.md and verification.md each end with the line <sub>pr-brief vX.Y.Z</sub>, naming the version in SKILL.md"
       ]
     },
@@ -110,8 +108,7 @@
         "protected-facts: every status/risk fact present in the sources appears in the brief: release or deploy status, anything merged without review or past an unresolved finding, a missed target, an open owner decision, and evidence of whether the feature is in use",
         "verification-ran: verification.md exists with a verdict table (claim, verdict, citation), a contradictions list and a coverage line; unless coverage is complete and every Verdict cell is exactly confirmed, wrong or unsupported, brief.md's first line is the NOT INDEPENDENTLY VERIFIED banner",
         "verdicts-applied: a claim stays in brief.md's body only if verification.md marks it exactly confirmed with a citation, or exactly wrong and the body carries its checked correction instead; every listed contradiction is resolved",
-        "removals-listed: everything deleted or narrowed at verification, including a contradiction's deleted side, appears in brief.md's Removed, not verified section as one line naming the topic as a gap and, in plain words, why it was removed; the only exception is a claim replaced by its checked correction; no line restates the removed claim",
-        "silence-not-evidence: no verification.md row marked wrong or unsupported says, in its Source cell, that a source could not be read or was read only in part",
+        "silence-not-evidence: no verification.md row is marked wrong or unsupported on the grounds that a source the verifier did not read in full fails to mention the claim; a wrong row whose Source cell notes such a source also quotes an outright statement from a source read in full",
         "version-stamped: brief.md and verification.md each end with the line <sub>pr-brief vX.Y.Z</sub>, naming the version in SKILL.md"
       ]
     }

@@ -102,15 +102,13 @@ keep the other sections.
 
 **Length: at most 1,400 words.** That is a ceiling, not a target: the reader's time is the
 constraint, and a small PR gets a short brief. Count with `wc -w` before verification and again
-before returning, the banner and the Removed, not verified section included. Before verification,
-if the brief is over, tighten using the rules below rather than dropping a section. After
-verification, get under the ceiling only by deleting descriptive detail, never by rewording
-checked text.
+before returning, the banner included. Before verification, if the brief is over, tighten using
+the rules below rather than dropping a section. After verification, get under the ceiling only by
+deleting descriptive detail, never by rewording checked text.
 
 **What never gets cut:** status and risk facts — whether it is released or deployed, anything
 merged without review or past an unresolved finding, a missed target, an open decision for the
-owner, evidence of whether the feature is actually being used, and the **Removed, not verified**
-section. Cut descriptive detail first.
+owner, and evidence of whether the feature is actually being used. Cut descriptive detail first.
 
 **Write tight:**
 - State each fact once. The executive summary restates headlines; nothing else repeats.
@@ -169,10 +167,6 @@ Omit the section if there is nothing — don't invent concerns.>
 with the project's stated constraints — or "nothing outside the expected scope">
 
 **Built:** <one sentence, "Built X with Y." — only if it says something the summary and table don't>
-
-## Removed, not verified
-<one line per item removed or narrowed at verification — see Independent verification; omit the
-section if nothing was>
 
 <sub>Sources: PR #N, issue #M (+comments), <ledger files>, <since-merge checks>. Not available: …</sub>
 ```
@@ -280,21 +274,13 @@ fact-checked by an agent that did not write it.
      neither is confirmed, delete both.
    - Repair the prose around deletions so it still reads cleanly; don't add new claims while
      doing so.
-   - **No deletion is silent.** Everything you delete or narrow at this step, except a claim
-     replaced by its checked correction, gets one line under **Removed, not verified**: the topic
-     as a gap and, in plain words, why it was removed, naming the record that would settle it
-     where there is one ("whether the owner approved the plan — the project's records could not
-     be read"). Never restate the claim. (The Sources line's "Not available" is different: it
-     lists sources *you* could not read.)
 3. **Rewrite the executive summary** from the corrected sections, so it agrees with them.
 4. **Unless the verifier ran, reported `complete` coverage, and every Verdict cell is exactly
    `confirmed`, `wrong` or `unsupported`,** the brief's first line is:
    `> **NOT INDEPENDENTLY VERIFIED — do not forward.** <which sources or sections could not be checked, and why>`
-   Name sources and sections here; the removed claims are listed under Removed, not verified.
    Never withhold the brief; never omit the banner.
 
-Never pad the brief back up after deletions. The **Removed, not verified** section is not
-padding: it is one line per item, and it is never cut.
+Never pad the brief back up after deletions.
 
 ## Deliver
 
