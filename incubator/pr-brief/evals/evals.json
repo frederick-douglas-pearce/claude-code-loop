@@ -39,7 +39,7 @@
         "record-written: the returned record path (.json) is in the same folder as the brief, shares its stamp, and parses as JSON; schema is the integer 1; every key SKILL.md's record section names is present, and each value is null or has that field's stated type and, where its Meaning lists values, one of them",
         "record-verified: every non-null claim field in the record has a record: row in verification.md whose Verdict cell reads exactly confirmed with a citation and whose Claim cell holds the shipped value; a non-null list also has an exactly confirmed row with a citation for itself and for each of its elements",
         "record-meta: head_sha equals the PR's headRefOid; generated_at is a UTC timestamp written YYYY-MM-DDTHH:MM:SSZ and status.as_of equals it; generator is the text of the brief's version line without the tags",
-        "storage: the three returned paths are absolute, in one folder that ends pr-brief/<owner>/<repo>/ for the PR's repository and is not inside the briefed repo, and share one stamp, which is the record's generated_at with - and : removed, or undated exactly when generated_at is null",
+        "storage: the three returned paths are in one folder <data>/pr-brief/<owner>/<repo>/ for the PR's repository, where <data> is $XDG_DATA_HOME or, if that is unset, $HOME/.local/share, and share one stamp",
         "record-agrees: every fact in brief.md that a record field holds agrees with that field's final value"
       ]
     },
@@ -80,7 +80,7 @@
         "record-written: the returned record path (.json) is in the same folder as the brief, shares its stamp, and parses as JSON; schema is the integer 1; every key SKILL.md's record section names is present, and each value is null or has that field's stated type and, where its Meaning lists values, one of them",
         "record-verified: every non-null claim field in the record has a record: row in verification.md whose Verdict cell reads exactly confirmed with a citation and whose Claim cell holds the shipped value; a non-null list also has an exactly confirmed row with a citation for itself and for each of its elements",
         "record-meta: head_sha equals the PR's headRefOid; generated_at is a UTC timestamp written YYYY-MM-DDTHH:MM:SSZ and status.as_of equals it; generator is the text of the brief's version line without the tags",
-        "storage: the three returned paths are absolute, in one folder that ends pr-brief/<owner>/<repo>/ for the PR's repository and is not inside the briefed repo, and share one stamp, which is the record's generated_at with - and : removed, or undated exactly when generated_at is null",
+        "storage: the three returned paths are in one folder <data>/pr-brief/<owner>/<repo>/ for the PR's repository, where <data> is $XDG_DATA_HOME or, if that is unset, $HOME/.local/share, and share one stamp",
         "record-agrees: every fact in brief.md that a record field holds agrees with that field's final value"
       ]
     },
@@ -120,7 +120,7 @@
         "record-written: the returned record path (.json) is in the same folder as the brief, shares its stamp, and parses as JSON; schema is the integer 1; every key SKILL.md's record section names is present, and each value is null or has that field's stated type and, where its Meaning lists values, one of them",
         "record-verified: every non-null claim field in the record has a record: row in verification.md whose Verdict cell reads exactly confirmed with a citation and whose Claim cell holds the shipped value; a non-null list also has an exactly confirmed row with a citation for itself and for each of its elements",
         "record-meta: head_sha equals the PR's headRefOid; generated_at is a UTC timestamp written YYYY-MM-DDTHH:MM:SSZ and status.as_of equals it; generator is the text of the brief's version line without the tags",
-        "storage: the three returned paths are absolute, in one folder that ends pr-brief/<owner>/<repo>/ for the PR's repository and is not inside the briefed repo, and share one stamp, which is the record's generated_at with - and : removed, or undated exactly when generated_at is null",
+        "storage: the three returned paths are in one folder <data>/pr-brief/<owner>/<repo>/ for the PR's repository, where <data> is $XDG_DATA_HOME or, if that is unset, $HOME/.local/share, and share one stamp",
         "record-agrees: every fact in brief.md that a record field holds agrees with that field's final value"
       ]
     }

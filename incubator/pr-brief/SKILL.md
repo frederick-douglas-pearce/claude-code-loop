@@ -100,8 +100,8 @@ keep the other sections.
 
 ## The record
 
-Every run also writes a record file (named in **Deliver**): the brief's facts as data, so a later
-tool can count and add them up across PRs without summarizing prose. Draft it **before** the
+Every run also produces a record (**Deliver** names its file): the brief's facts as data, so a
+later tool can count and add them up across PRs without summarizing prose. Draft it **before** the
 brief, from the evidence you gathered, then write the brief from it. The verifier checks the
 record, and the record is authoritative for every fact it holds except `status`, which readers
 recompute.
@@ -382,24 +382,26 @@ Never pad the brief back up after deletions.
 
 ## Deliver
 
-Every repo's briefs go to one folder per user, `<dir>` = `<data>/pr-brief/<owner>/<repo>/`:
-1. `<owner>/<repo>` is the PR's repository, read from the PR's `url`, never the current
-   directory's. Run `echo "${XDG_DATA_HOME:-$HOME/.local/share}"`; its output is `<data>`.
-2. **Stop** if `<owner>` or `<repo>` can't be read from the URL, or if `<data>` is empty or does not
-   start with `/`. Never write anywhere else instead.
-3. Run `mkdir -p -- <dir>`, with the absolute path written out.
+Every repo's briefs go to one folder per user, `<dir>` = `<data>/pr-brief/<owner>/<repo>/`. Do
+these steps **before your first Write** of any brief, record or verification file, even if that
+comes before verification:
+1. `<owner>/<repo>` is the PR's repository, read from the PR's `url` — the same `owner/name` as
+   the record's `repo` — never the current directory's. Run
+   `echo "${XDG_DATA_HOME:-$HOME/.local/share}"`; its output is `<data>`.
+2. **Stop** if `<owner>` or `<repo>` can't be read from the URL, or if `<data>` is empty, does not
+   start with `/`, or contains `'`.
+3. Run `mkdir -p -- '<dir>'`, with the absolute path written out inside the single quotes.
+4. Run `date -u +%Y%m%dT%H%M%SZ`; its output is `<stamp>`. **Stop** if it fails.
+5. Glob `<dir>` for `pr-<N>.<stamp>*`. **Stop** if anything matches.
 
-Name the three files with one stamp: the brief `pr-<N>.<stamp>.md`, the record
-`pr-<N>.<stamp>.json`, and the verifier's verdicts `pr-<N>.<stamp>.verification.md`. `<stamp>` is
-`generated_at` with the `-` and `:` removed (`20261014T100440Z`), or `undated` if `generated_at`
-is `null`. Before writing, Glob `<dir>` for `pr-<N>.<stamp>.*`; if anything matches, append `-2`,
-`-3`, … to the stamp, the smallest no existing file uses. **Never overwrite a file:** if a Write
-reports the file exists, take the next suffix, and never Read a stored brief in order to overwrite
-it. The name only keeps runs apart; the record's `repo`, `pr` and `generated_at` are the
-authoritative values.
+The three files are the brief `pr-<N>.<stamp>.md`, the record `pr-<N>.<stamp>.json` and the
+verifier's verdicts `pr-<N>.<stamp>.verification.md`. **Every Write goes to one of these three
+paths.** You may rewrite a file this run wrote (the word count, trims, the version line), and
+never any other file. A failed `mkdir` or a failed Write is a stop. The name only keeps runs apart;
+the record's `repo`, `pr` and `generated_at` are the authoritative values.
 
-On a stop, write nothing, say why, and return the brief and the record inline. Never withhold the
-brief.
+On a stop, say why, name any file already written, and return inline, exactly as it would have
+been written, every file not written. Never withhold the brief.
 
 Save the verifier's output **verbatim** — it is the audit record, so never condense or edit
 it; add your note on how you handled every row and contradiction, except a row you shipped as a
@@ -409,9 +411,9 @@ After verification, end both markdown files with this line, exactly: `<sub>pr-br
 It records which version of these instructions wrote them; it is not a claim about the PR. The
 record's `generator` holds the same text without the tags.
 
-The brief file, not what you return, is the authoritative copy of the brief; the record is
-authoritative for every fact it holds except `status`, which readers recompute. Return the three
-file paths, then the brief exactly as written.
+Unless you stopped, the brief file, not what you return, is the authoritative copy of the brief;
+the record is authoritative for every fact it holds except `status`, which readers recompute.
+Return the three file paths, then the brief exactly as written.
 
 ## Honesty about uncertainty
 
