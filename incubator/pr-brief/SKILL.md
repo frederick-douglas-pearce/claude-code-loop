@@ -114,8 +114,6 @@ authoritative for every fact it holds except `status`, which readers recompute.
 | `value.kind` | string | `new-capability`, `fixed-defect`, `reduced-risk`, `lower-cost`, `faster-future-work` or `groundwork` (see **Value delivered**) |
 | `value.who` | string | who benefits |
 | `value.one_line` | string | one plain sentence of at most 25 words a stakeholder could repeat; it becomes the executive summary's Value line |
-| `cost.elapsed` | integer | elapsed time in whole minutes, from the ledger's `wall-clock=`; `null` if there is no ledger or the figure is approximate (`≈`) |
-| `cost.elapsed_basis` | string | `wall-clock` (the ledger's figure, which includes waiting for a human) |
 | `cost.human_decisions` | integer | how many times a person decided (see **Cost**) |
 | `cost.review_rounds` | integer | how many code review rounds ran |
 | `cost.review_outcome` | string | how code review ended: `passed` (the last round left nothing unresolved), `closed-by-human` (a person ended review with findings unresolved) or `not-reviewed` |
@@ -123,14 +121,13 @@ authoritative for every fact it holds except `status`, which readers recompute.
 | `spec_deltas` | array of `{kind, summary}` | each difference between the spec and what was delivered (the rules in **Spec vs. delivery**): `kind` is `narrowed`, `dropped`, `superseded`, `unrequested` or `missed-target`; `summary` is one plain sentence |
 | `technologies` | array of `{name, new, vendor}` | each technology the diff changes or newly depends on (the rules in **Technology**); `new` and `vendor` (an external service or vendor) are booleans |
 | `status.state` | string | `open`, `merged` or `closed` |
-| `status.release` | string | the first release that contains the PR, or `unreleased` |
 | `status.deployed` | boolean | whether a successful deploy ran after the merge |
 | `status.later_changes` | array of `{pr, summary}` | each later PR that changed what someone sees today: `pr` is its number (an integer), `summary` what it changed |
 
 `status` is **must-refresh**: it was true at `status.as_of`, and a reader recomputes it rather than
 trusting it.
 
-**Metadata: added after verification, never drafted and never shown to the verifier.**
+**Metadata: added after verification, never drafted.**
 - `schema`: the integer `1`.
 - `generator`: see **Deliver**.
 - `generated_at`: when you write the record, in UTC, from `date -u +%Y-%m-%dT%H:%M:%SZ`; `null`
@@ -143,25 +140,19 @@ trusting it.
   - `counts`: how many Verdict cells in the verifier's table, record and brief rows together, read
     exactly `confirmed`, `wrong`, `unsupported` and `unchecked`, plus `other` for every cell that
     is none of those four exactly. `null` unless the verifier returned a readable table.
-  - `removed`: one entry for each `record:` row in the verifier's table except a `confirmed` row
-    with a citation and a `wrong` row whose checked correction the record now carries, as
-    `{path, verdict, source}`: the row's path, Verdict cell and Source cell, copied verbatim.
-    Claims cut from the brief's prose are not listed here.
 
 **Unknown is `null`.** `null` means unknown, never zero and never "none". A confirmed "none" is a
-value: `[]`, `unreleased`, `false`. Every key is always present. A value that does not fit its
-field's type or listed values is `null`, including a state no listed value names; when unsure,
-`null`.
+value: `[]`, `false`. Every key is always present. A value that does not fit its field's type, or,
+where its Meaning lists values, one of them, is `null`, including a state no listed value names;
+when unsure, `null`.
 - **A list ships whole or not at all.** It ships only if its own row, the claim that the list is
   complete, is confirmed and every element's row is confirmed; otherwise the whole list is `null`.
-  A list or element is never corrected.
-- **`cost.elapsed` and `cost.elapsed_basis` are one claim.** They ship together, on one confirmed
-  row, or are both `null`.
 
 **For readers.** Ignore fields you don't know. Use a record only if it parses, `schema` is an
 integer you know, `head_sha` is not `null`, and every key named here is present with a value of its
-stated type and listed values, or `null`. Anything else is a gap: report it, never skip it. If you
-cannot tell, it is a gap. A `null` is a gap in any count or sum it would enter.
+stated type (and, where its Meaning lists values, one of them), or `null`. Anything else is a gap:
+report it, never skip it. If you cannot tell, it is a gap. A `null` is a gap in any count or sum it
+would enter.
 
 ```json
 {
@@ -173,22 +164,21 @@ cannot tell, it is a gap. A `null` is a gap in any count or sum it would enter.
   "head_sha": "<the PR's final commit, 40 hex characters>",
   "issues": [120],
   "value": {"kind": "fixed-defect", "who": "…", "one_line": "…"},
-  "cost": {"elapsed": 95, "elapsed_basis": "wall-clock", "human_decisions": 2,
-           "review_rounds": 2, "review_outcome": "passed", "new_running_costs": []},
+  "cost": {"human_decisions": 2, "review_rounds": 2, "review_outcome": "passed",
+           "new_running_costs": []},
   "spec_deltas": [{"kind": "dropped", "summary": "…"}],
   "technologies": [{"name": "Markdown", "new": false, "vendor": false}],
-  "status": {"state": "merged", "release": "unreleased", "deployed": null,
-             "later_changes": [], "as_of": "2026-01-15T14:02:09Z"},
+  "status": {"state": "merged", "deployed": null, "later_changes": [],
+             "as_of": "2026-01-15T14:02:09Z"},
   "verification": {"coverage": "partial",
-                   "counts": {"confirmed": 24, "wrong": 1, "unsupported": 0, "unchecked": 1, "other": 0},
-                   "removed": [{"path": "status.deployed", "verdict": "unchecked",
-                                "source": "gh run list could not be read (permission denied)"}]}
+                   "counts": {"confirmed": 24, "wrong": 1, "unsupported": 0, "unchecked": 1, "other": 0}}
 }
 ```
 
 ## Write the brief
 
-**Write it from the record.** Every fact a record field holds agrees with that field. Prose adds
+**Write it from the record.** Every fact in the brief that a record field holds agrees with that
+field. Prose adds
 what the record can't hold.
 
 **Length: at most 1,400 words.** That is a ceiling, not a target: the reader's time is the
@@ -282,9 +272,9 @@ internal work up as a feature.
 Executives ask about cost right after value, so report what is measured, accurately and briefly,
 and name what is not.
 
-- **Elapsed time** — the record's `cost.elapsed`, from the ledger's `- Budget:` line
-  (`wall-clock=`), which *includes time spent waiting for a human*; say so. Where it is `null`,
-  leave the row out.
+- **Elapsed time** — from the ledger's `- Budget:` line (`wall-clock=`), which *includes time
+  spent waiting for a human*; say so. Without a ledger, use the issue-to-merge dates and say
+  that's calendar time.
 - **Human involvement** — how many times a person had to decide: plan approval, merge approval,
   escalations, holds, scope or backlog rulings. Count them from this issue's journal blocks
   (`- Human gate:` lines, held or escalated stops, and any decision the journal attributes to the
@@ -363,8 +353,7 @@ fact-checked by an agent that did not write it.
    - `wrong` → before using the correction, check that the cited source exists and says what the
      verifier claims. If it does, replace the claim with the correction. If it doesn't, the claim
      is disputed: **delete it** — ship neither version, and don't argue it out in another round.
-     In the record, only a single-value field takes a correction, and only one that fits the
-     field's type and listed values; a `wrong` list, element or `head_sha` is deleted.
+     In the record, `wrong` deletes: the field is `null`.
    - Any other verdict (`unsupported`, `unchecked`, or one not named here) → delete the claim.
      Don't soften it into a hedge.
    - Each **contradiction** → keep the sentence the sources support and delete the other; if
@@ -374,8 +363,8 @@ fact-checked by an agent that did not write it.
      citation.
    - In the record, deleting a value means `null`, by the rules in **The record**. If the
      verifier did not run or returned no readable table, every claim field is `null`.
-   - Then make the brief agree with the final record: each fact a field holds agrees with its
-     final value, and any fact whose field is `null` is deleted.
+   - Then make the brief agree with the final record: each fact in the brief that a field holds
+     agrees with its final value, and any fact whose field is `null` is deleted.
    - Repair the prose around deletions so it still reads cleanly; don't add new claims while
      doing so.
 3. **Rewrite the executive summary** from the corrected sections, so it agrees with them. Its

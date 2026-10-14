@@ -30,17 +30,16 @@ be the specific record that shows the fact: the journal line, the commit, the ru
 
 ## What to check
 
-**The record first: every field, one row each.** You were given the record's section of the
-skill: a field is a row of its table, and you check each value against that field's type, listed
-values and meaning there. Put `record: <path>` in the Section column (`record: cost.review_rounds`,
-`record: technologies[2]`, elements numbered from 0 in draft order) and the field's value in the
-Claim column. Give each path one row. A field drafted as `null` gets no row. `cost.elapsed` and
-`cost.elapsed_basis` share one row, at `record: cost.elapsed`. Each list gets a row of its own, at
-the list's path, for the claim that the list is complete (the list rules below apply), and each
-element gets one row. Check an element whole: it is `confirmed` only if every part of it is,
-otherwise it takes its least-checked part's verdict (`unchecked`, then `unsupported`, then
-`wrong`); never split one across rows. A record field is always a claim: one the sources don't
-support is `unsupported`, never skipped.
+**The record first: every field, one row each.** You were given the record's section of the skill:
+a field is a row of its table, and you check each value against that field's type, listed values
+(if any) and meaning there. Put `record: <path>` in the Section column (`record:
+cost.review_rounds`, `record: technologies[2]`, elements numbered from 0 in draft order) and the
+field's value in the Claim column. Give each path one row. A field drafted as `null` gets no row.
+Each list gets a row of its own, at the list's path, for the claim that the list is complete (the
+list rules below apply), and each element gets one row. Check an element whole: it is `confirmed`
+only if every part of it is, otherwise it takes its least-checked part's verdict (`unchecked`, then
+`unsupported`, then `wrong`); never split one across rows. A record field is always a claim: one
+the sources don't support is `unsupported`, never skipped.
 
 **Then the brief: only the claims no record field holds.** A claim that states a field's value is
 covered by that field's row; if it states the value differently, list it under Contradictions.
@@ -58,7 +57,7 @@ Two kinds of claim are easy to wave through:
 - **Lists presented as complete** — "since changed by #59 and #80", "the only reviewer", "all
   three rounds". These also claim that nothing else belongs on the list. Check that too (e.g.
   search later PRs and commits touching the same files); if the list is incomplete, it is
-  **wrong**, with the complete list as the correction on a brief claim.
+  **wrong**, with the complete list as the correction.
 - **Claims that something is absent** — "usage isn't measured", "nothing has changed since
   merge", "no new dependencies". These are checkable: search for the thing (code, config, later
   commits, manifests). Confirm with what you searched and found nothing.
@@ -93,7 +92,7 @@ Return exactly this, and nothing else:
 | 5 | record: cost.review_rounds | 4 | confirmed | progress.md, #<M> close record: "code-review=4" | |
 
 ## Contradictions
-- "<sentence A>" vs "<sentence B or record: path>" — <why they conflict>   (or "none")
+- "<sentence A or record: path>" vs "<sentence B or record: path>" — <why they conflict>   (or "none")
 
 ## Coverage
 complete | partial — <what was not checked, and why>
@@ -101,9 +100,7 @@ complete | partial — <what was not checked, and why>
 
 - **confirmed** requires a citation: the source and the exact text or location that supports the
   claim. A verdict without one will be treated as unsupported.
-- **wrong** requires a citation and a correction stated in the brief's own plain language, or,
-  on a record row for a single-value field, the field's corrected value. A record list or element
-  row takes no correction.
+- **wrong** requires a citation and a correction stated in the brief's own plain language.
 - **unsupported** means you read the sources that could settle it and found nothing either way.
 - **unchecked** means the silence rule applies: a source that could settle the claim was not read
   in full, and nothing you read settles it. The Source cell names that source and why it wasn't
