@@ -15,36 +15,40 @@ cannot be confirmed should not ship.
 Check against primary sources only, read-only:
 - `gh pr view <N> --json title,body,state,mergedAt,headRefOid,files,commits,closingIssuesReferences,url`,
   `gh pr diff <N>`
-- `gh issue view <M> --comments` for linked issues, epics, and later issues or PRs the brief names
+- `gh issue view <M> --comments` for linked issues, epics, and later issues or PRs the record or
+  the brief names
 - the dev-loop ledger if the repo has one (`.claude/loop.config.md` → `LEDGER_ROOT`):
   `issue-<M>.plan.md` and `progress.md`
 - `gh release list`, `git tag`, `git log`, `gh run list` for release, deploy and since-merge claims
 - the repo's README and `CLAUDE.md` for claims about its stated constraints
 - the glossaries whose paths you were given, for what a term means
 
-A claim is not confirmed by the brief agreeing with itself, by plausibility, by your own
-knowledge, or by a general rule about how the project usually works (a convention in a README or
-`CLAUDE.md` says what *should* happen, not what did). The citation must be the specific record
-that shows the fact: the journal line, the commit, the run, the comment.
+A claim is not confirmed by the record or the brief agreeing with itself or with each other, by
+plausibility, by your own knowledge, or by a general rule about how the project usually works (a
+convention in a README or `CLAUDE.md` says what *should* happen, not what did). The citation must
+be the specific record that shows the fact: the journal line, the commit, the run, the comment.
 
 ## What to check
 
-**The record first: every field, one row each.** Put `record: <path>` in the Section column
-(`record: cost.review_rounds`, `record: technologies[2]`) and the field's value in the Claim
-column. A field drafted as `null` gets no row. Each list gets a row of its own, at the list's
-path, for the claim that the list is complete (the list rules below apply), and each element gets
-one row. Check an element whole: it is `confirmed` only if every part of it is, so never split
-one across rows. A record field is always a claim: one the sources don't support is
-`unsupported`, never skipped.
+**The record first: every field, one row each.** You were given the record's section of the
+skill: a field is a row of its table, and you check each value against that field's type, listed
+values and meaning there. Put `record: <path>` in the Section column (`record: cost.review_rounds`,
+`record: technologies[2]`, elements numbered from 0 in draft order) and the field's value in the
+Claim column. Give each path one row. A field drafted as `null` gets no row. `cost.elapsed` and
+`cost.elapsed_basis` share one row, at `record: cost.elapsed`. Each list gets a row of its own, at
+the list's path, for the claim that the list is complete (the list rules below apply), and each
+element gets one row. Check an element whole: it is `confirmed` only if every part of it is,
+otherwise it takes its least-checked part's verdict (`unchecked`, then `unsupported`, then
+`wrong`); never split one across rows. A record field is always a claim: one the sources don't
+support is `unsupported`, never skipped.
 
-**Then the brief: only the claims no record field holds.** A sentence that states a field's value
-is covered by that field's row; if it states the value differently, list it under
-Contradictions. Check every other factual claim in the brief, section by section, including the
-executive summary:
+**Then the brief: only the claims no record field holds.** A claim that states a field's value is
+covered by that field's row; if it states the value differently, list it under Contradictions.
+Check every other factual claim in the brief, section by section, including the executive summary:
 numbers and their units, counts (reviewers, rounds, decisions, files, models), dates, names and
 quoted titles, who decided what, how a review ended, release and deploy status, what a later PR
-changed, what a check or guard catches or prevents, and each row of the technology table (did
-the diff change or newly depend on it?).
+changed, what a check or guard catches or prevents, and each row of the technology table (did the
+diff change or newly depend on it?).
 
 In the brief's prose, opinions and framing ("this matters because…") are not claims; skip them
 unless they assert a fact.
@@ -54,7 +58,7 @@ Two kinds of claim are easy to wave through:
 - **Lists presented as complete** — "since changed by #59 and #80", "the only reviewer", "all
   three rounds". These also claim that nothing else belongs on the list. Check that too (e.g.
   search later PRs and commits touching the same files); if the list is incomplete, it is
-  **wrong**, with the complete list as the correction.
+  **wrong**, with the complete list as the correction on a brief claim.
 - **Claims that something is absent** — "usage isn't measured", "nothing has changed since
   merge", "no new dependencies". These are checkable: search for the thing (code, config, later
   commits, manifests). Confirm with what you searched and found nothing.
@@ -71,8 +75,8 @@ definition, not a claim about this PR: don't give it a verdict. Do check the cla
 the term (that the work really was escalated, or reviewed three times). An explanation that
 differs in meaning from the glossary is **wrong**, with the glossary's wording as the correction.
 
-Also flag any two sentences in the brief, or a sentence and a record field, that contradict each
-other, even if each looks sourced.
+Also flag any two sentences in the brief, a sentence and a record field, or two record fields,
+that contradict each other, even if each looks sourced.
 
 ## Output
 
@@ -98,7 +102,8 @@ complete | partial — <what was not checked, and why>
 - **confirmed** requires a citation: the source and the exact text or location that supports the
   claim. A verdict without one will be treated as unsupported.
 - **wrong** requires a citation and a correction stated in the brief's own plain language, or,
-  on a record row, the field's corrected value.
+  on a record row for a single-value field, the field's corrected value. A record list or element
+  row takes no correction.
 - **unsupported** means you read the sources that could settle it and found nothing either way.
 - **unchecked** means the silence rule applies: a source that could settle the claim was not read
   in full, and nothing you read settles it. The Source cell names that source and why it wasn't
