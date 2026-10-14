@@ -178,8 +178,7 @@ would enter.
 ## Write the brief
 
 **Write it from the record.** Every fact in the brief that a record field holds agrees with that
-field. Prose adds
-what the record can't hold.
+field. Prose adds what the record can't hold.
 
 **Length: at most 1,400 words.** That is a ceiling, not a target: the reader's time is the
 constraint, and a small PR gets a short brief. Count with `wc -w` before verification and again

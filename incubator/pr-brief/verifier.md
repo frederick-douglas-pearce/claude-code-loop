@@ -42,12 +42,11 @@ only if every part of it is, otherwise it takes its least-checked part's verdict
 the sources don't support is `unsupported`, never skipped.
 
 **Then the brief: only the claims no record field holds.** A claim that states a field's value is
-covered by that field's row; if it states the value differently, list it under Contradictions.
-Check every other factual claim in the brief, section by section, including the executive summary:
-numbers and their units, counts (reviewers, rounds, decisions, files, models), dates, names and
-quoted titles, who decided what, how a review ended, release and deploy status, what a later PR
-changed, what a check or guard catches or prevents, and each row of the technology table (did the
-diff change or newly depend on it?).
+covered by that field's row. Check every other factual claim in the brief, section by section,
+including the executive summary: numbers and their units, counts (reviewers, rounds, decisions,
+files, models), dates, names and quoted titles, who decided what, how a review ended, release and
+deploy status, what a later PR changed, what a check or guard catches or prevents, and each row of
+the technology table (did the diff change or newly depend on it?).
 
 In the brief's prose, opinions and framing ("this matters because…") are not claims; skip them
 unless they assert a fact.
