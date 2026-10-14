@@ -34,8 +34,12 @@
         "length-in-range: word count of brief.md (wc -w) is at most 1,400",
         "protected-facts: every status/risk fact present in the sources appears in the brief: release or deploy status, anything merged without review or past an unresolved finding, a missed target, an open owner decision, and evidence of whether the feature is in use",
         "verification-ran: verification.md exists with a verdict table (claim, verdict, citation), a contradictions list and a coverage line; unless coverage is complete and every Verdict cell is exactly confirmed, wrong or unsupported, brief.md's first line is the NOT INDEPENDENTLY VERIFIED banner",
-        "verdicts-applied: a claim stays in brief.md's body only if verification.md marks it exactly confirmed with a citation, or exactly wrong and the body carries its checked correction instead; every listed contradiction is resolved",
-        "version-stamped: brief.md and verification.md each end with the line <sub>pr-brief vX.Y.Z</sub>, naming the version in SKILL.md"
+        "verdicts-applied: a claim stays in brief.md's body only if verification.md marks it exactly confirmed with a citation, or exactly wrong and the body carries its checked correction instead, or it agrees with a record field's final value; every listed contradiction is resolved",
+        "version-stamped: brief.md and verification.md each end with the line <sub>pr-brief vX.Y.Z</sub>, naming the version in SKILL.md",
+        "record-written: pr-<N>.json sits beside the brief and parses as JSON; schema is the integer 1; every key SKILL.md's record section names is present, and each value is null or has that field's stated type and, where its Meaning lists values, one of them",
+        "record-verified: every non-null claim field in pr-<N>.json has a record: row in verification.md whose Verdict cell reads exactly confirmed with a citation and whose Claim cell holds the shipped value; a non-null list also has an exactly confirmed row with a citation for itself and for each of its elements",
+        "record-meta: head_sha equals the PR's headRefOid; generated_at is a UTC timestamp written YYYY-MM-DDTHH:MM:SSZ and status.as_of equals it; generator is the text of the brief's version line without the tags",
+        "record-agrees: every fact in brief.md that a record field holds agrees with that field's final value"
       ]
     },
     {
@@ -70,8 +74,12 @@
         "length-in-range: word count of brief.md (wc -w) is at most 1,400",
         "protected-facts: every status/risk fact present in the sources appears in the brief: release or deploy status, anything merged without review or past an unresolved finding, a missed target, an open owner decision, and evidence of whether the feature is in use",
         "verification-ran: verification.md exists with a verdict table (claim, verdict, citation), a contradictions list and a coverage line; unless coverage is complete and every Verdict cell is exactly confirmed, wrong or unsupported, brief.md's first line is the NOT INDEPENDENTLY VERIFIED banner",
-        "verdicts-applied: a claim stays in brief.md's body only if verification.md marks it exactly confirmed with a citation, or exactly wrong and the body carries its checked correction instead; every listed contradiction is resolved",
-        "version-stamped: brief.md and verification.md each end with the line <sub>pr-brief vX.Y.Z</sub>, naming the version in SKILL.md"
+        "verdicts-applied: a claim stays in brief.md's body only if verification.md marks it exactly confirmed with a citation, or exactly wrong and the body carries its checked correction instead, or it agrees with a record field's final value; every listed contradiction is resolved",
+        "version-stamped: brief.md and verification.md each end with the line <sub>pr-brief vX.Y.Z</sub>, naming the version in SKILL.md",
+        "record-written: pr-<N>.json sits beside the brief and parses as JSON; schema is the integer 1; every key SKILL.md's record section names is present, and each value is null or has that field's stated type and, where its Meaning lists values, one of them",
+        "record-verified: every non-null claim field in pr-<N>.json has a record: row in verification.md whose Verdict cell reads exactly confirmed with a citation and whose Claim cell holds the shipped value; a non-null list also has an exactly confirmed row with a citation for itself and for each of its elements",
+        "record-meta: head_sha equals the PR's headRefOid; generated_at is a UTC timestamp written YYYY-MM-DDTHH:MM:SSZ and status.as_of equals it; generator is the text of the brief's version line without the tags",
+        "record-agrees: every fact in brief.md that a record field holds agrees with that field's final value"
       ]
     },
     {
@@ -105,8 +113,12 @@
         "length-in-range: word count of brief.md (wc -w) is at most 1,400",
         "protected-facts: every status/risk fact present in the sources appears in the brief: release or deploy status, anything merged without review or past an unresolved finding, a missed target, an open owner decision, and evidence of whether the feature is in use",
         "verification-ran: verification.md exists with a verdict table (claim, verdict, citation), a contradictions list and a coverage line; unless coverage is complete and every Verdict cell is exactly confirmed, wrong or unsupported, brief.md's first line is the NOT INDEPENDENTLY VERIFIED banner",
-        "verdicts-applied: a claim stays in brief.md's body only if verification.md marks it exactly confirmed with a citation, or exactly wrong and the body carries its checked correction instead; every listed contradiction is resolved",
-        "version-stamped: brief.md and verification.md each end with the line <sub>pr-brief vX.Y.Z</sub>, naming the version in SKILL.md"
+        "verdicts-applied: a claim stays in brief.md's body only if verification.md marks it exactly confirmed with a citation, or exactly wrong and the body carries its checked correction instead, or it agrees with a record field's final value; every listed contradiction is resolved",
+        "version-stamped: brief.md and verification.md each end with the line <sub>pr-brief vX.Y.Z</sub>, naming the version in SKILL.md",
+        "record-written: pr-<N>.json sits beside the brief and parses as JSON; schema is the integer 1; every key SKILL.md's record section names is present, and each value is null or has that field's stated type and, where its Meaning lists values, one of them",
+        "record-verified: every non-null claim field in pr-<N>.json has a record: row in verification.md whose Verdict cell reads exactly confirmed with a citation and whose Claim cell holds the shipped value; a non-null list also has an exactly confirmed row with a citation for itself and for each of its elements",
+        "record-meta: head_sha equals the PR's headRefOid; generated_at is a UTC timestamp written YYYY-MM-DDTHH:MM:SSZ and status.as_of equals it; generator is the text of the brief's version line without the tags",
+        "record-agrees: every fact in brief.md that a record field holds agrees with that field's final value"
       ]
     }
   ]

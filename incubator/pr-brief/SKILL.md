@@ -6,7 +6,7 @@ disable-model-invocation: true
 context: fork
 agent: general-purpose
 background: false
-allowed-tools: Bash(gh pr view *) Bash(gh pr diff *) Bash(gh pr list *) Bash(gh issue view *) Bash(gh release list *) Bash(gh run list *) Bash(git log *) Bash(git tag *) Bash(wc *) Bash(mkdir *) Read Grep Glob Write Agent
+allowed-tools: Bash(gh pr view *) Bash(gh pr diff *) Bash(gh pr list *) Bash(gh issue view *) Bash(gh release list *) Bash(gh run list *) Bash(git log *) Bash(git tag *) Bash(wc *) Bash(mkdir *) Bash(date *) Read Grep Glob Write Agent
 ---
 
 <!-- Maintainers: bump the version in "Deliver" with every edit to this file, verifier.md or
@@ -46,7 +46,7 @@ The reader often oversees several projects at once and comes to this PR cold.
 Each source answers a different question, and the gaps between them are some of the most useful
 things to report.
 
-1. **The PR** — `gh pr view <N> --json title,body,state,mergedAt,files,commits,closingIssuesReferences,url`
+1. **The PR** — `gh pr view <N> --json title,body,state,mergedAt,headRefOid,files,commits,closingIssuesReferences,url`
    and `gh pr diff <N>`. The brief covers the **whole PR** — every commit, whether it is open or
    merged — so work from the full diff, not the last commit. For a large diff, read the file list first. Test files name the behaviors
    the author meant to guarantee, often more plainly than the code does.
@@ -98,13 +98,93 @@ If the PR changes nothing a user can observe (refactor, tests, CI), it still has
 reduced risk or faster future work. Say so, keep the walkthrough to "what should still work", and
 keep the other sections.
 
+## The record
+
+Every run also writes `pr-<N>.json`: the brief's facts as data, so a later tool can count and add
+them up across PRs without summarizing prose. Draft it **before** the brief, from the evidence you
+gathered, then write the brief from it. The verifier checks the record, and the record is
+authoritative for every fact it holds except `status`, which readers recompute.
+
+**What you draft: claim fields only.** Each field below is a claim the verifier checks.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `head_sha` | string | the PR's final commit (`headRefOid`) |
+| `issues` | array of integers | the issues this PR closes (`closingIssuesReferences`) |
+| `value.kind` | string | `new-capability`, `fixed-defect`, `reduced-risk`, `lower-cost`, `faster-future-work` or `groundwork` (see **Value delivered**) |
+| `value.who` | string | who benefits |
+| `value.one_line` | string | one plain sentence of at most 25 words a stakeholder could repeat; it becomes the executive summary's Value line |
+| `cost.human_decisions` | integer | how many times a person decided (see **Cost**) |
+| `cost.review_rounds` | integer | how many code review rounds ran |
+| `cost.review_outcome` | string | how code review ended: `passed` (the last round left nothing unresolved), `closed-by-human` (a person ended review with findings unresolved) or `not-reviewed` |
+| `cost.new_running_costs` | array of strings | each new running cost, with its amount and unit as the source states them |
+| `spec_deltas` | array of `{kind, summary}` | each difference between the spec and what was delivered (the rules in **Spec vs. delivery**): `kind` is `narrowed`, `dropped`, `superseded`, `unrequested` or `missed-target`; `summary` is one plain sentence |
+| `technologies` | array of `{name, new, vendor}` | each technology the diff changes or newly depends on (the rules in **Technology**); `new` and `vendor` (an external service or vendor) are booleans |
+| `status.state` | string | `open`, `merged` or `closed` |
+| `status.deployed` | boolean | whether a successful deploy ran after the merge |
+| `status.later_changes` | array of `{pr, summary}` | each later PR that changed what someone sees today: `pr` is its number (an integer), `summary` what it changed |
+
+`status` is **must-refresh**: it was true at `status.as_of`, and a reader recomputes it rather than
+trusting it.
+
+**Metadata: added after verification, never drafted.**
+- `schema`: the integer `1`.
+- `generator`: see **Deliver**.
+- `generated_at`: when you write the record, in UTC, from `date -u +%Y-%m-%dT%H:%M:%SZ`; `null`
+  if that command fails.
+- `repo` (`owner/name`) and `pr` (the PR number).
+- `status.as_of`: equal to `generated_at`.
+- `verification`:
+  - `coverage`: `complete` if the brief carries no banner (see **Independent verification**),
+    otherwise `partial`. It follows the banner, not the verifier's own Coverage line.
+  - `counts`: how many Verdict cells in the verifier's table, record and brief rows together, read
+    exactly `confirmed`, `wrong`, `unsupported` and `unchecked`, plus `other` for every cell that
+    is none of those four exactly. `null` unless the verifier returned a readable table.
+
+**Unknown is `null`.** `null` means unknown, never zero and never "none". A confirmed "none" is a
+value: `[]`, `false`. Every key is always present. A value that does not fit its field's type, or,
+where its Meaning lists values, one of them, is `null`, including a state no listed value names;
+when unsure, `null`.
+- **A list ships whole or not at all.** It ships only if its own row, the claim that the list is
+  complete, is confirmed and every element's row is confirmed; otherwise the whole list is `null`.
+
+**For readers.** Ignore fields you don't know. Use a record only if it parses, `schema` is an
+integer you know, `head_sha` is not `null`, and every key named here is present with a value of its
+stated type (and, where its Meaning lists values, one of them), or `null`. Anything else is a gap:
+report it, never skip it. If you cannot tell, it is a gap. A `null` is a gap in any count or sum it
+would enter.
+
+```json
+{
+  "schema": 1,
+  "generator": "<see Deliver>",
+  "generated_at": "2026-01-15T14:02:09Z",
+  "repo": "owner/name",
+  "pr": 123,
+  "head_sha": "<the PR's final commit, 40 hex characters>",
+  "issues": [120],
+  "value": {"kind": "fixed-defect", "who": "…", "one_line": "…"},
+  "cost": {"human_decisions": 2, "review_rounds": 2, "review_outcome": "passed",
+           "new_running_costs": []},
+  "spec_deltas": [{"kind": "dropped", "summary": "…"}],
+  "technologies": [{"name": "Markdown", "new": false, "vendor": false}],
+  "status": {"state": "merged", "deployed": null, "later_changes": [],
+             "as_of": "2026-01-15T14:02:09Z"},
+  "verification": {"coverage": "partial",
+                   "counts": {"confirmed": 24, "wrong": 1, "unsupported": 0, "unchecked": 1, "other": 0}}
+}
+```
+
 ## Write the brief
+
+**Write it from the record.** Every fact in the brief that a record field holds agrees with that
+field. Prose adds what the record can't hold.
 
 **Length: at most 1,400 words.** That is a ceiling, not a target: the reader's time is the
 constraint, and a small PR gets a short brief. Count with `wc -w` before verification and again
-before returning, the banner included. Before verification, if the brief is over, tighten using
-the rules below rather than dropping a section. After verification, get under the ceiling only by
-deleting descriptive detail, never by rewording checked text.
+before returning, the banner included; the record doesn't count. Before verification, if the brief
+is over, tighten using the rules below rather than dropping a section. After verification, get
+under the ceiling only by deleting descriptive detail, never by rewording checked text.
 
 **What never gets cut:** status and risk facts — whether it is released or deployed, anything
 merged without review or past an unresolved finding, a missed target, an open decision for the
@@ -245,11 +325,13 @@ executive summary and the table don't already say.
 
 ## Self-review (a pre-filter, not the check)
 
-Before verification, re-read the draft against its sources. Confirm claims about what the PR
+Before verification, re-read the draft record and the brief against their sources, and check that
+the brief agrees with each record value. Confirm claims about what the PR
 does — especially what a new check, guard or warning *catches or prevents*; authors often state
 the limits of their own guards — and recount every number from its source. Delete anything you
-can't point to a source for. This catches the easy errors; it does not replace the verifier,
-because a drafter re-reading its own work tends to keep believing it.
+can't point to a source for; in the record, set it to `null`. This catches the easy errors; it
+does not replace the verifier, because a drafter re-reading its own work tends to keep believing
+it.
 
 ## Independent verification
 
@@ -258,43 +340,61 @@ fact-checked by an agent that did not write it.
 
 1. **Launch the verifier.** Start a fresh subagent with the Agent tool. Its prompt is the full
    text of `verifier.md` (in this skill's directory), followed by the PR number, the repository
-   path, the path of each glossary you used, and the draft brief. Give it nothing else — not your
-   notes, sources list, or reasoning.
+   path, the path of each glossary you used, this file's **The record** section (the field
+   definitions it checks against), the draft record (claim fields only, no metadata) and the draft
+   brief. Give it nothing else — not your notes, sources list, or reasoning.
    Its independence is what makes it useful.
-2. **Apply the verdicts — default-deny.** A claim ships only if the verifier marked it
-   `confirmed` *with a citation*. Read each Verdict cell whole: a cell that is not exactly
-   `confirmed`, `wrong`, `unsupported` or `unchecked` counts as not confirmed.
+2. **Apply the verdicts — default-deny,** to the record first, then to the brief. A claim ships
+   only if the verifier marked it `confirmed` *with a citation*. Read each Verdict cell whole: a
+   cell that is not exactly `confirmed`, `wrong`, `unsupported` or `unchecked` counts as not
+   confirmed.
    - `confirmed` with no citation → treat as `unsupported`.
    - `wrong` → before using the correction, check that the cited source exists and says what the
      verifier claims. If it does, replace the claim with the correction. If it doesn't, the claim
      is disputed: **delete it** — ship neither version, and don't argue it out in another round.
+     In the record, `wrong` deletes: the field is `null`.
    - Any other verdict (`unsupported`, `unchecked`, or one not named here) → delete the claim.
      Don't soften it into a hedge.
    - Each **contradiction** → keep the sentence the sources support and delete the other; if
-     neither is confirmed, delete both.
+     neither is confirmed, delete both. Where one side is a record field, the field's verdict
+     settles it; where both are, delete both.
+   - A record path with more than one row ships only if every row for it is `confirmed` with a
+     citation.
+   - In the record, deleting a value means `null`, by the rules in **The record**. If the
+     verifier did not run or returned no readable table, every claim field is `null`.
+   - Then make the brief agree with the final record: each fact in the brief that a field holds
+     agrees with its final value, and any fact whose field is `null` is deleted.
    - Repair the prose around deletions so it still reads cleanly; don't add new claims while
      doing so.
-3. **Rewrite the executive summary** from the corrected sections, so it agrees with them.
-4. **Unless the verifier ran, reported `complete` coverage, and every Verdict cell is exactly
-   `confirmed`, `wrong` or `unsupported`,** the brief's first line is:
+3. **Rewrite the executive summary** from the corrected sections, so it agrees with them. Its
+   Value line is `value.one_line`; if that field is `null`, write the Value line from what
+   survived in **Value delivered**, like the other lines.
+4. **Unless the verifier ran, reported `complete` coverage, every Verdict cell is exactly
+   `confirmed`, `wrong` or `unsupported`, and every non-null drafted record field has a row,** the
+   brief's first line is:
    `> **NOT INDEPENDENTLY VERIFIED — do not forward.** <which sources or sections could not be checked, and why>`
-   Never withhold the brief; never omit the banner.
+   Name sections and sources in plain words, never record field names. Never withhold the brief;
+   never omit the banner.
+5. **Add the record's metadata** (see **The record**).
 
 Never pad the brief back up after deletions.
 
 ## Deliver
 
-Write the final brief to `<dir>/pr-<N>.md` and the verifier's verdicts to
-`<dir>/pr-<N>.verification.md`, where `<dir>` is `LEDGER_ROOT/briefs/` if the repo has a dev-loop
-ledger, and `${TMPDIR:-/tmp}/pr-brief/<repo-name>/` otherwise (create it). Save the verifier's
-output **verbatim** — it is the audit record, so never condense or edit it; add your note on how
-you handled every row and contradiction, except a row you shipped as a cited `confirmed`, below
-it, under its own heading.
+Write the final brief to `<dir>/pr-<N>.md`, the final record to `<dir>/pr-<N>.json`, and the
+verifier's verdicts to `<dir>/pr-<N>.verification.md`, where `<dir>` is `LEDGER_ROOT/briefs/` if
+the repo has a dev-loop ledger, and `${TMPDIR:-/tmp}/pr-brief/<repo-name>/` otherwise (create
+it). Save the verifier's output **verbatim** — it is the audit record, so never condense or edit
+it; add your note on how you handled every row and contradiction, except a row you shipped as a
+cited `confirmed`, below it, under its own heading.
 
-After verification, end both files with this line, exactly: `<sub>pr-brief v0.4.0</sub>`. It
-records which version of these instructions wrote them; it is not a claim about the PR.
+After verification, end both markdown files with this line, exactly: `<sub>pr-brief v1.0.0</sub>`.
+It records which version of these instructions wrote them; it is not a claim about the PR. The
+record's `generator` holds the same text without the tags.
 
-The brief file is the authoritative copy. Return the file path, then the brief exactly as written.
+The brief file, not what you return, is the authoritative copy of the brief; the record is
+authoritative for every fact it holds except `status`, which readers recompute. Return the three
+file paths, then the brief exactly as written.
 
 ## Honesty about uncertainty
 
