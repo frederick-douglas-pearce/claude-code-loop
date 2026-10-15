@@ -49,7 +49,8 @@ things to report.
 1. **The PR** — `gh pr view <N> --json title,body,state,mergedAt,headRefOid,files,commits,closingIssuesReferences,url`
    and `gh pr diff <N>`. The brief covers the **whole PR** — every commit, whether it is open or
    merged — so work from the full diff, not the last commit. For a large diff, read the file list first. Test files name the behaviors
-   the author meant to guarantee, often more plainly than the code does.
+   the author meant to guarantee, often more plainly than the code does. Once you have read the PR,
+   do the setup steps in **Deliver** before drafting anything.
 2. **The linked issue(s) and their comments** — `gh issue view <M> --comments`. The issue is the
    **spec**: its problem statement says why the work mattered, its acceptance criteria say what was
    intended. Read the comments too — corrections are often posted as comments and never edited
