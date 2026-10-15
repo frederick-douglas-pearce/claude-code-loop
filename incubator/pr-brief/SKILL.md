@@ -399,9 +399,8 @@ The three files are the brief `pr-<N>.<stamp>.md`, the record `pr-<N>.<stamp>.js
 verifier's verdicts `pr-<N>.<stamp>.verification.md`. **Every Write goes to one of these three
 paths.** You may rewrite a file this run wrote, and never any other file. If a Write fails, write
 nothing more and end the run: say which file failed and that this run's files in `<dir>` are
-incomplete, and return inline what you have drafted, the brief under the banner (see
-**Independent verification**). The name only keeps runs apart; the record's `repo`, `pr` and
-`generated_at` are the authoritative values.
+incomplete. The name only keeps runs apart; the record's `repo`, `pr` and `generated_at` are the
+authoritative values.
 
 Save the verifier's output **verbatim** — it is the audit record, so never condense or edit
 it; add your note on how you handled every row and contradiction, except a row you shipped as a
