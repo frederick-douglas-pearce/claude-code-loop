@@ -130,7 +130,7 @@ recompute.
 trusting it.
 
 **Metadata: added after verification, never drafted.**
-- `schema`: the integer `1`.
+- `schema`: the integer `2`.
 - `generator`: see **Deliver**.
 - `generated_at`: when you write the record, in UTC, from `date -u +%Y-%m-%dT%H:%M:%SZ`; `null`
   if that command fails.
@@ -142,6 +142,16 @@ trusting it.
   - `counts`: how many Verdict cells in the verifier's table, record and brief rows together, read
     exactly `confirmed`, `wrong`, `unsupported` and `unchecked`, plus `other` for every cell that
     is none of those four exactly. `null` unless the verifier returned a readable table.
+  - `removed`: what verification kept out of the record. `null` unless the verifier returned a
+    readable table. Otherwise one entry for each row of its table whose Section cell begins
+    `record:`, in table order, except a row whose value shipped: its path names a field in the
+    table above, or an element of a list field, and is not `null` in the final record (an element
+    of a `null` list is not in it). If you cannot tell whether a row's value shipped, list it. `[]`
+    if every such row's value shipped. Each entry is `{row, path, verdict, source}`: `row` is the
+    row's `#` cell as an integer; `path` is the rest of the Section cell after `record:`; `verdict`
+    and `source` are its Verdict and Source cells. Copy each verbatim, trimmed of surrounding
+    spaces. An entry's `verdict` is its row's, not the reason the value was removed; the note saved
+    below the verdicts (**Deliver**) says why. A drafted field with no row is not listed.
 
 **Unknown is `null`.** `null` means unknown, never zero and never "none". A confirmed "none" is a
 value: `[]`, `false`. Every key is always present. A value that does not fit its field's type, or,
@@ -158,7 +168,7 @@ would enter.
 
 ```json
 {
-  "schema": 1,
+  "schema": 2,
   "generator": "<see Deliver>",
   "generated_at": "2026-01-15T14:02:09Z",
   "repo": "owner/name",
@@ -173,7 +183,9 @@ would enter.
   "status": {"state": "merged", "deployed": null, "later_changes": [],
              "as_of": "2026-01-15T14:02:09Z"},
   "verification": {"coverage": "partial",
-                   "counts": {"confirmed": 24, "wrong": 1, "unsupported": 0, "unchecked": 1, "other": 0}}
+                   "counts": {"confirmed": 24, "wrong": 1, "unsupported": 0, "unchecked": 1, "other": 0},
+                   "removed": [{"row": 14, "path": "status.deployed", "verdict": "unchecked",
+                                "source": "…"}]}
 }
 ```
 
@@ -407,7 +419,7 @@ Save the verifier's output **verbatim** — it is the audit record, so never con
 it; add your note on how you handled every row and contradiction, except a row you shipped as a
 cited `confirmed`, below it, under its own heading.
 
-After verification, end both markdown files with this line, exactly: `<sub>pr-brief v2.0.0</sub>`.
+After verification, end both markdown files with this line, exactly: `<sub>pr-brief v3.0.0</sub>`.
 It records which version of these instructions wrote them; it is not a claim about the PR. The
 record's `generator` holds the same text without the tags.
 
