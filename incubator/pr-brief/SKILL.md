@@ -6,7 +6,7 @@ disable-model-invocation: true
 context: fork
 agent: general-purpose
 background: false
-allowed-tools: Bash(gh pr view *) Bash(gh pr diff *) Bash(gh pr list *) Bash(gh issue view *) Bash(gh release list *) Bash(gh run list *) Bash(git log *) Bash(git tag *) Bash(wc *) Bash(mkdir *) Bash(date *) Read Grep Glob Write Agent
+allowed-tools: Bash(gh pr view *) Bash(gh pr diff *) Bash(gh pr list *) Bash(gh issue view *) Bash(gh release list *) Bash(gh run list *) Bash(git log *) Bash(git tag *) Bash(wc *) Bash(mkdir *) Bash(date *) Bash(echo *) Read Grep Glob Write Agent
 ---
 
 <!-- Maintainers: bump the version in "Deliver" with every edit to this file, verifier.md or
@@ -49,7 +49,8 @@ things to report.
 1. **The PR** — `gh pr view <N> --json title,body,state,mergedAt,headRefOid,files,commits,closingIssuesReferences,url`
    and `gh pr diff <N>`. The brief covers the **whole PR** — every commit, whether it is open or
    merged — so work from the full diff, not the last commit. For a large diff, read the file list first. Test files name the behaviors
-   the author meant to guarantee, often more plainly than the code does.
+   the author meant to guarantee, often more plainly than the code does. Once you have read the PR,
+   do the setup steps in **Deliver** before drafting anything.
 2. **The linked issue(s) and their comments** — `gh issue view <M> --comments`. The issue is the
    **spec**: its problem statement says why the work mattered, its acceptance criteria say what was
    intended. Read the comments too — corrections are often posted as comments and never edited
@@ -100,10 +101,11 @@ keep the other sections.
 
 ## The record
 
-Every run also writes `pr-<N>.json`: the brief's facts as data, so a later tool can count and add
-them up across PRs without summarizing prose. Draft it **before** the brief, from the evidence you
-gathered, then write the brief from it. The verifier checks the record, and the record is
-authoritative for every fact it holds except `status`, which readers recompute.
+Every run also produces a record (**Deliver** names its file): the brief's facts as data, so a
+later tool can count and add them up across PRs without summarizing prose. Draft it **before** the
+brief, from the evidence you gathered, then write the brief from it. The verifier checks the
+record, and the record is authoritative for every fact it holds except `status`, which readers
+recompute.
 
 **What you draft: claim fields only.** Each field below is a claim the verifier checks.
 
@@ -381,20 +383,37 @@ Never pad the brief back up after deletions.
 
 ## Deliver
 
-Write the final brief to `<dir>/pr-<N>.md`, the final record to `<dir>/pr-<N>.json`, and the
-verifier's verdicts to `<dir>/pr-<N>.verification.md`, where `<dir>` is `LEDGER_ROOT/briefs/` if
-the repo has a dev-loop ledger, and `${TMPDIR:-/tmp}/pr-brief/<repo-name>/` otherwise (create
-it). Save the verifier's output **verbatim** — it is the audit record, so never condense or edit
+Every repo's briefs go to one folder per user, `<dir>` = `<data>/pr-brief/<owner>/<repo>/`. Do
+these steps right after reading the PR, before drafting anything. A stop in these steps ends the
+run: say why.
+1. `<owner>/<repo>` is the PR's repository, read from the PR's `url` — the same `owner/name` as
+   the record's `repo` — never the current directory's. Run
+   `echo "${XDG_DATA_HOME:-$HOME/.local/share}"`; its output is `<data>`.
+2. **Stop** if `<owner>` or `<repo>` can't be read from the URL, or if `<data>` is empty, does not
+   start with `/`, or contains `'`.
+3. Run `mkdir -p -- '<dir>'`, with the absolute path written out inside the single quotes.
+   **Stop** if it fails.
+4. Run `date -u +%Y%m%dT%H%M%SZ`; its output is `<stamp>`. **Stop** if it fails.
+5. Glob `<dir>` for `pr-<N>.<stamp>*`. **Stop** if anything matches.
+
+The three files are the brief `pr-<N>.<stamp>.md`, the record `pr-<N>.<stamp>.json` and the
+verifier's verdicts `pr-<N>.<stamp>.verification.md`. **Every Write goes to one of these three
+paths.** You may rewrite a file this run wrote, and never any other file. If a Write fails, write
+nothing more and end the run: say which file failed and that this run's files in `<dir>` are
+incomplete. The name only keeps runs apart; the record's `repo`, `pr` and `generated_at` are the
+authoritative values.
+
+Save the verifier's output **verbatim** — it is the audit record, so never condense or edit
 it; add your note on how you handled every row and contradiction, except a row you shipped as a
 cited `confirmed`, below it, under its own heading.
 
-After verification, end both markdown files with this line, exactly: `<sub>pr-brief v1.0.0</sub>`.
+After verification, end both markdown files with this line, exactly: `<sub>pr-brief v2.0.0</sub>`.
 It records which version of these instructions wrote them; it is not a claim about the PR. The
 record's `generator` holds the same text without the tags.
 
-The brief file, not what you return, is the authoritative copy of the brief; the record is
-authoritative for every fact it holds except `status`, which readers recompute. Return the three
-file paths, then the brief exactly as written.
+If the run did not end early, return the three file paths, then the brief exactly as written;
+the brief file, not what you return, is the authoritative copy of the brief. The record is
+authoritative for every fact it holds except `status`, which readers recompute.
 
 ## Honesty about uncertainty
 
