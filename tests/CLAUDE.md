@@ -104,6 +104,15 @@ that used to sit here went stale the first time a module was added):
   binary needed**, unlike `test_publish_to_pages.py`'s Tier 2: `build_plan` is Phase 1 and this
   guard never reaches `git_pages_owner`.
 
+- **`tests/test_check_humanizer_pass.py`** — behavior of `tooling/check-humanizer-pass.py`, the
+  PR-time guard that every post records a humanizer pass (#182). It exists for the same reason as
+  `test_check_og_cards.py` above: with no dated post under `posts/` the guard exits **0**, so
+  without this module it would be a check nobody had seen fail. Control first, each negative case
+  asserting the specific complaint. `GrammarSourceTests` and `ParserReuseTests` pin that the guard
+  takes its verdict from `tooling/attestation.py`, the grammar `test_posts_frontmatter.py` also
+  uses, and reads the value through the publisher's `read_field` — a coupling's identity, never
+  that the grammar is right.
+
 - **`tests/test_repo_consistency.py`** — **mechanical** checks on the markdown/JSON deliverable,
   and — since #181 — one check over the suite's own imports:
 
