@@ -13,6 +13,9 @@ The engine was originally built and hardened in
 v0.11.0 releases) and extracted here. Install it once, generate a per-project `loop.config.md` with
 `/init-loop`, and run your backlog as a loop.
 
+> **v0.3.1, not yet stable**: six repos drive it today; see *Status* for what that does and
+> doesn't establish.
+
 ## Why try it
 
 - **You stay in charge of what matters.** By default the loop stops for your approval on every
@@ -46,80 +49,6 @@ v0.11.0 releases) and extracted here. Install it once, generate a per-project `l
 - **Nothing to install beyond Claude Code, git, the `gh` CLI and Python 3.9+.** The engine is
   markdown an agent executes; the guard hook and the mutation harness are standard-library Python.
   It is written around GitHub, using `gh` for issues, pull requests and CI checks.
-
-## Status
-
-> **Status — v0.3.1; not yet stable.** Four pieces ship: the
-> `dev-loop` skill (`SKILL.md`, a core `loop-engine.md`, and the units under `phases/` and
-> `reference/` that it reads on demand), the `/init-loop` onboarding
-> command, the append-only guard hook, and the mutation harness the acceptance gate
-> runs (`plugins/dev-loop/tools/mutate_verify.py`). **Six repos drive it**: the first external adoption
-> [us-presidential-vote-analysis](https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis),
-> the ongoing AgentFluent dogfood,
-> [claude-code-sessions](https://github.com/frederick-douglas-pearce/claude-code-sessions),
-> [sportswear-esg-news-classifier](https://github.com/frederick-douglas-pearce/sportswear-esg-news-classifier)
-> (since 2026-09-06), `claude-hook-validator` (a private repo, onboarded directly at v0.3.1 on
-> 2026-10-09), and (since 2026-07-28) this repo, which runs the loop it develops and
-> is the source of most of the findings below. **They sit on different engine versions
-> deliberately — and this list is not the authority on which.** Version pinning is
-> per-project; read it from `~/.claude/plugins/installed_plugins.json`, never from prose
-> here. At the v0.3.0 cut (2026-09-11) three repos took that release — this one,
-> `us-presidential-vote-analysis` and `sportswear-esg-news-classifier` — and the same three
-> took v0.3.1 on 2026-10-08 and 2026-10-09. AgentFluent and `claude-code-sessions` stay held
-> on v0.2.0 as an untreated control for the cost research in [`docs/research/`](docs/research/)
-> (see *How the loop gets better*). **111 issues had been carried to `done` by the loop as of
-> the v0.3.0 cut**, across the five repos driving it then. That is enough to say the
-> plugin/config seam holds and that the hardening works under load; it is not enough to call
-> it stable.
->
-> **v0.3.1 is a patch: it changes how the engine is loaded.** The engine is now a core
-> that every invocation reads in full, plus units it reads at their point of use. A unit
-> the loop cannot confirm it read in full counts as not loaded, and the step that needs it
-> stops for you rather than passing
-> ([#128](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/128)). The
-> plugin now ships its runtime tree only
-> ([#170](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/170)). It is
-> also the release the cost research is measuring: the files every invocation reads shrank
-> 23.8% in bytes against v0.3.0, clearing the pre-registered ≥20% floor — which is a smaller
-> footprint, not yet a saving. Whether a run actually gets cheaper is
-> [#133](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/133)'s verdict,
-> measured against a frozen v0.3.0 baseline.
->
-> **v0.3.0 is a minor bump because it adds a gate.** When code review returns a **blocking**
-> finding that raises a design question — whether the approach is right, whether a fix
-> belongs in this change at all, whether several findings share one root cause — the loop
-> consults its design reviewer for a **scope ruling** and stops for you with that ruling
-> attached. It fires on every route, under every mode, at whatever round the finding arose,
-> and no config setting reaches it
-> ([#114](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/114)).
-> The rest of the release is the review gate getting cheaper without getting weaker:
-> findings sort into **blocking** and **editorial**, so a prose fix no longer costs a full
-> round (#121); the guard-efficacy lens becomes a floor rather than an option (#122); and
-> rounds after the first read only the delta since the last reviewed commit, defaulting back
-> to a full round whenever that anchor cannot be trusted (#120). Three verification fixes
-> ride along — an agent that returns **no verdict** is recorded as not passed rather than
-> passed (#119), the mutation harness refuses to break a tree it cannot tell apart from
-> yours (#111), and the loop must mark which of its claims it verified and which it merely
-> inferred (#115) — and a run whose ledger carries no `plan-gate:` field is now **told once per
-> run** that the loop inferred `always`, and what the one-line remedy is, instead of arriving
-> there in silence (#108).
->
-> Findings from real runs are indexed in
-> [#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1) — read
-> the comments there for the current set; its title names only the earliest ones.
-> **v0.2.0** was the hardening release that came out of them: it makes the acceptance
-> gate adversarial, moves it last so it certifies the commit that actually merges, and
-> defaults the plan gate to stopping on every issue under `calibration` — alongside
-> gate-currency expiry, an orphan-PR scan on resume, an offline-test tier, and a stop
-> on any ledger status the engine does not recognize. Expect rough edges in porting to
-> a repo unlike the six above; that is exactly what #1 collects.
->
-> **Issues for this plugin live in
-> [this repo's tracker](https://github.com/frederick-douglas-pearce/claude-code-loop/issues).**
-> The AgentFluent links in this README are **provenance, not the live backlog** — the
-> extraction stories (S2–S4, under epic
-> [#611](https://github.com/frederick-douglas-pearce/agentfluent/issues/611)) were filed
-> there before this repo existed.
 
 ## How the loop works
 
@@ -240,6 +169,80 @@ project means editing the config and nothing else. When the engine needs a fact 
 gets a new `CAPS` parameter rather than a special case. `/init-loop` embeds the config's skeleton and
 an inference map for filling it in, and the test suite fails if the engine reads a parameter that
 skeleton does not offer.
+
+## Status
+
+> **Status — v0.3.1; not yet stable.** Four pieces ship: the
+> `dev-loop` skill (`SKILL.md`, a core `loop-engine.md`, and the units under `phases/` and
+> `reference/` that it reads on demand), the `/init-loop` onboarding
+> command, the append-only guard hook, and the mutation harness the acceptance gate
+> runs (`plugins/dev-loop/tools/mutate_verify.py`). **Six repos drive it**: the first external adoption
+> [us-presidential-vote-analysis](https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis),
+> the ongoing AgentFluent dogfood,
+> [claude-code-sessions](https://github.com/frederick-douglas-pearce/claude-code-sessions),
+> [sportswear-esg-news-classifier](https://github.com/frederick-douglas-pearce/sportswear-esg-news-classifier)
+> (since 2026-09-06), `claude-hook-validator` (a private repo, onboarded directly at v0.3.1 on
+> 2026-10-09), and (since 2026-07-28) this repo, which runs the loop it develops and
+> is the source of most of the findings below. **They sit on different engine versions
+> deliberately — and this list is not the authority on which.** Version pinning is
+> per-project; read it from `~/.claude/plugins/installed_plugins.json`, never from prose
+> here. At the v0.3.0 cut (2026-09-11) three repos took that release — this one,
+> `us-presidential-vote-analysis` and `sportswear-esg-news-classifier` — and the same three
+> took v0.3.1 on 2026-10-08 and 2026-10-09. AgentFluent and `claude-code-sessions` stay held
+> on v0.2.0 as an untreated control for the cost research in [`docs/research/`](docs/research/)
+> (see *How the loop gets better*). **111 issues had been carried to `done` by the loop as of
+> the v0.3.0 cut**, across the five repos driving it then. That is enough to say the
+> plugin/config seam holds and that the hardening works under load; it is not enough to call
+> it stable.
+>
+> **v0.3.1 is a patch: it changes how the engine is loaded.** The engine is now a core
+> that every invocation reads in full, plus units it reads at their point of use. A unit
+> the loop cannot confirm it read in full counts as not loaded, and the step that needs it
+> stops for you rather than passing
+> ([#128](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/128)). The
+> plugin now ships its runtime tree only
+> ([#170](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/170)). It is
+> also the release the cost research is measuring: the files every invocation reads shrank
+> 23.8% in bytes against v0.3.0, clearing the pre-registered ≥20% floor — which is a smaller
+> footprint, not yet a saving. Whether a run actually gets cheaper is
+> [#133](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/133)'s verdict,
+> measured against a frozen v0.3.0 baseline.
+>
+> **v0.3.0 is a minor bump because it adds a gate.** When code review returns a **blocking**
+> finding that raises a design question — whether the approach is right, whether a fix
+> belongs in this change at all, whether several findings share one root cause — the loop
+> consults its design reviewer for a **scope ruling** and stops for you with that ruling
+> attached. It fires on every route, under every mode, at whatever round the finding arose,
+> and no config setting reaches it
+> ([#114](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/114)).
+> The rest of the release is the review gate getting cheaper without getting weaker:
+> findings sort into **blocking** and **editorial**, so a prose fix no longer costs a full
+> round (#121); the guard-efficacy lens becomes a floor rather than an option (#122); and
+> rounds after the first read only the delta since the last reviewed commit, defaulting back
+> to a full round whenever that anchor cannot be trusted (#120). Three verification fixes
+> ride along — an agent that returns **no verdict** is recorded as not passed rather than
+> passed (#119), the mutation harness refuses to break a tree it cannot tell apart from
+> yours (#111), and the loop must mark which of its claims it verified and which it merely
+> inferred (#115) — and a run whose ledger carries no `plan-gate:` field is now **told once per
+> run** that the loop inferred `always`, and what the one-line remedy is, instead of arriving
+> there in silence (#108).
+>
+> Findings from real runs are indexed in
+> [#1](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/1) — read
+> the comments there for the current set; its title names only the earliest ones.
+> **v0.2.0** was the hardening release that came out of them: it makes the acceptance
+> gate adversarial, moves it last so it certifies the commit that actually merges, and
+> defaults the plan gate to stopping on every issue under `calibration` — alongside
+> gate-currency expiry, an orphan-PR scan on resume, an offline-test tier, and a stop
+> on any ledger status the engine does not recognize. Expect rough edges in porting to
+> a repo unlike the six above; that is exactly what #1 collects.
+>
+> **Issues for this plugin live in
+> [this repo's tracker](https://github.com/frederick-douglas-pearce/claude-code-loop/issues).**
+> The AgentFluent links in this README are **provenance, not the live backlog** — the
+> extraction stories (S2–S4, under epic
+> [#611](https://github.com/frederick-douglas-pearce/agentfluent/issues/611)) were filed
+> there before this repo existed.
 
 ## Quick start
 
