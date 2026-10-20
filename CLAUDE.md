@@ -272,6 +272,17 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
   steps (Claude Code version verified, humanizer pass, claims verified); each guard checks that an
   attestation was **made**, never that the work behind it was done well — the distinction
   `CLAUDE.md` draws everywhere else between a coupling's identity and a proposition's truth.
+- **`docs/research/` is the cost-and-convergence research and does not ship.** The notebook
+  (`loop-cost-and-convergence.md`), the causal-identification design note (`cost-model-design.md`),
+  frozen before/after baselines, and the stdlib scripts that read session transcripts and
+  `- Budget:` lines. **Its `README.md` is the index and the place to start**, including which
+  consumers sit in which engine era. Its `test_*.py` files are **not** reached by
+  `discover -s tests`; that README gives the command that runs them. Two of its rules bind anyone
+  taking a measurement — name the installed engine version, and the `(model, effort)` stratum, on
+  both sides of any comparison — and that README carries the reasons.
+- **`.claude/specs/` holds the decision log and PRDs, and does not ship.** `decisions.md` is where
+  the `D0xx` entries cited throughout these files live (append-only, newest at the bottom);
+  `prd-engine-sharding.md` is the sharding epic's PRD.
 - `${CLAUDE_PLUGIN_ROOT}` (this installed plugin) and `${CLAUDE_PROJECT_DIR}` (the consuming repo)
   are not interchangeable — the engine and hook both depend on the distinction.
 - The loop ledger (`queue.md`, `progress.md`, `issue-<N>.plan.md`) lives under the *consuming*
@@ -293,18 +304,24 @@ cannot mutate the engine driving it — but it also means the loop keeps exhibit
 the defects we are fixing until that re-install lands.
 
 **All three consumers moved 0.0.1 → 0.2.0 on 2026-08-21**, which is what makes the two instances
-below history. **They have moved again since, and this sentence is not where to learn the current
-version** — `ls ~/.claude/plugins/cache/claude-code-loop/dev-loop/` is, and the highest version
-there is the engine that drove the most recent run. A version pinned in this file rots at every
-release; this one did, and it is the first thing you need when reading a journal. They are kept because the *shape* recurs at every release, and because reading a journal
-written before that date requires knowing which engine produced it: **#19/F15** (in the installed 0.0.1
-the AC-verifier is **step 7** and diffs `main...HEAD` *before* the step-8 commit, so an uncommitted
-branch certifies an empty diff — **fixed in-tree by #48; the fix reached every consumer at the
-2026-08-21 re-install**; note the step numbers in that sentence are 0.0.1's, and **#31 has since rotated the
-in-tree pipeline** so that acceptance is step 10 and runs *after* the step-7 commit — when reading a
-run's journal, check which numbering the engine driving it used) and
-**#21/F14** (an unbound binding skips its gate silently instead of erroring — **fixed in-tree by
-the gate-outcome invariant; the fix reached every consumer at the 2026-08-21 re-install**).
+below history. **They have moved again since, and no longer in lockstep, so this sentence is not
+where to learn any repo's version.** The plugin is pinned per project: read the
+`dev-loop@claude-code-loop` entry in `~/.claude/plugins/installed_plugins.json` whose `projectPath`
+is the repo in question. `ls ~/.claude/plugins/cache/claude-code-loop/dev-loop/` lists every version
+some repo still pins, so its highest entry is **not** necessarily the engine that drove a given run.
+Some consumers are held back deliberately, as the untreated control for the cost research
+(`docs/research/README.md` → Status names them) — re-installing a held repo as part of a release
+ends that control, so it is a decision, not a step of the release. A version pinned in this file
+rots at every release; this one did, and it is the first thing you need when reading a journal. They are 
+kept because the *shape* recurs at every release, and because reading a journal written before that
+date requires knowing which engine produced it: **#19/F15** (in the installed 0.0.1 the AC-verifier is
+**step 7** and diffs `main...HEAD` *before* the step-8 commit, so an uncommitted branch certifies an
+empty diff — **fixed in-tree by #48; the fix reached every consumer at the 2026-08-21 re-install**; note
+the step numbers in that sentence are 0.0.1's, and **#31 has since rotated the in-tree pipeline** so
+that acceptance is step 10 and runs *after* the step-7 commit — when reading a run's journal, check
+which numbering the engine driving it used) and **#21/F14** (an unbound binding skips its gate silently
+instead of erroring — **fixed in-tree by the gate-outcome invariant; the fix reached every consumer at
+the 2026-08-21 re-install**).
 
 **The window between an in-tree fix and a consumer re-install is when new consumers get onboarded
 with the old bug.** The test is exact — a defect fixed in-tree **before** an onboarding yet still
@@ -341,8 +358,10 @@ sentence.
 
 **Why this consumer is worth the overhead:** its deliverable is *markdown an agent executes*, which
 neither AgentFluent nor the vote repo produces. That breaks the router's assumption that markdown
-implies the `docs` route — so `.claude/loop.config.md` §3 carries a binding override sending
-`loop-engine.md`, `SKILL.md`, and `init-loop.md` to the `code` route. Findings unique to this shape
+implies the `docs` route — so `.claude/loop.config.md` §3 carries binding overrides sending the
+payload's executed markdown (`loop-engine.md`, `SKILL.md`, `init-loop.md`, and any payload path its
+`docs` line does not name, which reaches the phase units) and the skills under `incubator/` to the
+`code` route. Findings unique to this shape
 are logged on #1, which is the only copy.
 
 ## Branching & PR flow
@@ -424,8 +443,9 @@ runs (the first external adoption
 the AgentFluent dogfood, #6's smoke test, and — since 2026-07-28 — this repo's own dogfood) are
 recorded there with where they surfaced, the gap, a
 *generic* fix (removing the AgentFluent-ism rather than special-casing), and a severity; the detail
-lives in its comments, which are the only copy. They are scoped into **seven epics and ~21 stories**
-under the milestone.
+lives in its comments, which are the only copy. The original set was scoped into **seven epics and
+~21 stories** under `v0.2.0`; later findings are triaged by the scope brake below, not by that
+scoping.
 
 **The index outgrew its own title, so do not read either as a range.** The issue is still *titled*
 "F1–F21"; its comments now carry findings **well past that range** — the highest F-number lives on
@@ -505,10 +525,11 @@ and "scope committed." Three rules now sit in that gap:
 
 **The `tech-debt` label exists so `deferred-corpus` keeps meaning something.** Work that waits on
 *effort* rather than *corpus* does not belong in the deferral milestone — putting it there would
-dissolve the one criterion that makes `deferred-corpus` a category instead of a junk drawer. #35,
-#62 and #76 carry the label and no milestone. Corpus- or evidence-gated work (#49, #61, #71) still
-goes to `deferred-corpus` proper. When deferring, pick the bucket by *what the work waits on*, and
-never widen `deferred-corpus`'s criterion to avoid the choice.
+dissolve the one criterion that makes `deferred-corpus` a category instead of a junk drawer. #62
+and #76 carry the label and no milestone. #35 carries the label too, but it was milestoned on
+2026-08-22 to what is now `deferred-corpus`, so it is not a worked example of this rule. Corpus- or
+evidence-gated work (#49, #61, #71) still goes to `deferred-corpus` proper. When deferring, pick
+the bucket by *what the work waits on*, and never widen `deferred-corpus`'s criterion to avoid the choice.
 
 ### Standing convention: the README status block ships with the version bump
 
@@ -526,3 +547,11 @@ gained a paragraph stating that you approve every plan by default, that `plan-ga
 independent settings, and that an absent field reads as `always`. It is no longer a pending
 re-read. #36 / AC3 carries this for the release, and F5 (#31), F8 (#25) and F16 (#26/#27)
 change it too.
+
+**The README's "How the loop works" section is another restatement, and nothing guards it.** Added
+2026-10-19 for prospective users, it restates the pipeline's steps and their numbers, the routes,
+the ledger's status chain, and a summary of both human gates. A change to any of those — a renumber,
+a new route, a new status, a change to what stops for the human — must update it in the same PR.
+`PipelineStepOrderTests` reads the engine, `SKILL.md` and `plugin.json`, never the README, so a
+stale step table there stays green. [#265](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/265) tracks pinning the
+step table's identity to the engine (`tech-debt`).
