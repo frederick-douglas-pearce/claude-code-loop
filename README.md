@@ -144,7 +144,7 @@ subagents you already have (this repo binds its own `pm` and `architect` agents)
 | Code reviewers | parallel read-only finder subagents over the diff, each handed the issue's acceptance criteria, with angles picked from the change's risk surface and a guard-efficacy lens as a floor | `CODE_REVIEW` |
 | Security reviewer | runs where the route and the touched surface call for it | `SECURITY_REVIEW` |
 | QA | a fresh-context acceptance verifier: did the change meet every criterion (Class A), and would its tests notice if it broke (Class B, the mutation pass) | `VERIFY`, plus the bundled mutation harness |
-| Tech lead | you: approve plans, approve merges, settle anything the agents disagree on, punt on, or cannot resolve | the `plan-gate:` and `mode:` fields in the run's ledger |
+| Owner | you: the final call on scope, design and merges — approve plans, approve merges, settle anything the agents disagree on, punt on, or cannot resolve | the `plan-gate:` and `mode:` fields in the run's ledger |
 
 ### The pipeline: one issue per invocation
 
