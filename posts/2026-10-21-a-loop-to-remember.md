@@ -39,7 +39,7 @@ Now take the best model you can imagine. It still has to get requirements clarif
 
 An agent can do every job on a dev team. What it shouldn't do is check its own work.
 
-That is the thesis, and it is why I titled the series "A Cross-Functional Team of One." A coding agent really is cross-functional. It plans, designs, implements and tests. Generalization means a lot of ground to cover, and when the same mind that did the work also checks it, it tends to confirm its own thinking.
+That is the thesis behind the series title, "A Cross-Functional Team of One." A coding agent really is cross-functional. It plans, designs, implements and tests. Generalization means a lot of ground to cover, and when the same mind that did the work also checks it, it tends to confirm its own thinking.
 
 Covering all that ground has a cost of its own. Everything the agent reads lands in one context window, and Anthropic's Claude Code guide warns that it "fills up fast, and performance degrades as it fills." The guide's answer is a subagent with its own fresh context, "so the agent doing the work isn't the one grading it" ([Claude Code docs](https://code.claude.com/docs/en/best-practices)).
 
