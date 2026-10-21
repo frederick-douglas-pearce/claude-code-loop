@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "A Loop to Remember"
-date: 2026-10-21 09:00:00-0700
+date: 2026-10-21 01:00:00-0700
 description: "Giving coding agents the structure human teams rely on: how I work as the owner of an agent dev team, and where it goes next."
 categories: ["claude-code-loop"]
 tags: ["claude-code", "dev-loop", "agents", "foundation"]
@@ -29,9 +29,9 @@ A few weeks later I wanted the same loop on another project, so I packaged it as
 
 The complaints developers make about coding agents are many of the same ones developers have always made about each other, and teams fixed them with structure, not with better individuals.
 
-In [Stack Overflow's 2026 survey](https://survey.stackoverflow.co/2026/ai/data), the biggest group of developers rated their AI tools "good, but not great" at complex tasks, and nearly half said they trust AI output only when they can easily check it. Checking has become the slow part. When one company moved its engineers to Claude Code, AI-written pull requests were no buggier than before, but each reviewer's load doubled ([He et al., 2026](https://arxiv.org/abs/2607.01904)). Human teams hit the same wall whenever one person writes faster than the others can review.
+In [Stack Overflow's 2026 survey](https://survey.stackoverflow.co/2026/ai/data), the biggest group of developers rated their AI tools "good, but not great" at complex tasks, and nearly half said they trust AI output only when they can easily check it. Checking has become the slow part. When one company moved its engineers to Claude Code, AI-written pull requests were no buggier than before, but each reviewer's load doubled ([He et al., 2026, preprint](https://arxiv.org/abs/2607.01904)). Human teams hit the same wall whenever one person writes faster than the others can review.
 
-Context has changed shape too. Today's agents can search the whole repo, and in the same survey only one developer in five said a lack of context in AI tools got in their way. The context developers say they need most isn't in the code: 85% named project goals or requirements, 44% earlier decisions and the reasons behind them, and 61% said important context lives in people's heads. A new hire has the same problem on day one. They can read every file and still not know why it was built that way. We don't fire them. We give them someone who knows the system.
+Context has changed shape too. Today's agents can search the whole repo, and in [the same survey](https://survey.stackoverflow.co/2026/knowledge/data) only one developer in five said a lack of context in AI tools got in their way. The context developers say they need most isn't in the code: 85% named project goals or requirements, 44% earlier decisions and the reasons behind them, and 61% said important context lives in people's heads. A new hire has the same problem on day one. They can read every file and still not know why it was built that way. We don't fire them. We give them someone who knows the system.
 
 Now take the best model you can imagine. It still has to get requirements clarified. It still needs scope split into pieces that can be reviewed. It still needs to know the design principles and the roadmap, which are not in the files it is editing. Those aren't defects. They are some of the hardest parts of development, and they sit where roles meet: the pm and the implementer on requirements, the architect and the implementer on design. Teams put a handoff at each of those points.
 
@@ -55,16 +55,16 @@ The roles are:
 
 - **pm** scopes and prioritizes.
 - **architect** reviews design, read-only.
-- **ba** keeps a glossary so the other roles stop talking past each other. It is wired into two of my projects' loop configs. It is not yet in the plugin's engine, so installing `dev-loop` will not give it to you (yet).
+- **ba** keeps a glossary so the other roles stop talking past each other. It is wired into two of my projects' loop configs. It is not yet in the plugin's engine, so installing `dev-loop` will not give it to you.
 - **implementer** writes the change.
 - **code review** is an independent pass over the diff, with the issue's acceptance criteria in hand.
 - **security** is the specialist on call. It reviews code changes and sits out docs-only ones, and any change that touches a security-sensitive surface comes to me at merge regardless.
 - **QA** checks the work against the issue's acceptance criteria, then runs mutation testing, which catches tests that pass without testing anything.
 - **merge** is the last gate, and it is mine.
 
-Map the complaints to the roles. "Doesn't know my codebase" goes to the architect. Scope creep goes to the plan gate, where I approve every plan before code is written. "Tests pass, doesn't work" goes to QA. Misreadings or inconsistent language between roles go to the ba. The one I haven't solved is over-engineering. It's still on me to catch, but every plan now has to say who the change is for and how we'd know it worked, and a plan that can't stops at the plan gate.
+Map the complaints to the roles. "Doesn't know my codebase" goes to the architect. Scope creep goes to the plan gate. "Tests pass, doesn't work" goes to QA. Misreadings or inconsistent language between roles go to the ba. The one I haven't solved is over-engineering. It's still on me to catch, but every plan now has to say who the change is for and how we'd know it worked, and a plan that can't stops at the plan gate.
 
-Plans change when these roles weigh in. On August 15, the v0.2.0 milestone had 13 open items. In the previous 15 days, 19 issues had closed and 31 had been filed. I asked for a pm review, and the verdict was "Ship 5 work items, not 13." It also recommended freezing the milestone. It shipped five days later.
+Plans change when these roles weigh in. On August 15, the v0.2.0 milestone had 13 open items. In the previous 15 days, 19 issues had closed and 31 had been filed. I asked for a pm review, and the verdict was "Ship 5 work items, not 13." It also recommended freezing the milestone. The milestone shipped five days later.
 
 On October 8, I wanted an executive-level brief built on top of per-PR briefs. Two other aggregator ideas were already open in the backlog. The architect recommended combining them rather than building three aggregators. It also reversed my own plan to commit briefs onto the feature branch, because "the brief becomes part of the diff it describes." I took both.
 
@@ -80,9 +80,9 @@ It remembers across sessions, too. Its state lives in a ledger on disk, so a `/c
 
 It also replaced my old "if needed" with written criteria. Each issue is routed by its labels and by path rules in the project's config. A code change gets every gate. A docs-only change skips the architect and security passes and gets a lighter review, which saves time and tokens.
 
-And it travels. My projects are very different: some are almost all markdown, like the plugin itself, some are web apps, and some are Python command-line tools. Each has its own loop config, `loop.config.md`, which sets the test and lint commands, the routing rules, and which agent fills each role. The engine ships separately, as the plugin, so when it gains a feature, such as changes aimed at cutting its token cost, every project gets it on update while its config stays its own.
+And it travels. My projects are very different: some are almost all markdown, like the plugin itself; some are web apps; and some are Python command-line tools. Each has its own loop config, `loop.config.md`, which sets the test and lint commands, the routing rules, and which agent fills each role. The engine ships separately, as the plugin, so when it gains a feature, such as changes aimed at cutting its token cost, every project gets it on update while its config stays its own.
 
-I trust the output more, because the work is checked by something other than its author. I learn more, because the architect and pm explain their reasoning and I read it. I have a pm that is available any time of day across every project I run. And I have shared artifacts, the decision log and the glossary, that a human teammate can open, read and comment on.
+I trust the output more, because the work is checked by something other than its author. I learn more, because the architect and pm explain their reasoning and I read it. I have a pm available at any hour, on every project I run. And I have shared artifacts, the decision log and the glossary, that a human teammate can open, read and comment on.
 
 ## Where it's going
 
@@ -100,9 +100,9 @@ There is a catch. I've heard plenty of developers say, "Building software is eas
 
 List the handoffs you type by hand every session. "Loop in the architect." "Run the review." "What's next?" Each one is a role, and each is a place where you are the only thing keeping the process on track.
 
-If you want to evaluate how well your own subagents work, that is what AgentFluent is for.
+If you want to evaluate how well your own subagents work, that is what [AgentFluent](https://github.com/frederick-douglas-pearce/agentfluent) is for.
 
-The `dev-loop` plugin and the loop config are at https://github.com/frederick-douglas-pearce/claude-code-loop. The rest of this series goes gate by gate: how each role works, the real runs where one nearly let something through, and what I changed in the loop afterward. It also covers how to set up the loop for your own projects, and the cost experiments aimed at making it cheaper without making it weaker. Write your process down once, and let the loop do the remembering.
+The `dev-loop` plugin and the loop config are at [`claude-code-loop` on GitHub](https://github.com/frederick-douglas-pearce/claude-code-loop). The rest of this series goes gate by gate: how each role works, the real runs where one nearly let something through, and what I changed in the loop afterward. It also covers how to set up the loop for your own projects, and the cost experiments aimed at making it cheaper without making it weaker. Write your process down once, and let the loop do the remembering.
 
 ---
 
