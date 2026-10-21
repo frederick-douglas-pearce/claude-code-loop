@@ -37,7 +37,7 @@ Now take the best model you can imagine. It still has to get requirements clarif
 
 ## A cross-functional team of one
 
-An agent can do every job on a dev team. What it can't do is check its own work effectively.
+An agent can do every job on a dev team. What it shouldn't do is check its own work.
 
 That is the thesis, and it is why I titled the series "A Cross-Functional Team of One." A coding agent really is cross-functional. It plans, designs, implements and tests. Generalization means a lot of ground to cover, and when the same mind that did the work also checks it, it tends to confirm its own thinking.
 
