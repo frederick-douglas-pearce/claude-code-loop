@@ -4,7 +4,7 @@ title: "A Loop to Remember"
 date: 2026-10-21 01:00:00-0700
 description: "Giving coding agents the structure human teams rely on: how I work as the owner of an agent dev team, and where it goes next."
 categories: ["claude-code-loop"]
-tags: ["claude-code", "dev-loop", "agents", "foundation"]
+tags: ["claude-code", "dev-loop", "agents", "software-development", "foundation"]
 og_image: https://frederick-douglas-pearce.github.io/assets/img/a-loop-to-remember-og.png
 og_card_source: posts/images/a-loop-to-remember/og-card.png
 featured: true
