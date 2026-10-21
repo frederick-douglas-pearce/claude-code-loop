@@ -1,0 +1,33 @@
+# OG-card brief for posts/2026-10-26-a-loop-to-remember.md.
+#
+# Render:
+#     uv run tooling/render-og-card.py posts/images/a-loop-to-remember/og-card.toml
+
+[card]
+title = ["A Loop to Remember"]
+subhead = "An agent can do every job on a dev team. What it can't do is check its own work."
+series_mark = "A Cross-Functional Team of One"
+
+[[panel]]
+label = "Before the loop"
+sublabel = "every handoff typed by hand"
+mono = true
+rows = [
+  ["architect", "if I remembered"],
+  ["code review", "when I asked"],
+  ["acceptance check", "none"],
+  ["mutation testing", "none"],
+  ["record", "issues and PRs"],
+]
+
+[[panel]]
+label = "With the loop"
+sublabel = "run by the issue's route"
+mono = true
+rows = [
+  ["architect", "every code plan"],
+  ["code review", "every PR"],
+  ["acceptance check", "every criterion"],
+  ["mutation testing", "behavior changes"],
+  ["record", "ledger on disk"],
+]
