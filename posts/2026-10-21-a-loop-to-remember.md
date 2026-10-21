@@ -1,19 +1,19 @@
 ---
 layout: post
 title: "A Loop to Remember"
-date: 2026-10-26 09:00:00-0700
-description: "Giving coding agents the structure human teams have always used: how I work as the owner of an agent dev team, and where it goes next."
+date: 2026-10-21 09:00:00-0700
+description: "Giving coding agents the structure human teams rely on: how I work as the owner of an agent dev team, and where it goes next."
 categories: ["claude-code-loop"]
 tags: ["claude-code", "dev-loop", "agents", "foundation"]
 og_image: https://frederick-douglas-pearce.github.io/assets/img/a-loop-to-remember-og.png
 og_card_source: posts/images/a-loop-to-remember/og-card.png
-featured: false
+featured: true
 claude_code_version_verified: v2.1.303
 humanizer_pass: none
 claims_verified: none
 ---
 
-For months, the least reliable member of my AI dev team was me.
+Early on with Claude Code, the least reliable member of my AI dev team was me.
 
 I was building AgentFluent, a tool for monitoring and improving how well Claude Code subagents perform, and I already had an agent team of sorts. A pm agent scoped the work. An architect agent reviewed the design. Claude, running as the main or "parent" agent, wrote the code, opened the PRs and ran the reviews via a separate skill. Every handoff between them happened because I typed it, and nothing was journaled outside GitHub issues and PRs.
 
