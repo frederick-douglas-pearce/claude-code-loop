@@ -9,7 +9,7 @@ og_image: https://frederick-douglas-pearce.github.io/assets/img/a-loop-to-rememb
 og_card_source: posts/images/a-loop-to-remember/og-card.png
 featured: true
 claude_code_version_verified: v2.1.303
-humanizer_pass: none
+humanizer_pass: v3.0.0
 claims_verified: none
 ---
 
@@ -31,9 +31,9 @@ The complaints developers make about coding agents are many of the same ones dev
 
 In [Stack Overflow's 2026 survey](https://survey.stackoverflow.co/2026/ai/data), the biggest group of developers rated their AI tools "good, but not great" at complex tasks, and nearly half said they trust AI output only when they can easily check it. Checking has become the slow part. When one company moved its engineers to Claude Code, AI-written pull requests were no buggier than before, but each reviewer's load doubled ([He et al., 2026, preprint](https://arxiv.org/abs/2607.01904)). Human teams hit the same wall whenever one person writes faster than the others can review.
 
-Context has changed shape too. Today's agents can search the whole repo, and in [the same survey](https://survey.stackoverflow.co/2026/knowledge/data) only one developer in five said a lack of context in AI tools got in their way. The context developers say they need most isn't in the code: 85% named project goals or requirements, 44% earlier decisions and the reasons behind them, and 61% said important context lives in people's heads. A new hire has the same problem on day one. They can read every file and still not know why it was built that way. We don't fire them. We give them someone who knows the system.
+Context has changed shape too. Today's agents can search the whole repo, and in [the same survey](https://survey.stackoverflow.co/2026/knowledge/data) only one developer in five said a lack of context in AI tools got in their way. The context developers say they need most isn't in the code: 85% named project goals or requirements, 44% earlier decisions and the reasons behind them, and 61% said important context lives in people's heads. A new hire has the same problem on day one. They can read every file and still not know why it was built that way, so we pair them with someone who knows the system.
 
-Now take the best model you can imagine. It still has to get requirements clarified. It still needs scope split into pieces that can be reviewed. It still needs to know the design principles and the roadmap, which are not in the files it is editing. Those aren't defects. They are some of the hardest parts of development, and they sit where roles meet: the pm and the implementer on requirements, the architect and the implementer on design. Teams put a handoff at each of those points.
+Now take the best model you can imagine. It still has to get requirements clarified. It still needs scope split into pieces that can be reviewed. It still needs to know the design principles and the roadmap, which are not in the files it is editing. That work is some of the hardest in development, and it sits where roles meet: the pm and the implementer on requirements, the architect and the implementer on design. Teams put a handoff at each of those points.
 
 ## A cross-functional team of one
 
@@ -76,7 +76,7 @@ Agents are agreeable. They won't push back forcefully unless you ask them to, an
 
 Process, first of all. The loop runs every step the issue's route calls for, in order, every time. I no longer worry about forgetting to bring in the architect or run the review, because remembering is the loop's job now.
 
-It remembers across sessions, too. Its state lives in a ledger on disk, so a `/clear`, a compaction or a crash doesn't lose my place. On resume, the loop checks each unfinished item against git and the open PRs before it starts anything new. And it fails safe: a gate it didn't run never counts as passed, and a missing setting never quietly switches a check off.
+It remembers across sessions, too. Its state lives in a ledger on disk, so a `/clear`, a compaction or a crash doesn't lose my place. On resume, the loop checks each unfinished item against git and the open PRs before it starts anything new. And it fails safe: a gate it didn't run never counts as passed, and a missing setting never turns a check off.
 
 It also replaced my old "if needed" with written criteria. Each issue is routed by its labels and by path rules in the project's config. A code change gets every gate. A docs-only change skips the architect and security passes and gets a lighter review, which saves time and tokens.
 
@@ -92,9 +92,9 @@ I think developers are becoming owners of agent teams, accountable for what thos
 
 The mechanism for tailoring that team is the same config. Each role is bound by name, like `SCOPE_AGENT` and `DESIGN_AGENT`, and a project-level agent definition is all a tailored role needs. So when a human PM reviews the artifacts and gives feedback, that feedback can become a tweak to the pm agent or a change to the loop config. Across projects and orgs, each loop could be tailored to the individuals on that team.
 
-My projects to date are personal, so no human PM has sent me that feedback yet. The binding is a fact. The cross-org use is my vision for the dev loop.
+My projects to date are personal, so no human PM has sent me that feedback yet. The binding exists today; the cross-org use is my vision for the dev loop.
 
-There is a catch. I've heard plenty of developers say, "Building software is easy. Just give us the exact specs." Now the developer is increasingly the one who has to write them.
+I've heard plenty of developers say, "Building software is easy. Just give us the exact specs." Now the developer is increasingly the one who has to write them.
 
 ## Try this week
 
