@@ -21,7 +21,7 @@ I thought it was working pretty well, but I had to babysit every step, and it wa
 
 Nothing in the process checked the finished work against what the issue had actually asked for. Were all the tests really testing something? I wasn't always sure.
 
-One night, with a release's worth of issues still in the queue, I decided it was time to automate the handoffs so I didn't have to prompt each step by hand. Forgetting was a symptom. The problem was that there was a lot to remember. I needed a loop to remember for me.
+One night, with a release's worth of issues still in the queue, I decided it was time to automate the process so I didn't have to prompt each step by hand. Forgetting was a symptom. The problem was that there was a lot to remember. I needed a loop to remember for me.
 
 A few weeks later I wanted the same loop on another project, so I packaged it as a Claude Code plugin, `dev-loop`, that any repo can install.
 
@@ -82,15 +82,15 @@ It also replaced my old "if needed" with written criteria. Each issue is routed 
 
 And it travels. My projects are very different: some are almost all markdown, like the plugin itself; some are web apps; and some are Python command-line tools. Each has its own loop config, `loop.config.md`, which sets the test and lint commands, the routing rules, and which agent fills each role. The engine ships separately, as the plugin, so when it gains a feature, such as changes aimed at cutting its token cost, every project gets it on update while its config stays its own.
 
-I trust the output more, because the work is checked by something other than its author. I learn more, because the architect and pm explain their reasoning and I read it. I have a pm available at any hour, on every project I run. And I have shared artifacts, the decision log and the glossary, that a human teammate can open, read and comment on.
+I trust the output more, because the work is checked by an agent in a different role, not by its author. I learn more, because the architect and pm explain their reasoning and I read it. I have a pm available at any hour, on every project I run. And I have shared artifacts, the decision log and the glossary, that a human teammate can open, read and comment on.
 
 ## Where it's going
 
 This part is opinion, not a finding.
 
-I think developers are becoming owners of agent teams, accountable for what those teams produce. That doesn't retire what human teams have learned. Agent teams should be modeled on human ones and work in sync with the people in those roles.
+I think developers are becoming owners of agent teams, accountable for what those teams produce. That doesn't retire what human teams have learned. Agent teams should be modeled on human ones and work in sync with the human PMs, architects and reviewers who hold the same roles.
 
-The mechanism for tailoring that team is the same config. Each role is bound in that config, and the pm and architect are bound by agent name, as `SCOPE_AGENT` and `DESIGN_AGENT`. Pointing one of those at a different agent definition is all a tailored role needs. So when a human PM reviews the artifacts and gives feedback, that feedback can become a tweak to the pm agent or a change to the loop config. Across projects and orgs, each loop could be tailored to the individuals on that team.
+The mechanism for tailoring that team is the loop config plus custom agents. Each role is bound in the config, and the pm and architect are bound by agent name, as `SCOPE_AGENT` and `DESIGN_AGENT`. Pointing one of those at a different agent definition is all a tailored role needs. So when a human PM reviews the artifacts and gives feedback, that feedback can become a tweak to the pm agent or a change to the loop config. Across projects and orgs, each loop could be tailored to the individuals on that team.
 
 My projects to date are personal, so no human PM has sent me that feedback yet. The binding exists today; the cross-org use is my vision for the dev loop.
 
@@ -98,7 +98,7 @@ I've heard plenty of developers say, "Building software is easy. Just give us th
 
 ## Try this week
 
-List the handoffs you type by hand every session. "Loop in the architect." "Run the review." "What's next?" Each one is a role, and each is a place where you are the only thing keeping the process on track.
+List the handoffs you type by hand every session. "Loop in the architect." "Run the review." "What's next?" Each one is a role, and each is a place where you are the only one keeping the process on track.
 
 If you want to evaluate how well your own subagents work, that is what [AgentFluent](https://github.com/frederick-douglas-pearce/agentfluent) is for.
 
