@@ -8,9 +8,9 @@ tags: ["claude-code", "dev-loop", "agents", "foundation"]
 og_image: https://frederick-douglas-pearce.github.io/assets/img/a-loop-to-remember-og.png
 og_card_source: posts/images/a-loop-to-remember/og-card.png
 featured: true
-claude_code_version_verified: v2.1.303
+claude_code_version_verified: v2.1.306
 humanizer_pass: v3.0.0
-claims_verified: none
+claims_verified: 2026-10-21
 ---
 
 Early on with Claude Code, the least reliable member of my AI dev team was me.
@@ -27,9 +27,9 @@ A few weeks later I wanted the same loop on another project, so I packaged it as
 
 ## Why teams have roles
 
-The complaints developers make about coding agents are many of the same ones developers have always made about each other, and teams fixed them with structure, not with better individuals.
+The complaints developers make about coding agents are many of the same ones developers have always made about each other, and teams fixed them with structure and process, not with better individuals.
 
-In [Stack Overflow's 2026 survey](https://survey.stackoverflow.co/2026/ai/data), the biggest group of developers rated their AI tools "good, but not great" at complex tasks, and nearly half said they trust AI output only when they can easily check it. Checking has become the slow part. When one company moved its engineers to Claude Code, AI-written pull requests were no buggier than before, but each reviewer's load doubled ([He et al., 2026, preprint](https://arxiv.org/abs/2607.01904)). Human teams hit the same wall whenever one person writes faster than the others can review.
+In [Stack Overflow's 2026 survey](https://survey.stackoverflow.co/2026/ai/data), the biggest group of developers rated their AI tools "good, but not great" at complex tasks, and nearly half said they trust AI output only when they can easily check it. Checking has become the slow part. When one company moved its engineers to Claude Code, AI-written pull requests were no buggier than human-written ones by the study's measures, but each reviewer's load doubled ([He et al., 2026, preprint](https://arxiv.org/abs/2607.01904)). Human teams hit the same wall whenever one person writes faster than the others can review.
 
 Context has changed shape too. Today's agents can search the whole repo, and in [the same survey](https://survey.stackoverflow.co/2026/knowledge/data) only one developer in five said a lack of context in AI tools got in their way. The context developers say they need most isn't in the code: 85% named project goals or requirements, 44% earlier decisions and the reasons behind them, and 61% said important context lives in people's heads. A new hire has the same problem on day one. They can read every file and still not know why it was built that way, so we pair them with someone who knows the system.
 
@@ -49,7 +49,7 @@ The architect in my setup works read-only. It never writes code. What it does is
 
 I'm the team's owner: I make the final call on scope, design and what merges. I usually start by brainstorming with the parent agent, then hand the agreed-upon spec to the pm agent, which scopes the work together with the architect. Questions come back to me. The pm produces the PRD, the epics and stories, and recommendations on priority and milestones. It also starts a decision log, which records the architect's rulings and my own calls as well as its own.
 
-The `dev-loop` plugin then works the top epic's issues one by one. I approve every plan and every merge. The architect's design calls come to me inside the plan. The review gates run without me, and when the reviewers can't settle a finding, they stop and bring me options. If my priorities change, say I need a release out sooner, I talk it through with the pm, and we reorder the backlog and re-scope issues to match.
+The `dev-loop` plugin then works the top epic's issues one by one. I approve every plan and every merge. The architect's design calls come to me inside the plan. The review gates run without me, and when the reviewers can't settle a finding, or a finding raises a design question, they stop and hand me options. If my priorities change, say I need a release out sooner, I talk it through with the pm, and we reorder the backlog and re-scope issues to match.
 
 The roles are:
 
@@ -58,17 +58,17 @@ The roles are:
 - **ba** keeps a glossary so the other roles stop talking past each other. It is wired into two of my projects' loop configs. It is not yet in the plugin's engine, so installing `dev-loop` will not give it to you.
 - **implementer** writes the change.
 - **code review** is an independent pass over the diff, with the issue's acceptance criteria in hand.
-- **security** is the specialist on call. It reviews code changes and sits out docs-only ones, and any change that touches a security-sensitive surface comes to me at merge regardless.
-- **QA** checks the work against the issue's acceptance criteria, then runs mutation testing, which catches tests that pass without testing anything.
+- **security** is the specialist on call. It reviews code changes that touch a security-sensitive surface and sits out the rest, and any change that touches such a surface comes to me at merge regardless.
+- **QA** checks the work against the issue's acceptance criteria. On code changes that come with tests, it then runs mutation testing, which catches tests that pass without testing anything.
 - **merge** is the last gate, and it is mine.
 
-Map the complaints to the roles. "Doesn't know my codebase" goes to the architect. Scope creep goes to the plan gate. "Tests pass, doesn't work" goes to QA. Misreadings or inconsistent language between roles go to the ba. The one I haven't solved is over-engineering. It's still on me to catch, but every plan now has to say who the change is for and how we'd know it worked, and a plan that can't stops at the plan gate.
+Map the complaints to the roles. "Doesn't know my codebase" goes to the architect. Scope creep goes to the plan gate. "Tests pass, doesn't work" goes to QA. Misreadings or inconsistent language between roles go to the ba. The one I haven't solved is over-engineering. It's still on me to catch, but every feature plan now has to say who it's for and what would show it's the wrong thing to build, and a plan that can't stops at the plan gate.
 
-Plans change when these roles weigh in. On August 15, the v0.2.0 milestone had 13 open items. In the previous 15 days, 19 issues had closed and 31 had been filed. I asked for a pm review, and the verdict was "Ship 5 work items, not 13." It also recommended freezing the milestone. The milestone shipped five days later.
+Plans change when these roles weigh in. On August 15, the v0.2.0 milestone had 13 open work items. In the previous 15 days, 19 issues had closed and 31 had been filed. I asked for a pm review, and the verdict was "Ship 5 work items, not 13." It also recommended freezing the milestone. The milestone shipped four days later.
 
-On October 8, I wanted an executive-level brief built on top of per-PR briefs. Two other aggregator ideas were already open in the backlog. The architect recommended combining them rather than building three aggregators. It also reversed my own plan to commit briefs onto the feature branch, because "the brief becomes part of the diff it describes." I took both.
+On October 8, I wanted an executive-level brief built on top of per-PR briefs. Two other aggregator ideas were already open in the backlog. The architect recommended combining them rather than building three aggregators. It also reversed my plan to commit the briefs to the repo. Committing them on the feature branch was out, because "the brief becomes part of the diff it describes." I took both.
 
-I don't always take the advice. I have kept open an issue the pm wanted closed, and shipped the architect's version of a change the pm wanted deferred.
+I don't always take the advice. I kept open an issue the pm wanted closed, and shipped the architect's version of a change the pm wanted deferred.
 
 Agents are agreeable. They won't push back forcefully unless you ask them to, and that cuts both ways: you may have to encourage disagreement, but that's cheap. A pm and an architect can disagree in parallel in minutes. I still decide.
 
@@ -78,7 +78,7 @@ Process, first of all. The loop runs every step the issue's route calls for, in 
 
 It remembers across sessions, too. Its state lives in a ledger on disk, so a `/clear`, a compaction or a crash doesn't lose my place. On resume, the loop checks each unfinished item against git and the open PRs before it starts anything new. And it fails safe: a gate it didn't run never counts as passed, and a missing setting never turns a check off.
 
-It also replaced my old "if needed" with written criteria. Each issue is routed by its labels and by path rules in the project's config. A code change gets every gate. A docs-only change skips the architect and security passes and gets a lighter review, which saves time and tokens.
+It also replaced my old "if needed" with written criteria. Each issue is routed by its labels and by path rules in the project's config. A code change goes through the full pipeline. A docs-only change skips the architect and security passes and gets a lighter review, which saves time and tokens.
 
 And it travels. My projects are very different: some are almost all markdown, like the plugin itself; some are web apps; and some are Python command-line tools. Each has its own loop config, `loop.config.md`, which sets the test and lint commands, the routing rules, and which agent fills each role. The engine ships separately, as the plugin, so when it gains a feature, such as changes aimed at cutting its token cost, every project gets it on update while its config stays its own.
 
@@ -90,7 +90,7 @@ This part is opinion, not a finding.
 
 I think developers are becoming owners of agent teams, accountable for what those teams produce. That doesn't retire what human teams have learned. Agent teams should be modeled on human ones and work in sync with the people in those roles.
 
-The mechanism for tailoring that team is the same config. Each role is bound by name, like `SCOPE_AGENT` and `DESIGN_AGENT`, and a project-level agent definition is all a tailored role needs. So when a human PM reviews the artifacts and gives feedback, that feedback can become a tweak to the pm agent or a change to the loop config. Across projects and orgs, each loop could be tailored to the individuals on that team.
+The mechanism for tailoring that team is the same config. Each role is bound in that config, and the pm and architect are bound by agent name, as `SCOPE_AGENT` and `DESIGN_AGENT`. Pointing one of those at a different agent definition is all a tailored role needs. So when a human PM reviews the artifacts and gives feedback, that feedback can become a tweak to the pm agent or a change to the loop config. Across projects and orgs, each loop could be tailored to the individuals on that team.
 
 My projects to date are personal, so no human PM has sent me that feedback yet. The binding exists today; the cross-org use is my vision for the dev loop.
 
@@ -106,4 +106,4 @@ The `dev-loop` plugin and the loop config are at [`claude-code-loop` on GitHub](
 
 ---
 
-_Drafted with Claude Code (verified against v2.1.303). The ideas, claims, and any errors are mine._
+_Drafted with Claude Code (verified against v2.1.306). The ideas, claims, and any errors are mine._
