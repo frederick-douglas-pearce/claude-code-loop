@@ -425,7 +425,7 @@ not in AgentFluent. The early extraction stories (S2–S4, epic
 [#611](https://github.com/frederick-douglas-pearce/agentfluent/issues/611)) were filed in AgentFluent
 before this repo existed; those links in `README.md` are history, not the live backlog.
 
-**`v0.2.0` shipped 2026-08-20** (`1e54d3c`). It grew past a patch bump — it renumbers the pipeline,
+**`v0.2.0` shipped 2026-08-19** (`1e54d3c`, PR #105). It grew past a patch bump — it renumbers the pipeline,
 adds an `in-acceptance` status, rewrites Resume, and reverses a multi-site invariant — which is why
 it was a minor bump and not the `v0.0.2` this file once named.
 
