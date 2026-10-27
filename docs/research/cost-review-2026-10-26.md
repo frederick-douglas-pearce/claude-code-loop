@@ -303,31 +303,33 @@ Six silent detection bugs, each in a plausible direction, and a corpus where mos
 
 ## 7. Proposed epic: `cost: turns first`
 
+**Filed 2026-10-26 as epic #271**, children in the "filed" column. Rows 2, 3, 7, and 10b map to issues that already existed.
+
 The work this review leaves, as issues, with the model each needs. "Fable" marks work where the deliverable is engine prose that must stay consistent with multi-site invariants, or a design whose fail-safe posture has to be argued; that is where weaker runs have cost rounds before (#23: 9 subagent runs and 7 rounds on consistency alone). "Opus 5.5" marks scripts, instruments, config, and PRs that apply a manifest or a design note that already exists.
 
-| # | issue | depends on | model | why |
-|---|---|---|---|---|
-| 1 | **R1 engine text**: fresh-agent fix application, iteration round ceiling, the deletion rule (absorbs #169, #56; supersedes #153) | design note (appendix A) | Fable for the text; Opus 5.5 for the PR | the passage touches currency, isolation, fresh re-check, and gate-outcome at once |
-| 2 | **#133 un-park, post the sharding verdict, close #128** | data on disk (§5.7) | Opus 5.5 | one reading and a comment |
-| 3 | **#150 AC1**: three `/context` readings in a loop session; disable unneeded MCP servers if eager | — | Opus 5.5 | an hour |
-| 4 | **Quality outcome instrument**: fix-up commits within 14 days per merged PR; escalations per issue from the journal; F-comment attribution convention | — | Opus 5.5 | git and journal parsing |
-| 5 | **Per-step cost attribution (E4)** in `tree_cost.py`, with step boundaries recovered from `tool_use` inputs | — | Opus 5.5 | instrument work; the step-marker detector needs the hand-check rule (§5.8) |
-| 6 | **Paired benchmark harness**: frozen fixture issues, replay script, scripted plan-gate answer, interleaving, pre-registration template (promotes #211's #208/#209/#210; realizes #69) | 4, 5 | Opus 5.5; Fable for fixture selection and the pre-registration | the predictions per lever are the judgment part |
-| 7 | **σ replication** (#209): k ≥ 3 runs per fixture on one configuration | 6 | Opus 5.5 | runs and a table |
-| 8 | **R3a deletion PRs** from the manifest (appendix C): class 1 verbatim duplicates (14 rows, 8.0KB net), then class 2 maintainer history to `plugins/CLAUDE.md` (38 rows, 10.2KB) | manifest | Opus 5.5 | the survivor text is written and anchor-checked; one class per PR; five rows carry a named test edit |
-| 9 | **R3b class 3 "why"-prose cuts** (95 rows, 28.1KB net) | manifest | Opus 5.5 to apply; Fable to review the survivors once, since each is a rule restated | the manifest already drafted every survivor, so the Fable share is a review pass, not the drafting |
-| 10a | **Point-fix PR for the five behavior deltas** the reconciliation found (B1 D1.1, D1.2, D2.1, D2.4; B2 Δ3.3), each with its ruling and reason | appendices B1, B2 | Opus 5.5 | the rulings are made; this is applying them, one site each, with the `SKILL.md` L86 clause change |
-| 10b | **#35 collapse** of the five multi-site invariants to the canonical passages B1/B2 draft, with per-region pointer tests | 10a | Fable for the plan-gate and gate-outcome passages (the drifted ones); Opus 5.5 for currency, fresh re-check, and scope ruling (no drift, ~9.1KB of redundancy) | collapsing is where a winner gets picked silently; the rulings in B1 are what make it safe |
-| 11 | **R3c finish the reference appendix** (PRD S3): worked example, `- Plan-gate-inferred:`, plan template and lifecycle | — | Opus 5.5 | the PRD already specifies it; `PlanGateFrozenBlockTests` must be re-pointed |
-| 12 | **R2 phase-isolation design**: controller + phase skills (`context: fork`, `background: false`), fail-safe posture per phase, the review phase first | 5 (to order phases) | Fable | a new layer in the three-layer split; the posture argument is the deliverable |
-| 13 | **R2 spike**: step 3 plan drafting as a forked skill, measured on the benchmark | 6, 12 | Opus 5.5 | implementation of a design |
-| 14 | **R4 subagent tiering**: pin `model:`/`effort:` per role; spawn mechanical roles on a cheaper model; roster stratification in the instruments | 4 | Opus 5.5 | frontmatter and a spawn sentence; quality guard from 4 |
-| 15 | **R6 read-discipline hook** (`PreToolUse` on Bash, opt-in, fail-open until configured) and the prose it retires | — | Opus 5.5 | same shape as `guard_append_only.py` |
-| 16 | **R7 plan-gate scope budget**, after a journal grep for split prevalence | — | Opus 5.5 | small engine passage; the human still decides |
-| 17 | **R8 `test` route and route-aware gate depth**, after a route-distribution count | — | Opus 5.5 | config and routing table |
-| 18 | **Re-install the control repos** (`agentfluent`, `claude-code-sessions`) and drop the DiD; close #223 | — | Opus 5.5 | a decision and two installs |
-| 19 | **Research tests in CI** (`docs/research/test_*.py`) | — | Opus 5.5, `tech-debt` | a workflow file |
-| 20 | **R9 gate-wait cost**: step-12 stop message and `SKILL.md` say "one invocation per session, `/clear` before the next"; document `promptCacheTtl: 1h` for API-key consumers in the README; add the re-warm term to `tree_cost.py` | — | Opus 5.5 | two sentences, a README paragraph, one instrument term |
+| # | filed | issue | depends on | model | why |
+|---|---|---|---|---|---|
+| 1 | #288 | **R1 engine text**: fresh-agent fix application, iteration round ceiling, the deletion rule (absorbs #169, #56; supersedes #153) | design note (appendix A) | Fable for the text; Opus 5.5 for the PR | the passage touches currency, isolation, fresh re-check, and gate-outcome at once |
+| 2 | #133 | **#133 un-park, post the sharding verdict, close #128** | data on disk (§5.7) | Opus 5.5 | one reading and a comment |
+| 3 | #150 | **#150 AC1**: three `/context` readings in a loop session; disable unneeded MCP servers if eager | — | Opus 5.5 | an hour |
+| 4 | #272 | **Quality outcome instrument**: fix-up commits within 14 days per merged PR; escalations per issue from the journal; F-comment attribution convention | — | Opus 5.5 | git and journal parsing |
+| 5 | #273 | **Per-step cost attribution (E4)** in `tree_cost.py`, with step boundaries recovered from `tool_use` inputs | — | Opus 5.5 | instrument work; the step-marker detector needs the hand-check rule (§5.8) |
+| 6 | #274 | **Paired benchmark harness**: frozen fixture issues, replay script, scripted plan-gate answer, interleaving, pre-registration template (promotes #211's #208/#209/#210; realizes #69) | 4, 5 | Opus 5.5; Fable for fixture selection and the pre-registration | the predictions per lever are the judgment part |
+| 7 | #209 | **σ replication** (#209): k ≥ 3 runs per fixture on one configuration | 6 | Opus 5.5 | runs and a table |
+| 8 | #275 | **R3a deletion PRs** from the manifest (appendix C): class 1 verbatim duplicates (14 rows, 8.0KB net), then class 2 maintainer history to `plugins/CLAUDE.md` (38 rows, 10.2KB) | manifest | Opus 5.5 | the survivor text is written and anchor-checked; one class per PR; five rows carry a named test edit |
+| 9 | #276 | **R3b class 3 "why"-prose cuts** (95 rows, 28.1KB net) | manifest | Opus 5.5 to apply; Fable to review the survivors once, since each is a rule restated | the manifest already drafted every survivor, so the Fable share is a review pass, not the drafting |
+| 10a | #277 | **Point-fix PR for the five behavior deltas** the reconciliation found (B1 D1.1, D1.2, D2.1, D2.4; B2 Δ3.3), each with its ruling and reason | appendices B1, B2 | Opus 5.5 | the rulings are made; this is applying them, one site each, with the `SKILL.md` L86 clause change |
+| 10b | #35 | **#35 collapse** of the five multi-site invariants to the canonical passages B1/B2 draft, with per-region pointer tests | 10a | Fable for the plan-gate and gate-outcome passages (the drifted ones); Opus 5.5 for currency, fresh re-check, and scope ruling (no drift, ~9.1KB of redundancy) | collapsing is where a winner gets picked silently; the rulings in B1 are what make it safe |
+| 11 | #278 | **R3c finish the reference appendix** (PRD S3): worked example, `- Plan-gate-inferred:`, plan template and lifecycle | — | Opus 5.5 | the PRD already specifies it; `PlanGateFrozenBlockTests` must be re-pointed |
+| 12 | #279 | **R2 phase-isolation design**: controller + phase skills (`context: fork`, `background: false`), fail-safe posture per phase, the review phase first | 5 (to order phases) | Fable | a new layer in the three-layer split; the posture argument is the deliverable |
+| 13 | #280 | **R2 spike**: step 3 plan drafting as a forked skill, measured on the benchmark | 6, 12 | Opus 5.5 | implementation of a design |
+| 14 | #281 | **R4 subagent tiering**: pin `model:`/`effort:` per role; spawn mechanical roles on a cheaper model; roster stratification in the instruments | 4 | Opus 5.5 | frontmatter and a spawn sentence; quality guard from 4 |
+| 15 | #282 | **R6 read-discipline hook** (`PreToolUse` on Bash, opt-in, fail-open until configured) and the prose it retires | — | Opus 5.5 | same shape as `guard_append_only.py` |
+| 16 | #283 | **R7 plan-gate scope budget**, after a journal grep for split prevalence | — | Opus 5.5 | small engine passage; the human still decides |
+| 17 | #284 | **R8 `test` route and route-aware gate depth**, after a route-distribution count | — | Opus 5.5 | config and routing table |
+| 18 | #285 | **Re-install the control repos** (`agentfluent`, `claude-code-sessions`) and drop the DiD; close #223 | — | Opus 5.5 | a decision and two installs |
+| 19 | #286 | **Research tests in CI** (`docs/research/test_*.py`) | — | Opus 5.5, `tech-debt` | a workflow file |
+| 20 | #287 | **R9 gate-wait cost**: step-12 stop message and `SKILL.md` say "one invocation per session, `/clear` before the next"; document `promptCacheTtl: 1h` for API-key consumers in the README; add the re-warm term to `tree_cost.py` | — | Opus 5.5 | two sentences, a README paragraph, one instrument term |
 
 Order: 2, 3, 20 first (hours, and they close open loops). Then 4–7 (the harness; nothing else can be judged without it). Then 1 (the largest modeled lever, and its design note is the appendix). Then 8–11 in parallel with 12–13. 14–17 after the harness exists.
 
