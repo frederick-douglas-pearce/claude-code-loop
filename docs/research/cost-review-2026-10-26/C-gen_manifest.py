@@ -5,17 +5,44 @@ Each row names one or more FRAGMENTS of the engine: (first_line, start_phrase, l
 end_phrase). A None start_phrase means "from the beginning of first_line"; a None end_phrase
 means "through the end of last_line including its newline". Phrases are asserted to exist so a
 typo fails loudly rather than mis-sizing a row.
-"""
-import pathlib, sys
 
-# Repo-relative: this file sits at docs/research/cost-review-2026-10-26/. Output goes to the
-# directory named by the first argument (default: the current directory), never into the repo.
-ENGINE = (
-    pathlib.Path(__file__).resolve().parents[3]
-    / "plugins/dev-loop/skills/dev-loop/loop-engine.md"
-)
-OUT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".") / "deletion-manifest.md"
-LINES = ENGINE.read_text(encoding="utf-8").split("\n")  # LINES[i-1] is line i, no newline
+Usage (stdlib; run from anywhere inside the repo checkout):
+  C-gen_manifest.py OUT_DIR                     regenerate the manifest from the frozen snapshot
+  C-gen_manifest.py --check 'C2-*,C3-*'         does each row still anchor in the current engine?
+  C-gen_manifest.py OUT_DIR --apply 'C1-*' --exclude C1-07 [--in-place]
+                                                apply rows to the current engine
+Rows the sequencing review moved to another issue (REASSIGNED) are refused by --apply unless
+--include-reassigned is passed by the PR that owns them.
+"""
+import argparse, fnmatch, pathlib, subprocess, sys
+
+# Line numbers in every row are coordinates in a FROZEN snapshot of the engine, the commit the
+# manifest was written against. Regenerating the manifest reads that snapshot, so its output never
+# moves. Applying or checking rows reads the CURRENT engine and finds each fragment there by its
+# text (widened with snapshot context until unique), never by line number: a row stays applicable
+# after other rows, or other PRs, have shifted the file. (#289)
+REPO = pathlib.Path(__file__).resolve().parents[3]
+ENGINE_REL = "plugins/dev-loop/skills/dev-loop/loop-engine.md"
+ENGINE = REPO / ENGINE_REL
+BASE_REV = "971f21c"
+ORIGINAL = subprocess.run(
+    ["git", "-C", str(REPO), "show", f"{BASE_REV}:{ENGINE_REL}"],
+    check=True, capture_output=True, text=True, encoding="utf-8",
+).stdout
+LINES = ORIGINAL.split("\n")  # LINES[i-1] is line i of the snapshot, no newline
+OUT = pathlib.Path(".") / "deletion-manifest.md"  # main() resets from the command line
+
+# Rows the 2026-10-27 sequencing review moved to another issue. --apply refuses them unless
+# --include-reassigned is given: a reassigned row applied by the wrong PR picks a winner silently.
+REASSIGNED = {
+    "C1-07": "#277 (the two copies disagree on test order; needs a ruling)",
+    "C2-16": "#277 / #35 (shares the paragraph Δ3.3 edits)",
+    "C2-13": "#288 (R1 redrafts step 8's implement paragraph)",
+    "C3-35": "#288 (R1 redrafts step 8's implement paragraph)",
+    "C3-80": "#278 (inside the moved Plan-gate-inferred subsection)",
+    **{i: "#35 (inside B2's replacement ranges)" for i in
+       ("C2-14", "C2-15", "C2-36", "C2-38", "C3-36", "C3-37", "C3-38", "C3-39", "C3-87", "C3-91")},
+}
 
 
 def frag_text(l1, s, l2, e):
@@ -719,7 +746,7 @@ def applied_survivors(r):
 
 def apply_all(rows):
     import re
-    original = ENGINE.read_text(encoding="utf-8")
+    original = ORIGINAL
     edits = []
     for r in rows:
         for frag, sv in zip(r["frags"], applied_survivors(r)):
@@ -740,7 +767,7 @@ def check_pins(original, after):
     import ast, re
     norm = lambda s: re.sub(r"\s+", " ", s).strip()
     o, a = norm(original), norm(after)
-    tests = ENGINE.parents[4] / "tests"
+    tests = REPO / "tests"
     lost, kept = [], 0
     seen = set()
     for tf in sorted(tests.glob("*.py")):
@@ -772,7 +799,7 @@ def validate_all():
         sys.exit(1)
 
 
-def main():
+def generate():
     global STEP_REFS_BEFORE, STEP_REFS_AFTER, MIN_STEP_REFS, PIN_SUMMARY
     import re
     validate_all()
@@ -782,7 +809,7 @@ def main():
     sep = re.compile(r"[/–—-]")
     count = lambda t: sum(len(sep.split(run)) for run in step_re.findall(t))
     STEP_REFS_BEFORE, STEP_REFS_AFTER = count(original), count(after)
-    tsrc = (ENGINE.parents[4] / "tests/test_repo_consistency.py").read_text()
+    tsrc = (REPO / "tests/test_repo_consistency.py").read_text()
     m = re.search(r"_MIN_STEP_REFERENCES\s*=\s*(\d+)", tsrc)
     MIN_STEP_REFS = int(m.group(1)) if m else "?"
     kept, lost = check_pins(original, after)
@@ -818,7 +845,7 @@ def main():
     total_rows = sum(t[0] for t in totals.values())
     total_gross = sum(t[1] for t in totals.values())
     total_net = sum(t[2] for t in totals.values())
-    core_bytes = len(ENGINE.read_text(encoding="utf-8").encode("utf-8"))
+    core_bytes = len(ORIGINAL.encode("utf-8"))
 
     out.append("# Deletion manifest — R3 classes 1–3, `plugins/dev-loop/skills/dev-loop/loop-engine.md`\n")
     out.append(f"Engine as read: 2,535 lines, {core_bytes:,} bytes (`wc -c`). Line numbers are the current file's. "
@@ -865,6 +892,128 @@ def main():
     for c in (1, 2, 3):
         print(f"class {c}: rows={totals[c][0]} gross={totals[c][1]} net={totals[c][2]}")
     print("top5:", [(r['id'], r['gross']) for r in computed[:5]])
+
+
+# ---------------------------------------------------------------------------------------------
+# Applying and checking rows against the CURRENT engine (#289).
+# ---------------------------------------------------------------------------------------------
+MAX_CONTEXT = 600
+
+
+def locate(current, a, b):
+    """Find snapshot span ORIGINAL[a:b] in `current`. Returns ("ok", a2, b2), ("gone", None, None)
+    when the span's own text no longer occurs, or ("ambiguous", None, None) when no amount of
+    unchanged snapshot context makes it unique."""
+    text = ORIGINAL[a:b]
+    if text not in current:
+        return "gone", None, None
+    for k in range(0, MAX_CONTEXT + 1, 20):
+        for kl, kr in ((k, 0), (0, k), (k, k)):
+            lo, hi = max(0, a - kl), min(len(ORIGINAL), b + kr)
+            ctx = ORIGINAL[lo:hi]
+            if current.count(ctx) == 1:
+                pos = current.index(ctx) + (a - lo)
+                return "ok", pos, pos + (b - a)
+    return "ambiguous", None, None
+
+
+def select(spec, exclude):
+    pats = [p.strip() for p in spec.split(",") if p.strip()]
+    ex = [p.strip() for p in (exclude or "").split(",") if p.strip()]
+    rows = [r for r in ROWS
+            if any(fnmatch.fnmatchcase(r["id"], p) for p in pats)
+            and not any(fnmatch.fnmatchcase(r["id"], p) for p in ex)]
+    if not rows:
+        sys.exit(f"no rows match {spec!r}")
+    return rows
+
+
+def status(current, r):
+    spans = []
+    for frag in r["frags"]:
+        st, a2, b2 = locate(current, *frag_span(*frag))
+        if st != "ok":
+            return st, None
+        spans.append((a2, b2))
+    return "ok", spans
+
+
+def _tidy(text, lo, hi):
+    """Collapse what a splice at [lo, hi) left behind: a blank-line run of three or more newlines,
+    and trailing spaces before a newline (manifest execution note 8). Touches only the splice."""
+    lo, hi = max(0, lo - 4), min(len(text), hi + 4)
+    seg = prev = text[lo:hi]
+    while True:  # to a fixed point: dropping a space can leave a fresh triple newline
+        seg = seg.replace("\n\n\n", "\n\n").replace(" \n", "\n")
+        if seg == prev:
+            break
+        prev = seg
+    return text[:lo] + seg + text[hi:]
+
+
+def apply_rows(current, rows):
+    edits, bad = [], []
+    for r in rows:
+        st, spans = status(current, r)
+        if st != "ok":
+            bad.append(f"{r['id']}: {st}")
+            continue
+        for (a2, b2), sv in zip(spans, applied_survivors(r)):
+            edits.append((a2, b2, sv, r["id"]))
+    if bad:
+        sys.exit("rows that do not anchor in the current engine:\n  " + "\n  ".join(bad))
+    edits.sort(key=lambda t: t[0])
+    for (a1, b1, _, i1), (a2, b2, _, i2) in zip(edits, edits[1:]):
+        assert b1 <= a2, f"overlapping fragments: {i1} and {i2}"
+    text = current
+    for a, b, sv, _ in reversed(edits):
+        text = text[:a] + sv + text[b:]
+        text = _tidy(text, a, a + len(sv))
+    return text
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("out_dir", nargs="?", default=".",
+                    help="where the regenerated manifest and engine-after.md go (default: .)")
+    ap.add_argument("--engine", type=pathlib.Path, default=ENGINE,
+                    help="current engine file for --check/--apply (default: the repo's)")
+    ap.add_argument("--check", metavar="ROWS",
+                    help="report whether each selected row anchors in the current engine")
+    ap.add_argument("--apply", metavar="ROWS",
+                    help="apply the selected rows to the current engine, e.g. 'C1-*' or 'C2-01,C2-02'")
+    ap.add_argument("--exclude", metavar="ROWS", help="rows to leave out of --check/--apply")
+    ap.add_argument("--include-reassigned", action="store_true",
+                    help="allow --apply on rows REASSIGNED to another issue")
+    ap.add_argument("--in-place", action="store_true",
+                    help="with --apply, rewrite --engine instead of writing engine-applied.md")
+    args = ap.parse_args()
+    global OUT
+    OUT = pathlib.Path(args.out_dir) / "deletion-manifest.md"
+    validate_all()
+    if not (args.check or args.apply):
+        generate()
+        return
+    current = args.engine.read_text(encoding="utf-8")
+    if args.check:
+        counts = {}
+        for r in select(args.check, args.exclude):
+            st, _ = status(current, r)
+            note = f"  (reassigned: {REASSIGNED[r['id']]})" if r["id"] in REASSIGNED else ""
+            print(f"{r['id']}: {st}{note}")
+            counts[st] = counts.get(st, 0) + 1
+        print("summary:", ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+        return
+    rows = select(args.apply, args.exclude)
+    held = [r["id"] for r in rows if r["id"] in REASSIGNED]
+    if held and not args.include_reassigned:
+        sys.exit("refusing reassigned rows (pass --exclude, or --include-reassigned in the PR that "
+                 "owns them):\n  " + "\n  ".join(f"{i} -> {REASSIGNED[i]}" for i in held))
+    after = apply_rows(current, rows)
+    dest = args.engine if args.in_place else pathlib.Path(args.out_dir) / "engine-applied.md"
+    dest.write_text(after, encoding="utf-8")
+    saved = len(current.encode("utf-8")) - len(after.encode("utf-8"))
+    print(f"applied {len(rows)} rows -> {dest}; {saved:,} bytes net")
 
 
 if __name__ == "__main__":
