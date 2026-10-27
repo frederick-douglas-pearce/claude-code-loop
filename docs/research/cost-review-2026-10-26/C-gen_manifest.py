@@ -7,22 +7,24 @@ means "through the end of last_line including its newline". Phrases are asserted
 typo fails loudly rather than mis-sizing a row.
 
 Usage (stdlib; needs a full clone that contains BASE_REV):
-  C-gen_manifest.py [OUT_DIR]                   regenerate the manifest from the frozen snapshot
+  C-gen_manifest.py [OUT_DIR]                   regenerate C-deletion-manifest.md and
+                                                engine-after.md from the frozen snapshot
   C-gen_manifest.py --check 'C2-*,C3-*'         does each row anchor in the current engine?
                                                 (exit 1 if any fragment does not)
-  C-gen_manifest.py [OUT_DIR] --apply 'C1-*' --exclude C1-07 [--in-place]
-                                                apply rows to the current engine
+  C-gen_manifest.py --apply 'C1-*' --exclude C1-07 --in-place
+                                                apply rows to the current engine (without
+                                                --in-place: write OUT_DIR/engine-applied.md)
 Plain regeneration reads the snapshot, so it passes whatever the current engine looks like: it is
 not a check. Use --check for that.
 
 A fragment is found by its WHOLE snapshot text plus at least MIN_CONTEXT characters of unchanged
 snapshot context on one side, never by line number and never by its text alone (a verbatim copy
-elsewhere would otherwise be deleted in its place). A fragment whose interior another PR edited is
-reported `changed` and is never applied: re-anchor that row by hand. Every pattern given to
---check, --apply or --exclude must match a row. Rows the sequencing review moved to another issue
+elsewhere would otherwise be deleted in its place). A fragment that is not found is `absent`:
+already applied, or edited by another PR. The tool never claims which; check by hand. Every pattern
+given to --check or --apply must match a row, and every --exclude pattern a selected row. Rows the sequencing review moved to another issue
 (REASSIGNED) are applied only when named one by one in --include-reassigned.
 """
-import argparse, ast, fnmatch, pathlib, re, subprocess, sys
+import argparse, ast, fnmatch, functools, pathlib, re, subprocess, sys
 
 # Line numbers in every row are coordinates in a FROZEN snapshot of the engine, the commit the
 # manifest was written against. Regenerating the manifest reads that snapshot, so its output never
@@ -42,6 +44,7 @@ class ManifestError(Exception):
     """A row or an edit that cannot be applied as written. Never an assert: -O strips those."""
 
 
+@functools.lru_cache(maxsize=None)
 def git_show(rel):
     r = subprocess.run(["git", "-C", str(REPO), "show", f"{BASE_REV}:{rel}"],
                        capture_output=True, text=True, encoding="utf-8")
@@ -74,32 +77,17 @@ REASSIGNED = {
 
 
 def frag_text(l1, s, l2, e):
+    """Validate a fragment against the snapshot and return its text (frag_span has the arithmetic)."""
     if not 1 <= l1 <= l2 <= len(LINES):
         raise ManifestError(f"line range out of bounds: L{l1}–{l2}")
-    first = LINES[l1 - 1]
-    last = LINES[l2 - 1]
-    if s is None:
-        a = 0
-    else:
-        a = first.find(s)
-        if a < 0:
-            raise ManifestError(f"start phrase not on L{l1}: {s!r}\n  line: {first!r}")
-    if e is None:
-        b = len(last)
-        tail_nl = True
-    else:
-        b = last.find(e)
-        if b < 0:
-            raise ManifestError(f"end phrase not on L{l2}: {e!r}\n  line: {last!r}")
-        b += len(e)
-        tail_nl = False
-    if l1 == l2:
-        if not a < b:
-            raise ManifestError(f"empty or inverted span on L{l1}: {s!r} .. {e!r}")
-        return first[a:b] + ("\n" if tail_nl else "")
-    mid = LINES[l1:l2 - 1]
-    body = first[a:] + "\n" + "".join(m + "\n" for m in mid) + last[:b]
-    return body + ("\n" if tail_nl else "")
+    if s is not None and s not in LINES[l1 - 1]:
+        raise ManifestError(f"start phrase not on L{l1}: {s!r}\n  line: {LINES[l1 - 1]!r}")
+    if e is not None and e not in LINES[l2 - 1]:
+        raise ManifestError(f"end phrase not on L{l2}: {e!r}\n  line: {LINES[l2 - 1]!r}")
+    a, b = frag_span(l1, s, l2, e)
+    if not a < b:
+        raise ManifestError(f"empty or inverted span at L{l1}: {s!r} .. {e!r}")
+    return ORIGINAL[a:b]
 
 
 # ----------------------------------------------------------------------------------------------
@@ -296,7 +284,7 @@ row("C2-30", 2, [F(1864, None, 1866, None)],
     "nothing (the skeleton already renders line + indented remedy)",
     "drop",
     "L1866 `unreadable` matches a `test_mutate_verify.py` literal by coincidence. Overlaps R3 class 4.")
-row("C2-31", 2, [F(1921, "This is deliberate", 1923, "branch-protection collision.")],
+row("C2-31", 2, [F(1921, None, 1923, None)],
     "nothing",
     "`.claude/specs/decisions.md` if a D-entry is wanted; otherwise drop (\"branch-protection collision\" is AgentFluent history)",
     "L1919 `.gitignore` is pinned (tests L360, L523) and untouched.")
@@ -809,7 +797,7 @@ def check_pins(original, after):
     lost, kept = [], 0
     seen = set()
     for tf in snapshot_tests():
-        tree = ast.parse(git_show(f"tests/{tf.name}"))
+        tree = ast.parse(git_show(f"tests/{tf}"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 sn = norm(node.value)
@@ -820,7 +808,7 @@ def check_pins(original, after):
                     if sn in a:
                         kept += 1
                     else:
-                        lost.append((tf.name, node.lineno, sn[:60]))
+                        lost.append((tf, node.lineno, sn[:60]))
     return kept, lost
 
 
@@ -830,7 +818,24 @@ def snapshot_tests():
                        capture_output=True, text=True, encoding="utf-8")
     if r.returncode:
         sys.exit(f"cannot list tests/ at {BASE_REV[:12]}: {r.stderr.strip()}")
-    return [pathlib.PurePosixPath(n) for n in sorted(r.stdout.split()) if n.endswith(".py")]
+    return [n for n in sorted(r.stdout.split()) if n.endswith(".py")]
+
+
+def lost_pins(before, after):
+    """Literals (>= 10 chars) in the WORKING TREE's tests/*.py that occur in `before` but not in
+    `after`, whitespace-normalized. --apply's check; regeneration's is check_pins, at BASE_REV."""
+    norm = lambda s: re.sub(r"\s+", " ", s).strip()
+    o, a = norm(before), norm(after)
+    lost, seen = [], set()
+    for tf in sorted((REPO / "tests").glob("*.py")):
+        for node in ast.walk(ast.parse(tf.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                sn = norm(node.value)
+                if len(sn) >= 10 and sn not in seen:
+                    seen.add(sn)
+                    if sn in o and sn not in a:
+                        lost.append((tf.name, node.lineno, sn[:60]))
+    return lost
 
 
 def validate_all():
@@ -920,21 +925,21 @@ def generate(out_dir):
         out.append(f"| {r['id']} | {esc(r['rng'])} | {r['gross']:,} | {r['net']:,} | {r['cls']} | {esc(r['survivor'])} | {esc(r['dest'])} | {esc(r['risk'])} | {esc(r['fragdesc'])} |")
     out.append("")
     out.append("## Execution notes\n")
-    out.append("1. **Order of operations.** Any order, one class or row set per PR. Run `C-gen_manifest.py --check ROWS` against the PR's base first (it exits 1 if any fragment is `changed`, `missing` or `ambiguous`), then `--apply ROWS --in-place`. Plain regeneration reads the frozen snapshot and passes whatever the current engine looks like, so it is not a check.")
+    out.append("1. **Order of operations.** Any order, one class or row set per PR. Run `C-gen_manifest.py --check ROWS` against the PR's base first (it exits 1 if any fragment is `absent` or `ambiguous`), then `--apply ROWS --in-place`, which warns about any test literal the apply removes. Plain regeneration reads the frozen snapshot and passes whatever the current engine looks like, so it is not a check.")
     out.append("2. **Tests that must change in the same PR** (the three PINNED rows): C1-02 (retire the step-11 region from the always-escalate coupling tests, ~L3000–3065), C1-13 (`_EXPECTED_RESTATEMENTS` 4 → 3, L1481), C2-01 (delete the `implementing` table row and its What-holds bullet in one edit; `PhaseIndexTests` compares the two sets).")
     out.append("3. **Anchors to keep byte-exact** (region start/end literals that sit beside a span): L281, L374, L555, L732, L770, L778, L1058, L1166, L1171, L1304, L1512, L1602, L1743, L2018–2019, L2264, L2331, L2383, L2401, L2428, L2430, L2460, L2509. Each row that abuts one names it.")
     out.append("4. **Cross-references into cut passages:** none by heading name from `SKILL.md`, the units, `init-loop.md` or README (grepped for every cut heading; `accepting.md` L145's \"be more careful\" is a phrase, not a pointer). Step 10's \"three constraints\" (L903–911) are referenced from L2226–2227 and `accepting.md`, which is why they are excluded.")
     out.append(f"5. **`PipelineStepOrderTests._MIN_STEP_REFERENCES` floor.** The engine corpus carries {STEP_REFS_BEFORE} `step N` cross-references today; applying every row leaves {STEP_REFS_AFTER} (floor: {MIN_STEP_REFS}). The generator wrote the post-deletion text to `engine-after.md` beside this file and re-checked every ≥10-char string literal from `tests/*.py` that occurs in the engine today: {PIN_SUMMARY}")
     out.append("6. **Survivor discipline.** Every survivor was written to keep the rule, the trigger and any exception; where a \"why\" paragraph held the only statement of one (C2-15's default-deny close, C3-62's `count it`, C3-77's anchor sentence, C3-88's `cannot tell ⇒ dirty`), that sentence is in the survivor verbatim. Do not improve a survivor into a new argument — deletion asserts nothing (root `CLAUDE.md`).")
     out.append("7. **Class-2 destinations.** Four rows ask for a `plugins/CLAUDE.md` bullet (C2-04 exclusion wording, C2-19 retired execution-policy binding, C2-28 heading-nesting note, C2-34/35 placement notes); the rest point at an existing issue/finding (#1 F15, #60, #62, #89) or drop.")
-    out.append("8. **Whitespace after whole-paragraph deletions.** Applying the rows verbatim leaves 17 blank-line pairs (two consecutive empty lines) where a whole paragraph went, plus a trailing space at a handful of splice points; `--apply` collapses them, single trailing spaces, and doubled spaces at each splice, and refuses a splice that leaves orphaned punctuation. They are cosmetic — markdown renders them identically — and the sizes above do not count them. The `engine-after.md` that plain regeneration writes is the untidied snapshot rendering.")
+    out.append("8. **Whitespace after whole-paragraph deletions.** Applying the rows verbatim leaves 17 blank-line pairs (two consecutive empty lines) where a whole paragraph went, plus a trailing space at a handful of splice points; `--apply` collapses them, whitespace-only lines, single trailing spaces, and doubled spaces at each splice. They are cosmetic — markdown renders them identically — and the sizes above do not count them. The `engine-after.md` that plain regeneration writes is the untidied snapshot rendering.")
     out.append("")
     out.append("## Appendix — ranges considered and deliberately NOT listed\n")
     out.append("| range | why it stays |\n|---|---|")
     for rng, why in EXCLUDED:
         out.append(f"| {esc(rng)} | {esc(why)} |")
     out.append("")
-    (out_dir / "deletion-manifest.md").write_text("\n".join(out), encoding="utf-8")
+    (out_dir / "C-deletion-manifest.md").write_text("\n".join(out), encoding="utf-8")
     print(f"rows={total_rows} gross={total_gross} net={total_net} core={core_bytes}")
     for c in (1, 2, 3):
         print(f"class {c}: rows={totals[c][0]} gross={totals[c][1]} net={totals[c][2]}")
@@ -946,7 +951,6 @@ def generate(out_dir):
 # ---------------------------------------------------------------------------------------------
 MIN_CONTEXT = 40   # unchanged snapshot characters required beside a fragment, on one side
 MAX_CONTEXT = 600
-END_PROBE = 60     # characters of each end of a span used to tell `changed` from `missing`
 
 
 def _find_once(hay, needle):
@@ -959,9 +963,9 @@ def locate(current, a, b):
       ok         the whole span, with >= MIN_CONTEXT chars of unchanged snapshot context on one
                  side (less only at a file boundary), occurs exactly once;
       ambiguous  the span's text occurs, but never uniquely with that much unchanged context, so
-                 the copy found may not be this row's (a verbatim duplicate elsewhere);
-      changed    both ends of the span occur but the whole does not: another PR edited it;
-      missing    neither: already applied, or removed by another edit."""
+                 the copy found may not be this row's (a verbatim duplicate elsewhere, or both
+                 neighbors already applied);
+      absent     the span's text does not occur: already applied, or edited by another PR."""
     text = ORIGINAL[a:b]
     if text in current:
         for k in range(MIN_CONTEXT, MAX_CONTEXT + 1, 20):
@@ -972,27 +976,32 @@ def locate(current, a, b):
                     pos = i + (a - lo)
                     return "ok", pos, pos + (b - a)
         return "ambiguous", None, None
-    head, tail = text[:END_PROBE], text[-END_PROBE:]
-    h = current.find(head)
-    if len(text) > 2 * END_PROBE and h >= 0 and current.find(tail, h + len(head)) >= 0:
-        return "changed", None, None
-    return "missing", None, None
+    return "absent", None, None
+
+
+def split_ids(spec):
+    return [p.strip() for p in (spec or "").split(",") if p.strip()]
 
 
 def select(spec, exclude):
-    """Rows matching `spec` minus `exclude`. Every pattern in either must match some row."""
-    pats = [p.strip() for p in spec.split(",") if p.strip()]
-    ex = [p.strip() for p in (exclude or "").split(",") if p.strip()]
+    """Rows matching `spec` minus `exclude`. Every spec pattern must match a row, and every
+    exclude pattern a selected row: a typo must fail, never select or keep a row silently."""
+    pats, ex = split_ids(spec), split_ids(exclude)
+    if not pats:
+        sys.exit("empty row selection")
+    match = lambda ids, p: [i for i in ids if fnmatch.fnmatchcase(i, p)]
     ids = [r["id"] for r in ROWS]
-    unmatched = [p for p in pats + ex if not fnmatch.filter(ids, p)]
+    unmatched = [p for p in pats if not match(ids, p)]
     if unmatched:
         sys.exit("patterns that match no row: " + ", ".join(unmatched))
-    rows = [r for r in ROWS
-            if any(fnmatch.fnmatchcase(r["id"], p) for p in pats)
-            and not any(fnmatch.fnmatchcase(r["id"], p) for p in ex)]
-    if not rows:
+    chosen = [i for i in ids if any(fnmatch.fnmatchcase(i, p) for p in pats)]
+    unmatched = [p for p in ex if not match(chosen, p)]
+    if unmatched:
+        sys.exit("--exclude patterns that match no selected row: " + ", ".join(unmatched))
+    keep = {i for i in chosen if not any(fnmatch.fnmatchcase(i, p) for p in ex)}
+    if not keep:
         sys.exit(f"no rows left after --exclude: {spec!r} minus {exclude!r}")
-    return rows
+    return [r for r in ROWS if r["id"] in keep]
 
 
 def frag_statuses(current, r):
@@ -1008,13 +1017,11 @@ def frag_statuses(current, r):
     return outp
 
 
-ORPHAN = re.compile(r"[.;:,]\s*[;:,]|[ \t][;:,.)](?=\s|$)")
-
-
 def _tidy_seg(seg):
     prev = None
     while seg != prev:  # to a fixed point: one rule can expose another's pattern
         prev = seg
+        seg = re.sub(r"\n[ \t]+\n", "\n\n", seg)   # a whitespace-only line is a blank line
         seg = re.sub(r"\n{3,}", "\n\n", seg)
         seg = re.sub(r"(?<! ) \n", "\n", seg)       # a lone trailing space; keep a hard break
         seg = re.sub(r"(?<=\S) {2,}(?=\S)", " ", seg)  # a doubled space inside a line
@@ -1023,24 +1030,18 @@ def _tidy_seg(seg):
 
 def _tidy_windows(text, windows, pad=4):
     """Tidy each splice's neighborhood. Windows are merged where they touch and processed from the
-    end of the file backward, so tidying one never shifts another's offsets. A splice that leaves
-    orphaned punctuation is an error, not a cosmetic: the survivor or the span needs fixing."""
+    end of the file backward, so tidying one never shifts another's offsets. Whitespace only:
+    punctuation a survivor leaves behind is the row's defect, fixed in the row."""
     merged = []
-    for lo, hi, rid in sorted((max(0, lo - pad), min(len(text), hi + pad), rid)
-                              for lo, hi, rid in windows):
+    for lo, hi in sorted((max(0, lo - pad), min(len(text), hi + pad)) for lo, hi, _ in windows):
         if merged and lo <= merged[-1][1]:
             merged[-1][1] = max(merged[-1][1], hi)
-            merged[-1][2].append(rid)
         else:
-            merged.append([lo, hi, [rid]])
-    bad = []
-    for lo, hi, rids in reversed(merged):
-        seg = _tidy_seg(text[lo:hi])
-        if ORPHAN.search(seg):
-            bad.append(f"{'/'.join(sorted(set(rids)))}: {seg.strip()!r}")
-        text = text[:lo] + seg + text[hi:]
-    if bad:
-        raise ManifestError("splice left orphaned punctuation:\n  " + "\n  ".join(bad))
+            merged.append([lo, hi])
+    for lo, hi in reversed(merged):
+        text = text[:lo] + _tidy_seg(text[lo:hi]) + text[hi:]
+    if text.endswith("\n\n"):  # a splice at the end of the file
+        text = text.rstrip("\n") + "\n"
     return text
 
 
@@ -1053,9 +1054,9 @@ def apply_rows(current, rows):
             else:
                 edits.append((a2, b2, sv, r["id"]))
     if bad:
-        hint = ("\nAn `ambiguous` fragment whose neighbors were applied in earlier runs has no unchanged "
-                "context left: apply it in the same --apply as a neighbor (in this manifest, C3-53 "
-                "with C3-52, and C2-32 with C2-31), or by hand." if any("ambiguous" in x for x in bad) else "")
+        hint = ("\nAn `ambiguous` fragment may have no unchanged context left because rows beside it "
+                "were applied in earlier runs: apply it in the same --apply as those, or by hand."
+                if any("ambiguous" in x for x in bad) else "")
         raise ManifestError("fragments that do not anchor in the current engine:\n  "
                             + "\n  ".join(bad) + hint)
     return _splice(current, edits, tidy=True)
@@ -1079,23 +1080,24 @@ def main():
     ap.add_argument("--in-place", action="store_true",
                     help="with --apply, rewrite --engine instead of writing engine-applied.md")
     args = ap.parse_args()
-    if not args.apply and (args.in_place or args.include_reassigned):
+    checking, applying = args.check is not None, args.apply is not None
+    if not applying and (args.in_place or args.include_reassigned):
         ap.error("--in-place and --include-reassigned need --apply")
-    if not (args.check or args.apply) and (args.engine or args.exclude):
+    if not (checking or applying) and (args.engine or args.exclude):
         ap.error("--engine and --exclude need --check or --apply")
-    if args.check and args.out_dir:
+    if checking and args.out_dir:
         ap.error("--check writes nothing; drop OUT_DIR")
     if args.in_place and args.out_dir:
         ap.error("--in-place writes the engine; drop OUT_DIR")
     out_dir = pathlib.Path(args.out_dir or ".")
     load_snapshot()
-    if not (args.check or args.apply):
+    if not (checking or applying):
         generate(out_dir)
         return
     validate_all()
     engine = args.engine or ENGINE
     current = engine.read_text(encoding="utf-8")
-    if args.check:
+    if checking:
         counts, failed = {}, False
         for r in select(args.check, args.exclude):
             note = f"  (reassigned: {REASSIGNED[r['id']]})" if r["id"] in REASSIGNED else ""
@@ -1106,7 +1108,7 @@ def main():
         print("summary:", ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
         sys.exit(1 if failed else 0)
     rows = select(args.apply, args.exclude)
-    named = [i.strip() for i in args.include_reassigned.split(",") if i.strip()]
+    named = split_ids(args.include_reassigned)
     selected = {r["id"] for r in rows}
     stray = [i for i in named if i not in REASSIGNED or i not in selected]
     if stray:
@@ -1123,6 +1125,12 @@ def main():
         sys.exit(str(e))
     dest = engine if args.in_place else out_dir / "engine-applied.md"
     dest.write_text(after, encoding="utf-8")
+    lost = lost_pins(current, after)
+    if lost:
+        print(f"WARNING: {len(lost)} literal(s) from the working tree's tests/ occur in the engine "
+              "before this apply and not after; edit those tests in the same PR:")
+        for f, ln, lit in lost:
+            print(f"  {f}:{ln}  {lit}")
     saved = len(current.encode("utf-8")) - len(after.encode("utf-8"))
     print(f"applied {len(rows)} rows -> {dest}; {saved:,} bytes net")
 

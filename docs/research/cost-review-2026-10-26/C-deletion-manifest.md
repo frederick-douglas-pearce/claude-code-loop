@@ -9,9 +9,9 @@ Engine as read: 2,535 lines, 200,789 bytes (`wc -c`). Line numbers are the froze
 | class | rows | bytes (gross) | bytes (net of survivors) |
 |---|---:|---:|---:|
 | 1 | 14 | 9,933 | 8,013 |
-| 2 | 38 | 12,938 | 10,176 |
+| 2 | 38 | 12,941 | 10,179 |
 | 3 | 95 | 32,965 | 28,118 |
-| **all** | **147** | **55,836** | **46,307** |
+| **all** | **147** | **55,839** | **46,310** |
 
 Net cut ≈ 23.1% of core as read (200,789 B). Rows marked PINNED need a test edit in the same PR; rows marked *flag* touch a site of a multi-site invariant that `plugins/CLAUDE.md` lists but #35 does not own — the rule sentence survives in each, so they are executable, but tell the reconciling agent.
 
@@ -110,8 +110,8 @@ Net cut ≈ 23.1% of core as read (200,789 B). Rows marked PINNED need a test ed
 | C3-35 | L754–757 (partial) | 256 | 230 | 3 | recorded in the plan text. | drop (Gates L2369–2374 restates why declines must be handed over, and is itself trimmed by C3-90) | `Ledger format` at L754 is a literal mention. | L754 from 'recorded in the plan text. A' → L757 through 'every subsequent fresh instance.' |
 | C3-08 | L276–279 (partial) | 251 | 158 | 3 | State it at the invoke site: `DESIGN_AGENT` has no prompt template of its own (Tool surface). | drop | Region `step 4 (architect invoke site)` (L269 → L281) must still contain `Verdict-first invariant` — L275 untouched. | L276 from 'This agent has no prompt template of its' → L279 through 'reason.' |
 | C1-11 | L1927–1929 | 249 | 249 | 1 | nothing | drop (Resume L1973–1977 states it) | Not pinned. | L1927 → L1929 |
+| C2-31 | L1921–1923 | 247 | 247 | 2 | nothing | `.claude/specs/decisions.md` if a D-entry is wanted; otherwise drop ("branch-protection collision" is AgentFluent history) | L1919 `.gitignore` is pinned (tests L360, L523) and untouched. | L1921 → L1923 |
 | C2-32 | L1924–1926 | 247 | 247 | 2 | nothing | `docs/research/README.md` (harvest guidance is maintainer research practice, not an orchestrator instruction) | Not pinned. | L1924 → L1926 |
-| C2-31 | L1921–1923 (partial) | 244 | 244 | 2 | nothing | `.claude/specs/decisions.md` if a D-entry is wanted; otherwise drop ("branch-protection collision" is AgentFluent history) | L1919 `.gitignore` is pinned (tests L360, L523) and untouched. | L1921 from 'This is deliberate' → L1923 through 'branch-protection collision.' |
 | C3-04 | L127–130 (partial) | 243 | 155 | 3 | Test membership against the vocabulary, never by excluding a list of statuses that rest. | drop | Not pinned. | L127 from 'Test' → L130 through 'exists to prevent.' |
 | C2-37 | L2499–2502 (partial) | 242 | 242 | 2 | nothing | drop (maintainer guidance about recipes that do not yet name the invariant) | Not pinned. | L2499 from 'Read that as the' → L2502 through 'someone closes it.' |
 | C3-45 | L1102–1103 (partial); L1106–1107 (partial) | 242 | 213 | 3 | Where (fragment 1) / Removal is always yours. (fragment 2) | drop | Not pinned. | L1102 from 'These are one duty in two' → L1103 through 'destroys work: where' ‖ L1106 from 'Hosts that auto-clean' → L1107 through 'removal is always yours.' |
@@ -169,14 +169,14 @@ Net cut ≈ 23.1% of core as read (200,789 B). Rows marked PINNED need a test ed
 
 ## Execution notes
 
-1. **Order of operations.** Any order, one class or row set per PR. Run `C-gen_manifest.py --check ROWS` against the PR's base first (it exits 1 if any fragment is `changed`, `missing` or `ambiguous`), then `--apply ROWS --in-place`. Plain regeneration reads the frozen snapshot and passes whatever the current engine looks like, so it is not a check.
+1. **Order of operations.** Any order, one class or row set per PR. Run `C-gen_manifest.py --check ROWS` against the PR's base first (it exits 1 if any fragment is `absent` or `ambiguous`), then `--apply ROWS --in-place`, which warns about any test literal the apply removes. Plain regeneration reads the frozen snapshot and passes whatever the current engine looks like, so it is not a check.
 2. **Tests that must change in the same PR** (the three PINNED rows): C1-02 (retire the step-11 region from the always-escalate coupling tests, ~L3000–3065), C1-13 (`_EXPECTED_RESTATEMENTS` 4 → 3, L1481), C2-01 (delete the `implementing` table row and its What-holds bullet in one edit; `PhaseIndexTests` compares the two sets).
 3. **Anchors to keep byte-exact** (region start/end literals that sit beside a span): L281, L374, L555, L732, L770, L778, L1058, L1166, L1171, L1304, L1512, L1602, L1743, L2018–2019, L2264, L2331, L2383, L2401, L2428, L2430, L2460, L2509. Each row that abuts one names it.
 4. **Cross-references into cut passages:** none by heading name from `SKILL.md`, the units, `init-loop.md` or README (grepped for every cut heading; `accepting.md` L145's "be more careful" is a phrase, not a pointer). Step 10's "three constraints" (L903–911) are referenced from L2226–2227 and `accepting.md`, which is why they are excluded.
 5. **`PipelineStepOrderTests._MIN_STEP_REFERENCES` floor.** The engine corpus carries 292 `step N` cross-references today; applying every row leaves 257 (floor: 40). The generator wrote the post-deletion text to `engine-after.md` beside this file and re-checked every ≥10-char string literal from `tests/*.py` that occurs in the engine today: 75 still present; 3 LOST — `unreadable` (test_mutate_verify.py:566); `description` (test_posts_frontmatter.py:53); `— (in core)` (test_repo_consistency.py:1829)
 6. **Survivor discipline.** Every survivor was written to keep the rule, the trigger and any exception; where a "why" paragraph held the only statement of one (C2-15's default-deny close, C3-62's `count it`, C3-77's anchor sentence, C3-88's `cannot tell ⇒ dirty`), that sentence is in the survivor verbatim. Do not improve a survivor into a new argument — deletion asserts nothing (root `CLAUDE.md`).
 7. **Class-2 destinations.** Four rows ask for a `plugins/CLAUDE.md` bullet (C2-04 exclusion wording, C2-19 retired execution-policy binding, C2-28 heading-nesting note, C2-34/35 placement notes); the rest point at an existing issue/finding (#1 F15, #60, #62, #89) or drop.
-8. **Whitespace after whole-paragraph deletions.** Applying the rows verbatim leaves 17 blank-line pairs (two consecutive empty lines) where a whole paragraph went, plus a trailing space at a handful of splice points; `--apply` collapses them, single trailing spaces, and doubled spaces at each splice, and refuses a splice that leaves orphaned punctuation. They are cosmetic — markdown renders them identically — and the sizes above do not count them. The `engine-after.md` that plain regeneration writes is the untidied snapshot rendering.
+8. **Whitespace after whole-paragraph deletions.** Applying the rows verbatim leaves 17 blank-line pairs (two consecutive empty lines) where a whole paragraph went, plus a trailing space at a handful of splice points; `--apply` collapses them, whitespace-only lines, single trailing spaces, and doubled spaces at each splice. They are cosmetic — markdown renders them identically — and the sizes above do not count them. The `engine-after.md` that plain regeneration writes is the untidied snapshot rendering.
 
 ## Appendix — ranges considered and deliberately NOT listed
 
