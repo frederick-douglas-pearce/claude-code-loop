@@ -1,0 +1,5 @@
+`DESIGN_AGENT`. Escalate to the HUMAN when those disagree/punt, ACs are unresolvable, an
+action is destructive/irreversible, a review finding is contested or is BLOCKING and unresolved
+(an EDITORIAL one raised before step 8's sweep escalates nothing — it is swept there; one raised
+after that sweep escalates like any other, by step 8's *"Once" is literal* rule), the same step
+failed twice, or the round ceiling is reached (Gates) —

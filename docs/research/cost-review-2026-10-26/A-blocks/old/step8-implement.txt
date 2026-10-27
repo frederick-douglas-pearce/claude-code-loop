@@ -1,0 +1,22 @@
+**Implement viable BLOCKING findings** — **except one raising a design question, which stops for
+the human before any fix for it is applied (below)** — act on that stop before acting on this
+sentence. Decline any **other** finding you do
+not implement, with a one-line rationale; the exception above is a stop, never a decline — **and
+record each decline, with that rationale, in the gate-decision block where this round resolves**
+(Ledger format → progress.md), exactly as an architect decline is recorded in the plan text. A
+later round is *required* to receive the declines (Gates), and a decline is the one outcome that
+leaves **no trace in the diff** for that round to recover it from: unrecorded, it is invisible to
+every subsequent fresh instance. Then **commit the BLOCKING fixes** and
+**verify recs were applied — by a fresh checker, never by yourself.** If you *delegated* any fix,
+that agent wrote to its own copy: collect the diff, apply it, and **remove the copy before you
+commit** (Execution policy, Tool surface) — directing a fix is authorship, and it is also the one
+spawn at this gate that opens the staging window. This is the Fresh-re-check
+invariant's sharpest instance (see Gates): you wrote the fixes, so confirming them yourself is the
+author agreeing with himself, not a gate. **Commit before spawning it** — the checker reads a diff
+ending at `HEAD`, so an uncommitted fix is invisible to it. Under a scoped round that is worse than
+the F15 shape the acceptance gate had to fix, not milder: the checker is handed not the pre-fix code
+but an **empty** delta, which reports clean rather than reporting the wrong thing (hence the
+empty-delta fallback in the `reviewing` unit). Spawn **one lighter
+checker** — its inputs are fixed under Gates (Fresh-re-check invariant → the code-review bullet) and
+are not restated here — rather than re-running the full finder fan-out; that recipe carries its
+licence to object too. Bounded to 2 rounds (round 1 being the review

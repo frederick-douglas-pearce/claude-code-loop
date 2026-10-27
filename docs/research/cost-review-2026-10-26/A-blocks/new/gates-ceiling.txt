@@ -1,0 +1,24 @@
+**The ceiling — six rounds across code review and acceptance in one iteration, every round
+counted however it was opened.** The caps bound each gate and nothing bounds the cycle: a fix at
+one gate re-arms another, so an iteration can spend a round at every stop and never trip a cap.
+Keep the running total — every round this iteration has run at either gate, each `- Code-review:`
+element and each acceptance verify or re-verify, re-arm re-checks and human-directed rounds
+included; **if you cannot tell which rounds are this iteration's, the total is unknown, and unknown
+is at the ceiling.** Before spawning any round of either gate, add one: **a total that would exceed
+six is a round you do not spawn.** STOP and put it to the human with the state — the total and its
+split, each round's `claims=`, and where the last round's findings sit: in the previous fix's
+hunks, in one acceptance-criteria cluster, in prose rather than code — and the options that end a
+cycle: revert the hunk the findings cluster in; split the change along that seam; a subtractive
+scope ruling from `DESIGN_AGENT`; ship what is clean, with the residuals named for the human to
+file; abandon. Another round is the option this stop exists to interrupt — list it last. **A
+direction given before this stop does not carry past it:** "keep going until clean" is spent at the
+ceiling, and **past it no re-arm is owned** — a round that would exceed six is spawned under no
+step's budget; it escalates (Currency). The human remains the budget authority: a round they direct
+*at* this stop runs, counts, and stops again if dirty. It is a handoff on the cap's terms above —
+not a verdict, not `blocked`. Record `ceiling=reached` on the `- Budget:` line (progress.md → the
+Budget line), and the human's answer as a human decision, never as a gate passing (Currency).
+
+Cost: **one extra subagent per dirty class per iteration, plus one fix agent per dirty code-review
+round (step 8)** — so two re-checkers at the acceptance gate when Class A and Class B are both
+dirty, since their inputs differ and cannot be merged into one checker. Bounded either way, and it
+cannot grow into an unbounded ladder.

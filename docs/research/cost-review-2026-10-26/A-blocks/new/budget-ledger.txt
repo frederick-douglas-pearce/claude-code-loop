@@ -1,0 +1,3 @@
+- **`ceiling=reached | not-reached`** — whether the round ceiling (Gates) stopped this iteration.
+  Recorded separately from `gate-rounds` because a total can sit at six without the stop having
+  fired, and only the stop is what a later reader is measuring.

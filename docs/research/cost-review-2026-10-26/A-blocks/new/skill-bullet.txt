@@ -1,0 +1,7 @@
+- **A code-review fix is written by a fresh agent in its own copy of the tree, never by you, and
+  re-checked by another fresh instance, never by its author.** If you cannot isolate a writer, do
+  not write the fix yourself — stop and ask. After any gate's fix, the re-check is a **new spawn** —
+  not you re-reading the diff, and not the round-1 agent re-contacted. If the fresh re-check is
+  still dirty, **escalate to the human** rather than iterating — and **never spawn a round that
+  would take this iteration past six across code review and acceptance**, whatever you were told
+  earlier; if you cannot count them, you are at the ceiling: stop and ask.
