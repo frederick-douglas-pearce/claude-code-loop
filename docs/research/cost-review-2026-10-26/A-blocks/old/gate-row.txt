@@ -1,0 +1,1 @@
+| Code review | `CODE_REVIEW` (parallel finders you run — step 8); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes, each carrying a **finding class**: BLOCKING re-arms; EDITORIAL raised before step 8's sweep is swept there, and anything raised after that sweep escalates |

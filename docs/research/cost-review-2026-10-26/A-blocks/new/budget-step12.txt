@@ -1,0 +1,2 @@
+- **`ceiling=reached` where the round ceiling stopped this iteration (Gates), `ceiling=not-reached`
+  otherwise.** Omitted means unknown, as for every optional slot — never "not reached".

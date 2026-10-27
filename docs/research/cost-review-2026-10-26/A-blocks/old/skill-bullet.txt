@@ -1,0 +1,4 @@
+- **A fix for a gate finding is re-checked by a fresh instance, never by its author.** After you fix
+  what a gate found, the re-check is a **new spawn** — not you re-reading your own diff, and not the
+  round-1 agent re-contacted. If the fresh re-check is still dirty, **escalate to the human** rather
+  than iterating.

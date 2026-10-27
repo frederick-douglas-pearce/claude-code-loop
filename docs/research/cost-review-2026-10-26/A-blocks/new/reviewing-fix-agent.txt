@@ -1,0 +1,44 @@
+**The fix agent — one fresh writer per dirty round, under a deletion-first mandate.** Core (step 8)
+fixes that every BLOCKING fix is written by a fresh agent in its own copy and that you never read
+or edit its hunks; this is the brief. The agent is a new spawn — not a finder of this round, not the
+re-checker, not anything that has read your reasoning — isolated per Tool surface and counted in
+`subagent-runs`. Its copy need not start at this branch's head: **the brief's first instruction is
+to check out the round's anchor** — the head the round ran on — **detached, and print `git rev-parse
+HEAD`**; before you apply anything, confirm the copy's HEAD is that SHA and its `git rev-parse
+--show-toplevel` differs from yours. **A diff whose base you cannot confirm is `unproven` and is not
+applied.** The agent commits nothing: its working tree against that base is the whole deliverable,
+so collection is one `git diff`.
+
+**What the brief carries** — as text, since the agent reads nothing in this engine:
+1. **the finding list, verbatim** — every BLOCKING finding you are implementing, each with its
+   `file:line` and the finder's own words — and nothing of yours: not why you think each defect
+   happened, not a draft fix, not a commit message, not what the fix should say;
+2. **the base** — the anchor SHA, with the checkout-and-confirm instruction above;
+3. **the plan** (`issue-<N>.plan.md`, which holds the acceptance criteria verbatim) and the round's
+   diff range, to read in the copy;
+4. **the mandate, verbatim:** *A finding that turns on a claim — false, stale, unresolvable,
+   self-contradictory, or misdescribing what it sits on — is fixed by deleting the smallest clause
+   that carries the claim, by substituting a value you reproduced in this tree, or by a mechanical
+   re-wrap; if you cannot tell whether a finding turns on a claim, it does. Compose no new
+   sentence: a new sentence is a new claim and enters review unverified. A claim you cannot verify
+   in the tree is deleted, not reworded; a hedge is not a defect, and is never resolved into an
+   assertion. Fix a stale term at every site repo-wide — enumerate them first — not at the one site
+   a finding names. Where a claim is load-bearing and cannot be deleted, or the finding is wrong
+   because the claim is true, DECLINE and say what you reproduced; if you cannot tell whether a
+   claim is load-bearing, it is. A behavior defect is fixed in code, with no new prose claim beside
+   it and never by weakening a test. Grep for inbound references before deleting. Touch nothing no
+   finding reaches. Commit nothing. Spawn nothing.*
+5. **what it returns, verdict-first** (Verdict-first invariant): one line per finding — `fixed:
+   deleted | substituted | re-wrapped | code — <paths>` or `declined — <reason>` — before any
+   explanation; and the Relay invariant's sentence verbatim: *mark each statement you return as
+   REPRODUCED — you ran it, read it, or compared it in the material given to you — or INFERRED,
+   for anything about an artifact you were not given.*
+
+**What you do with the return.** A `declined` finding is a decline for every purpose core's decline
+rule fixes: record it with the agent's reason beside your own declines in the gate-decision block,
+so the re-check receives it and may contest it. Its `file:line` cite the copy, never the merge
+candidate — record dispositions, not lines. **A copy stranded by a `/clear` is collected on Tool
+surface's terms — save its diff beside the ledger, then remove it — and never applied:** a resumed
+`in-review` row replays this step, so the findings it answered are re-derived and re-fixed by a
+fresh spawn.
+

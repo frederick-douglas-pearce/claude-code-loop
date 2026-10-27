@@ -1,0 +1,7 @@
+
+**With each dirty round, record the fix agent's dispositions** — one per BLOCKING finding, in the
+agent's own vocabulary (`fixed: deleted | substituted | re-wrapped | code` or `declined —
+<reason>`; the `reviewing` unit, *The fix agent*), written when the fix resolves and before the
+re-check is spawned, beside the round's declines. A disposition held only in your context is lost
+to the `/clear` that most often sits between a fix and its re-check, and the re-check is owed the
+declines among them.

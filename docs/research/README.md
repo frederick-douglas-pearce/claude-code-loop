@@ -19,6 +19,7 @@ rather than remembered.
 | `draft-core.md` | The seven-unit **target** architecture. Not the increment being shipped — do not implement from it. |
 | `core-self-sufficiency-audit.md` | Which engine references a shrunken core would break, and the replacement wording. |
 | `cost-model-design.md` | Design note: what it would take to *estimate* a lever's effect rather than read it off a slope — estimands, the identification designs available, and the instrumentation that has to land first. |
+| **`cost-review-2026-10-26.md`** | **The cost review** (2026-10-26, engine 0.3.1): where the bill goes (turns, not context), nine ranked levers R1–R9, what to change in the testing approach, and the `cost: turns first` epic with a model label per issue. Appendices in `cost-review-2026-10-26/`: the R1 design note (A), the #35 drift reconciliations (B1, B2), the 147-row deletion manifest and its generator (C), and the hand-check of the $128 session (D). |
 
 ## Scripts
 

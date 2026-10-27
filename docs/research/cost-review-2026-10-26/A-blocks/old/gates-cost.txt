@@ -1,0 +1,3 @@
+Cost: **one extra subagent per dirty class per iteration** — so two
+at the acceptance gate when Class A and Class B are both dirty, since their inputs differ and cannot
+be merged into one checker. Bounded either way, and it cannot grow into an unbounded ladder.

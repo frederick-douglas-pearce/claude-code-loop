@@ -1,0 +1,39 @@
+**Implement viable BLOCKING findings** — **except one raising a design question, which stops for
+the human before any fix for it is applied (below)** — act on that stop before acting on this
+sentence. Decline any **other** finding you do
+not implement, with a one-line rationale; the exception above is a stop, never a decline — **and
+record each decline, with that rationale, in the gate-decision block where this round resolves**
+(Ledger format → progress.md), exactly as an architect decline is recorded in the plan text. A
+later round is *required* to receive the declines (Gates), and a decline is the one outcome that
+leaves **no trace in the diff** for that round to recover it from: unrecorded, it is invisible to
+every subsequent fresh instance.
+
+**"Implement" means a fresh agent writes every fix, in its own copy of the tree — never you, and
+never in your tree.** The belief that wrote the text under review is still yours while you would
+write its fix, and a fix written under it is the next round's finding. Spawn **one fix agent per
+round** — not one per finding, never beside another writer — under Tool surface's isolation duties,
+with the brief the `reviewing` unit fixes (*The fix agent*); it carries the deletion-first mandate,
+which is not restated here. **If you cannot give it its own copy there is no fix to write: do not
+write one yourself — STOP and ask.** On its return, **collect the diff by path and apply it, remove
+the copy, and only then stage** (Tool surface — the window closes when *you* remove the copy).
+**You never read the fix's hunks and never edit them.** Your read at this boundary is `git diff
+--cached --name-status`: every staged path must be one the agent's report names — a test path there
+re-arms step 6's hermetic trigger, as step 6 says — and **a staged path you cannot attribute to the
+report is not committed: unstage it and ask.** A fix that looks wrong to you is a question for the
+re-check, never an edit for you. **An agent that returns no report and leaves nothing in its copy
+has fixed nothing:** journal `- gate-error: code-review — fix agent — <first line of the error>`
+(`no-stderr` where there was none), escalate, and never write the fix yourself. A partial copy is
+collected on Tool surface's terms and the re-check judges it. Record the agent's per-finding
+dispositions in the gate-decision block (Ledger format → progress.md) before you spawn the re-check.
+
+Then **commit the BLOCKING fixes** and **verify recs were applied — by a fresh checker, never by
+yourself and never by the fix agent.** Directing a fix is authorship, and the fix agent is this
+gate's one writing spawn, so its copy is what opens the staging window. This is the Fresh-re-check
+invariant's sharpest instance (see Gates): you directed the fixes, so confirming them yourself is
+the author agreeing with himself, not a gate. **Commit before spawning it** — the checker reads a
+diff ending at `HEAD`, so an uncommitted fix is invisible to it. Under a scoped round that is worse
+than the F15 shape the acceptance gate had to fix, not milder: the checker is handed not the pre-fix
+code but an **empty** delta, which reports clean rather than reporting the wrong thing (hence the
+empty-delta fallback in the `reviewing` unit). Spawn **one lighter checker** — its inputs are fixed
+under Gates (Fresh-re-check invariant → the code-review bullet) and are not restated here — rather
+than re-running the full finder fan-out; that recipe carries its licence to object too. Bounded to 2 rounds (round 1 being the review
