@@ -46,11 +46,12 @@ Every session prints its `stratum` line.
 
 **The re-warm term** (`--sessions` only, #287): the parent's cache writes on a turn
 that follows an idle gap longer than the cache TTL, priced apart from the rest of the
-bill it is already inside. Every per-turn instrument prices it at zero, yet on the
-`3f30a898` hand-check it was 32% of the parent bill (appendix D). It is **outside
-the hand-check**: `handcheck_pricing.py` covers `bill`, not this term, which was
-cross-checked once against appendix D by an independent script. Parent only;
-subagent idle time is a named limit, not measured.
+bill it is already inside. No per-turn instrument separates it from the rest of the
+bill, yet on appendix D's session (`3f30a898`) it was 32% of the parent bill.
+`handcheck_pricing.py` covers `bill`, not this term; what pins the term against real
+data is `test_appendix_d_session_reproduces_seven_rewarms_and_27_80`, which skips
+where that transcript is absent. Parent only; subagent idle time is a named limit,
+not measured.
 
 In directory mode only sessions that delegated at least once are reported -- a
 non-delegating session has a subagent share of zero by construction and would
@@ -66,6 +67,7 @@ import datetime
 import json
 import os
 import pathlib
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -134,17 +136,25 @@ def physical_problems(priced, name=""):
 TIER_TTL = dict(zip(CACHE_TIERS, (300, 3600)))
 
 
+_ISO = re.compile(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)")
+
+
 def _when(rec):
-    """A record's `timestamp` as an aware datetime, or None when it cannot be read.
-    Transcripts end it in `Z`, which `fromisoformat` rejects before Python 3.11."""
+    """A record's `timestamp` as an aware datetime, or None when it cannot be read --
+    including a timestamp with no offset. The fraction is normalized to six digits
+    and `Z` to `+00:00` first, since `fromisoformat` rejects both before Python 3.11,
+    so a transcript reads the same on every supported version."""
     ts = rec.get("timestamp")
-    if not isinstance(ts, str):
+    m = _ISO.fullmatch(ts) if isinstance(ts, str) else None
+    if m is None:
         return None
+    base, frac, tz = m.groups()
+    text = (base + ("." + (frac + "00000")[:6] if frac else "")
+            + ("+00:00" if tz == "Z" else tz))
     try:
-        when = datetime.datetime.fromisoformat(ts[:-1] + "+00:00" if ts.endswith("Z") else ts)
+        return datetime.datetime.fromisoformat(text)
     except ValueError:
         return None
-    return when if when.tzinfo else None
 
 
 def _ttl(usage):
@@ -174,9 +184,12 @@ def rewarms(priced):
     the gap could exceed it -- and then `rewarms` is None, never [] and never zero."""
     out, prev_end, ttl = [], None, 0
     for t in priced.turns:
-        start, end = _when(t.records[0]), _when(t.records[-1])
-        if start is None or end is None:
+        times = [_when(r) for r in t.records]
+        if None in times:
             return None, "turn %s: no readable timestamp" % (t.key,)
+        if any(b < a for a, b in zip(times, times[1:])):
+            return None, "turn %s: timestamp runs backwards" % (t.key,)
+        start, end = times[0], times[-1]
         writes = _tok(t.usage, "cache_creation_input_tokens")
         if prev_end is not None:
             gap = (start - prev_end).total_seconds()
@@ -268,9 +281,11 @@ def report_sessions(paths):
         print(f"# EXCLUDED from totals {r['name']}: {why}")
     for key, grp in groups.items():
         pt, st = sum(r["parent_usd"] for r in grp), sum(r["sub_usd"] for r in grp)
-        rw = sum(r["rewarm_usd"] for r in grp if r["rewarm_usd"] is not None)
+        known = [r["rewarm_usd"] for r in grp if r["rewarm_usd"] is not None]
+        rw = (f"re-warm ${sum(known):,.2f} ({len(known)} of {len(grp)} sessions)"
+              if known else "re-warm unknown")
         print(f"# stratum {label(key)}: {len(grp)} sessions | parent ${pt:,.2f} | "
-              f"subagent ${st:,.2f} | total ${pt + st:,.2f} | re-warm ${rw:,.2f}")
+              f"subagent ${st:,.2f} | total ${pt + st:,.2f} | {rw}")
     return rows
 
 

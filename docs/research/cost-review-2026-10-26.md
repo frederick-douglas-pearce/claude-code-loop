@@ -192,7 +192,7 @@ F93: the gate stack is route-blind; a `docs` row costs the same six subagent run
 
 **Evidence.** The $128 session was two `/dev-loop` invocations in one session with no `/clear` between them; the second started at 723k context. Of its $87.90 parent bill, cache writes were $36.9, and **75% of that ($27.8) was six re-warms of the entire context after human gate waits longer than the 1-hour cache TTL**: one stop at 947k context cost $7.60 just to resume. Per-turn instruments cannot see this; it is 32% of the parent bill. Active API time was 4.5h of a 29h span; the other 24.6h was the human.
 
-_Correction 2026-10-28 (#287): seven re-warms, not six; the $27.8 stands. See appendix D's correction note._
+_Correction 2026-10-27 (#287): seven turns, six of them whole-context re-warms; the $27.8 stands as the term's total. See appendix D's correction note._
 
 **Why it matters more than the number.** The 1-hour TTL is the *subscription* rate. **On an API key the main-conversation cache TTL is 5 minutes** (`prompt-caching.md`), so a business consumer re-warms the whole context at cache-write rates at nearly every plan gate and merge gate, and the cost of a gate is proportional to the parent's context at the stop. For the adoption goal, this is the first-order problem: the loop stops for a human by design, and the parent is at 200–950k when it does.
 

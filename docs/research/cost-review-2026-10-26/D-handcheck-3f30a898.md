@@ -55,10 +55,12 @@ One, automatic, at 960k: 959,671 → 80,653 (−92%), summary 12.1k chars. Re-re
 
 Sharding the 55k-token core (carried 423 turns, ≈ $5) and delegating step 6 (134 parent turns, 34% of Σ context) are structural levers, not cheap ones.
 
-## Correction (2026-10-28, #287)
+## Correction (2026-10-27, #287)
 
 **Seven re-warms, not six.** The $27.8 above is right, and `tree_cost.py --sessions` now
 reproduces it as its re-warm term: seven parent turns write cache after an idle gap longer than the
 1-hour TTL — 46, 152, 203, 212, 340, **346** and 406 — summing to $27.80. The list above omits 346
-($0.36, 44,942 tokens), the first turn after the auto-compaction. The six named turns sum to
-$27.45.
+($0.36, 44,942 tokens), the first turn after the auto-compaction: it is the post-compaction
+rebuild (35,709 tokens read from cache), not a whole-context re-warm, and the term counts it
+because the term is defined by the gap, not by the cause. The six whole-context re-warms sum to
+$27.44.
