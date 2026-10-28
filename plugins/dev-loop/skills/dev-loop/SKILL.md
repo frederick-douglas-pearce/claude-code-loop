@@ -66,8 +66,9 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   same protocol at the point the index gives: a unit you cannot confirm you read in full is a unit
   you have not loaded, and a partial load that omits one **over-escalates** — the step that needs it
   does not pass and its gate is not skipped. STOP and tell the human.
-- **One issue per invocation, then STOP and journal.** Never batch. The driver re-invokes with
-  fresh context for the next issue.
+- **One issue per invocation, then STOP and journal.** Never batch. Tell the human to run
+  `/clear` before invoking again, or the next issue starts on this one's context and pays for it
+  on every turn.
 - **Resume before selecting.** If a ledger row is mid-pipeline (interrupted), finish it against
   live git/PR state before starting anything new. **If an open PR has no row at all, STOP and ask** —
   do not adopt it and do not select new work. The ledger is gitignored and can be absent or stale, so

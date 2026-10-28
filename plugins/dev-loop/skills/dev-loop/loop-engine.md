@@ -1011,8 +1011,9 @@ separator, and notes must keep their parentheses balanced — a reader splits `g
 **outside** parentheses, so the lens list above stays one sub-slot rather than three.
 
 Set the `queue.md` row to `done` (or `blocked`/`deferred` with reason); note newly-unblocked
-issues. The ledger is gitignored — do NOT commit it (Ledger format → lifecycle). STOP. (Driver
-re-invokes with fresh context for the next issue.)
+issues. The ledger is gitignored — do NOT commit it (Ledger format → lifecycle). STOP, and end
+the stop message by telling the human to run `/clear` before invoking again: otherwise the next
+issue starts on this one's context and pays for it on every turn.
 
 ### Escalation rubric (when unsure)
 Scope/priority/requirements — including any plan whose value story lacks a credible user or a

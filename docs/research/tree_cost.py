@@ -44,6 +44,15 @@ prints both counts; `--sessions` refuses a session whose cross-file count is not
 pooled across one; an unstratified session is excluded and named with its reason.
 Every session prints its `stratum` line.
 
+**The re-warm term** (`--sessions` only, #287): the parent's cache writes on a turn
+that follows an idle gap longer than the cache TTL, priced apart from the rest of the
+bill it is already inside. No per-turn instrument separates it from the rest of the
+bill, yet on appendix D's session (`3f30a898`) it was 32% of the parent bill.
+`handcheck_pricing.py` covers `bill`, not this term; what pins the term against real
+data is `test_appendix_d_session_reproduces_seven_rewarms_and_27_80`, which skips
+where that transcript is absent. Parent only; subagent idle time is a named limit,
+not measured.
+
 In directory mode only sessions that delegated at least once are reported -- a
 non-delegating session has a subagent share of zero by construction and would
 deflate the aggregate. That makes "delegating" a selection on behaviour, which is a
@@ -54,14 +63,16 @@ Usage:
     python3 docs/research/tree_cost.py --sessions <session.jsonl> [...]   # named sessions,
         delegating or not: the per-issue bill, parent and subagents shown separately
 """
+import datetime
 import json
 import os
 import pathlib
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from stratum import Unpriced, _tok, group_by_stratum, label, price_records, \
-    session_strata, stratum_line  # noqa: E402
+from stratum import CACHE_TIERS, Unpriced, _tok, cache_split, group_by_stratum, label, \
+    price_records, session_strata, stratum_line, weights_for  # noqa: E402
 
 
 def _records(path):
@@ -121,10 +132,89 @@ def physical_problems(priced, name=""):
     return out
 
 
+#: Seconds each cache tier stays warm after the last request that touched it.
+TIER_TTL = dict(zip(CACHE_TIERS, (300, 3600)))
+
+
+_ISO = re.compile(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)")
+
+
+def _when(rec):
+    """A record's `timestamp` as an aware datetime, or None when it cannot be read --
+    including a timestamp with no offset. The fraction is normalized to six digits
+    and `Z` to `+00:00` first, since `fromisoformat` rejects both before Python 3.11,
+    so a transcript reads the same on every supported version."""
+    ts = rec.get("timestamp")
+    m = _ISO.fullmatch(ts) if isinstance(ts, str) else None
+    if m is None:
+        return None
+    base, frac, tz = m.groups()
+    text = (base + ("." + (frac + "00000")[:6] if frac else "")
+            + ("+00:00" if tz == "Z" else tz))
+    try:
+        return datetime.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _ttl(usage):
+    """-> seconds the cache this turn wrote stays warm: 0 when it wrote none, None
+    when the tier cannot be read off the raw `cache_creation` breakdown (absent, or
+    both tiers). Deliberately not `cache_split`, whose absent-means-5m is a pricing
+    default: read as a TTL it would mark every older 1-hour session 5-minute."""
+    if not _tok(usage, "cache_creation_input_tokens"):
+        return 0
+    cc = usage.get("cache_creation")
+    if not isinstance(cc, dict):
+        return None
+    tiers = [f for f in CACHE_TIERS if cc.get(f)]
+    return TIER_TTL[tiers[0]] if len(tiers) == 1 else None
+
+
+def rewarms(priced):
+    """The re-warm term of one transcript -> (rewarms, unknown).
+
+    A turn is a re-warm iff it writes cache and its gap -- from the previous turn's
+    last record to its own first -- is strictly longer than the TTL of the most recent
+    earlier turn that wrote cache, the entry that expired. A turn with no earlier
+    writer has nothing to expire. Each re-warm is (key, gap seconds, write tokens,
+    usd), priced on its cache-write tokens only: gross, not net of the read it
+    replaced. `unknown` names why the term cannot be stated -- a timestamp missing,
+    unreadable or running backwards, or an earlier writer's tier unreadable where
+    the gap could exceed it -- and then `rewarms` is None, never [] and never zero."""
+    out, prev_end, ttl = [], None, 0
+    for t in priced.turns:
+        times = [_when(r) for r in t.records]
+        if None in times:
+            return None, "turn %s: no readable timestamp" % (t.key,)
+        if any(b < a for a, b in zip(times, times[1:])):
+            return None, "turn %s: timestamp runs backwards" % (t.key,)
+        start, end = times[0], times[-1]
+        writes = _tok(t.usage, "cache_creation_input_tokens")
+        if prev_end is not None:
+            gap = (start - prev_end).total_seconds()
+            if gap < 0:
+                return None, "turn %s: timestamp runs backwards" % (t.key,)
+            if ttl is None and writes and gap > min(TIER_TTL.values()):
+                return None, "turn %s: earlier cache tier unreadable" % (t.key,)
+            if ttl and writes and gap > ttl:
+                m5, h1 = cache_split(t.usage)
+                w = weights_for(t.model)
+                cost = (m5 * w.cache_write_5m + h1 * w.cache_write_1h) * w.base_usd_per_mtok / 1e6
+                out.append((t.key, gap, writes, cost))
+        if writes:
+            ttl = _ttl(t.usage)
+        prev_end = end
+    return out, None
+
+
 def price_session(parent):
     """Price one session: its parent transcript and every subagent transcript.
 
-    -> dict(name, parent_usd, sub_usd, subs, turns, stratum, refused). Unlike
+    -> dict(name, parent_usd, sub_usd, subs, turns, stratum, refused, rewarms,
+    rewarm_usd, rewarm_unknown) -- the last three the parent's re-warm term
+    (`rewarms`), `rewarm_usd` None and `rewarm_unknown` naming why when it cannot be
+    stated; that never refuses the bill. Unlike
     `survey` this prices a session that delegated nothing (its subagent bill is a
     measured 0, not a selection). A session refuses -- `refused` names why, and both
     bills are None -- when any file will not price under the spec, any turn is
@@ -135,7 +225,8 @@ def price_session(parent):
     subs = sorted(sub_dir.glob("*.jsonl")) if sub_dir.is_dir() else []
     row = {"name": parent.stem[:8], "subs": len(subs), "parent_usd": None,
            "sub_usd": None, "turns": None, "refused": None,
-           "stratum": session_strata(str(parent))}
+           "stratum": session_strata(str(parent)),
+           "rewarms": None, "rewarm_usd": None, "rewarm_unknown": None}
     files = []
     for f in [parent] + subs:
         priced, why = bill(f)
@@ -154,7 +245,14 @@ def price_session(parent):
         return row
     row.update(parent_usd=files[0].usd, sub_usd=sum(f.usd for f in files[1:]),
                turns=len(files[0].turns))
+    found, unknown = rewarms(files[0])
+    row.update(rewarms=found, rewarm_unknown=unknown,
+               rewarm_usd=None if unknown else sum(r[3] for r in found))
     return row
+
+
+def _rewarm_cell(r):
+    return "unknown" if r["rewarm_usd"] is None else "%.2f" % r["rewarm_usd"]
 
 
 def report_sessions(paths):
@@ -163,23 +261,31 @@ def report_sessions(paths):
     It cannot see project or session class: pass one repo's sessions of one class."""
     rows = [price_session(p) for p in paths]
     print(f"{'session':9} {'turns':>6} {'parent $':>10} {'subs':>5} {'subagent $':>11} "
-          f"{'total $':>10}  stratum")
+          f"{'total $':>10} {'re-warm $':>10}  stratum")
     for r in rows:
         if r["refused"]:
             print(f"{r['name']:9} REFUSED -- {r['refused']}")
             continue
         print(f"{r['name']:9} {r['turns']:6d} {r['parent_usd']:10.2f} {r['subs']:5d} "
-              f"{r['sub_usd']:11.2f} {r['parent_usd'] + r['sub_usd']:10.2f}  "
+              f"{r['sub_usd']:11.2f} {r['parent_usd'] + r['sub_usd']:10.2f} "
+              f"{_rewarm_cell(r):>10}  "
               f"{label(r['stratum'].parent) if r['stratum'].stratified else 'UNSTRATIFIED'}")
     ok = [r for r in rows if not r["refused"]]
     print(f"# {len(ok)} priced, {len(rows) - len(ok)} refused")
+    for r in ok:
+        if r["rewarm_unknown"]:
+            print(f"# re-warm unknown, EXCLUDED from re-warm totals {r['name']}: "
+                  f"{r['rewarm_unknown']}")
     groups, excluded = group_by_stratum(ok, key=lambda r: r["stratum"])
     for r, why in excluded:
         print(f"# EXCLUDED from totals {r['name']}: {why}")
     for key, grp in groups.items():
         pt, st = sum(r["parent_usd"] for r in grp), sum(r["sub_usd"] for r in grp)
+        known = [r["rewarm_usd"] for r in grp if r["rewarm_usd"] is not None]
+        rw = (f"re-warm ${sum(known):,.2f} ({len(known)} of {len(grp)} sessions)"
+              if known else "re-warm unknown")
         print(f"# stratum {label(key)}: {len(grp)} sessions | parent ${pt:,.2f} | "
-              f"subagent ${st:,.2f} | total ${pt + st:,.2f}")
+              f"subagent ${st:,.2f} | total ${pt + st:,.2f} | {rw}")
     return rows
 
 
