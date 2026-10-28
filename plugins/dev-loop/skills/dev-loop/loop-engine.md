@@ -1303,7 +1303,17 @@ not a gate.
 
 The header also carries two **budget caps** (both default `none` = uncapped):
 `iteration-cap:` (max **issues per run** — in this engine one "iteration" = one issue) and
-`subagent-cap:` (max **subagent runs per iteration**). Step 1 checks them as a retrospective circuit-breaker and states how (what counts as an iteration, which `- Budget:` line is read, advisory on manual re-invoke vs. halting under the driver); token/cost is deferred for the same reason (below).
+`subagent-cap:` (max **subagent runs per iteration**). The orchestrator checks them at iteration
+start (step 1) as a **retrospective circuit-breaker** against the ledger — it does not watch
+its own spend mid-turn (that is why token/cost is deferred, below). Cumulative iterations are
+counted as the **distinct issues at a terminal status** (`done`/`deferred`/`blocked`) in
+`queue.md` — the authoritative status file — never by counting `progress.md` blocks, since a
+`/clear`-resume re-enters an iteration and would double-count. `subagent-cap` is enforced by
+reading the **prior** iteration's journaled `- Budget:` line: if it breached, halt before
+starting the next. On breach the behavior is **advisory in manual re-invoke** (journal + surface
+it and proceed — the human who invoked is the budget authority) and **halting under the driver**
+(see Convergence). The caps bound `escalation-only`'s runaway-consumption risk; bad-merge risk is
+already covered by the default-deny/always-escalate machinery above.
 
 ### `progress.md` — append-only journal (survives /clear + compaction)
 The orchestrator APPENDS one block **per gate decision** and, over an iteration, the two records

@@ -1446,7 +1446,7 @@ class MutationNaReasonTests(unittest.TestCase):
 
     #60's second PR retired one of three reasons (``n/a: apparatus pending``) when the
     mutation apparatus landed. Retiring a member of a closed list is a multi-site edit:
-    the engine states the list's size in four separate passages, and a partial
+    the engine states the list's size in separate passages, and a partial
     retraction leaves the engine contradicting itself about how many ways there are to
     skip the gate -- which is the fail-open direction, since a reader who finds "three"
     goes looking for a third reason.
@@ -2851,10 +2851,10 @@ class CurrencyExemptionAgreementTests(unittest.TestCase):
 
 
 class FindingClassAgreementTests(unittest.TestCase):
-    """#121's finding classes are restated in pairs; each pair must agree.
+    """#121's finding classes and the merge gate's escalate list stay coupled.
 
-    Two couplings, both the same shape as ``CurrencyExemptionAgreementTests``:
-    the lists are **extracted from the prose and compared to each other**, never
+    Coupling 1 is the same shape as ``CurrencyExemptionAgreementTests``: its
+    lists are **extracted from the prose and compared to each other**, never
     to a copy pinned here. A pinned copy passes for any edit that changes both
     regions in the same wrong direction, and needs updating on every legitimate
     reword.
@@ -2871,8 +2871,8 @@ class FindingClassAgreementTests(unittest.TestCase):
     ``escalation-only`` bullet, and this class compared the two. #275 deleted
     step 11's copy and left a pointer, so the coupling is now pointer to
     enumeration: step 11's region must name both ``Ledger format → queue.md`` and
-    ``mode: escalation-only``, and the enumeration must still parse to three or
-    more conditions.
+    ``mode: escalation-only``, and the enumeration must sit inside
+    ``## Ledger format`` and still parse to three or more conditions.
 
     **What coupling 1 does NOT guard, stated because an earlier draft claimed it
     did.** It compares the *set of class tokens* named in each region, and says
@@ -2997,16 +2997,28 @@ class FindingClassAgreementTests(unittest.TestCase):
         return frozenset(items)
 
     def test_the_extractor_actually_finds_the_escalate_list(self) -> None:
-        """The one enumeration still exists and still parses.
+        """The one enumeration still exists, where step 11 points, and still parses.
 
-        An *unmatched* region is not the risk here -- ``_span`` asserts, so this
-        goes red loudly. The silent case is a region that matches and then parses
-        to almost nothing.
+        Located heading-first: the anchor is searched for only inside
+        ``## Ledger format``, so moving the list elsewhere fails here rather than
+        leaving step 11's pointer aimed at nothing. The silent case it also covers
+        is a region that matches and then parses to almost nothing.
         """
-        body = self._span(
-            "The human merge gate is **retained**", "\u2014 **and, by default-deny",
-            "escalation-only escalate list",
+        section = self._span(
+            "## Ledger format", "## Router \u2014 classification", "Ledger format section",
         )
+        start, end = "The human merge gate is **retained**", "\u2014 **and, by default-deny"
+        i = section.find(start)
+        self.assertNotEqual(
+            i, -1, f"the escalation-only enumeration ({start!r}) is not inside "
+            "## Ledger format, which is where step 11's pointer sends the reader.",
+        )
+        j = section.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the escalation-only escalate list ({end!r}) "
+            "inside ## Ledger format -- re-anchor this test before trusting it.",
+        )
+        body = section[i:j]
         self.assertGreaterEqual(
             len(self._conditions(body)), 3,
             "fewer than three always-escalate conditions extracted from the "
