@@ -1478,7 +1478,7 @@ class MutationNaReasonTests(unittest.TestCase):
     # Pinned exactly, not as a floor. A floor cannot catch a restatement reworded out of
     # the matcher's reach when another is added in the same change -- the count stays
     # put while coverage drops. Adding a restatement deliberately means updating this.
-    _EXPECTED_RESTATEMENTS = 4
+    _EXPECTED_RESTATEMENTS = 3
 
     _RETIRED_REASON = "apparatus pending"
 
@@ -2866,14 +2866,13 @@ class FindingClassAgreementTests(unittest.TestCase):
     from one and the engine names different classes in its two statements of the
     bound, with every word of both passages still reading correctly.
 
-    **Coupling 2 -- the merge gate's always-escalate list is written twice.**
-    Step 11 enumerates it, and the ``escalation-only`` bullet in Ledger format
-    enumerates it again for the mode that can auto-merge. The second is the one
-    that matters most: it governs the path with **no human in it**, so a
-    condition present in step 11 and missing there is a row that auto-merges past
-    a finding step 11 would have stopped for. The first draft of #121's own plan
-    named only step 11 and the architect caught it -- this test is that
-    near-miss made mechanical.
+    **Coupling 2 -- step 11 defers to the one enumeration of the always-escalate
+    list.** The list used to be written twice, in step 11 and in Ledger format's
+    ``escalation-only`` bullet, and this class compared the two. #275 deleted
+    step 11's copy and left a pointer, so the coupling is now pointer to
+    enumeration: step 11's region must name both ``Ledger format → queue.md`` and
+    ``mode: escalation-only``, and the enumeration must still parse to three or
+    more conditions.
 
     **What coupling 1 does NOT guard, stated because an earlier draft claimed it
     did.** It compares the *set of class tokens* named in each region, and says
@@ -2900,29 +2899,11 @@ class FindingClassAgreementTests(unittest.TestCase):
     it``, which is correct guidance rather than an invitation to bump a literal.
     Improved, not eliminated.
 
-    **What coupling 2 does not reach.** It guards 2 of the 3+ statements of the
-    always-escalate conditions: ``README.md`` states them a third time and the
-    Escalation rubric carries a differently-worded mention. Neither is compared
-    here -- their agreement is review's to own. Three further gaps, all measured
-    by mutation rather than reasoned about:
-
-    * **Step 11's peer bullets are outside the span.** It starts at "none of the
-      always-escalate conditions apply:", so a condition added as its own
-      ``- ... , AND`` bullet -- which is how ``hold`` and the release-bump
-      condition are already written -- is invisible here.
-    * **``_HOLD_ROW`` is subtracted from both sides unconditionally**, so the
-      escalation-only bullet dropping ``a hold row`` altogether is not caught.
-    * **A condition inserted before the introducing ``:``** is not parsed.
-
-    **Extractor assumptions, and how each fails.** The first ``:`` in a region
-    introduces the list, and no item contains a non-parenthetical comma. An
-    **asymmetric** violation of either fails loud -- but via
-    ``test_both_statements_of_the_always_escalate_list_agree``, *not* via the
-    guard-on-guard tests, which stay green because both regions still parse to
-    three or more items. A violation applied **identically to both regions** --
-    the likely shape, since this project's convention is to edit them together --
-    is absorbed **silently**: both lists mis-split the same way and still agree.
-    That is the one blind spot worth knowing before trusting a green run.
+    **What coupling 2 does not reach.** ``README.md`` states the always-escalate
+    conditions again and the Escalation rubric carries a differently-worded
+    mention. Neither is compared here -- their agreement is review's to own. Nor
+    is the content of the enumeration: a condition dropped from it is not caught
+    while three or more remain.
 
     **And what neither guards, deliberately.** Not the polarity or the
     correctness of any rule: nothing here knows that EDITORIAL *should* be the
@@ -2934,7 +2915,6 @@ class FindingClassAgreementTests(unittest.TestCase):
     """
 
     _CLASS_TOKENS = ("BLOCKING", "EDITORIAL")
-    _HOLD_ROW = "a hold row"
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -2999,19 +2979,10 @@ class FindingClassAgreementTests(unittest.TestCase):
             "passages still read correctly.",
         )
 
-    # ---- coupling 2: the two statements of the always-escalate list ----
+    # ---- coupling 2: step 11's pointer to the one always-escalate list ----
 
-    def _escalate_regions(self) -> dict:
-        return {
-            "step 11 (the human merge gate)": self._span(
-                "none of the always-escalate conditions apply:", "**Default-deny:**",
-                "step 11 escalate list",
-            ),
-            "escalation-only bullet (the auto-merge path)": self._span(
-                "The human merge gate is **retained**", "\u2014 **and, by default-deny",
-                "escalation-only escalate list",
-            ),
-        }
+    _STEP11_START = "none of the always-escalate conditions apply:"
+    _POINTER_LABELS = ("Ledger format \u2192 queue.md", "mode: escalation-only")
 
     def _conditions(self, body: str) -> frozenset:
         body = self._normalize(body)
@@ -3023,45 +2994,47 @@ class FindingClassAgreementTests(unittest.TestCase):
             if not item:
                 continue
             items.add(item.lower())
-        # step 11 carries `hold` as its own bullet above the list; the
-        # escalation-only bullet folds it in. That divergence is structural, so
-        # it is excluded explicitly rather than by a fuzzy comparison.
-        # DO NOT GROW THIS EXCLUSION. It has the shape CLAUDE.md flags for
-        # ALLOWED_NON_BINDINGS and _STOPWORDS: appending a term is the cheap way
-        # to green a failing comparison, and each one is a condition this guard
-        # stops comparing. A new divergence is a finding about the engine, not a
-        # constant to add here.
-        return frozenset(x for x in items if x != self._HOLD_ROW)
+        return frozenset(items)
 
-    def test_the_extractor_actually_finds_both_escalate_lists(self) -> None:
-        """Guards the guard: a region that matches but stops parsing asserts nothing.
+    def test_the_extractor_actually_finds_the_escalate_list(self) -> None:
+        """The one enumeration still exists and still parses.
 
-        An *unmatched* region is not the risk here -- ``_span`` asserts, so both
-        tests go red loudly. The silent case is a region that matches and then
-        parses to almost nothing, which would make the comparison below vacuous.
+        An *unmatched* region is not the risk here -- ``_span`` asserts, so this
+        goes red loudly. The silent case is a region that matches and then parses
+        to almost nothing.
         """
-        for label, body in self._escalate_regions().items():
-            with self.subTest(region=label):
-                self.assertGreaterEqual(
-                    len(self._conditions(body)), 3,
-                    "fewer than three always-escalate conditions extracted from "
-                    f"{label}. This test compares the two lists to each other, so "
-                    "a region that stops parsing makes it vacuous. Re-anchor the "
-                    "span or the splitter; do not drop a region to make this pass.",
-                )
-
-    def test_both_statements_of_the_always_escalate_list_agree(self) -> None:
-        found = {k: self._conditions(v) for k, v in self._escalate_regions().items()}
-        (a_label, a), (b_label, b) = found.items()
-        self.assertEqual(
-            a, b,
-            "the merge gate's always-escalate conditions are enumerated twice and "
-            f"the two lists DIFFER.\n  only in {a_label}: {sorted(a - b)}\n  only "
-            f"in {b_label}: {sorted(b - a)}\nThe escalation-only bullet governs "
-            "the path with no human in it, so a condition present in step 11 and "
-            "missing there auto-merges past something step 11 would have stopped "
-            "for. Edit them together.",
+        body = self._span(
+            "The human merge gate is **retained**", "\u2014 **and, by default-deny",
+            "escalation-only escalate list",
         )
+        self.assertGreaterEqual(
+            len(self._conditions(body)), 3,
+            "fewer than three always-escalate conditions extracted from the "
+            "escalation-only bullet. Re-anchor the span or the splitter.",
+        )
+
+    def test_step_11_points_at_the_escalate_list(self) -> None:
+        text = _engine_text()
+        # A duplicated start anchor would let the span widen past step 11 and
+        # find the labels in a neighbour's text.
+        self.assertEqual(
+            text.count(self._STEP11_START), 1,
+            f"the step 11 start anchor ({self._STEP11_START!r}) occurs "
+            f"{text.count(self._STEP11_START)} times in the engine corpus; it must "
+            "occur exactly once.",
+        )
+        body = self._normalize(
+            self._span(self._STEP11_START, "**Default-deny:**", "step 11 escalate pointer")
+        )
+        for label in self._POINTER_LABELS:
+            with self.subTest(label=label):
+                self.assertIn(
+                    label, body,
+                    "step 11 defers its always-escalate conditions to the one "
+                    f"enumeration in Ledger format, and its pointer no longer names "
+                    f"{label!r}. Without it the gate that applies the list no longer "
+                    "says where the list is.",
+                )
 
 
 class GuardEfficacyLensLabelTests(unittest.TestCase):

@@ -127,14 +127,7 @@ invocation resumes correctly.
    resume action. Test
    membership against the vocabulary rather than by excluding a list of statuses that rest — an
    exclusion test silently absorbs anything it has never heard of into *interrupted*, which is the
-   guess this ordering exists to prevent. If any row is *interrupted*, a prior iteration was cut off. Reconcile it against
-   LIVE git/PR state as the source of truth — branch exists? PR open? already merged? CI
-   status? — plus the working tree (status is only a coarse anchor; git wins on conflict),
-   then re-enter the pipeline at the matching stage and FINISH that issue BEFORE selecting a
-   new one. This is what makes "one PR at a time" hold across `/clear`/compaction. A `hold` or
-   `parked` row is NOT an interruption: skip it here — a `hold` stays held until the human
-   releases the merge, a `parked` row stays gated until its external condition is released (step
-   1); neither blocks working other issues.
+   guess this ordering exists to prevent. If any row is *interrupted*, a prior iteration was cut off. Finish it — per the Resume procedure, against live git/PR state — BEFORE selecting a new one; a `hold` or `parked` row is NOT an interruption (Resume).
 
    **Then run the orphan scan: look for an open PR that no row covers.** The scan above classifies
    *rows*, and a row is created for every backlogged issue at init — so most interruptions do leave one. External state can
@@ -922,13 +915,7 @@ only when ALL of these hold:
   version scheme — a `docs`/`chore` change, or any change in a project with no release cycle,
   produces no bump, which qualifies, AND
 - the row is **not** `hold`, AND
-- none of the always-escalate conditions apply: a `feat:`/breaking change, a risky/irreversible
-  change, a touched security surface, a contested review finding, **an unresolved BLOCKING review
-  finding** (step 8 — an EDITORIAL finding raised before that step's sweep is swept there and never
-  left unresolved; one raised after it escalates, by step 8's *"Once" is literal* rule), **an
-  unresolved Class B mutation survivor from the acceptance gate** (step 10 — a guard that does not guard is
-  exactly the defect an auto-merge has no human to catch), or **an unresolved hermetic-tier finding**
-  (step 6 — same shape: a declared invariant that is not true, with no human in the path to notice).
+- none of the always-escalate conditions apply: see Ledger format → queue.md → `mode: escalation-only`, the one enumeration (a `hold` row is excluded by the bullet above).
 
 **Default-deny:** if route graduation or any always-escalate condition is uncertain, the row is
 **not** auto-merge-eligible — fall back to the human merge gate.
@@ -972,43 +959,7 @@ its shape). Step 7 writes the open record; if this iteration re-entered *past* s
 there may be none — **do not write one now.** Back-dating it would assert a record of a moment nobody
 observed, which is the same bar the architect freeze and the gate lines are under.
 
-The `- Budget:` line is:
-`subagent-runs=<n>` · `gate-rounds=architect=<a>,code-review=<c>,ac-verify=<v>` ·
-`wall-clock=<elapsed, includes gate-wait — not a cap input>` · `tokens=deferred` (computed
-post-hoc from the loop's own JSONL by an out-of-band analyzer, not inside the skill; the named
-slot keeps the line forward-stable) — **plus any of the optional slots below**. Those four are
-**required**; write the whole thing as **one physical line, never wrapped** (every reader of this
-line is line-based, so a wrap strands whichever slots fall past the break).
-
-**Say why, not just how much.** Counts alone cannot tell a justified high-stakes iteration from
-review thrash, which is the distinction the human needs when deciding whether to loosen a gate. So:
-- **Note any slot** by putting a short free-text parenthetical **after** its value —
-  `subagent-runs=4 (Explore map + architect + 2 finders)`,
-  `gate-rounds=architect=0(discharged by a pre-existing review)`. A space before the `(` is optional.
-  On `gate-rounds` a note attaches to the **immediately preceding sub-slot**, never to the slot as a
-  whole — to annotate the whole iteration, use `justification=`.
-- **On the code-review count, the parenthetical records the lenses that fired** —
-  `code-review=2(correctness,robustness)`. Instrumenting which angles actually catch things is what
-  lets a review-tier matrix later be chosen from corpus rather than intuition.
-- **Add `justification=<short reason>` whenever any `gate-rounds` value exceeds 1** — the single-pass
-  baseline. It is *permitted* on any line; write it whenever the spend would otherwise look
-  unexplained.
-- **Record the acceptance gate's two result classes separately — and its escape count separately
-  again.** Three distinct numbers; collapsing any two of them loses the distinction between a gate
-  that found nothing and a gate that missed something:
-  - `ac-findings=<n>` — **Class A**, criteria the gate found unmet, **counted cumulatively across
-    all of that gate's rounds, not as the final round's residue** (a final-round count is 0 on every
-    iteration that merged, which erases the signal).
-  - `mutation-survivors=<n>` — **Class B**, guards whose test survived its own mutation
-    (AC-verifier → Part 2).
-  - `post-gate-survivors=<n>` — **not a gate output at all**: defects that escaped the gate and
-    surfaced later in this iteration. Class A and Class B are what the gate *found*;
-    `post-gate-survivors` is what it *missed*. Keep the three names straight — Class B is
-    `mutation-survivors`, never `post-gate-survivors`.
-
-**Two constraints that keep the line parseable.** No slot value and no note may contain the `·`
-separator, and notes must keep their parentheses balanced — a reader splits `gate-rounds` on commas
-**outside** parentheses, so the lens list above stays one sub-slot rather than three.
+The `- Budget:` line is specified once, in Ledger format → `progress.md` → `- Budget:`: four required slots (`subagent-runs`, `gate-rounds`, `wall-clock`, `tokens`), one physical line, a note on any slot, `justification=` whenever a `gate-rounds` value exceeds 1, and the acceptance gate's three counts kept separate. Write it as that section gives it.
 
 Set the `queue.md` row to `done` (or `blocked`/`deferred` with reason); note newly-unblocked
 issues. The ledger is gitignored — do NOT commit it (Ledger format → lifecycle). STOP, and end
@@ -1280,14 +1231,7 @@ apply this rule; the sets it closes over are the ones enumerated above.
   **parked cheap path** re-derives selectability from `queue.md` without that scan. The upgrade rule
   in `README.md` is what addresses the second of those, and nothing here enforces it.
 
-**Curated-subset invariant.** The queue built at init is the authoritative
-work set; `BACKLOG_SOURCE` membership may drift afterward, and that drift is **surfaced to the
-human once, never auto-applied** — neither auto-added on join nor auto-ejected on leave (step-1
-roster reconciliation). A corollary is a Notes discipline: **write a `parked`/`blocked` row's Notes
-as the durable curation DECISION** (`awaiting: <external condition>`, `deliberately out of <run> at
-init (curation)`, `kept: out-of-<run> roster (curation)`), **never the mutable live evidence** ("not
-in roster", "no PR yet") — the latter is contradicted by a later live re-check and destabilizes
-resume.
+**Curated-subset invariant.** The queue built at init is the authoritative work set; `BACKLOG_SOURCE` drift is surfaced once, never auto-applied (step 1), and a `parked`/`blocked` row's Notes record the curation DECISION, never live evidence (step 2).
 
 The header carries a `mode:` field that gates **the merge gate only** — it does
 **not** change the plan gate, whose posture comes from the separate **`plan-gate:`** field described
@@ -1359,17 +1303,7 @@ not a gate.
 
 The header also carries two **budget caps** (both default `none` = uncapped):
 `iteration-cap:` (max **issues per run** — in this engine one "iteration" = one issue) and
-`subagent-cap:` (max **subagent runs per iteration**). The orchestrator checks them at iteration
-start (step 1) as a **retrospective circuit-breaker** against the ledger — it does not watch
-its own spend mid-turn (that is why token/cost is deferred, below). Cumulative iterations are
-counted as the **distinct issues at a terminal status** (`done`/`deferred`/`blocked`) in
-`queue.md` — the authoritative status file — never by counting `progress.md` blocks, since a
-`/clear`-resume re-enters an iteration and would double-count. `subagent-cap` is enforced by
-reading the **prior** iteration's journaled `- Budget:` line: if it breached, halt before
-starting the next. On breach the behavior is **advisory in manual re-invoke** (journal + surface
-it and proceed — the human who invoked is the budget authority) and **halting under the driver**
-(see Convergence). The caps bound `escalation-only`'s runaway-consumption risk; bad-merge risk is
-already covered by the default-deny/always-escalate machinery above.
+`subagent-cap:` (max **subagent runs per iteration**). Step 1 checks them as a retrospective circuit-breaker and states how (what counts as an iteration, which `- Budget:` line is read, advisory on manual re-invoke vs. halting under the driver); token/cost is deferred for the same reason (below).
 
 ### `progress.md` — append-only journal (survives /clear + compaction)
 The orchestrator APPENDS one block **per gate decision** and, over an iteration, the two records
@@ -1506,9 +1440,6 @@ is due, and it takes the fourth path. On a row the trigger never fired on, write
 reason (`n/a: no test change`, `n/a: docs route`): a missing binding does not make a gate due that
 nothing else made due, and halting a `docs` typo fix over a binding it would never have read is not
 fail-safe, just broken.
-
-Never fold this into `mutation-survivors`. That slot's `n/a` list is closed at two reasons, and a
-hermetic result is a different question from whether a guard guards.
 
 The **`- Code-review:`** line names **the commit range each round read**, one element per round,
 alongside that round's result. It is what lets a later reader tell **what a verdict covers** —
@@ -1925,9 +1856,6 @@ plan. Never regenerated and never back-dated — see Resume.>
 - **Dogfood corpus harvest:** read the JSONL + `progress.md` from the working tree directly; if a
   versioned audit trail is later wanted, snapshot the ledger into a dedicated `docs:` PR on demand
   — do not stream per-iteration ledger commits.
-- **No git/ledger divergence:** because the ledger is uncommitted, resume (see Resume) reconciles
-  the on-disk ledger against *live* git/PR state (branch exists? PR open? CI status?), which
-  is the source of truth — not a possibly-stale commit.
 
 ---
 
@@ -1968,10 +1896,7 @@ the human** — it is not an interrupted row and never enters the live reconcile
 format → queue.md, which is where that rule and its limits are stated). A `hold` **or `parked`** row is **excluded** — a `hold` is a deliberate, durable
 human merge-hold and a `parked` row is gated on an external event (Ledger format → queue.md),
 neither an interruption; leave them (a `hold` until the human clears it at step 11; a `parked` row
-until explicit un-park at step 0.1) and neither blocks other work. A run resting under a `RUN
-PARKED` sentinel is likewise **not** an interrupted row — step 0 short-circuits it on the cheap
-parked path and never enters this resume *row* scan (safe for rows: a valid PARKED state has no
-non-terminal pipeline row — it says nothing about state with no row). The on-disk ledger row status
+until explicit un-park at step 0.1) and neither blocks other work. The on-disk ledger row status
 is only a **coarse anchor** (which stage); the **live
 git/PR state is the source of truth** for the details (the ledger is uncommitted): for an in-flight
 row, check whether its branch exists, whether a PR is open (or already merged), and the PR's CI
@@ -2098,10 +2023,7 @@ only.** Step 8's scope ruling is a separate gate (Gates → gate table) whose du
 not reach: a BLOCKING design-question finding consults and stops **on every route**, `docs` included,
 which still takes a light review pass and can therefore raise one.
 
-`blocked` and `parked` are **Status overlays, not Routes**: a row keeps its semantic Route (`code`/
-`research`/`docs`) while resting on an unmet in-run dependency (`blocked`) or an external event
-(`parked`). Skip it; a `blocked` row returns to selection when its dependency closes (steps 1 /
-Router), a `parked` row when the human un-parks it (step 0.1).
+`blocked` and `parked` are Status overlays, not Routes (Ledger format → queue.md); a `blocked` row returns to selection when its dependency closes (step 1), a `parked` row when the human un-parks it (step 0.1).
 
 **Generic mechanical discipline:** set the squash `--subject` scope **explicitly** (per
 `COMMIT_CONV`), never inherited from the PR title. (Host-repo mechanical specifics — e.g. the
@@ -2486,10 +2408,6 @@ instances of this one inverts them — and would make the class rule unsatisfiab
 never "reproduced" and step 8 defines no unverified-class state. The nearest relative of those two is
 the **Fresh-re-check invariant** (above), not this one.
 
-**One rule elsewhere is this invariant applied to artifacts rather than sentences:** a file inside an
-isolated copy **is not evidence of anything** until you have applied it (Tool surface). Same
-question — what an agent hands back is not yet evidence — reached through a file instead of a claim.
-
 **Two kinds of site carry it, exactly as Verdict-first distinguishes them:**
 - **Text handed to the agent verbatim** — the AC-verifier's `Prompt:` block (Part 1) above all.
   That text reaches an agent which reads nothing else in this file, so a reference by name is inert
@@ -2515,22 +2433,7 @@ order (last-wins, since the log is append-only) and acts only on it:
   Summarizes counts + any blocked/deferred items; the orchestrator stops and reports, and a later
   re-invocation short-circuits without re-scanning.
 - **`RUN PARKED — awaiting <condition>`** (resting, **non-terminal**) — all *workable* rows are
-  terminal but ≥1 `parked` row awaits an external event (a release cut, a dogfood window). A
-  re-invocation short-circuits (step 0): it runs only the cheap roster reconciliation
-  + a `queue.md` selectability re-derivation, then re-reports parked **without** the expensive
-  per-row live reconcile / resume — until the human explicitly releases a **named** condition
-  (which flips only the `parked` rows awaiting *that* condition back to `routed`, appends a
-  superseding `RUN RESUMED` sentinel, and leaves rows gated on other conditions parked) or a
-  pulled-in joiner / cleared dep makes work selectable again. This is what stops a release-gated run
-  from re-reaching a *new* conclusion on every re-fire (the "converged-pending-release"
-  instability). Distinct from an *interrupted* row needing resume (see Resume): a valid PARKED state
-  has no non-terminal pipeline row, so resume is safely skipped.
+  terminal but ≥1 `parked` row awaits an external event (a release cut, a dogfood window). A re-invocation short-circuits onto step 0.1's cheap parked path until the human explicitly releases a **named** condition or a pulled-in joiner / cleared dep makes work selectable again.
 - **held / pending** (no sentinel) — a `hold` row needs the human now, or a row is still `blocked`
   on an open in-run dependency; the orchestrator reports and stops without a sentinel (the run is
   not complete and not cleanly parked).
-
-**Guardrails:** iteration/budget caps live in the `queue.md` header (`iteration-cap:`/
-`subagent-cap:`) and are checked at iteration start against the ledger — **advisory in manual
-re-invoke (journaled + surfaced, not gating — the human who invoked is the budget authority),
-halted by the driver**; one PR at a time; stuck-detection (repeated error signature) → escalate.
-The C1 append-only guard hook protects append-only logs once the loop commits its own work.
