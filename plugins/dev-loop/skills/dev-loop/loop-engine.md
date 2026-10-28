@@ -2447,3 +2447,9 @@ order (last-wins, since the log is append-only) and acts only on it:
 - **held / pending** (no sentinel) — a `hold` row needs the human now, or a row is still `blocked`
   on an open in-run dependency; the orchestrator reports and stops without a sentinel (the run is
   not complete and not cleanly parked).
+
+**Guardrails:** iteration/budget caps live in the `queue.md` header (`iteration-cap:`/
+`subagent-cap:`) and are checked at iteration start against the ledger — **advisory in manual
+re-invoke (journaled + surfaced, not gating — the human who invoked is the budget authority),
+halted by the driver**; one PR at a time; stuck-detection (repeated error signature) → escalate.
+The C1 append-only guard hook protects append-only logs once the loop commits its own work.
