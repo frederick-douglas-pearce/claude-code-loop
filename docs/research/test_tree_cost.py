@@ -519,6 +519,8 @@ class RewarmTests(unittest.TestCase):
         with contextlib.redirect_stdout(buf):
             T.main(["--sessions", str(self.root / "p.jsonl"), str(self.root / "q.jsonl")])
         out = buf.getvalue()
+        p_line = [ln for ln in out.splitlines() if ln.startswith("p ")][0]
+        self.assertEqual(p_line.split()[2::4], ["16.00", "8.00"])  # parent $, re-warm $
         q_line = [ln for ln in out.splitlines() if ln.startswith("q ")][0]
         self.assertIn("unknown", q_line)
         self.assertIn("re-warm unknown, EXCLUDED from re-warm totals q:", out)
