@@ -10,6 +10,7 @@ scope brake. Same rationale as `test_engine_cost.py`.
     python3 docs/research/test_tree_cost.py
 """
 import contextlib
+import datetime
 import io
 import itertools
 import json
@@ -31,12 +32,40 @@ ONE_M = {"input_tokens": 1_000_000, "output_tokens": 0,
 _IDS = itertools.count()
 
 
-def rec(model, effort="high", usage=None):
+def rec(model, effort="high", usage=None, timestamp=None):
     """Each call is its own API turn: a distinct `message.id`, so a dedupe never
     merges two fixture records that a test means to be two turns."""
-    return {"type": "assistant", "effort": effort, "version": "2.1.280",
-            "message": {"id": "x%d" % next(_IDS), "model": model, "content": [],
-                        "usage": usage if usage is not None else ONE_M}}
+    r = {"type": "assistant", "effort": effort, "version": "2.1.280",
+         "message": {"id": "x%d" % next(_IDS), "model": model, "content": [],
+                     "usage": usage if usage is not None else ONE_M}}
+    if timestamp is not None:
+        r["timestamp"] = timestamp
+    return r
+
+
+def at(seconds):
+    """A transcript timestamp `seconds` after a fixed origin, `Z`-suffixed as
+    transcripts write it."""
+    when = datetime.datetime(2026, 10, 1) + datetime.timedelta(seconds=seconds)
+    return when.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def writes(n, tier="1h"):
+    """Usage writing `n` cache tokens on one tier, nothing else."""
+    cc = {"ephemeral_5m_input_tokens": n if tier == "5m" else 0,
+          "ephemeral_1h_input_tokens": n if tier == "1h" else 0}
+    return {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": n, "cache_creation": cc}
+
+
+READ_ONLY = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 1000,
+             "cache_creation_input_tokens": 0}
+
+#: The hand-checked session of appendix D. It lives outside the repo, so the test
+#: that reads it skips where it is absent.
+D_SESSION = pathlib.Path(os.path.expanduser(
+    "~/.claude/projects/-home-fdpearce-Documents-Projects-git-us-presidential-vote-analysis"
+    "/3f30a898-e246-47ff-95aa-0b2ebceb383e.jsonl"))
 
 
 class TreeCostTests(unittest.TestCase):
@@ -270,6 +299,150 @@ class TreeCostTests(unittest.TestCase):
     def test_every_session_prints_its_stratum_line(self):
         self.session("aaaaaaaa", [rec(M55)], [[rec(M48, "xhigh")]])
         self.assertIn("stratum  claude-opus-5-5@high", self.out())
+
+
+class RewarmTests(unittest.TestCase):
+    """The re-warm term (#287): cache writes on a parent turn after an idle gap
+    longer than the TTL of the cache an earlier turn wrote."""
+
+    def setUp(self):
+        self.root = pathlib.Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def row(self, parent, subs=()):
+        (self.root / "p.jsonl").write_text("".join(json.dumps(r) + "\n" for r in parent))
+        if subs:
+            d = self.root / "p" / "subagents"
+            d.mkdir(parents=True)
+            for i, recs in enumerate(subs):
+                (d / ("a%d.jsonl" % i)).write_text("".join(json.dumps(r) + "\n" for r in recs))
+        r = T.price_session(self.root / "p.jsonl")
+        self.assertIsNone(r["refused"])
+        return r
+
+    def pair(self, gap, first="1h", second="1h", n=1_000_000):
+        """A writer at 0 and a second writer `gap` seconds later."""
+        return self.row([rec(M55, usage=writes(n, first), timestamp=at(0)),
+                         rec(M55, usage=writes(n, second), timestamp=at(gap))])
+
+    def test_a_write_after_a_gap_longer_than_the_ttl_is_a_rewarm(self):
+        r = self.pair(3601)
+        self.assertEqual(len(r["rewarms"]), 1)
+        self.assertAlmostEqual(r["rewarm_usd"], 8.0)        # 1M 1h writes @ 2 x $4
+        self.assertEqual(r["rewarms"][0][1:3], (3601, 1_000_000))
+
+    def test_a_gap_equal_to_the_ttl_is_not_a_rewarm(self):
+        r = self.pair(3600)
+        self.assertEqual((r["rewarms"], r["rewarm_usd"]), ([], 0))
+
+    def test_a_gap_shorter_than_the_ttl_is_not_a_rewarm(self):
+        self.assertEqual(self.pair(1800)["rewarms"], [])
+
+    def test_the_first_turn_is_never_a_rewarm(self):
+        r = self.row([rec(M55, usage=writes(1000), timestamp=at(0))])
+        self.assertEqual((r["rewarms"], r["rewarm_usd"]), ([], 0))
+
+    def test_a_turn_that_writes_no_cache_is_never_a_rewarm(self):
+        r = self.row([rec(M55, usage=writes(1000), timestamp=at(0)),
+                      rec(M55, usage=READ_ONLY, timestamp=at(7200))])
+        self.assertEqual(r["rewarms"], [])
+
+    def test_a_turn_with_no_earlier_writer_has_nothing_to_expire(self):
+        r = self.row([rec(M55, usage=READ_ONLY, timestamp=at(0)),
+                      rec(M55, usage=writes(1000), timestamp=at(7200))])
+        self.assertEqual(r["rewarms"], [])
+
+    def test_the_ttl_is_the_earlier_writers_tier_not_this_turns(self):
+        """The entry that expired is the earlier one. A 5-minute writer then a 1-hour
+        write 301s later is a re-warm; the reverse is not."""
+        r = self.pair(301, first="5m", second="1h")
+        self.assertAlmostEqual(r["rewarm_usd"], 8.0)
+        self.assertEqual(self.pair(301, first="1h", second="5m")["rewarms"], [])
+
+    def test_each_tier_is_priced_at_its_own_write_rate(self):
+        self.assertAlmostEqual(self.pair(3601, first="1h", second="5m")["rewarm_usd"], 5.0)
+
+    def test_the_ttl_follows_the_most_recent_writer(self):
+        """1h writer, then a 5m writer, then a write 400s later: the 5m entry is the
+        one that expired."""
+        r = self.row([rec(M55, usage=writes(1000, "1h"), timestamp=at(0)),
+                      rec(M55, usage=writes(1000, "5m"), timestamp=at(10)),
+                      rec(M55, usage=writes(1000, "1h"), timestamp=at(410))])
+        self.assertEqual(len(r["rewarms"]), 1)
+
+    def test_an_unreadable_earlier_tier_makes_the_term_unknown_not_zero(self):
+        absent = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0,
+                  "cache_creation_input_tokens": 1000}
+        r = self.row([rec(M55, usage=absent, timestamp=at(0)),
+                      rec(M55, usage=writes(1000), timestamp=at(600))])
+        self.assertIsNone(r["rewarm_usd"])
+        self.assertIsNone(r["rewarms"])
+        self.assertIn("tier unreadable", r["rewarm_unknown"])
+        self.assertIsNotNone(r["parent_usd"])               # the bill still prices
+
+    def test_the_gap_runs_from_the_previous_turns_last_record_to_this_turns_first(self):
+        """Turn A streams at 0 and 1000; turn B at 4500 and 8000. From A's last
+        record to B's first is 3500 -- no re-warm. From A's first (4500), or to B's
+        last (7000), would be one."""
+        a, b = rec(M55, usage=writes(1000)), rec(M55, usage=writes(1000))
+        recs = [dict(a, timestamp=at(0)), dict(a, timestamp=at(1000)),
+                dict(b, timestamp=at(4500)), dict(b, timestamp=at(8000))]
+        r = self.row(recs)
+        self.assertEqual(r["turns"], 2)
+        self.assertEqual(r["rewarms"], [])
+
+    def test_an_offset_timestamp_parses_like_a_z_one(self):
+        r = self.row([rec(M55, usage=writes(1000), timestamp="2026-10-01T00:00:00+00:00"),
+                      rec(M55, usage=writes(1000), timestamp="2026-10-01T01:00:01+00:00")])
+        self.assertEqual(len(r["rewarms"]), 1)
+
+    def test_a_missing_or_unparseable_timestamp_makes_the_term_unknown(self):
+        for bad in (None, "yesterday", "2026-10-01T00:00:00"):     # the last is naive
+            with self.subTest(bad=bad):
+                r = self.row([rec(M55, usage=writes(1000), timestamp=at(0)),
+                              rec(M55, usage=writes(1000), timestamp=bad)])
+                self.assertIsNone(r["rewarm_usd"])
+                self.assertIn("no readable timestamp", r["rewarm_unknown"])
+
+    def test_a_backwards_timestamp_makes_the_term_unknown(self):
+        r = self.row([rec(M55, usage=writes(1000), timestamp=at(100)),
+                      rec(M55, usage=writes(1000), timestamp=at(0))])
+        self.assertIn("backwards", r["rewarm_unknown"])
+
+    def test_subagent_turns_are_not_counted(self):
+        sub = [rec(M55, usage=writes(1000), timestamp=at(0)),
+               rec(M55, usage=writes(1000), timestamp=at(7200))]
+        r = self.row([rec(M55, usage=writes(1000), timestamp=at(0))], [sub])
+        self.assertEqual(r["rewarms"], [])
+
+    def test_the_term_leaves_the_bill_untouched(self):
+        r = self.pair(3601)
+        self.assertAlmostEqual(r["parent_usd"], T.bill(self.root / "p.jsonl")[0].usd)
+        self.assertAlmostEqual(r["parent_usd"], 16.0)      # both writes, re-warm included once
+
+    def test_sessions_mode_prints_unknown_and_excludes_it_from_totals(self):
+        self.pair(3601)
+        (self.root / "q.jsonl").write_text(
+            "".join(json.dumps(r) + "\n" for r in [rec(M55, usage=writes(1000)),
+                                                    rec(M55, usage=writes(1000))]))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            T.main(["--sessions", str(self.root / "p.jsonl"), str(self.root / "q.jsonl")])
+        out = buf.getvalue()
+        q_line = [ln for ln in out.splitlines() if ln.startswith("q ")][0]
+        self.assertIn("unknown", q_line)
+        self.assertIn("re-warm unknown, EXCLUDED from re-warm totals q:", out)
+        self.assertIn("| re-warm $8.00", out)
+
+    @unittest.skipUnless(D_SESSION.is_file(), "appendix D's transcript is not on this machine")
+    def test_appendix_d_session_reproduces_seven_rewarms_and_27_80(self):
+        r = T.price_session(D_SESSION)
+        self.assertIsNone(r["refused"])
+        self.assertIsNone(r["rewarm_unknown"])
+        self.assertEqual(len(r["rewarms"]), 7)
+        self.assertAlmostEqual(r["rewarm_usd"], 27.80, delta=0.05)
 
 
 if __name__ == "__main__":

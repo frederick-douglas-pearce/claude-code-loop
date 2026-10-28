@@ -96,7 +96,8 @@ to last so that it certifies the commit that actually merges.
 | **11. Merge** | Through `MERGE_METHOD`, with the PR's own branch deleted. | every merge under `mode: calibration` (the default) and on any route you have not graduated |
 | **12. Journal + stop** | Appends the close record — including a `- Budget:` line of subagent runs and gate rounds — marks the row `done`, and stops. | — |
 
-Re-invoke for the next issue, or let Claude Code's `/loop` drive it. The optional
+Re-invoke for the next issue (by hand, run `/clear` first, so it does not start on the last
+issue's context), or let Claude Code's `/loop` drive it. The optional
 `iteration-cap:` and `subagent-cap:` fields in the ledger header halt the driver once a run reaches
 them; a manual re-invoke past a cap is warned and journaled, not stopped.
 
@@ -279,6 +280,18 @@ harness; it does nothing until the consuming repo supplies the per-project confi
 harness the acceptance gate runs — the engine's own instructions are prompt
 artifacts and need nothing installed. Both are launched with bare `python3`, use
 the standard library only, and are tested on 3.9 through 3.13 in CI.
+
+**On an API key, set the prompt cache to one hour.** The loop stops for you at its plan and merge
+gates. With an API key, a cloud provider or usage credits, Claude Code caches the main
+conversation for five minutes by default, so a gate you answer later than that re-writes the
+session's whole context into the cache when the loop resumes. Set `"promptCacheTtl": "1h"` in your
+Claude Code settings (v2.1.242 or later; see
+[prompt caching](https://code.claude.com/docs/en/prompt-caching)) to keep it for an hour. A
+one-hour cache write costs 2× base input against 1.25× for five minutes, so the setting costs more
+on work that never idles past five minutes. Re-warms are not small: in one hand-checked run they
+were 32% of the parent bill even with a one-hour cache
+([appendix D](docs/research/cost-review-2026-10-26/D-handcheck-3f30a898.md)).
+On a Claude subscription within your plan's usage, the main conversation already gets one hour.
 
 ### Upgrading the plugin
 
