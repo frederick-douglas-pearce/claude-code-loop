@@ -377,7 +377,7 @@ class RewarmTests(unittest.TestCase):
         self.assertAlmostEqual(r["rewarm_usd"], 10.0)      # 1M 1h writes @ 2 x $5
 
     def test_a_read_only_turn_between_writers_keeps_the_expiring_tier(self):
-        """A non-writing turn neither resets the TTL nor is skipped as a gap anchor."""
+        """A non-writing turn keeps the earlier writer's tier and still anchors the gap."""
         r = self.row([rec(M55, usage=writes(1000), timestamp=at(0)),
                       rec(M55, usage=READ_ONLY, timestamp=at(10)),
                       rec(M55, usage=writes(1000), timestamp=at(3700))])
@@ -481,11 +481,17 @@ class RewarmTests(unittest.TestCase):
         self.assertIn("backwards", r["rewarm_unknown"])
 
     def test_equal_timestamps_are_not_backwards(self):
+        """Between turns, and between the records of one turn."""
         r = self.row([rec(M55, usage=writes(1000), timestamp=at(0)),
                       rec(M55, usage=writes(1000), timestamp=at(0))])
         self.assertEqual((r["rewarms"], r["rewarm_unknown"]), ([], None))
+        a = rec(M55, usage=writes(1000))
+        r = self.row([dict(a, timestamp=at(0)), dict(a, timestamp=at(0))])
+        self.assertEqual((r["rewarms"], r["rewarm_unknown"]), ([], None))
 
     def test_a_fraction_of_any_length_parses_the_same_on_every_version(self):
+        """Bites only below Python 3.11, whose `fromisoformat` rejects these fractions
+        without the normalization; this file is not in CI, so run it on 3.9 by hand."""
         for frac in ("1", "123", "123456", "123456789"):
             with self.subTest(frac=frac):
                 r = self.row([rec(M55, usage=writes(1000), timestamp="2026-10-01T00:00:00Z"),

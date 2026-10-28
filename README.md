@@ -282,14 +282,13 @@ harness the acceptance gate runs — the engine's own instructions are prompt
 artifacts and need nothing installed. Both are launched with bare `python3`, use
 the standard library only, and are tested on 3.9 through 3.13 in CI.
 
-**With an API key, a cloud provider or usage credits, set the prompt cache to one hour.** The loop
-stops for you at its plan and merge gates, and there Claude Code caches the main conversation for
-five minutes by default, so a gate you answer later than that re-writes the
+**With an API key, a cloud provider, or usage credits, set the prompt cache to one hour.** The
+loop stops for you at its plan and merge gates. With any of those, Claude Code caches the main
+conversation for five minutes by default, so a gate you answer later than that re-writes the
 session's whole context into the cache when the loop resumes. Set `"promptCacheTtl": "1h"` in your
 Claude Code settings (v2.1.242 or later; see
 [prompt caching](https://code.claude.com/docs/en/prompt-caching)) to keep it for an hour. On Amazon
-Bedrock or behind an LLM gateway, check that page first: one-hour support varies by model on
-Bedrock, and a gateway must forward the `anthropic-beta` header. A
+Bedrock or behind an LLM gateway, check that page first. A
 one-hour cache write costs 2× base input against 1.25× for five minutes, so the setting costs more
 on work that never idles past five minutes. Re-warms are not small: in one hand-checked run they
 were 32% of the parent bill even with a one-hour cache
