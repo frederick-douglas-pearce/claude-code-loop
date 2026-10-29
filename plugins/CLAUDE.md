@@ -142,3 +142,25 @@ even though nothing will fail loudly:
   list is **sufficient, not exhaustive**: extend it, never prune it. Its "if unsure, material"
   catch-all is what makes it the opposite polarity to `ALLOWED_NON_BINDINGS`/`_STOPWORDS` —
   additions can only strengthen it, so it is not the stale-allow-list failure those two flag.
+- **The Execution policy (`loop-engine.md` → Tool surface) has no binding, deliberately.** A
+  porting project has nothing to set there, and that is a decision rather than an oversight — the parameter that once sat there
+  (`PERMISSION_POSTURE`, #27) was retired, not left unfilled. A binding could only ever
+  restate what the predicate derives, or license the "be careful" form the policy rules out; the
+  first is redundant and the second is an off switch for a safety invariant. Agent spend is not a
+  counterexample: it is budgeted **elsewhere and differently**, by the `subagent-cap`
+  circuit-breaker — a per-run ledger field the human sets, not a project binding, bounding *volume*
+  retrospectively and unable to tell simultaneity from throughput.
+- **Step 5's plan-informing exclusion (step 8's scope ruling): do not word it "before the plan
+  gate".** Step 5 *is* that gate and its own first consult happens there, so that phrasing would
+  exclude the one architect call the freeze rule most needs to reach. Key it on **purpose** — plus
+  the two facts that the scope ruling rules on a finding and rewrites no `## Approach`.
+- **Resume of a `planning` row: expect it to be common, not exceptional.** Under
+  `plan-gate: always` every issue stops at step 5 with its row still `planning`, and `planning` is a
+  pipeline status, so step 0.3 classifies it *interrupted* — meaning any `/clear` between the plan
+  gate and the human's approval lands in Resume. Resume's write-once guards are what make that safe;
+  do not relax them on the assumption that this path is rare.
+- **The `- Plan-gate-inferred:` subsection is placed last in its section deliberately.** A heading
+  earlier in the section would nest everything after it — the open and close records,
+  `- Hermetic:`, `- Restore:`, `- Budget:` — under a heading about the posture inference.
+- **The mechanism blockquote** (Gates → Fresh-re-check invariant) is kept in core rather than in
+  the `accepting` unit, because step 8's `guard-efficacy` lens needs it before step 10.
