@@ -412,7 +412,13 @@ never be a reason to record less.**
   plan-informing: freeze, and treat this condition as due.** Unknown must land on the over-gating
   side.
 
-  **A consultation *after* this gate is out of scope here.** The pipeline offers no path back to step 5 from `plan-approved`; a later consultation that invalidates an approved plan is the plan-currency problem (#89), not this condition, and step 8's scope ruling owes it nothing. Do not improvise a stop for it.
+  **A consultation *after* this gate is out of scope here, deliberately.** The pipeline offers no
+  path back to step 5 from `plan-approved`, and an approved plan later invalidated by a fresh
+  consultation is the plan-currency problem (#89, in the same family as #33), not this
+  condition. Step 8's scope ruling is such a consultation, and is additionally not plan-informing —
+  so it owes this condition nothing on either count. Do not improvise a stop for it here: with no
+  pre-image to diff, any rule stated at this step would be self-assessment — the very thing this
+  condition exists to replace.
 
   **Present the frozen-vs-final diff at the stop**, not a re-read of the whole plan. The cost of this
   condition is the human's attention, and a diff is what keeps it cheap.
@@ -607,7 +613,11 @@ says. So: one surface is reviewed, none is enforced, and
 For every AC, point at the change that satisfies it. If you cannot point at anything, you have not
 implemented it — go back and do so now.
 
-**This is a tripwire, not a gate, and it is explicitly not sufficient.** It catches **gross omission** cheaply before step 10, the most expensive point in the pipeline:
+**This is a tripwire, not a gate, and it is explicitly not sufficient.** It exists because of where
+the acceptance gate now sits. That gate is step 10, after the PR is open, after CI is green, after
+review and after security — so "you did not implement AC-3 at all" is discovered at the most
+expensive point in the pipeline available. Under the old ordering it cost one cheap fix loop with no
+PR and no CI. This walk is a cheap catch for **gross omission** and buys nothing else:
 - it does **not** substitute for step 10, which still runs unconditionally and independently;
 - a `file:line` you can name is **not evidence the criterion is met** — only that something was
   written toward it. Judging *met* is the fresh verifier's job, on the diff, not yours on your
@@ -1181,7 +1191,10 @@ rewrite of the plan**. The two modes:
 - **`escalation-only`** — the human loosens the **merge gate per route**: a route the human has
   *graduated* auto-merges when CI + AC-verifier + review are green and the change produces no
   release-artifact bump (or ≤ patch where `RELEASE_SCHEME` defines one — a `docs`/`chore` change,
-  or any change with no release cycle, qualifies). *Which* routes are graduated is recorded per-run in the `graduated-routes:` header, never frozen into this definition. The human merge gate is **retained** for every non-graduated route and,
+  or any change with no release cycle, qualifies). *Which* routes are currently graduated is a
+  mutable human decision, recorded per-run in the `graduated-routes:` header and in the project
+  decision log — never frozen into this mechanism definition (the lesson: graduation *state* is
+  evidence, not a rule). The human merge gate is **retained** for every non-graduated route and,
   regardless of route, for any of: a `feat:`/breaking change, a risky/irreversible change, a touched
   security surface, a contested review finding, an unresolved BLOCKING review finding (step 8 — an
   EDITORIAL finding raised before that step's sweep is swept there and never left unresolved; one
@@ -1515,7 +1528,14 @@ Two ordering rules, because both are easy to get backwards:
 - **`git status` is not sufficient on its own.** A repo that gitignores the isolation path reports
   clean with a copy still present, so pair it with `git worktree list` (Tool surface).
 
-On an isolated or in-tree pass the two counts are read off the harness's report (AC-verifier → Part 2): `applied` counts mutations whose substitution actually changed the file's bytes, `restored` counts mutations whose file was verified byte-exact on the way back. They count mutations, not files — three mutations in one file report `applied: 3` — and never invocations of a helper.
+**A producer now exists** (AC-verifier → Part 2), so on an isolated or in-tree pass the two counts
+are read off the harness's report rather than tallied by hand: `applied` counts **mutations whose
+substitution actually changed the file's bytes**, and `restored` counts mutations whose file was
+verified byte-exact on the way back. They count mutations, not files — three mutations in one file
+report `applied: 3` — and neither counts invocations of a helper — that substitution is the specific dishonesty AC5 names, and it is
+now settled in code instead of by instruction. Pinning this line's presence or shape with a
+consistency check became possible with that producer; whether to do it is **#62's** call, not a
+claim this section makes on its behalf.
 
 The `- Budget:` line is the per-iteration cost record: a `·`-separated list of `name=value` **slots**.
 

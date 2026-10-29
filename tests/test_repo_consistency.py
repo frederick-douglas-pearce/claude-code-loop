@@ -1814,8 +1814,9 @@ class PhaseIndexIdentityTests(unittest.TestCase):
     right. **A green run means the index is internally consistent and its files exist —
     never that the fail-safe halves are correct.** Nor does it check that a step's own
     section tells you to read the unit its row names; that gap is F183 on #1. It checks
-    index -> disk only: a unit file the index does not name is not detected. The never-indexed ban covers two literal paths; it
-    does not establish that Resume or the Router stays in core.
+    index -> disk only: a unit file the index does not name is not detected. The
+    never-indexed ban covers two literal paths; it does not establish that Resume or the
+    Router stays in core.
 
     **Reads ``_ENGINE`` directly, not ``_engine_text()``** -- the same "not for structure"
     exception ``PipelineStepOrderTests._engine_steps`` takes. The index is core's
