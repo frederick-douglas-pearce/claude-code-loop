@@ -109,15 +109,18 @@ even though nothing will fail loudly:
     **both** values and that `always` does not excuse skipping the diff or its `- Plan-gate:` line;
     step 5's always-on block carries the same point at length
   - Ledger format — the `- Plan-gate:` spelling enumeration (the **canonical** one; step 5 points
-    at it rather than restating, after a draft where the two lists disagreed) and the `progress.md`
-    worked example
-  - the `issue-<N>.plan.md` template · Resume's two write-once side effects
+    at it rather than restating, after a draft where the two lists disagreed)
+  - the `progress.md` worked example (the `record-templates` unit, `reference/record-templates.md`,
+    since #278)
+  - the `issue-<N>.plan.md` template (the `plan-template` unit, `reference/plan-template.md`, since
+    #278) · Resume's two write-once side effects
   - `SKILL.md`'s fail-safe list · the README trust model
 
   **`PlanGateFrozenBlockTests` guards one mechanically-checkable part** — that the frozen
   block's heading appears, **normalized**, in each of four *located regions* of the engine: step 4's
   span (which writes it), step 5's span (which diffs against it), the `issue-<N>.plan.md` template
-  fence, and the Resume paragraph. That coupling is a *string*, not a meaning, so the check is
+  fence (read from `reference/plan-template.md` alone since #278, so a span cannot cross from core
+  into a unit), and the Resume paragraph. That coupling is a *string*, not a meaning, so the check is
   neither fragile nor vacuous: if step 4 writes a heading step 5 no longer looks for, the mechanism
   is dead while every word of the prose still reads correctly. **It asserts that the heading *appears*, normalized, in each region — not byte-identity, and not
   equality** — whitespace is collapsed (one occurrence is line-wrapped, the same hazard that hides
@@ -159,8 +162,10 @@ even though nothing will fail loudly:
   pipeline status, so step 0.3 classifies it *interrupted* — meaning any `/clear` between the plan
   gate and the human's approval lands in Resume. Resume's write-once guards are what make that safe;
   do not relax them on the assumption that this path is rare.
-- **The `- Plan-gate-inferred:` subsection is placed last in its section deliberately.** A heading
-  earlier in the section would nest everything after it — the open and close records,
-  `- Hermetic:`, `- Restore:`, `- Budget:` — under a heading about the posture inference.
+- **The `- Plan-gate-inferred:` subsection is placed last in its section deliberately.** Since
+  #278 its body is the `plan-gate-inferred` unit and core keeps a stub — the trigger and the
+  never-*writes*-the-field rule — under the same `####` heading. A heading earlier in the section
+  would nest everything after it — the records table, `- Hermetic:`, `- Restore:`, `- Budget:` —
+  under a heading about the posture inference.
 - **The mechanism blockquote** (Gates → Fresh-re-check invariant) is kept in core rather than in
   the `accepting` unit, because step 8's `guard-efficacy` lens needs it before step 10.

@@ -157,10 +157,9 @@ The plugin keeps a strict split between what is generic, what is per project, an
 2. **A project-agnostic engine** — `skills/dev-loop/loop-engine.md` is the **core**: the pipeline,
    ledger format, router, resume, gate, convergence and budget semantics, and a **phase index**
    naming each on-demand unit. The core is read in full on every invocation; a unit is read at its
-   point of use — `phases/reviewing.md` at step 8, `phases/accepting.md` (the AC-verifier and the
-   mutation pass) at step 10, `reference/initialization.md` only when a new run is created. A unit
-   the loop cannot confirm it read in full counts as not loaded, and the step that needs it does not
-   pass. Neither the core nor any unit contains a project-specific value.
+   point of use, which the phase index names for each unit. A unit the loop cannot confirm it read
+   in full counts as not loaded, and the step that needs it does not pass. Neither the core nor any
+   unit contains a project-specific value.
 3. **A per-project binding seam** — `.claude/loop.config.md` in *your* repo. Every `CAPS` name the
    engine uses (`BACKLOG_SOURCE`, `SCOPE_AGENT`, `DESIGN_AGENT`, `CODE_REVIEW`, `TEST_CMD`,
    `MERGE_METHOD`, …) resolves there.
@@ -925,7 +924,10 @@ claude-code-loop/
 │       │       │   ├── accepting.md # phase unit: step 10 + the AC-verifier
 │       │       │   └── reviewing.md # phase unit: step 8's code-review procedure
 │       │       └── reference/
-│       │           └── initialization.md # appendix unit: Initialization + the queue.md skeleton
+│       │           ├── initialization.md     # appendix unit: Initialization + the queue.md skeleton
+│       │           ├── plan-gate-inferred.md # appendix unit: the run-level posture inference record
+│       │           ├── plan-template.md      # appendix unit: the issue-<N>.plan.md template + lifecycle
+│       │           └── record-templates.md   # appendix unit: the progress.md open and close records
 │       ├── hooks/
 │       │   ├── hooks.json           # wires the PreToolUse guard via ${CLAUDE_PLUGIN_ROOT}
 │       │   ├── guard_append_only.py # append-only guard (config-driven; stdlib only)

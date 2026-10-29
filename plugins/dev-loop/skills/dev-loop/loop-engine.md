@@ -21,6 +21,9 @@ A named section may live in a unit.
 | Unit | File | Read it at |
 |---|---|---|
 | `accepting` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/phases/accepting.md` | step 10; and Resume, when its unfinished-mutation check sends you to this unit |
+| `plan-gate-inferred` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/plan-gate-inferred.md` | step 0 (the parked path, or step 0.2), on a run that owes the `- Plan-gate-inferred:` record (Ledger format → `progress.md` → `- Plan-gate-inferred:` states when) |
+| `plan-template` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/plan-template.md` | step 3, before setting the row to `planning` |
+| `record-templates` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/record-templates.md` | step 7, at its start, before staging; and step 12 |
 | `reference` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/initialization.md` | step 0, when no run exists and you are about to initialize one |
 | `reviewing` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/phases/reviewing.md` | step 8; and before any code-review round, whenever it runs |
 
@@ -41,6 +44,13 @@ never lets its gate be skipped. Per unit:
   and the row cannot merge: journal a `- gate-error:` and escalate to the human (Gate-outcome
   invariant). On Resume, if the unfinished-mutation check sends you to the unit and it is not
   loaded, that is a STOP: touch nothing in the tree, and never `git restore`.
+- `plan-gate-inferred` — on a run that owes the record, the posture still reads `always` (step 5).
+  Write no `- Plan-gate-inferred:` block and never the `plan-gate:` field: STOP and tell the human
+  that the run's header states no posture it can read.
+- `plan-template` — at step 3, write no `issue-<N>.plan.md` and do not change the row's status:
+  STOP and tell the human.
+- `record-templates` — write neither record, and take no further action in the step whose read
+  failed; at step 12, do not change the row's status. STOP and tell the human.
 - `reference` — Initialization and the `queue.md` skeleton it writes. Without it loaded, do not
   initialize — create nothing under `LEDGER_ROOT` — and do not invent a queue shape: STOP and tell
   the human.
@@ -91,7 +101,7 @@ invocation resumes correctly.
        `progress.md` by the same searched read (never a bulk one — this is the path that exists to
        be cheap, and the journal is the largest file in the ledger), **emit the plan-gate inference
        record if it is owed** (Ledger format → `progress.md` → `- Plan-gate-inferred:`, which states
-       when it is owed and how it dedupes) — **this path never reaches step 0.2**, so without it a
+       when it is owed and which unit to read) — **this path never reaches step 0.2**, so without it a
        parked run can fall through to selection below and work an issue under a posture nobody
        stated, and it goes before the reconciliation because that sub-unit can stop for a human
        answer — run the step-1 roster
@@ -109,9 +119,10 @@ invocation resumes correctly.
 2. Read `queue.md` (note its `mode:` / `graduated-routes:` / `plan-gate:` header and any
    `hold`/`parked` rows) and the tail of `progress.md`. **Then emit the plan-gate inference record
    if it is owed** (Ledger format → `progress.md` → `- Plan-gate-inferred:`) — that section states
-   when it is owed, how it dedupes to once per run, and that it is surfaced to the human as well as
-   journalled. **Its dedupe SEARCHES the FULL `progress.md`, not the tail read above** — never a
-   bulk read of it, for the reason step 0.1 gives. Do not write the field: it is
+   when it is owed and sends you to the `plan-gate-inferred` unit, which states how it dedupes to
+   once per run and that it is surfaced to the human as well as journalled. **Its dedupe SEARCHES
+   the FULL `progress.md`, not the tail read above** — never a bulk read of it, for the reason
+   step 0.1 gives. Do not write the field: it is
    the human's.
 3. **Resume before selecting (see the Resume procedure below).** **Recognise each issue row's
    Status first, then classify it** — the three Status sets are closed (Ledger format → queue.md),
@@ -214,9 +225,12 @@ out-of-<run> roster (curation)`) survives a later live re-check; the mutable liv
 roster", "no PR yet") is contradicted by the next re-check and destabilizes resume.
 
 ### 3. Plan
-Set the row status to `planning`. Fetch the issue (`gh issue view <N>`). Write
-`issue-<N>.plan.md` (template in Ledger format → issue-<N>.plan.md), copying acceptance criteria
-verbatim. Lighter for research/docs.
+**Read the `plan-template` unit now** —
+`${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/plan-template.md`, in full, under the load
+protocol (preamble) — in the same turn as fetching the issue (`gh issue view <N>`), since neither
+call depends on the other. Only once it is loaded, set the row status to `planning`. Write
+`issue-<N>.plan.md` from the unit's template, copying acceptance criteria verbatim. Lighter for
+research/docs.
 
 **Value framing (opens the plan, route-scaled).** State *why this should exist* in
 user terms — the question the architect/AC-verifier/code-review gates never ask (they check we
@@ -270,8 +284,7 @@ always-on stop passes silently.
 **(a) FIRST, before you invoke `DESIGN_AGENT`, freeze the plan's approach.** Copy `## Approach`
 verbatim into a
 `## Approach as reviewed (frozen before the design gate) — write-once, do not edit` block in
-`issue-<N>.plan.md` (the heading is fixed and must match the template in Ledger format exactly —
-step 5 looks for it by name). That block
+`issue-<N>.plan.md` (the heading is fixed — step 5 looks for it by name). That block
 is the **pre-image** step 5's materiality test diffs against — without it the test has nothing to
 compare and degrades to self-assessment, which is what it exists to replace. (The ledger is
 gitignored, so there is no git pre-image to recover instead.) The freeze is owed whenever you are
@@ -631,6 +644,11 @@ about your own work. *Whether a criterion was implemented at all* is a different
 by looking, and the one reader who can answer it fastest is the one who just wrote the change.
 
 ### 7. Commit + PR
+**Read the `record-templates` unit now, before staging** —
+`${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/record-templates.md`, in full, under the load
+protocol (preamble). If it is not loaded, STOP (preamble → *What holds without each unit
+loaded*).
+
 Commit with correct `COMMIT_CONV` scope — **staging explicit paths and reading `git diff --cached`
 first** (step 6), since this is a commit boundary like any other and the tree may have gained an
 agent's files since you last looked. Open the PR; **replicate `PR_TEMPLATE` fully** in
@@ -638,7 +656,7 @@ the body; make the Security-review choice up front. Advance the row to `in-pr` a
 PR number.
 
 **Then append the iteration's open record to `progress.md`, before you wait for CI.** Write it as
-Ledger format → `progress.md` gives it; that template is the one statement of what it carries, so do
+the `record-templates` unit gives it; that template is the one statement of what it carries, so do
 not re-derive the fields here.
 
 **Write it now rather than at step 12, for the reason step 5 journals its `- Plan-gate:` line where
@@ -922,15 +940,16 @@ merge via `MERGE_METHOD` with an explicit `--subject` carrying the correct `COMM
 `--delete-branch`. Confirm the issue closed.
 
 ### 12. Journal + stop
-Append the iteration's **close record** to `progress.md` (Ledger format → progress.md, which carries
-its shape). Step 7 writes the open record; if this iteration re-entered *past* step 7 on resume,
+Append the iteration's **close record** to `progress.md`. Its shape is in the `record-templates`
+unit — `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/record-templates.md`; read it now, in full,
+under the load protocol (preamble). Step 7 writes the open record; if this iteration re-entered *past* step 7 on resume,
 there may be none — **do not write one now.** Back-dating it would assert a record of a moment nobody
 observed, which is the same bar the architect freeze and the gate lines are under.
 
 The `- Budget:` line is specified once, in Ledger format → `progress.md` → `- Budget:`: four required slots (`subagent-runs`, `gate-rounds`, `wall-clock`, `tokens`), one physical line, a note on any slot, `justification=` whenever a `gate-rounds` value exceeds 1, and the acceptance gate's three counts kept separate. Write it as that section gives it.
 
 Set the `queue.md` row to `done` (or `blocked`/`deferred` with reason); note newly-unblocked
-issues. The ledger is gitignored — do NOT commit it (Ledger format → lifecycle). STOP, and end
+issues. The ledger is gitignored — do NOT commit it. STOP, and end
 the stop message by telling the human to run `/clear` before invoking again: otherwise the next
 issue starts on this one's context and pays for it on every turn.
 
@@ -1268,7 +1287,7 @@ The orchestrator APPENDS one block **per gate decision** and, over an iteration,
 below; it is never rewritten. This is the audit trail and the resume anchor. Some blocks sit outside that
 per-iteration shape and are **run-level rather than per-issue** — among them the
 `## <ISO8601> — curation` block step 1's roster reconciliation writes, and the
-`## <ISO8601> — plan-gate inference` block defined at the end of this section.
+`## <ISO8601> — plan-gate inference` block (`- Plan-gate-inferred:`, last in this section).
 
 **The pipeline names the step that writes each record, and each is owed only by an iteration that
 reaches that step:**
@@ -1293,44 +1312,9 @@ is that it survives the loss of the second. A template that only shows the close
 outcomes an iteration does not have yet, which pressures the orchestrator to defer the entire
 journal to step 12 — the failure this split exists to remove.
 
-**The open record** — written at step 7:
-
-```markdown
-## <ISO8601> — #<N> (<route>) — iteration open
-- Issue: #<N> — <title>
-- Route: <code|research|docs>
-- Branch: <branch name>
-- PR: #<pr>
-- Status: in-pr
-```
-
-Where the work **closes no issue** — a follow-up patching what a prior PR shipped, say — such work is
-often not in `queue.md` at all, so do not assume a row key exists: head the record with the PR
-(`## <ISO8601> — PR #<pr> (<route>) — iteration open`) and write `- Issue: none (Refs #<M>)`, adding
-the row key only if there is one. The branch and PR number are the identity the orphan scan reports
-by; omitting the record because there is no issue number is what would break it.
-
-**The close record** — written at step 12:
-
-```markdown
-## <ISO8601> — #<N> (research) — iteration complete
-- Selected: #<N> (highest-priority unblocked).
-- Route: research (probe; no test-coverage gate).
-- Plan: issue-<N>.plan.md written.
-- Architect: skipped (research scaffolding, no shared-interface impact).
-- Plan-gate: n/a: architect skipped (research scaffolding).
-- Human gate: plan approved by the human (plan-gate: always).
-- Implemented: <path>; recorded findings in <path>.
-- Hermetic: n/a: research route.
-- PR: #<pr> (chore scope). CI: green.
-- Code-review: round 1 (main...9f3c1ab) — 0 findings. Security: n/a (no deps added).
-- Editorial: 0 — no EDITORIAL finding returned.
-- Restore: n/a: no mutation applied.
-- AC-verify: Class A 3/3 acceptance criteria met. Class B: mutation pass not due (research route).
-- Budget: subagent-runs=3 · gate-rounds=architect=0,code-review=1(correctness,robustness),ac-verify=1 · ac-findings=0 · mutation-survivors=n/a: research route · wall-clock=18m · tokens=deferred
-- Merged: squash #<pr>. Issue #<N> closed.
-- Next: #<M> now unblocked.
-```
+**The two records' shapes are in the `record-templates` unit** —
+`${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/record-templates.md`, read at step 7 and step 12
+(phase index).
 
 Two further fixed-shape lines are appended **only when a gate produced no verdict** (Gate-outcome
 invariant — that section defines when each applies and what follows):
@@ -1360,9 +1344,8 @@ of the first three spellings, or takes the fourth path, which writes none:
 
 The **`- Human gate:`** line records how the plan gate resolved. Under `plan-gate: always` (the
 shipped default) every issue stops, so the line reads as an approval by the human and
-**`plan auto-approved` is never legitimate for this gate** — name the posture, as the worked example
-does. Under `plan-gate: conditional` an unstopped issue reads `plan auto-approved (<why>)`, the
-`<why>` being the judgment call that let it pass (e.g. route and low ambiguity).
+**`plan auto-approved` is never legitimate for this gate** — name the posture. Under
+`plan-gate: conditional` an unstopped issue reads `plan auto-approved (<why>)`, the `<why>` being the judgment call that let it pass (e.g. route and low ambiguity).
 
 The **`- Plan-gate:`** line records the always-on stop's frozen-vs-live diff (step 5), which is
 otherwise invisible for the same reason: it resolves before implementation, so a run that never took
@@ -1667,124 +1650,26 @@ distinguishable: a value, a visible not-due, and an omission that means only "un
 
 #### `- Plan-gate-inferred:` — the run-level posture inference
 
-**Three plan-gate-family lines exist; keep them apart.** `- Human gate:` records how the plan gate
-**resolved** on an issue. `- Plan-gate:` records the always-on stop's **frozen-vs-live diff** on an
-issue. `- Plan-gate-inferred:` — this line — records that the **run's header stated no posture at
-all**, so one was inferred.
-
-**Why it exists.** An inferred posture is a state whose only rendering is silence, and the ledger it
-is silent about can assert the opposite — a header reading `mode: escalation-only` and
-`graduated-routes: docs, research` while every plan stops anyway. That is the argument `- Hermetic:`
-and `- Restore:` were given dedicated spellings on. Initialization writes the field once and does not
-run again, and the orchestrator never writes the field outside Initialization, so without this line
-a run whose ledger predates the field is over-gated for the rest of its life with nothing naming the
-remedy.
-
 **When it is owed — this is the one statement of the trigger, and step 0 invokes it by reference
 rather than restating the condition.** It is owed when the run's `queue.md` header carries **no
 `plan-gate:` field, or a value step 5 does not recognise**.
 
-**Emit at most once per run — and dedupe on the LINE YOU ARE ABOUT TO WRITE, never on the name
-alone.** Search the FULL `progress.md` (never the tail) for that exact line; write the block only if
-it is absent. **The two spellings below are two different facts with two different remedies, and the
-second commonly follows the first *because the human acted on the first*.** A run that reports the
-absent field, gets a hand-edited header with a typo in it, and then suppresses the unrecognized-value
-notice on a name match has gone quiet at the exact moment its ledger started asserting a posture —
-strictly worse than never having spoken. Keying on the name alone produces that; keying on the line
-does not. This still is not a per-issue record: the line can only change when the **header** changes,
-which is the property AC-level "once per run" is about.
-
-**Surface first, then journal — the order is load-bearing.** An invocation can stop between the two
-(step 0.3 halts on an orphan PR, the driver halts on a budget breach, a `/clear` lands). Journalling
-first and stopping suppresses the message permanently while the ledger shows full compliance;
-surfacing first and stopping merely re-emits next invocation, which is harmless.
-
-It takes its own dated block, headed `## <ISO8601> — plan-gate inference`. **Keep the literals `RUN
-COMPLETE`, `RUN PARKED` and `RUN RESUMED` out of the heading and the body**: step 0.1 greps the whole
-journal for those, and a block carrying one risks reading as a run-state sentinel or forcing that
-step to stop and ask. **If the unrecognized value you must quote itself contains one of the three,
-do not write the block — STOP and ask the human**, rather than choosing between quoting it faithfully
-and keeping the journal readable.
-
-The block's shape — a skeleton, because the lines themselves are rendered **once**, below:
-
-```markdown
-## <ISO8601> — plan-gate inference
-
-<the applicable line from the two variants below, verbatim — it already carries its `- ` marker>
-
-  <that variant's own remedy paragraph, indented beneath it>
-```
-
-**Two variants, and this is the one place either is written out.** Each carries **its own** remedy:
-the two are not interchangeable, because they describe opposite states of the header.
-- **`- Plan-gate-inferred: no plan-gate: field in this run's header — reading as always.`**
-  Remedy: *a human may set the posture by adding `_plan-gate: always_` (or `_plan-gate: conditional_`) to this
-  run's `queue.md` header, beside `mode:`. The orchestrator never writes this field outside
-  Initialization, which for this run has already happened.*
-- **`- Plan-gate-inferred: unrecognized value "<the literal found>" — reading as always.`**
-  **Quote what you found**, never a tidied version of it. Remedy: *a human may correct the existing
-  value in this run's `queue.md` header — **replace it in place; do not add a second `plan-gate:`
-  line**. The orchestrator never writes this field outside Initialization, which for this run has
-  already happened.*
-
-**Never hand the absent-field remedy to the unrecognized-value case.** There the field is already
-present, so "add it beside `mode:`" yields a header carrying **two** `plan-gate:` lines — a state
-this engine has no rule for, reached by an operator doing exactly what they were told.
-
-**Absence of this line is not evidence the header stated a posture.** Every ledger written before
-this line existed lacks it whatever its header said, and so does a run that never reached an emit
-point. A missing line reads as *unknown*, on the same terms as an omitted `- Budget:` slot — never as
-"the posture was stated". **A `- Human gate:` line naming a posture is not that evidence either**: it
-names the posture in force, which on an owed run is the inferred one.
+**When it is owed, read the `plan-gate-inferred` unit now** —
+`${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/plan-gate-inferred.md`, in full, under the load
+protocol (preamble). It holds the line's two variants and their remedies, the dedupe rule, and the
+order in which to surface and journal it; write none of it without the unit.
 
 **The orchestrator never writes the `plan-gate:` field outside Initialization.** Read that as
 written and do not weaken it to "never rewrites it": on a ledger that never had the field there is
 nothing to rewrite, and an orchestrator reasoning from the weaker form can talk itself into adding
 one — freezing a posture the human never chose, which is the single outcome this must not produce.
-This line is a message, never an edit — not here, and not at any later invocation.
+The `- Plan-gate-inferred:` line is a message, never an edit — not here, and not at any later
+invocation.
 
-### `issue-<N>.plan.md` — per-issue plan (architect-reviewed, human-approved)
-```markdown
-# Plan: #<N> — <title>
-**Route:** <code|research|docs>  **Branch:** <BRANCH_FMT>
-
-## Value framing (route-scaled — see step 3)
-<feat: backbone activity + 1–3 `as a … I want … so that …`, each with who-benefits +
-prevalence + a falsifier ("what observation would show this is misdirected?"); discharge cheap
-falsifiers here (run the grep/corpus pass) rather than only stating them.
-fix: who hits it / how often / what breaks. docs: who reads it / what it unblocks.
-research: question + downstream decision + what a null result means.
-chore:/refactor: what internal tooling/quality it serves + why now.
-Add a source-fidelity note if the rationale leans on any externally-cited source.>
-
-## Acceptance criteria (verbatim from issue)
-- [ ] ...
-
-## Approach
-<steps, files to touch, tests to add>
-
-## Approach as reviewed (frozen before the design gate) — write-once, do not edit
-<Verbatim copy of `## Approach` taken BEFORE the architect pass was consulted — at step 4, or at
-step 5 where that step first consults it. Omit this section ONLY if no plan-informing architect pass
-ran at all (step 4 skipping it is not enough; step 8's scope ruling is not one). It is the pre-image
-step 5 diffs the live `## Approach` against to decide whether the architect materially changed the
-plan. Never regenerated and never back-dated — see Resume.>
-
-## Architect triggers hit
-<which ARCHITECT_TRIGGERS fired, or "none">
-
-## Risks / open questions for human
-<empty if none>
-```
-
-### Lifecycle & commit policy
-- **Init:** orchestrator creates the dir + `queue.md` from `BACKLOG_SOURCE`.
-- **Per iteration:** update one `queue.md` row through its statuses; append the **open record** at
-  step 7 and the **close record** at step 12, each owed only by an iteration that reaches that step,
-  plus a block wherever a gate resolves (see `progress.md` above); write/update `issue-<N>.plan.md`.
-- **Commit policy — gitignore the ledger** (`LEDGER_ROOT/` is added to `.gitignore`). It is
-  local working state: it survives `/clear`/compaction on disk, but is **never committed**.
+### The per-issue plan file and the ledger lifecycle — in the `plan-template` unit
+The `issue-<N>.plan.md` template and the ledger's lifecycle and commit policy are in the
+`plan-template` unit — `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/plan-template.md`, read at
+step 3 (phase index).
 
 ---
 
