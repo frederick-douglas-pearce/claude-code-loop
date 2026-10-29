@@ -211,12 +211,7 @@ AC-verifier) within an iteration to conserve the parent's context.
 
 ### 2. Triage / route (if not already routed)
 Run the Router (below) to set the row's **Route** (`code`/`research`/`docs`/`stub-defer`) and its
-**initial Status** (Route and Status are distinct — see Ledger format → queue.md): `stub-defer` →
-Status `deferred` (terminal); an unmet in-run dependency → Status `blocked` (record the dep, or
-`too-large`, in Notes — the Route is retained so the row resumes as that route when the dependency
-clears, step 1); a row whose work is gated on an **external event** (a release cut, a dogfood
-window — not an in-run issue) → Status `parked` with Notes `awaiting: <condition>` (non-terminal,
-resting; released only by explicit human un-park, step 0.1); otherwise → Status `routed`. If the
+**initial Status** (Route and Status are distinct — see Ledger format → queue.md). If the
 Status is `deferred`/`blocked`/`parked`, journal why and go back to step 1 — do not implement.
 
 **Write parked/blocked Notes as the curation DECISION, never the mutable evidence.** The durable
@@ -359,8 +354,9 @@ user, or no checkable falsifier — as itself a reason to STOP**, not just ambig
 
 **Under `plan-gate: conditional`**, present the plan and STOP for approval when: the value story
 doesn't hold; acceptance criteria are ambiguous; the change is risky/irreversible; SCOPE/DESIGN
-agents disagree or punt; or you are otherwise unsure. Otherwise proceed (note "auto-approved" + why
-in the journal). **Under `plan-gate: always` there is no "otherwise"** — every issue stops, and
+agents disagree or punt; or you are otherwise unsure. Otherwise proceed (journal `- Human gate: plan
+auto-approved (<why>)`, Ledger format → progress.md). **Under `plan-gate: always` there is no
+"otherwise"** — every issue stops, and
 "auto-approved" is never a legitimate journal entry for this gate. Route scope/value questions to
 `SCOPE_AGENT` and design questions to `DESIGN_AGENT` BEFORE escalating to the human — **instructing
 either verdict-first** (Verdict-first invariant, under Gates), since a consult that first runs *here*
@@ -407,11 +403,10 @@ never be a reason to record less.**
   all — the distinction is whether the gate ran, never whether the artifact is there.
 
   **"Skipped" means no *plan-informing* architect pass ran at all — not merely that step 4 skipped
-  it, and not merely that `DESIGN_AGENT` by that name was never invoked.** Two cases the narrow
+  it, and not merely that `DESIGN_AGENT` by that name was never invoked.** One case the narrow
   reading loses: this step routes design questions to `DESIGN_AGENT` before escalating, so the
-  agent can first run *here*, after step 4 declined it; and where the binding is unrunnable, the
-  inline composition you run in its place (Gate-outcome invariant) **is** an architect pass in
-  substance. **The freeze is owed by either, at step 4 or at step 5**: freeze `## Approach` before
+  agent can first run *here*, after step 4 declined it. **The freeze is owed at step 4 or at
+  step 5**: freeze `## Approach` before
   consulting, and apply the outcome to the plan text before deciding. A consultation at this step
   that redirects the plan is material on the same terms — otherwise the one architect call the
   freeze rule forgot to name becomes the path the whole condition is bypassed through, journalled
@@ -797,9 +792,8 @@ the escalation the human relies on is quietly conditional again.
   thing it may never return. The stop belongs to the **finding**, not to the agent, so the
   iteration **still stops** — you escalate with no ruling attached rather than proceeding. Note
   what this does and does not say: the *ruling* may indeed be skipped; the *stop* never is. **No
-  inline composition substitutes here, and that is scoped per *use*, not per binding:** the plan
-  gate's inline architect composition (step 5) does not reach this consult, because an
-  orchestrator composing its own scope ruling is precisely the self-assessment the ruling exists
+  inline composition substitutes here:** an orchestrator composing its own scope ruling is
+  precisely the self-assessment the ruling exists
   to remove. This use therefore defines no fallback, which puts it on the Gate-outcome invariant's
   **stopped-and-escalated** branch — true of every state below. Where the binding is
   **static**ally unusable — unbound, `TODO`-valued, or naming something you may not invoke — write
@@ -854,14 +848,10 @@ that findings ≥ the project's confidence bar are addressed):
 - Otherwise, if a sensitive surface is touched → the **labeled** review path. Skip for
   docs/no-surface changes.
 
-**This gate is no longer last, so "run it once, at dev-complete" is no longer a safe reading.** Step
-10 can produce code — a Class A finding is fixed and committed there — and that code lands
-*downstream* of this gate. Re-evaluate this trigger against any acceptance-gate fix before step 11:
-if such a fix touches a sensitive surface it has not been security-reviewed, so it **escalates at
-the merge gate under the existing "touched security surface" always-escalate condition** (step
-11) — the earlier clean verdict does not cover it. This is one instance of the general rule; **which
-gates a post-gate change re-arms, and from which sources, is the Gate-outcome invariant's currency
-clause** (under Gates).
+**A step-10 fix lands downstream of this gate.** Which gates it re-arms is the Gate-outcome
+invariant's currency clause (under Gates), and step 10 escalates every source-changing fix before
+step 11. Re-evaluate this gate's trigger against that fix (at step 10, before escalating) so the
+escalation names the gate it re-armed.
 
 ### 10. Verify done (independent, fresh context)
 Advance the row to `in-acceptance`. **Read the `accepting` unit now** —
@@ -973,7 +963,8 @@ above as the whole of when step 8 escalates points at fix-then-proceed — which
 decoupling of the ruling from the stop that step 8's trigger exists to prevent.
 
 **This list is what "unsure" triggers; it is not the whole of when the plan gate stops.** Under
-`plan-gate: always` — the shipped default, and what an absent field reads as — step 5 stops on
+`plan-gate: always` — and under an absent or unrecognized field, which reads as `always` — step 5
+stops on
 **every** issue, whether or not anything here fires. Read this rubric as the floor, never as the
 condition set: nothing on it needs to be true for the plan gate to be owed.
 
@@ -989,8 +980,10 @@ tool+args failing again — NOT merely re-entering a status (a legitimate `/clea
 re-enters `implementing` and must not be flagged). **A `- gate-fallback:` line is likewise not a stuck
 signature** — a standing misbinding recurs by design until the human repairs the config (Gate-outcome
 invariant), so exclude those lines from the repeat check and re-surface the config defect instead;
-`- gate-error:` lines *are* in scope. On a genuine repeat: stop, escalate, mark
-`blocked`, move on. Respect any iteration/budget cap (`iteration-cap:`/`subagent-cap:` in the
+`- gate-error:` lines *are* in scope. On a genuine repeat: stop, escalate, and mark `blocked` (Notes
+`gate-error: <gate>` where the repeating signature is a `- gate-error:` line — Gate-outcome
+invariant). Move on to another row only if this one has no open PR; otherwise report and STOP — one
+PR at a time. Respect any iteration/budget cap (`iteration-cap:`/`subagent-cap:` in the
 `queue.md` header): checked at iteration start (step 1) against the ledger — **advisory in manual
 re-invoke (journaled + surfaced, not gating), halted by the driver**.
 
@@ -1240,11 +1233,10 @@ gives the merge gate (step 11) a place to read the human's decision from.
 The header also carries **`plan-gate:`**, which sets the plan gate's posture (step 5) exactly as
 `mode:` sets the merge gate's. Two values:
 - **`always`** — stop for plan approval on **every** issue.
-- **`conditional`** — stop on step 5's judgment conditions (ambiguous ACs, risk/irreversibility,
-  agent disagreement, a value story that doesn't hold, genuine uncertainty).
+- **`conditional`** — stop on step 5's judgment conditions (enumerated there).
 
-Under **both**, step 5's always-on condition still fires and its `- Plan-gate:` line is still
-written. **Absent or unrecognized ⇒ `always`**: a ledger predating this field, or a typo, gets the
+Under **both**, step 5's always-on condition still fires and you still write its `- Plan-gate:`
+line. **Absent or unrecognized ⇒ `always`**: a ledger predating this field, or a typo, gets the
 over-gating reading rather than a silent fallthrough to the looser one.
 
 Initialization writes it per mode — `calibration` ⇒ `always`, a project with prior route graduation
@@ -1264,7 +1256,7 @@ mode default.
 **`plan-gate:` is human-owned.** Initialization writes it once, deriving the default from the mode
 branch it already takes; every value after that first write is a human decision recorded in
 the header, exactly like `mode:`, `graduated-routes:` and the budget caps. **The orchestrator never
-rewrites this field after Initialization** — not at step 5, and not on the observation that recent
+writes this field outside Initialization** — not at step 5, and not on the observation that recent
 approvals looked routine. A gate that can switch itself off on its own reading of its own history is
 not a gate.
 
@@ -1298,7 +1290,7 @@ reaches that step:**
 | **close record** | **step 12** | an iteration that reaches step 12 |
 
 **An iteration that ends before step 7 writes neither** — a plan
-gate that stops (under `plan-gate: always`, the shipped default, that is *every* issue until the
+gate that stops (under `plan-gate: always`, that is *every* issue until the
 human approves), a row deferred or blocked at step 2, a gate that escalates.
 
 **Gate-decision blocks are appended wherever the gate resolves — before, between, or after these
@@ -1342,8 +1334,8 @@ of the first three spellings, or takes the fourth path, which writes none:
   instead and the iteration stops. Three states reach here, all of them on a row the trigger DID
   fire on: bound but unable to execute; `—` with no reason; and absent or `TODO`-valued.
 
-The **`- Human gate:`** line records how the plan gate resolved. Under `plan-gate: always` (the
-shipped default) every issue stops, so the line reads as an approval by the human and
+The **`- Human gate:`** line records how the plan gate resolved. Under `plan-gate: always` every
+issue stops, so the line reads as an approval by the human and
 **`plan auto-approved` is never legitimate for this gate** — name the posture. Under
 `plan-gate: conditional` an unstopped issue reads `plan auto-approved (<why>)`, the `<why>` being the judgment call that let it pass (e.g. route and low ambiguity).
 
@@ -1367,8 +1359,8 @@ enumerates a writes-none path.
   a consult and never makes this spelling due. There is nothing to name as "what changed" because the
   evidence is what is missing; that is a stop, never a pass.
 - **`- Plan-gate: n/a: architect skipped (<route/reason>)`** — **no *plan-informing* architect pass
-  ran at all**: not at step 4, not at step 5, and not as the inline composition that substitutes for
-  an unrunnable binding. If any *plan-informing* pass ran, by any actor, this spelling is
+  ran at all**: not at step 4, and not at step 5. If any *plan-informing* pass ran, by any actor,
+  this spelling is
   unavailable — step 8's scope ruling is not one, and a row carrying only that ruling still spells
   it this way. The qualifier is load-bearing: these four spellings are a closed set and exactly one
   must be written, so an unqualified reading leaves such a row with no legal spelling at all.
@@ -1687,12 +1679,12 @@ distinct columns (Ledger format → queue.md), so a dependency-blocked research 
    package; no runtime-dep leakage into the package).
 4. Otherwise (a bug/enhancement touching the package source) → `code` (full pipeline).
 
-**Initial Status:** Route `stub-defer` → `deferred` (terminal). Else if the row's work is gated on
-an **external event** (a release cut, a dogfood window — not an in-run issue) → `parked` with Notes
-`awaiting: <condition>` (non-terminal, resting; released only by explicit human un-park, step 0/1).
-Else if any `Depends on` issue is not `done` → `blocked` (record the dep in Notes; the semantic
-Route is retained so the row resumes as that route once the dependency clears, step 1). Else →
-`routed`.
+**Initial Status:** Route `stub-defer` → `deferred` (terminal). Else if any `Depends on` issue is
+not `done` → `blocked` (record the dep in Notes; the semantic Route is retained so the row resumes
+as that route once the dependency clears, step 1). Else if the row's work is gated on an **external
+event** (a release cut, a dogfood window — not an in-run issue) → `parked` with Notes
+`awaiting: <condition>` (non-terminal, resting; released only by explicit human un-park, step 0.1).
+Else → `routed`.
 
 ---
 
@@ -1845,7 +1837,7 @@ Gate table:
 |------|-----|------|--------|
 | Plan | orchestrator | every issue | `issue-<N>.plan.md` |
 | Architect | `DESIGN_AGENT` | `ARCHITECT_TRIGGERS` or unsure — the **plan-informing** use, at step 4 or step 5. Step 8's scope ruling is a **separate gate**, its own row below | the agent's review, **recorded by you** wherever this project records architect decisions — issue comment, issue-body marker, or decision-log entry (Resume) |
-| Human (plan) | user | **every issue under `plan-gate: always`** (the default under `calibration`; absent or unrecognized reads as `always`); under `plan-gate: conditional`, if uncertain/irreversible. Under **both**, **always** when the architect materially changed the plan (step 5's frozen-vs-live diff — decisiveness escalates exactly as a punt does, and neither `mode:`, `plan-gate:`, nor route graduation reaches this one) | approve/redirect |
+| Human (plan) | user | **every issue under `plan-gate: always`** (the default under `calibration`; absent or unrecognized reads as `always`); under `plan-gate: conditional`, on step 5's judgment conditions (enumerated there, not here). Under **both**, **always** when the architect materially changed the plan (step 5's frozen-vs-live diff — decisiveness escalates exactly as a punt does, and neither `mode:`, `plan-gate:`, nor route graduation reaches this one) | approve/redirect |
 | Build commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`) | orchestrator | step 6, each per its own binding; `HERMETIC_TEST_CMD` additionally requires Route `code` **and** a change that adds or modifies a test, **whatever the binding says** — on such a row an absent or `TODO` binding is unknown, and unknown is due (the gate's four-state table) | **exit status per command**; non-zero blocks |
 | Code review | `CODE_REVIEW` (parallel finders you run — step 8); **the fix's re-check a fresh checker, not you** (Fresh-re-check invariant) | every issue; one light pass on `docs` | findings → fixes, each carrying a **finding class**: BLOCKING re-arms; EDITORIAL raised before step 8's sweep is swept there, and anything raised after that sweep escalates |
 | Scope ruling | `DESIGN_AGENT` | step 8, whenever a **BLOCKING** finding raises a design question — **on every route, `docs` included**, at whatever round it arises. **Its due-ness is fixed in this row alone and is NOT governed by the Routing table's per-route column**, which scopes the plan-informing Architect gate above and never reaches this one; nor by `mode:`, `plan-gate:`, or route graduation | the ruling, presented **with** the stop it carries — never a verdict on the change, and never a review *round* |
@@ -1855,7 +1847,8 @@ Gate table:
 
 **Gate-outcome invariant (evidence-bound pass).** Applies to every gate in the table above that
 returns a verdict **or a ruling** — the scope ruling returns the latter and certifies nothing, and
-it is inside this invariant for its journalling forms, never as a gate that may be recorded as
+it is inside this invariant for its `- gate-error:` form only, and owes no not-due line (step 8),
+never as a gate that may be recorded as
 passed — **on the rows that gate is due on** — due-ness is decided by the gate's **When** entry in
 the Gate table above and, where that column speaks to the gate at all, by the Routing table's
 per-route column, **both in this file**, and this invariant does not touch it. (**A gate row may
@@ -1890,8 +1883,9 @@ or `TODO`-valued row reads as **unknown, and unknown is due** — never as "the 
 due", which is the fail-open reading this invariant's own wording would otherwise license. It
 applies only where the gate's own trigger fired: a missing binding never makes a gate due that
 nothing else made due. Its four config states are tabulated once, at the gate itself; this is the
-rule, that is the table. An **unbound** row was never attempted and has no command to quote, so
-write the literal `- gate-error: hermetic — HERMETIC_TEST_CMD unbound — no-binding`; the
+rule, that is the table. A row that is unbound, `TODO`-valued, or `—` with no reason was never
+attempted and has no command to quote, so write `- gate-error: hermetic — HERMETIC_TEST_CMD
+<unbound | TODO-valued | no-reason> — no-binding`, naming the state you found; the
 `no-stderr` convention below is the precedent for naming an absent string rather than inventing one.
 
 For a gate that **is** due: it may be journalled **passed** only with the gate's own verdict as

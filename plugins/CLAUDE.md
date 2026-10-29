@@ -72,10 +72,8 @@ even though nothing will fail loudly:
   other.** The divergences are catalogued on #1 (F57, F58); do not re-derive or re-count them here.
   **So grep before editing is still necessary and is no longer sufficient: read each site, because
   the sites do not currently say the same thing.** Editing them "together" on the assumption that
-  they agree is how one of several variants gets propagated as though it were the invariant. #35
-  cannot be executed as chartered until F57/F58 are resolved — its AC1 (state it once) and AC3 (no
-  semantic change) are in direct conflict while the drift stands, since collapsing divergent sites
-  necessarily picks a winner. It carries `tech-debt` and sits in `deferred-corpus` (milestoned
+  they agree is how one of several variants gets propagated as though it were the invariant.
+  #35 carries `tech-debt` and sits in `deferred-corpus` (milestoned
   2026-08-22, under that milestone's pre-D012 name `v0.3.0`).
 - **Notes on `parked`/`blocked` rows record the durable curation DECISION, never mutable live
   evidence** — the latter is contradicted by the next re-check and destabilizes resume.
