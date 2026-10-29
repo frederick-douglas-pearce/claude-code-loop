@@ -849,7 +849,7 @@ that findings ≥ the project's confidence bar are addressed):
   docs/no-surface changes.
 
 **A step-10 fix lands downstream of this gate.** Which gates it re-arms is the Gate-outcome
-invariant's currency clause (under Gates), and step 10 escalates every source-changing one before
+invariant's currency clause (under Gates), and step 10 escalates every source-changing fix before
 step 11. Re-evaluate this gate's trigger against that fix (at step 10, before escalating) so the
 escalation names the gate it re-armed.
 
@@ -1847,7 +1847,7 @@ Gate table:
 
 **Gate-outcome invariant (evidence-bound pass).** Applies to every gate in the table above that
 returns a verdict **or a ruling** — the scope ruling returns the latter and certifies nothing, and
-it is inside this invariant for its `- gate-error:` form only, and owes no not-due line (step 8) —
+it is inside this invariant for its `- gate-error:` form only, and owes no not-due line (step 8),
 never as a gate that may be recorded as
 passed — **on the rows that gate is due on** — due-ness is decided by the gate's **When** entry in
 the Gate table above and, where that column speaks to the gate at all, by the Routing table's
@@ -1883,7 +1883,7 @@ or `TODO`-valued row reads as **unknown, and unknown is due** — never as "the 
 due", which is the fail-open reading this invariant's own wording would otherwise license. It
 applies only where the gate's own trigger fired: a missing binding never makes a gate due that
 nothing else made due. Its four config states are tabulated once, at the gate itself; this is the
-rule, that is the table. A row that is absent, `TODO`-valued, or `—` with no reason was never
+rule, that is the table. A row that is unbound, `TODO`-valued, or `—` with no reason was never
 attempted and has no command to quote, so write `- gate-error: hermetic — HERMETIC_TEST_CMD
 <unbound | TODO-valued | no-reason> — no-binding`, naming the state you found; the
 `no-stderr` convention below is the precedent for naming an absent string rather than inventing one.
