@@ -44,7 +44,8 @@ plan. Never regenerated and never back-dated — see Resume.>
 - **Init:** orchestrator creates the dir + `queue.md` from `BACKLOG_SOURCE`.
 - **Per iteration:** update one `queue.md` row through its statuses; append the **open record** at
   step 7 and the **close record** at step 12, each owed only by an iteration that reaches that step,
-  plus a block wherever a gate resolves (Ledger format → `progress.md`, in core); write/update `issue-<N>.plan.md`.
+  plus a block wherever a gate resolves (Ledger format → `progress.md`, in core); write/update
+  `issue-<N>.plan.md`.
 - **Commit policy — gitignore the ledger** (`LEDGER_ROOT/` is added to `.gitignore`). It is
   local working state: it survives `/clear`/compaction on disk, but is **never committed**.
 

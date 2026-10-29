@@ -1010,9 +1010,8 @@ class PipelineStepOrderTests(unittest.TestCase):
     def _engine_steps(self) -> list[tuple[int, str]]:
         """[(number, heading)] in file order, from loop-engine.md.
 
-        Scoped to the pipeline section: fenced blocks are stripped first (the
-        engine embeds a ``issue-<N>.plan.md`` template that already carries
-        markdown headings), and the scan stops at the first unnumbered ``###``
+        Scoped to the pipeline section: fenced blocks are stripped first (a fence
+        can carry markdown headings that are not pipeline steps), and the scan stops at the first unnumbered ``###``
         after the numbered run -- ``### Escalation rubric`` and the sections
         below it are not pipeline steps.
 
@@ -1096,10 +1095,11 @@ class PipelineStepOrderTests(unittest.TestCase):
         """[(literal, step number)] for every in-prose cross-reference.
 
         Fenced blocks are deliberately NOT stripped here, unlike
-        ``_engine_steps``: that one strips them because the embedded
-        ``issue-<N>.plan.md`` template contains markdown headings that are not
-        pipeline steps, whereas the template's own "see step 3" IS a real
-        cross-reference -- it ships into every plan file the loop writes.
+        ``_engine_steps``, which strips them because a fence can carry markdown
+        headings that are not pipeline steps. The ``issue-<N>.plan.md`` template,
+        in the ``plan-template`` unit since #278 and so on the seam, carries a
+        "see step 3" that IS a real cross-reference -- it ships into every plan
+        file the loop writes.
 
         **Reads the seam, unlike ``_engine_steps`` above** (#167/AC2). A ``step N``
         reference that moves into a unit must still resolve, and the numbers it yields
@@ -1728,7 +1728,9 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
         #
         # Read from the `plan-template` unit ALONE, never from the corpus: a span over
         # _engine_text() can start in one file and end in another, and still find one
-        # fence, while the template itself has left the file core points at.
+        # fence, while the template itself has left _PLAN_TEMPLATE. This path is not
+        # derived from step 3's pointer; re-pointing step 3 must re-point
+        # _PLAN_TEMPLATE with it -- that coupling is review's (F183).
         section = self._span(
             self._PLAN_TEMPLATE.read_text(encoding="utf-8"),
             "### `issue-<N>.plan.md`",
@@ -1778,7 +1780,7 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
             missing,
             [],
             "these region(s) do not carry the frozen-approach heading (the template "
-            f"region is read from reference/plan-template.md alone): {missing}.\n\n"
+            f"region is read from reference/{self._PLAN_TEMPLATE.name} alone): {missing}.\n\n"
             f"Expected (normalized): {self._HEADING!r}\n\n"
             "A MISMATCH IS SILENT. Step 5 looks the block up by name, so a heading "
             "that drifts at one site means the diff finds nothing -- and 'no evidence "

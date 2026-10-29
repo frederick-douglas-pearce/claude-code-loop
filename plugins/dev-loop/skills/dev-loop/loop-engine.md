@@ -21,9 +21,9 @@ A named section may live in a unit.
 | Unit | File | Read it at |
 |---|---|---|
 | `accepting` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/phases/accepting.md` | step 10; and Resume, when its unfinished-mutation check sends you to this unit |
-| `plan-gate-inferred` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/plan-gate-inferred.md` | step 0 (the parked path, or step 0.2), only when the `queue.md` header has no `plan-gate:` field or a value step 5 does not recognise |
+| `plan-gate-inferred` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/plan-gate-inferred.md` | step 0 (the parked path, or step 0.2), on a run that owes the `- Plan-gate-inferred:` record (Ledger format → `progress.md` → `- Plan-gate-inferred:` states when) |
 | `plan-template` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/plan-template.md` | step 3, before setting the row to `planning` |
-| `record-templates` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/record-templates.md` | step 7, at its start, before staging; and step 12, unless you can confirm you read it in full earlier this invocation |
+| `record-templates` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/record-templates.md` | step 7, at its start, before staging; and step 12 |
 | `reference` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/initialization.md` | step 0, when no run exists and you are about to initialize one |
 | `reviewing` | `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/phases/reviewing.md` | step 8; and before any code-review round, whenever it runs |
 
@@ -49,8 +49,8 @@ never lets its gate be skipped. Per unit:
   that the run's header states no posture it can read.
 - `plan-template` — at step 3, write no `issue-<N>.plan.md` and do not change the row's status:
   STOP and tell the human.
-- `record-templates` — write neither record. At step 7, STOP before committing, so nothing external
-  is created; at step 12, do not set the row `done`. STOP and tell the human.
+- `record-templates` — write neither record, and take no further action in the step whose read
+  failed; at step 12, do not change the row's status. STOP and tell the human.
 - `reference` — Initialization and the `queue.md` skeleton it writes. Without it loaded, do not
   initialize — create nothing under `LEDGER_ROOT` — and do not invent a queue shape: STOP and tell
   the human.
@@ -646,9 +646,8 @@ by looking, and the one reader who can answer it fastest is the one who just wro
 ### 7. Commit + PR
 **Read the `record-templates` unit now, before staging** —
 `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/record-templates.md`, in full, under the load
-protocol (preamble) — in the same turn as the `git status`/`git diff` read that precedes staging,
-since neither call depends on the other. If it is not loaded, STOP before committing (preamble →
-*What holds without each unit loaded*).
+protocol (preamble). If it is not loaded, STOP (preamble → *What holds without each unit
+loaded*).
 
 Commit with correct `COMMIT_CONV` scope — **staging explicit paths and reading `git diff --cached`
 first** (step 6), since this is a commit boundary like any other and the tree may have gained an
@@ -943,8 +942,7 @@ merge via `MERGE_METHOD` with an explicit `--subject` carrying the correct `COMM
 ### 12. Journal + stop
 Append the iteration's **close record** to `progress.md`. Its shape is in the `record-templates`
 unit — `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/record-templates.md`; read it now, in full,
-under the load protocol (preamble), unless you can confirm you read it in full earlier this
-invocation. Step 7 writes the open record; if this iteration re-entered *past* step 7 on resume,
+under the load protocol (preamble). Step 7 writes the open record; if this iteration re-entered *past* step 7 on resume,
 there may be none — **do not write one now.** Back-dating it would assert a record of a moment nobody
 observed, which is the same bar the architect freeze and the gate lines are under.
 
@@ -1289,8 +1287,7 @@ The orchestrator APPENDS one block **per gate decision** and, over an iteration,
 below; it is never rewritten. This is the audit trail and the resume anchor. Some blocks sit outside that
 per-iteration shape and are **run-level rather than per-issue** — among them the
 `## <ISO8601> — curation` block step 1's roster reconciliation writes, and the
-`## <ISO8601> — plan-gate inference` block, whose trigger ends this section and whose shape is in
-the `plan-gate-inferred` unit.
+`## <ISO8601> — plan-gate inference` block (`- Plan-gate-inferred:`, last in this section).
 
 **The pipeline names the step that writes each record, and each is owed only by an iteration that
 reaches that step:**
@@ -1317,7 +1314,7 @@ journal to step 12 — the failure this split exists to remove.
 
 **The two records' shapes are in the `record-templates` unit** —
 `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/record-templates.md`, read at step 7 and step 12
-(phase index). That unit is the one statement of what each record carries.
+(phase index).
 
 Two further fixed-shape lines are appended **only when a gate produced no verdict** (Gate-outcome
 invariant — that section defines when each applies and what follows):
@@ -1347,8 +1344,8 @@ of the first three spellings, or takes the fourth path, which writes none:
 
 The **`- Human gate:`** line records how the plan gate resolved. Under `plan-gate: always` (the
 shipped default) every issue stops, so the line reads as an approval by the human and
-**`plan auto-approved` is never legitimate for this gate** — name the posture. Under `plan-gate: conditional` an unstopped issue reads `plan auto-approved (<why>)`, the
-`<why>` being the judgment call that let it pass (e.g. route and low ambiguity).
+**`plan auto-approved` is never legitimate for this gate** — name the posture. Under
+`plan-gate: conditional` an unstopped issue reads `plan auto-approved (<why>)`, the `<why>` being the judgment call that let it pass (e.g. route and low ambiguity).
 
 The **`- Plan-gate:`** line records the always-on stop's frozen-vs-live diff (step 5), which is
 otherwise invisible for the same reason: it resolves before implementation, so a run that never took
@@ -1666,7 +1663,8 @@ order in which to surface and journal it; write none of it without the unit.
 written and do not weaken it to "never rewrites it": on a ledger that never had the field there is
 nothing to rewrite, and an orchestrator reasoning from the weaker form can talk itself into adding
 one — freezing a posture the human never chose, which is the single outcome this must not produce.
-This line is a message, never an edit — not here, and not at any later invocation.
+The `- Plan-gate-inferred:` line is a message, never an edit — not here, and not at any later
+invocation.
 
 ### The per-issue plan file and the ledger lifecycle — in the `plan-template` unit
 The `issue-<N>.plan.md` template and the ledger's lifecycle and commit policy are in the
