@@ -333,6 +333,9 @@ _PAYLOAD_INVENTORY = frozenset({
     "skills/dev-loop/phases/accepting.md",
     "skills/dev-loop/phases/reviewing.md",
     "skills/dev-loop/reference/initialization.md",
+    "skills/dev-loop/reference/plan-gate-inferred.md",
+    "skills/dev-loop/reference/plan-template.md",
+    "skills/dev-loop/reference/record-templates.md",
     "tools/mutate_verify.py",
 })
 
@@ -1656,7 +1659,8 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
 
     Step 4 WRITES a frozen pre-image of the plan's approach under a fixed heading;
     step 5 LOOKS FOR that heading to diff against; the ``issue-<N>.plan.md`` template
-    declares it; Resume names it in the write-once guard. If those spellings drift
+    declares it (in the ``plan-template`` unit, ``reference/plan-template.md``, since
+    #278); Resume names it in the write-once guard. If those spellings drift
     apart the mechanism is **dead while every word of the prose still reads correctly**
     -- step 5 finds no block, and an absent pre-image is exactly the case the engine
     now has to treat as material.
@@ -1694,28 +1698,43 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
     def _engine(self) -> str:
         return _engine_text()
 
-    def _span(self, text: str, start: str, end: str, label: str) -> str:
+    # The plan template's home since #278: the `plan-template` unit.
+    _PLAN_TEMPLATE = _REFERENCE / "plan-template.md"
+
+    def _span(
+        self,
+        text: str,
+        start: str,
+        end: str,
+        label: str,
+        source: str = "the engine corpus (_engine_text())",
+    ) -> str:
         i = text.find(start)
         self.assertNotEqual(
             i, -1, f"cannot locate the start of the {label} region ({start!r}) in "
-            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it."
+            f"{source} -- re-anchor this test before trusting it."
         )
         j = text.find(end, i + len(start))
         self.assertNotEqual(
             j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
-            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it."
+            f"{source} -- re-anchor this test before trusting it."
         )
         return text[i:j]
 
-    def _plan_template_fence(self, text: str) -> str:
+    def _plan_template_fence(self) -> str:
         # The plan template specifically -- NOT just any ```markdown fence. The engine
         # has several; an earlier draft accepted any of them and passed while the
         # heading had been moved into the progress.md one.
+        #
+        # Read from the `plan-template` unit ALONE, never from the corpus: a span over
+        # _engine_text() can start in one file and end in another, and still find one
+        # fence, while the template itself has left the file core points at.
         section = self._span(
-            text,
+            self._PLAN_TEMPLATE.read_text(encoding="utf-8"),
             "### `issue-<N>.plan.md`",
             "### Lifecycle & commit policy",
             "issue-<N>.plan.md template section",
+            source=f"reference/{self._PLAN_TEMPLATE.name} (read alone)",
         )
         fences = re.findall(r"```markdown(.*?)```", section, flags=re.S)
         self.assertEqual(
@@ -1741,7 +1760,7 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
             "step 5 (diffs against it)": self._span(
                 text, "### 5. Human gate", "### 6. Implement", "step 5"
             ),
-            "the issue-<N>.plan.md template": self._plan_template_fence(text),
+            "the issue-<N>.plan.md template": self._plan_template_fence(),
             "Resume (write-once guard)": self._span(
                 text, "## Resume after", "## Routing table", "Resume"
             ),
@@ -1758,8 +1777,8 @@ class PlanGateFrozenBlockTests(unittest.TestCase):
         self.assertEqual(
             missing,
             [],
-            "these region(s) of the engine corpus (_engine_text()) do not carry the frozen-approach "
-            f"heading: {missing}.\n\n"
+            "these region(s) do not carry the frozen-approach heading (the template "
+            f"region is read from reference/plan-template.md alone): {missing}.\n\n"
             f"Expected (normalized): {self._HEADING!r}\n\n"
             "A MISMATCH IS SILENT. Step 5 looks the block up by name, so a heading "
             "that drifts at one site means the diff finds nothing -- and 'no evidence "
