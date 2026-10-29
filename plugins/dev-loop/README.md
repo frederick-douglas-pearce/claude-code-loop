@@ -87,7 +87,7 @@ to last so that it certifies the commit that actually merges.
 | **2. Route** | The Router sets the issue's route (`code` / `research` / `docs` / `stub-defer`) and its starting status. | — |
 | **3. Plan** | Writes `issue-<N>.plan.md`: acceptance criteria verbatim, a value framing scaled to the route, and any falsifier cheap enough to check before code, checked. | the value story does not hold (it goes to `SCOPE_AGENT` first) |
 | **4. Architect** | When a trigger fires or the loop is unsure: freezes the plan's approach, then has `DESIGN_AGENT` review it, then writes the outcome into the plan. | — |
-| **5. Plan gate** | Presents the plan with its value framing. | every issue under `plan-gate: always` (the default); under `conditional`, on ambiguity, risk, disagreement or doubt; **always** if the architect materially changed the plan |
+| **5. Plan gate** | Presents the plan with its value framing. | every issue under `plan-gate: always` (the default under `calibration`); under `conditional`, on a failed value story, ambiguity, risk, agent disagreement or a punt, or doubt; **always** if the architect materially changed the plan |
 | **6. Implement** | Branch, code, tests and docs. Lint, type and test each pass on their own exit status; the offline tier runs where you bound one. | — |
 | **7. Commit + PR** | Stages explicit paths only, opens the PR from your template, journals an open record, waits for CI to go green. | — |
 | **8. Code review** | Finder fan-out; findings classed blocking or editorial; blocking fixes committed and re-checked once by a fresh checker; editorial ones applied in one contained sweep. | a blocking finding raises a design question; a blocking finding survives the re-check |
@@ -125,7 +125,7 @@ architect and stops for you.
   feature or breaking change, a risky or irreversible one, one that touches a security surface,
   one with a contested or unresolved review, acceptance or offline-tier finding, or one that bumps a
   release past patch. If eligibility is unclear, it comes back to you.
-- **The plan gate follows `plan-gate:`.** `always` (the default) stops on every issue;
+- **The plan gate follows `plan-gate:`.** `always` (the default under `calibration`) stops on every issue;
   `conditional` stops only on the engine's judgment conditions. An absent or unrecognized value
   reads as `always`.
 - **The two are independent**, so relaxing how much of the planning you review never loosens what
@@ -428,7 +428,7 @@ Wherever eligibility is unclear the rule is **default-deny**: fall back to the h
 setting from the merge gate — a `plan-gate:` field in the run's ledger header — set to `always` for
 a new run under `calibration`, meaning the loop writes a plan, shows it to you, and stops, on
 **every** issue. Set the field to `conditional` and the loop stops when it hits ambiguous
-acceptance criteria, risk, agent disagreement, a value story that doesn't
+acceptance criteria, risk, agent disagreement, an agent that punts, a value story that doesn't
 hold, or genuine uncertainty. The two settings are deliberately independent: relaxing how much of
 the planning you review never loosens what gets merged without you, and a ledger that doesn't
 mention the field at all is read as `always`. Neither setting reaches the loop's other mid-pipeline

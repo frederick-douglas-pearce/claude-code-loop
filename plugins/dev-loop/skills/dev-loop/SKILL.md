@@ -84,15 +84,15 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   engine's judgment conditions — so **if you are reading this without `loop-engine.md` loaded, treat
   the gate as `always` whatever the field says**: you cannot apply conditions you have not read, and
   "no condition I know of fired" is not one of them. `mode:` never narrows this gate in either
-  direction, and the field is the human's — you never rewrite it after Initialization.
+  direction, and the field is the human's — you never write it outside Initialization.
 - **A decisive architect escalates exactly as a punting one does.** If the architect **materially
   changed the plan**, STOP for the human — under every mode, whatever the route. The plan you would
   have approved is now a different plan and nobody has seen it, so "the agents ruled cleanly" is the
   trigger, not a reason to proceed. The engine's test is a diff against the approach frozen before
   the architect ran; **if the architect ran and that frozen block is absent, treat the change as
   material** rather than assuming it was not. (Only where **no *plan-informing* architect pass ran at
-  all** — not merely skipped at step 4, and counting any inline substitute for an unrunnable
-  binding — is there nothing to compare and the condition not due. Step 8's scope ruling on a
+  all** — not merely skipped at step 4 — is there nothing to compare and the condition not due.
+  Step 8's scope ruling on a
   BLOCKING design-question finding is **not** plan-informing: it rules on a finding, rewrites no
   plan, and never makes this condition due. **If you cannot tell whether a consult informs the plan,
   it does — freeze, and treat the condition as due**; unknown lands on the over-gating side here as

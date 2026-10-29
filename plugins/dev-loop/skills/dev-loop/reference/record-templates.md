@@ -36,7 +36,7 @@ by; omitting the record because there is no issue number is what would break it.
 - Implemented: <path>; recorded findings in <path>.
 - Hermetic: n/a: research route.
 - PR: #<pr> (chore scope). CI: green.
-- Code-review: round 1 (main...9f3c1ab) — 0 findings. Security: n/a (no deps added).
+- Code-review: round 1 (main...9f3c1ab) — 0 findings. Security: n/a: no deps added.
 - Editorial: 0 — no EDITORIAL finding returned.
 - Restore: n/a: no mutation applied.
 - AC-verify: Class A 3/3 acceptance criteria met. Class B: mutation pass not due (research route).
