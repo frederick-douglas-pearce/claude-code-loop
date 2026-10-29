@@ -142,10 +142,9 @@ even though nothing will fail loudly:
   list is **sufficient, not exhaustive**: extend it, never prune it. Its "if unsure, material"
   catch-all is what makes it the opposite polarity to `ALLOWED_NON_BINDINGS`/`_STOPWORDS` —
   additions can only strengthen it, so it is not the stale-allow-list failure those two flag.
-- **The Execution policy (`loop-engine.md` → Tool surface) has no binding, deliberately.** This
-  policy is deliberately *not* project-bound: a porting project has nothing to set there, and that
-  is a decision rather than an oversight — the parameter that once sat there
-  (`PERMISSION_POSTURE`, retired by #27) was retired, not left unfilled. A binding could only ever
+- **The Execution policy (`loop-engine.md` → Tool surface) has no binding, deliberately.** A
+  porting project has nothing to set there, and that is a decision rather than an oversight — the parameter that once sat there
+  (`PERMISSION_POSTURE`, #27) was retired, not left unfilled. A binding could only ever
   restate what the predicate derives, or license the "be careful" form the policy rules out; the
   first is redundant and the second is an off switch for a safety invariant. Agent spend is not a
   counterexample: it is budgeted **elsewhere and differently**, by the `subagent-cap`
