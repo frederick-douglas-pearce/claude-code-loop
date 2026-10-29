@@ -1798,7 +1798,7 @@ class PhaseIndexIdentityTests(unittest.TestCase):
     ceiling on a prose guard):
 
     (a) the table's unit set equals the What-holds list's unit set;
-    (b) every File the table names is ``— (in core)`` or a
+    (b) every File the table names is a
         ``${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/{phases,reference}/<name>.md`` path that
         exists in the payload, and the table never names ``reference/resume.md`` or
         ``reference/router.md``;
@@ -1814,8 +1814,7 @@ class PhaseIndexIdentityTests(unittest.TestCase):
     right. **A green run means the index is internally consistent and its files exist —
     never that the fail-safe halves are correct.** Nor does it check that a step's own
     section tells you to read the unit its row names; that gap is F183 on #1. It checks
-    index -> disk only: a unit file the index does not name, or a row that wrongly reads
-    ``— (in core)``, is not detected. The never-indexed ban covers two literal paths; it
+    index -> disk only: a unit file the index does not name is not detected. The never-indexed ban covers two literal paths; it
     does not establish that Resume or the Router stays in core.
 
     **Reads ``_ENGINE`` directly, not ``_engine_text()``** -- the same "not for structure"
@@ -1826,7 +1825,6 @@ class PhaseIndexIdentityTests(unittest.TestCase):
 
     _INDEX_MARKER = "**Phase index.**"
     _HOLDS_MARKER = "**What holds without each unit loaded.**"
-    _IN_CORE = "— (in core)"
     _UNIT_CELL = re.compile(r"`([a-z][a-z0-9-]*)`")
     _FILE_CELL = re.compile(
         r"`\$\{CLAUDE_PLUGIN_ROOT\}/(skills/dev-loop/(?:phases|reference)/[a-z][a-z0-9-]*\.md)`"
@@ -1891,12 +1889,10 @@ class PhaseIndexIdentityTests(unittest.TestCase):
     def test_every_indexed_file_exists(self) -> None:
         for unit, file_cell, _ in self._table_rows():
             with self.subTest(unit=unit):
-                if file_cell == self._IN_CORE:
-                    continue
                 match = self._FILE_CELL.fullmatch(file_cell)
                 self.assertIsNotNone(
                     match,
-                    f"unrecognised File cell {file_cell!r}: expected {self._IN_CORE!r} or "
+                    f"unrecognised File cell {file_cell!r}: expected "
                     "one backticked ${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/{phases,reference}/<name>.md",
                 )
                 self.assertTrue(

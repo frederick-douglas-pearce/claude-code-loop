@@ -89,6 +89,13 @@ even though nothing will fail loudly:
   split this bullet used to carry — isolation live, mutation pass dormant — **closed with #60's
   second PR**: the pass now runs the harness, so every one of those sites describes live behavior
   and none of them may be re-fenced as dormant.
+- **The Execution policy has no binding, deliberately.** A porting project has nothing to set
+  there, and that is a decision rather than an oversight — the parameter that once sat there was
+  retired, not left unfilled. A binding could only ever restate what the policy's predicate
+  derives, or license the "be careful" form the policy rules out; the first is redundant and the second is an
+  off switch for a safety invariant. Agent spend is not a counterexample: it is budgeted by the
+  `subagent-cap` circuit-breaker, a per-run ledger field the human sets, not a project binding.
+  Do not re-add one.
 - **The always-on plan-gate stop is a second multi-site invariant, only partly guarded** (#28).
   "A material architect rewrite stops for the human, under every mode" is restated at every site in
   the list below. **The list is the claim — there is deliberately no headline number.** Two drafts
@@ -142,3 +149,16 @@ even though nothing will fail loudly:
   list is **sufficient, not exhaustive**: extend it, never prune it. Its "if unsure, material"
   catch-all is what makes it the opposite polarity to `ALLOWED_NON_BINDINGS`/`_STOPWORDS` —
   additions can only strengthen it, so it is not the stale-allow-list failure those two flag.
+- **Key step 5's plan-informing exclusion on *purpose*, never on "before the plan gate".** Step 5
+  *is* that gate and its own first consult happens there, so that phrasing would exclude the one
+  architect call the freeze rule most needs to reach. Key it on purpose — plus the two facts that
+  step 8's scope ruling rules on a finding and rewrites no `## Approach`.
+- **The `planning`-row resume is common, not exceptional.** Under `plan-gate: always` every issue
+  stops at step 5 with its row still `planning`, a pipeline status, so step 0.3 classifies it
+  *interrupted* and any `/clear` before the human's approval lands in Resume. Its write-once guards
+  are what make that safe; do not relax them on the assumption that this path is rare.
+- **The `- Plan-gate-inferred:` subsection sits last in whatever section holds it, deliberately.**
+  A heading earlier would nest everything after it — the open and close records, `- Hermetic:`,
+  `- Restore:`, `- Budget:` — under a heading about the posture inference.
+- **The mechanism blockquote stays in core, not in the `accepting` unit**, because step 8's
+  `guard-efficacy` lens needs it before step 10.
