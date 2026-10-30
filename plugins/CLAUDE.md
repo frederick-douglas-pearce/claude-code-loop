@@ -167,3 +167,13 @@ even though nothing will fail loudly:
   under a heading about the posture inference.
 - **The mechanism blockquote** (Gates → Fresh-re-check invariant) is kept in core rather than in
   the `accepting` unit, because step 8's `guard-efficacy` lens needs it before step 10.
+- **The remote half of currency is another multi-site invariant** (#107). "A gate that reads the
+  remote is bound to the remote's commit", the push rule, and the head check
+  (`git fetch && git rev-list --left-right --count @{u}...HEAD`; anything but both counts `0` stops)
+  are restated across core, the `accepting` unit, `SKILL.md` and the README (both copies). No site
+  list is kept here — the first draft of this bullet carried one and it was incomplete at review.
+  **Grep for `rev-list` and `push` and read each site before editing.** The single reading lives in
+  the currency clause; steps 9 and 11 point at it. `RemoteHeadCheckTests` pins only that the command
+  appears in step 9's span and in both of step 11's. Keep the rule that **nothing moves either head
+  to make the check pass**: git answers a rejected push by suggesting `git pull`, which would carry
+  ungated commits through the check that exists to keep them out.

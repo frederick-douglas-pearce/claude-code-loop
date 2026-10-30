@@ -25,10 +25,11 @@ mutant both send you back to fix and re-verify under the same cap.
 
 **This gate is last, so it owns its own commit boundary — there is no later step that will pick its
 fixes up.** Every earlier gate's fixes flowed into a commit downstream of it; nothing sits between
-this gate and the merge (step 11) but the merge itself. So **commit the fixes here**, under the
-same explicit-path staging rule as every other boundary (step 6), and **before** spawning the fresh
-re-verify — an uncommitted fix is not on the PR branch, and a gate that certifies work the merge
-candidate does not contain has certified nothing. **Confirm no mutation copy is still live
+this gate and the merge (step 11) but the merge itself. So **commit and push the fixes here**, under
+the same explicit-path staging rule as every other boundary (step 6) and step 7's push-every-commit
+rule, and **before** spawning the fresh re-verify — an uncommitted fix is not on the PR branch, nor
+is a committed one the remote does not have, and a gate that certifies work the merge candidate does
+not contain has certified nothing. **Confirm no mutation copy is still live
 (`git worktree list`) and remove it before you stage** — Part 2 below creates one, this is the
 boundary immediately downstream of it, and the untracked scan cannot see a copy the repo gitignores
 (Tool surface).

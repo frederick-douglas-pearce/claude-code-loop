@@ -114,7 +114,11 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   the candidate. **Escalate, or re-run what the engine says that change re-armed** — and if you
   cannot determine which gates it re-armed, which you cannot without `loop-engine.md` loaded, that
   is the escalate branch, never the nothing-was-re-armed branch. Never merge on a verdict describing
-  an earlier tree.
+  an earlier tree. **A gate that reads the remote is bound to the remote's commit:** push as the
+  engine's step 7 says, and never apply a review label or merge unless
+  `git fetch && git rev-list --left-right --count @{u}...HEAD` succeeds and reports both counts as
+  `0`. Anything else, an error included, is a STOP; run nothing that moves either head to make it
+  pass.
 - **Every gate finding re-arms its round unless the engine says otherwise.** Code review classifies
   findings BLOCKING or EDITORIAL and only BLOCKING re-arms — but the classes, the floors that may
   raise one, and the containment on the sweep that discharges the rest all live in `loop-engine.md`

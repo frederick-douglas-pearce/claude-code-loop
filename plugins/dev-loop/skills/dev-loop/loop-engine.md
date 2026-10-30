@@ -646,9 +646,19 @@ loaded*).
 
 Commit with correct `COMMIT_CONV` scope — **staging explicit paths and reading `git diff --cached`
 first** (step 6), since this is a commit boundary like any other and the tree may have gained an
-agent's files since you last looked. Open the PR; **replicate `PR_TEMPLATE` fully** in
+agent's files since you last looked. **Push the branch with upstream tracking before opening the
+PR** — `git push -u <the remote the PR is opened from> <branch>` — and never rely on the PR command
+to push it for you. Open the PR; **replicate `PR_TEMPLATE` fully** in
 the body; make the Security-review choice up front. Advance the row to `in-pr` and record the
 PR number.
+
+**From this push on, push every commit on the PR branch as soon as it is made.** A commit is on
+the merge candidate only once the remote has it: CI runs there, a labeled review reads there, and
+the merge takes the remote's head. A commit in an agent's isolated copy is not on the branch until
+you have applied and committed it here. Push at each commit rather than "before a gate that reads
+the remote", because which gates read the remote is a property of their bindings (Gates →
+currency). **If a push fails, never force it: STOP and escalate with the push's first error
+line.**
 
 **Then append the iteration's open record to `progress.md`, before you wait for CI.** Write it as
 the `record-templates` unit gives it; that template is the one statement of what it carries, so do
@@ -663,7 +673,7 @@ read this as making `progress.md` self-sufficient** — the standing contract is
 `progress.md` + **live git/PR state**, which wins on conflict (Resume). This record makes an
 iteration *recoverable by the human*, not the ledger *authoritative*.
 
-Then wait for CI; fix until green.
+Then wait for CI; fix until green, pushing each CI fix as soon as it is committed.
 
 ### 8. Code review
 Advance the row to `in-review`. **Read the `reviewing` unit now** —
@@ -728,7 +738,8 @@ record each decline, with that rationale, in the gate-decision block where this 
 (Ledger format → progress.md), exactly as an architect decline is recorded in the plan text. A
 later round is *required* to receive the declines (Gates), and a decline is the one outcome that
 leaves **no trace in the diff** for that round to recover it from: unrecorded, it is invisible to
-every subsequent fresh instance. Then **commit the BLOCKING fixes** and
+every subsequent fresh instance. Then **commit and push the BLOCKING fixes** — pushed as soon as
+they are made (step 7), so a gate that reads the remote has them before it is armed — and
 **verify recs were applied — by a fresh checker, never by yourself.** If you *delegated* any fix,
 that agent wrote to its own copy: collect the diff, apply it, and **remove the copy before you
 commit** (Execution policy, Tool surface) — directing a fix is authorship, and it is also the one
@@ -848,6 +859,11 @@ that findings ≥ the project's confidence bar are addressed):
 - Otherwise, if a sensitive surface is touched → the **labeled** review path. Skip for
   docs/no-surface changes.
 
+**Before applying the label, run the head check**:
+`git fetch && git rev-list --left-right --count @{u}...HEAD` must pass (Gates → currency); anything
+else is a STOP. A labeled review reads the remote, so a fix the remote does not have is a fix it
+never sees.
+
 **A step-10 fix lands downstream of this gate.** Which gates it re-arms is the Gate-outcome
 invariant's currency clause (under Gates), and step 10 escalates every source-changing fix before
 step 11. Re-evaluate this gate's trigger against that fix (at step 10, before escalating) so the
@@ -880,6 +896,10 @@ one.** A re-arm would need three things this gate cannot supply:
 The human is the path because the human is the only actor outside those three constraints.
 
 ### 11. Merge
+**First, the head check — before the eligibility decision and before any stop for the human**:
+`git fetch && git rev-list --left-right --count @{u}...HEAD` must pass (Gates → currency); anything
+else is a STOP. Unpushed local commits mean a push was missed, not a step to finish here.
+
 Read the run `mode` and `graduated-routes` from the `queue.md` header. The merge gate is the
 **only** gate `mode` changes (step 5's posture comes from the separate `plan-gate:` field, which
 `mode:` never sets after Initialization — plus one always-on condition neither reaches). A row is
@@ -925,7 +945,9 @@ honor it until the human clears it (restoring the row's prior status). When the 
 auto-merge-eligible (or the human has approved), and CI + security + acceptance are green **on the
 commit you are about to merge** — this gate is itself a source of change, and it is the one step
 with nothing downstream to catch a stale verdict (Gate-outcome invariant → currency) — AND the row
-is not `hold`:
+is not `hold` — **run the head check again, immediately before merging**:
+`git fetch && git rev-list --left-right --count @{u}...HEAD` must pass (Gates → currency).
+Anything else is a STOP, auto-merge-eligible or not; never merge on it. On a pass:
 merge via `MERGE_METHOD` with an explicit `--subject` carrying the correct `COMMIT_CONV` scope,
 `--delete-branch`. Confirm the issue closed.
 
@@ -1843,7 +1865,7 @@ Gate table:
 | Scope ruling | `DESIGN_AGENT` | step 8, whenever a **BLOCKING** finding raises a design question — **on every route, `docs` included**, at whatever round it arises. **Its due-ness is fixed in this row alone and is NOT governed by the Routing table's per-route column**, which scopes the plan-informing Architect gate above and never reaches this one; nor by `mode:`, `plan-gate:`, or route graduation | the ruling, presented **with** the stop it carries — never a verdict on the change, and never a review *round* |
 | Security | `SECURITY_REVIEW` (local or label) | by route (step 9) | clean/findings |
 | AC-verify | fresh subagent (+`VERIFY`); **any re-check a fresh instance too** (Fresh-re-check invariant) | every issue with acceptance criteria (step 10 is unconditional; the **mutation pass within it** is scoped — Routing table). **Last gate before merge**, so it certifies the merge candidate and owns the commit boundary for its own fixes | done/not-done + gaps, as **two separate counts**: Class A (AC-satisfaction) and Class B (mutation survivors); **either class blocks** |
-| Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI + security + acceptance green | `MERGE_METHOD` |
+| Merge | user (calibration / non-graduated route) → orchestrator (auto: graduated routes) | CI + security + acceptance green, and local and remote heads agree (step 11's head check) | `MERGE_METHOD` |
 
 **Gate-outcome invariant (evidence-bound pass).** Applies to every gate in the table above that
 returns a verdict **or a ruling** — the scope ruling returns the latter and certifies nothing, and
@@ -1928,7 +1950,8 @@ forms, because only one of them is a recurrence signal:
 
 **A gate that did not run — static or dynamic — is never recorded as a gate that passed.**
 
-**Currency — a verdict is bound to the commit it ran on.** The two branches above are about a gate
+**Currency — a verdict is bound to the commit it ran on, and a gate that reads the remote is bound
+to the remote's commit.** The two branches above are about a gate
 that produced **no** verdict. Another way a gate ends up not having passed, and the one that looks
 like success: the gate ran, returned clean, and then **the merge candidate changed
 underneath it**. A later commit is a commit no gate ran on, so the earlier verdict does not reach
@@ -1937,6 +1960,21 @@ gate. The clause binds every gate above **whose verdict is about a diff or a com
 commands, code review, security, AC-verify, and the merge gate's own precondition. The plan,
 architect and human-plan gates certify an *approach*, not a commit; carrying those across a resume
 is Resume's rule, not this one.
+
+**The remote is a second copy of the candidate, and the clause binds both.** A gate that reads the
+local tree and a gate that reads the remote certify the same commit only while the two heads agree.
+CI, a labeled review, and the human's merge approval are the remote-reading gates this pipeline
+knows. **Whether a gate reads the remote is a property of its binding: if you cannot tell, it
+does.** Step 7 sets when commits are pushed, and the head check stops a label (step 9)
+or a merge (step 11) on heads that disagree. **The head check is
+`git fetch && git rev-list --left-right --count @{u}...HEAD`, and it passes only when it succeeds and
+reports both counts as `0`.** Anything else — commits on either side, or an error — is a STOP:
+escalate, journalling an error as
+`- gate-error: remote-currency — <the command that failed> — <first line of the error>` with
+volatile arguments elided (Gate-outcome invariant). **Run nothing that moves either head to make it
+pass**: git answers a rejected push by suggesting a pull, and anything that brings the remote's
+commits into the local tree carries commits no gate certified through the check that exists to keep
+them out.
 
 **The remedy, before the detail: re-run the re-armed gate, or STOP and escalate to the human. Never
 journal or merge on the superseded verdict.** Where the gate's own step states what a re-run costs,
@@ -1948,8 +1986,8 @@ to certify the re-arm, so it becomes an unowned re-arm and **escalates**. Owners
 not a step that once had one; a round invented to fit is a cap that does not bind (step 10).
 Escalation is for a re-arm no step owns — at the acceptance gate, every source-changing fix, per
 step 10's three constraints.
-And **commit the change first**, under step 6's explicit-path staging rule: the acceptance gate
-reads the working tree, so an uncommitted fix can be **detected** there and still be absent from
+And **commit and push the change first** (step 7), under step 6's explicit-path staging rule: the
+acceptance gate reads the working tree, so an uncommitted fix can be **detected** there and still be absent from
 what merges — **detecting is not certifying** (step 8).
 
 **It holds whatever produced the change** — the rule is about the *change*, never about its author.
@@ -1958,6 +1996,8 @@ not exhaustive**, and extend it rather than reading an unlisted source as exempt
 - a fix the **acceptance gate itself** made (step 10) — the one the gate order newly creates;
 - a **CI fix** after a gate has run (CI first runs at step 7, but the branch can redden later);
 - a change the **human asked for at the merge gate** (step 11);
+- **a commit on the remote that the local tree lacks** — no gate that reads the local tree saw it,
+  and the head check stops on it rather than pulling it in;
 - **bringing the branch up to date with its base**, where the host requires that before merging.
   This re-arms every gate that reads the **tree** rather than the diff — CI **and** the build
   commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`). If you cannot tell what the
