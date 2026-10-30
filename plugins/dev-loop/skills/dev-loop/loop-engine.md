@@ -896,8 +896,7 @@ one.** A re-arm would need three things this gate cannot supply:
 The human is the path because the human is the only actor outside those three constraints.
 
 ### 11. Merge
-**First, the head check — before the eligibility decision and before any stop for the human**, so
-that what is decided and what the human approves is the head that will merge:
+**First, the head check — before the eligibility decision and before any stop for the human**:
 `git fetch && git rev-list --left-right --count @{u}...HEAD` must pass (Gates → currency); anything
 else is a STOP. Unpushed local commits mean a push was missed, not a step to finish here.
 
@@ -1966,7 +1965,7 @@ is Resume's rule, not this one.
 local tree and a gate that reads the remote certify the same commit only while the two heads agree.
 CI, a labeled review, and the human's merge approval are the remote-reading gates this pipeline
 knows. **Whether a gate reads the remote is a property of its binding: if you cannot tell, it
-does.** Step 7 pushes every commit as soon as it is made, and the head check stops a label (step 9)
+does.** Step 7 sets when commits are pushed, and the head check stops a label (step 9)
 or a merge (step 11) on heads that disagree. **The head check is
 `git fetch && git rev-list --left-right --count @{u}...HEAD`, and it passes only when it succeeds and
 reports both counts as `0`.** Anything else — commits on either side, or an error — is a STOP:

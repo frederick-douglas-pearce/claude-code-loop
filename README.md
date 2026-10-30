@@ -535,10 +535,11 @@ looks most like success, because every gate genuinely did pass — just not on t
 merging.
 
 **The same holds between your machine and the remote.** CI, a label-triggered review, and your own
-merge approval all look at the pushed branch, which can differ from the loop's local copy. So the
-loop pushes every commit as soon as it makes it, and before it applies a review label or merges it
-checks mechanically that the two agree (`git rev-list --left-right --count @{u}...HEAD` after a
-fetch, which must report both counts as `0`). If they disagree it stops and asks you, and it runs
+merge approval all look at the pushed branch, which can differ from the loop's local copy. So from
+the PR's first push on, the loop pushes every commit as soon as it makes it, and before it applies a
+review label or merges it checks mechanically that the two agree
+(`git rev-list --left-right --count @{u}...HEAD` after a fetch, which must report both counts as
+`0`). If they disagree it stops and asks you, and it runs
 nothing that moves either head to make the check pass.
 
 **A pull request appears before any review has run — that is the order, not a slip.** The loop

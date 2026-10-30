@@ -114,8 +114,8 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   the candidate. **Escalate, or re-run what the engine says that change re-armed** — and if you
   cannot determine which gates it re-armed, which you cannot without `loop-engine.md` loaded, that
   is the escalate branch, never the nothing-was-re-armed branch. Never merge on a verdict describing
-  an earlier tree. **A gate that reads the remote is bound to the remote's commit:** push every
-  commit as soon as it is made, and never apply a review label or merge unless
+  an earlier tree. **A gate that reads the remote is bound to the remote's commit:** push as the
+  engine's step 7 says, and never apply a review label or merge unless
   `git fetch && git rev-list --left-right --count @{u}...HEAD` succeeds and reports both counts as
   `0`. Anything else, an error included, is a STOP; run nothing that moves either head to make it
   pass.
