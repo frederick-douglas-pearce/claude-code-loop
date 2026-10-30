@@ -652,13 +652,13 @@ to push it for you. Open the PR; **replicate `PR_TEMPLATE` fully** in
 the body; make the Security-review choice up front. Advance the row to `in-pr` and record the
 PR number.
 
-**Push every commit as soon as it is made — wherever it is made.** A commit is on the merge
-candidate only once the remote has it: CI runs there, a labeled review reads there, and the merge
-takes the remote's head. Step 6's commit boundaries are where most commits happen, not the set of
-them; a commit made anywhere else is pushed on the same terms. Push at each commit rather than
-"before a gate that reads the remote", because which gates read the remote is a property of their
-bindings (Gates → currency). **If a push fails, never force it.** The head checks at steps 9 and 11
-will then not pass, and they escalate.
+**From this push on, push every commit on the PR branch as soon as it is made.** A commit is on
+the merge candidate only once the remote has it: CI runs there, a labeled review reads there, and
+the merge takes the remote's head. A commit in an agent's isolated copy is not on the branch until
+you have applied and committed it here. Push at each commit rather than "before a gate that reads
+the remote", because which gates read the remote is a property of their bindings (Gates →
+currency). **If a push fails, never force it: STOP and escalate with the push's first error
+line.**
 
 **Then append the iteration's open record to `progress.md`, before you wait for CI.** Write it as
 the `record-templates` unit gives it; that template is the one statement of what it carries, so do
@@ -860,10 +860,9 @@ that findings ≥ the project's confidence bar are addressed):
   docs/no-surface changes.
 
 **Before applying the label, run the head check**:
-`git fetch && git rev-list --left-right --count @{u}...HEAD` must print exactly `0 0`. Its readings
-are step 11's, and anything but `0 0` is not a pass. A labeled review reads the remote, so a fix the
-remote does not have is a fix it never sees. **Treat a labeled review as not seeing later pushes**:
-a commit after the label goes on is one this gate did not certify (Gates → currency).
+`git fetch && git rev-list --left-right --count @{u}...HEAD` must pass (Gates → currency); anything
+else is a STOP. A labeled review reads the remote, so a fix the remote does not have is a fix it
+never sees.
 
 **A step-10 fix lands downstream of this gate.** Which gates it re-arms is the Gate-outcome
 invariant's currency clause (under Gates), and step 10 escalates every source-changing fix before
@@ -899,17 +898,8 @@ The human is the path because the human is the only actor outside those three co
 ### 11. Merge
 **First, the head check — before the eligibility decision and before any stop for the human**, so
 that what is decided and what the human approves is the head that will merge:
-`git fetch && git rev-list --left-right --count @{u}...HEAD` must print exactly `0 0`. Read the
-output **in this order**:
-- **The left count is above 0, whatever the right count** — the remote holds commits the local tree
-  does not, and no local gate read them. **STOP and escalate.** **Never pull, merge, rebase, or
-  force-push to reach `0 0`**: each one brings commits no gate certified through the check that
-  exists to keep them out.
-- **`0 <n>`, n above 0** — local commits the remote does not have. Push them (step 7's form), run
-  the check again, and wait for CI to go green on the new head before going on.
-- **An error, or anything else** — not a pass. Journal
-  `- gate-error: remote-currency — git rev-list — <first line of the error>` and escalate
-  (Gate-outcome invariant).
+`git fetch && git rev-list --left-right --count @{u}...HEAD` must pass (Gates → currency); anything
+else is a STOP. Unpushed local commits mean a push was missed, not a step to finish here.
 
 Read the run `mode` and `graduated-routes` from the `queue.md` header. The merge gate is the
 **only** gate `mode` changes (step 5's posture comes from the separate `plan-gate:` field, which
@@ -957,10 +947,8 @@ auto-merge-eligible (or the human has approved), and CI + security + acceptance 
 commit you are about to merge** — this gate is itself a source of change, and it is the one step
 with nothing downstream to catch a stale verdict (Gate-outcome invariant → currency) — AND the row
 is not `hold` — **run the head check again, immediately before merging**:
-`git fetch && git rev-list --left-right --count @{u}...HEAD` must print exactly `0 0`. Here
-**anything but `0 0`, a push included, means the head changed after the eligibility decision or the
-human saw it** — a change at the merge gate (Gate-outcome invariant → currency). STOP and put the
-new head in front of the human, auto-merge-eligible or not; never merge on it. On `0 0`:
+`git fetch && git rev-list --left-right --count @{u}...HEAD` must pass (Gates → currency).
+Anything else is a STOP, auto-merge-eligible or not; never merge on it. On a pass:
 merge via `MERGE_METHOD` with an explicit `--subject` carrying the correct `COMMIT_CONV` scope,
 `--delete-branch`. Confirm the issue closed.
 
@@ -1978,8 +1966,16 @@ is Resume's rule, not this one.
 local tree and a gate that reads the remote certify the same commit only while the two heads agree.
 CI, a labeled review, and the human's merge approval are the remote-reading gates this pipeline
 knows. **Whether a gate reads the remote is a property of its binding: if you cannot tell, it
-does.** Step 7 pushes every commit as soon as it is made; the head check at steps 9 and 11 is the
-enforcement.
+does.** Step 7 pushes every commit as soon as it is made, and the head check stops a label (step 9)
+or a merge (step 11) on heads that disagree. **The head check is
+`git fetch && git rev-list --left-right --count @{u}...HEAD`, and it passes only when it succeeds and
+reports both counts as `0`.** Anything else — commits on either side, or an error — is a STOP:
+escalate, journalling an error as
+`- gate-error: remote-currency — <the command that failed> — <first line of the error>` with
+volatile arguments elided (Gate-outcome invariant). **Run nothing that moves either head to make it
+pass**: git answers a rejected push by suggesting a pull, and anything that brings the remote's
+commits into the local tree carries commits no gate certified through the check that exists to keep
+them out.
 
 **The remedy, before the detail: re-run the re-armed gate, or STOP and escalate to the human. Never
 journal or merge on the superseded verdict.** Where the gate's own step states what a re-run costs,
@@ -1991,8 +1987,8 @@ to certify the re-arm, so it becomes an unowned re-arm and **escalates**. Owners
 not a step that once had one; a round invented to fit is a cap that does not bind (step 10).
 Escalation is for a re-arm no step owns — at the acceptance gate, every source-changing fix, per
 step 10's three constraints.
-And **commit the change first**, under step 6's explicit-path staging rule: the acceptance gate
-reads the working tree, so an uncommitted fix can be **detected** there and still be absent from
+And **commit and push the change first** (step 7), under step 6's explicit-path staging rule: the
+acceptance gate reads the working tree, so an uncommitted fix can be **detected** there and still be absent from
 what merges — **detecting is not certifying** (step 8).
 
 **It holds whatever produced the change** — the rule is about the *change*, never about its author.
@@ -2001,9 +1997,8 @@ not exhaustive**, and extend it rather than reading an unlisted source as exempt
 - a fix the **acceptance gate itself** made (step 10) — the one the gate order newly creates;
 - a **CI fix** after a gate has run (CI first runs at step 7, but the branch can redden later);
 - a change the **human asked for at the merge gate** (step 11);
-- **a commit on the remote that the local tree lacks** — pushed by anyone or anything but this
-  iteration. No gate that reads the local tree saw it, and step 11's head check stops on it rather
-  than pulling it in;
+- **a commit on the remote that the local tree lacks** — no gate that reads the local tree saw it,
+  and the head check stops on it rather than pulling it in;
 - **bringing the branch up to date with its base**, where the host requires that before merging.
   This re-arms every gate that reads the **tree** rather than the diff — CI **and** the build
   commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`). If you cannot tell what the

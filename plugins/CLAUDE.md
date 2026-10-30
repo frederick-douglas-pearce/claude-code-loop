@@ -168,14 +168,12 @@ even though nothing will fail loudly:
 - **The mechanism blockquote** (Gates → Fresh-re-check invariant) is kept in core rather than in
   the `accepting` unit, because step 8's `guard-efficacy` lens needs it before step 10.
 - **The remote half of currency is another multi-site invariant** (#107). "A gate that reads the
-  remote is bound to the remote's commit", the push-every-commit rule, and the head check
-  (`git rev-list --left-right --count @{u}...HEAD` after a fetch, `0 0` or escalate) are restated in:
-  the currency clause and the Gate table's Merge row; step 7 (the push rule); step 8's fix commits;
-  step 9 (before labeling) and step 11 (twice — before the eligibility decision and the human stop,
-  and again immediately before `MERGE_METHOD`); the `accepting` unit's commit boundary; `SKILL.md`'s
-  fail-safe list; and the README's trust model and step table. **Maintain the list; do not summarize
-  it.** `RemoteHeadCheckTests` pins only that the command appears in step 9's and step 11's spans.
-  Two things to keep: the left-count reading comes **first** and forbids pulling, because a
-  non-fast-forward push is answered by git's own hint with `git pull`, which would carry ungated
-  commits through the check; and step 11's second run treats **any** change, a push included, as
-  a change at the merge gate, because the first run precedes the human's approval.
+  remote is bound to the remote's commit", the push rule, and the head check
+  (`git fetch && git rev-list --left-right --count @{u}...HEAD`; anything but both counts `0` stops)
+  are restated across core, the `accepting` unit, `SKILL.md` and the README (both copies). No site
+  list is kept here — the first draft of this bullet carried one and it was incomplete at review.
+  **Grep for `rev-list` and `push` and read each site before editing.** The single reading lives in
+  the currency clause; steps 9 and 11 point at it. `RemoteHeadCheckTests` pins only that the command
+  appears in step 9's span and in both of step 11's. Keep the rule that **nothing moves either head
+  to make the check pass**: git answers a rejected push by suggesting `git pull`, which would carry
+  ungated commits through the check that exists to keep them out.

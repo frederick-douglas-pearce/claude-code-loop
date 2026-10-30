@@ -2511,8 +2511,8 @@ class RemoteHeadCheckTests(unittest.TestCase):
     Until #107 no step instructed a push, so CI, a label-triggered review and the
     merge could all act on a remote head that the local-reading gates never
     certified. The fix pushes every commit and makes the property **checkable**:
-    ``git rev-list --left-right --count @{u}...HEAD``, after a fetch, must print
-    ``0 0`` before step 9 applies a label, before step 11 decides eligibility and
+    ``git fetch && git rev-list --left-right --count @{u}...HEAD`` must report both
+    counts as ``0`` before step 9 applies a label, before step 11 decides eligibility and
     stops for the human, and again immediately before ``MERGE_METHOD``. The issue's
     own note is that this command is the half that closes the class -- the push
     instructions alone are the remember-to-be-careful shape.
@@ -2522,15 +2522,18 @@ class RemoteHeadCheckTests(unittest.TestCase):
     an agreement test; it fails when the command is deleted from, or reworded in,
     any one of them. Whitespace is normalized because a backticked span can wrap.
 
-    It does **not** assert the polarity (``must print exactly `0 0```), the order of
-    the readings (left count first, never pull to reach ``0 0``), or that step 11's
-    second run treats a push as a change at the merge gate. Those are propositions,
-    and per ``tests/CLAUDE.md`` they are review's. Nor does it survive an *append* --
-    a spare mention of the command next to a deleted mandate -- which is the
-    documented ceiling, not a gap.
+    The pinned literal carries the ``git fetch &&`` prefix: without the fetch,
+    ``@{u}`` is only the local tracking ref, which the loop's own push updates, so
+    the check would pass whatever the remote holds.
+
+    It does **not** assert the pass reading (both counts ``0``), that anything else
+    is a STOP, or that nothing may move either head to make it pass. Those are
+    propositions, and per ``tests/CLAUDE.md`` they are review's. Nor does it survive
+    an *append* -- a spare mention of the command next to a deleted mandate -- which
+    is the documented ceiling, not a gap.
     """
 
-    _COMMAND = "git rev-list --left-right --count @{u}...HEAD"
+    _COMMAND = "git fetch && git rev-list --left-right --count @{u}...HEAD"
 
     _REGIONS = {
         "step 9 (before labeling)": (
