@@ -2505,6 +2505,101 @@ class ResumeHandoffPointerTests(unittest.TestCase):
                 )
 
 
+class RemoteHeadCheckTests(unittest.TestCase):
+    """#107's head check is present at each site that must run it.
+
+    Until #107 no step instructed a push, so CI, a label-triggered review and the
+    merge could all act on a remote head that the local-reading gates never
+    certified. The fix pushes every commit and makes the property **checkable**:
+    ``git rev-list --left-right --count @{u}...HEAD``, after a fetch, must print
+    ``0 0`` before step 9 applies a label, before step 11 decides eligibility and
+    stops for the human, and again immediately before ``MERGE_METHOD``. The issue's
+    own note is that this command is the half that closes the class -- the push
+    instructions alone are the remember-to-be-careful shape.
+
+    What is asserted is **presence at each site**, in three located regions. The
+    sites are independent, not a writer and a reader of one string, so this is not
+    an agreement test; it fails when the command is deleted from, or reworded in,
+    any one of them. Whitespace is normalized because a backticked span can wrap.
+
+    It does **not** assert the polarity (``must print exactly `0 0```), the order of
+    the readings (left count first, never pull to reach ``0 0``), or that step 11's
+    second run treats a push as a change at the merge gate. Those are propositions,
+    and per ``tests/CLAUDE.md`` they are review's. Nor does it survive an *append* --
+    a spare mention of the command next to a deleted mandate -- which is the
+    documented ceiling, not a gap.
+    """
+
+    _COMMAND = "git rev-list --left-right --count @{u}...HEAD"
+
+    _REGIONS = {
+        "step 9 (before labeling)": (
+            "### 9. Security review (by route)", "### 10. Verify done",
+        ),
+        "step 11 (before the decision and the human stop)": (
+            "### 11. Merge", "Read the run `mode` and `graduated-routes`",
+        ),
+        "step 11 (immediately before MERGE_METHOD)": (
+            "**run the head check again, immediately before merging**",
+            "merge via `MERGE_METHOD`",
+        ),
+    }
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", text)
+
+    def _span(self, start: str, end: str, label: str) -> str:
+        text = _engine_text()
+        self.assertEqual(
+            text.count(start), 1,
+            f"the start anchor for {label} ({start!r}) occurs {text.count(start)} "
+            "times in the engine corpus; it must occur once -- re-anchor this test "
+            "before trusting it.",
+        )
+        i = text.find(start)
+        j = text.find(end, i + len(start))
+        self.assertNotEqual(
+            j, -1, f"cannot locate the end of the {label} region ({end!r}) in "
+            "the engine corpus (_engine_text()) -- re-anchor this test before trusting it.",
+        )
+        return text[i:j]
+
+    def test_each_site_runs_the_head_check(self) -> None:
+        for label, (start, end) in self._REGIONS.items():
+            with self.subTest(region=label):
+                self.assertIn(
+                    self._COMMAND,
+                    self._normalize(self._span(start, end, label)),
+                    f"{label} no longer carries the head check {self._COMMAND!r}. "
+                    "Without it the gate acts on the remote head with nothing "
+                    "confirming that head is the one the local-reading gates "
+                    "certified (#107). Restore the command; do not drop a region "
+                    "to make this pass.",
+                )
+
+    def test_no_region_is_satisfied_by_its_own_anchor(self) -> None:
+        for label, (start, end) in self._REGIONS.items():
+            with self.subTest(region=label):
+                for which, anchor in (("start", start), ("end", end)):
+                    self.assertNotIn(
+                        self._COMMAND, self._normalize(anchor),
+                        f"the {which} anchor for {label} contains the command, so "
+                        "that region's check can never fail. Re-anchor it.",
+                    )
+
+    def test_the_span_anchors_actually_resolve(self) -> None:
+        for label, (start, end) in self._REGIONS.items():
+            with self.subTest(region=label):
+                body = self._span(start, end, label)
+                self.assertGreater(
+                    len(body), 80,
+                    f"the {label} region resolved to {len(body)} characters, which is "
+                    "too short to be the passage intended -- the guard is checking "
+                    "nothing. Re-anchor it.",
+                )
+
+
 class DeltaScopedRoundNotationTests(unittest.TestCase):
     """#120's delta-scoped rounds name the SAME range at every site that fixes it.
 
@@ -2817,7 +2912,8 @@ class CurrencyExemptionAgreementTests(unittest.TestCase):
                 "### 10. Verify done", "### 11. Merge", "step 10",
             ),
             "currency clause (claims to match it)": self._span(
-                "**Currency — a verdict is bound to the commit it ran on.**",
+                # The heading's prefix: #107 extended the heading with the remote half.
+                "**Currency — a verdict is bound to the commit it ran on",
                 "**Fresh-re-check invariant",
                 "currency clause",
             ),

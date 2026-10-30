@@ -89,11 +89,11 @@ to last so that it certifies the commit that actually merges.
 | **4. Architect** | When a trigger fires or the loop is unsure: freezes the plan's approach, then has `DESIGN_AGENT` review it, then writes the outcome into the plan. | — |
 | **5. Plan gate** | Presents the plan with its value framing. | every issue under `plan-gate: always` (the default under `calibration`); under `conditional`, on a failed value story, ambiguity, risk, agent disagreement or a punt, or doubt; **always** if the architect materially changed the plan |
 | **6. Implement** | Branch, code, tests and docs. Lint, type and test each pass on their own exit status; the offline tier runs where you bound one. | — |
-| **7. Commit + PR** | Stages explicit paths only, opens the PR from your template, journals an open record, waits for CI to go green. | — |
+| **7. Commit + PR** | Stages explicit paths only, pushes the branch, opens the PR from your template, journals an open record, waits for CI to go green. Every later commit is pushed as soon as it is made. | — |
 | **8. Code review** | Finder fan-out; findings classed blocking or editorial; blocking fixes committed and re-checked once by a fresh checker; editorial ones applied in one contained sweep. | a blocking finding raises a design question; a blocking finding survives the re-check |
-| **9. Security** | By route: a local review, or a labeled review path when a sensitive surface is touched. | — |
+| **9. Security** | By route: a local review, or a labeled review path when a sensitive surface is touched. Before labeling, checks that the remote branch matches the local one. | the remote branch holds commits the loop did not make, or the head check cannot run |
 | **10. Acceptance** | A fresh AC-verifier, plus the mutation pass where it is due. The last gate before merge. | a finding of either class survives one re-verify; a fix here changed source no earlier gate saw |
-| **11. Merge** | Through `MERGE_METHOD`, with the PR's own branch deleted. | every merge under `mode: calibration` (the default) and on any route you have not graduated |
+| **11. Merge** | Checks that the remote branch matches the local one, before deciding and again right before merging; then merges through `MERGE_METHOD`, with the PR's own branch deleted. | every merge under `mode: calibration` (the default) and on any route you have not graduated; the remote branch holds commits the loop did not make, or the head check cannot run; the head changed after you approved |
 | **12. Journal + stop** | Appends the close record — including a `- Budget:` line of subagent runs and gate rounds — marks the row `done`, and stops. | — |
 
 Re-invoke for the next issue by hand, running `/clear` first so it does not start on the last
@@ -410,7 +410,7 @@ relying on any of this — *Upgrading the plugin* says how — and read "Upgradi
 live ledger" first.
 
 Worth reading before you install. This plugin drives a real development workflow on
-your behalf: it creates branches, commits, opens pull requests, runs your project's
+your behalf: it creates branches, commits, pushes branches, opens pull requests, runs your project's
 lint/type/test commands, merges, and deletes the merged branch. Here is the posture it
 takes while doing that.
 
@@ -533,6 +533,15 @@ the loop treats the gates that change re-armed as **not** having passed the new 
 them or stops and asks you; it does not merge on the older result. This is the failure mode that
 looks most like success, because every gate genuinely did pass — just not on the code you would be
 merging.
+
+**The same holds between your machine and the remote.** CI, a label-triggered review, and your own
+merge approval all look at the pushed branch, while code review and the acceptance gate read the
+local one. So the loop pushes every commit as soon as it makes it, and before it applies a review
+label or merges it checks mechanically that the two agree
+(`git rev-list --left-right --count @{u}...HEAD` after a fetch, which must read `0 0`). If the
+remote holds commits the loop did not make, it stops and asks you; it never pulls, rebases or
+force-pushes to make the check pass. If the head changes after you approve, it asks you again
+rather than merging.
 
 **A pull request appears before any review has run — that is the order, not a slip.** The loop
 implements, then **immediately commits and opens the PR**, and only then runs code review, security,
