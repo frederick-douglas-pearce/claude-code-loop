@@ -13,7 +13,7 @@ The engine was originally built and hardened in
 v0.11.0 releases) and extracted here. Install it once, generate a per-project `loop.config.md` with
 `/init-loop`, and run your backlog as a loop.
 
-> **v0.3.1, not yet stable**: six repos drive it today; see *Status* for what that does and
+> **v0.4.0, not yet stable**: six repos drive it today; see *Status* for what that does and
 > doesn't establish.
 
 ## Why try it
@@ -173,7 +173,7 @@ skeleton does not offer.
 
 ## Status
 
-> **Status — v0.3.1; not yet stable.** Four pieces ship: the
+> **Status — v0.4.0; not yet stable.** Four pieces ship: the
 > `dev-loop` skill (`SKILL.md`, a core `loop-engine.md`, and the units under `phases/` and
 > `reference/` that it reads on demand), the `/init-loop` onboarding
 > command, the append-only guard hook, and the mutation harness the acceptance gate
@@ -195,6 +195,24 @@ skeleton does not offer.
 > the v0.3.0 cut**, across the five repos driving it then. That is enough to say the
 > plugin/config seam holds and that the hardening works under load; it is not enough to call
 > it stable.
+>
+> **v0.4.0 is a minor bump because it adds stops.** The loop now pushes every commit on the
+> PR branch as soon as it makes it, and before it applies a review label or merges it checks
+> that the local and remote branches agree. If they don't, or the check can't run, it stops
+> for you and runs nothing that moves either branch to make them agree
+> ([#107](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/107)). Five
+> places where two engine passages disagreed now follow the stricter one
+> ([#277](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/277)); the
+> visible one is that a repo whose `DESIGN_AGENT` is still `TODO(init-loop)` stops on an
+> issue that triggers the architect instead of improvising its own design pass. The rest is
+> the first half of the cost work
+> ([#271](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/271)), shipped
+> unmeasured by decision. The engine core and `SKILL.md`, which every invocation reads, are
+> 7.8% smaller in bytes than in v0.3.1: duplicated passages and maintainer history are gone,
+> and three rarely-read sections moved into units read on demand (#275, #292, #278). The loop
+> also tells you to `/clear` between invocations, and the Install section covers the cache
+> setting for API-key users (#287). A smaller footprint is not yet a saving; the epic's
+> benchmark is what will measure one.
 >
 > **v0.3.1 is a patch: it changes how the engine is loaded.** The engine is now a core
 > that every invocation reads in full, plus units it reads at their point of use. A unit
@@ -396,7 +414,7 @@ enforcement: nothing in the plugin can stop you upgrading mid-iteration.
 
 ## What the loop can do to your repo
 
-**This section describes v0.3.1.** Every engine older than v0.3.0 gates less at nearly
+**This section describes v0.4.0.** Every engine older than v0.3.0 gates less at nearly
 every point below, and the lists here are illustrative, never the set — **assume nothing
 in this section is live until you have re-installed.** An installed **v0.2.0** has no
 design-question stop, no blocking/editorial split at code review, no guard-efficacy
