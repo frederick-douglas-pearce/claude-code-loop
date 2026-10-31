@@ -125,6 +125,12 @@ ERAS = [
     # files them as 0.3.0. It is baseline-only and never pooled (D007), so no DiD
     # reads it today; a per-repo lower bound is logged on #1 rather than built here.
     ("0.3.1", "2026-10-10", None),
+    # 0.4.0 is the cost epic's unmeasured deletions plus #277 and #107. No routine
+    # journal vocabulary of its own (#107's `remote-currency` appears only inside
+    # a `- gate-error:`). Date-only, deliberately. Every consumer re-installed on
+    # 2026-10-30 local (16:10-19:47 -0700), so 10-30 takes the EARLIER era by the
+    # rule above and the first unambiguous day is 10-31.
+    ("0.4.0", "2026-10-31", None),
 ]
 
 # `era_by_date` scans ERAS in order and breaks at the first future row, and the
