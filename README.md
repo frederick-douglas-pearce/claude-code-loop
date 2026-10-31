@@ -894,12 +894,14 @@ describes direction; it deliberately does not restate what is in each milestone.
 - **Finish measuring v0.3.1.** The sharding milestone stays open until
   [#133](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/133) has enough
   completed v0.3.1 sessions in each treated repo to judge its pre-registered predictions.
-- **Gate and selection integrity.** The next engine milestone, `v0.3.2`, holds every gate and every
-  selection to verified live state, never a stale or reassuring proxy.
+- **Cost, turns first.** The cost review
+  ([#271](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/271)) found the bill
+  is driven by turns, and the largest lever on turns is the review round that exists because the
+  previous round's fix introduced a new defect. v0.4.0 shipped the review's safe deletions
+  unmeasured. Next come more deletions and a paired benchmark, and then the levers that act on rounds.
 - **Cost attribution per iteration.** Recording session IDs in the journal
   ([#234](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/234)) would let an
-  iteration's token usage be tied to its PR; it is named as the leading candidate for the release
-  after `v0.3.2`.
+  iteration's token usage be tied to its PR.
 - **Cost experiments** ([#211](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/211),
   designed in [#144](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/144)): an
   isolated replicate harness, then replicated runs that estimate within-config variance and the
