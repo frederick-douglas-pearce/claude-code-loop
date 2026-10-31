@@ -131,6 +131,11 @@ KNOWN_FILE_BYTES = {
     "0.3.0": {CORE: 267647, ENTRY: 10182},
     "0.3.1": {CORE: 200789, ENTRY: 10829, "phases/accepting.md": 38409,
               "phases/reviewing.md": 32344, "reference/initialization.md": 3489},
+    "0.4.0": {CORE: 183926, ENTRY: 11208, "phases/accepting.md": 38503,
+              "phases/reviewing.md": 32344, "reference/initialization.md": 3489,
+              "reference/plan-gate-inferred.md": 4788,
+              "reference/plan-template.md": 2737,
+              "reference/record-templates.md": 2357},
 }
 # The core's bytes per version, kept under its old name for callers that import it.
 KNOWN_ENGINE_BYTES = {v: f[CORE] for v, f in KNOWN_FILE_BYTES.items()}
