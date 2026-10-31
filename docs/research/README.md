@@ -148,16 +148,21 @@ Two defences, both cheap, and they are the only things that have worked:
 
 Findings 1–12 are recorded in the notebook and were **all measured on 0.2.0**.
 
-**Several eras are now on disk, and the rollout is a staggered-adoption design with a live control.**
-Read the current split from `~/.claude/plugins/installed_plugins.json` — never from this paragraph,
+**Several eras are now on disk, and since 2026-10-31 there is no control group.** The held-back
+control repos were re-installed at v0.4.0 and the difference-in-differences design is dropped
+(#285): the two control repos had 1 and 2 ledger rows at 0.2.0, no stratum, different review
+bindings and no post-period accrual, so the DiD could not be computed, and holding them kept them on
+a known-defective engine. The paired benchmark (#274) replaces it. Every consumer is now treated, and
+each one's sessions are observational data on its own stratum, never pooled (D007). Read the current split from `~/.claude/plugins/installed_plugins.json` — never from this paragraph,
 which is the kind of prose that goes stale between releases:
 
 | era | installed | repos |
 |---|---|---|
-| 0.2.0 | 2026-08-21 | **held deliberately** on `agentfluent`, `claude-code-sessions` — the untreated control |
+| 0.2.0 | 2026-08-21 | `agentfluent`, `claude-code-sessions` — held as the untreated control until 2026-10-31, then moved straight to 0.4.0 (#285) |
 | 0.2.1 | 2026-08-26 | `claude-code-loop`, `us_presidential_vote_analysis` — **n=10 / n=12** admissible sessions (vote `d53db569` excluded as 0.2.0-era, F170) |
 | 0.3.0 | 2026-09-11 (local; `installed_plugins.json` stamps it `2026-09-12T00:39Z`) | `claude-code-loop`, `us_presidential_vote_analysis`, `sportswear-esg-news-classifier` — the sharding epic's before side (`baseline-2026-10-04.md`) |
-| **0.3.1** | **2026-10-08** loop and vote (~15:55 local); **2026-10-09** esg (21:40 local) | the three above — **#133-treated**. Also **`claude-hook-validator`**, onboarded at 0.3.1 on 2026-10-09: **baseline-only, not #133-treated** — it has no 0.3.0 before side, and D007 forbids pooling, so its 0.3.1 sessions are its own before-baseline for the next engine-changing release |
+| **0.3.1** | **2026-10-08** loop and vote (~15:55 local); **2026-10-09** esg (21:40 local) | the three above — **#133-treated**. Also **`claude-hook-validator`**, onboarded at 0.3.1 on 2026-10-09: **baseline-only, not #133-treated** — it has no 0.3.0 before side, and D007 forbids pooling, so its 0.3.1 sessions are its own before-baseline for the next engine-changing release. Also the GitHub Pages repo `frederick-douglas-pearce.github.io`, onboarded at 0.3.1 on 2026-10-26 |
+| **0.4.0** | **2026-10-30/31** (UTC stamps `2026-10-30T23:10Z`–`2026-10-31T02:47Z`) | **every consumer**: `claude-code-loop`, the Pages repo, `claude-code-sessions`, `claude-hook-validator`, `sportswear-esg-news-classifier`, `agentfluent`, `us_presidential_vote_analysis`. Shipped unmeasured by decision (#271). ⚠ `engine_cost.py` has no 0.4.0 rows in `KNOWN_FILE_BYTES`/`LOAD_TOKENS`, and `budget_stats.py`'s `ERAS` ends at 0.3.1, so 0.4.0 sessions refuse or mis-attribute until those are added |
 
 ⚠ **The v0.3.0 release grew the engine 50.8%** (177,529 → 267,647 bytes; always-loaded 45,937 →
 69,457 tokens). Two consequences, both of which bit the instruments before anyone measured anything:
