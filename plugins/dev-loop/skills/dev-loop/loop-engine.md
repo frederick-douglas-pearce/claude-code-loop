@@ -174,7 +174,8 @@ exact `- surfaced-join:` / `- surfaced-leave:` lines:
 - **Joined** (in the `BACKLOG_SOURCE` roster, no `queue.md` row, not already surfaced) → surface
   once: "#N joined <run> after init — pull in, or leave out? (never auto-added)." Record `-
   surfaced-join: #N` in a `## <ISO8601> — curation` block. Only on the human's "pull in" add a
-  `queued` row; a bare surface never adds one.
+  `queued` row, deriving its `Depends on` cell from the issue body as Initialization does; a bare
+  surface never adds one.
 - **Left** (a non-terminal `queue.md` row whose issue is no longer in the roster, not already
   recorded) → surface once: "#N left <run> — eject, or keep? (never auto-ejected)." Record
   `- surfaced-leave: #N`. On "keep", write the decision to the row's Notes (`kept: out-of-<run>
@@ -183,13 +184,26 @@ exact `- surfaced-join:` / `- surfaced-leave:` lines:
   close/clean its PR+branch first), then set the row `deferred` with a curation Notes reason.
 This paragraph is the sub-unit the step-0.1 parked path invokes standalone.
 
-A row is **selectable** if its status is `queued`/`routed`, OR it is `blocked` on an unmet
-dependency that has SINCE cleared (all its `Depends on` issues are now `done` — re-route it via
-step 2; this does NOT apply to a `blocked: too-large` park, which waits on a split, nor to a
-`gate-error:` block, which waits on a config repair). A `parked` row
-is never selectable here — it is released only by explicit human un-park (step 0.1). Among
-selectable rows pick by `PRIORITY_LABELS` order, tiebreak issue-number ascending. If none are
-selectable, determine the resting state from the remaining non-terminal rows (test in this order):
+**Candidates** are the rows whose status is `queued`/`routed`, plus rows `blocked` on a dependency
+— never a `blocked: too-large` row, which waits on a split, nor a `gate-error:` block, which waits
+on a config repair. A `parked` row is never a candidate — it is released only by explicit human
+un-park (step 0.1). Walk the candidates in `PRIORITY_LABELS` order, tiebreak issue-number
+ascending, and evaluate each only when it is the top one remaining: it is **selectable** iff its
+`Depends on` cell passes the Router's dependency test (Router → Initial Status). Evaluate no row you
+are not about to select — any lookup outside `queue.md` the test needs is for the top candidate's
+own entries only.
+- A `blocked` candidate that passes is selected — re-route it via step 2. One that fails stays
+  `blocked`; pass over it and record nothing.
+- A `queued`/`routed` candidate that fails was mis-statused: the Router would have written it
+  `blocked`. Correct it — set it `blocked` (Route retained; Notes name the dependency as the Router
+  records it, the decision and never live evidence), append
+  `- status-corrected: #N <old status> → blocked — Depends on #X[, #Y] unmet` to this pass's
+  `## <ISO8601> — curation` block (opening one if there is none), and move to the next candidate.
+  This is the one statement of that spelling; step 2 writes no second record. A corrected row is no
+  longer `queued`/`routed`, so the correction never repeats, and once its dependency is met it is
+  selected as a `blocked` candidate.
+
+Select the first selectable candidate. If none is selectable, determine the resting state from the remaining non-terminal rows (test in this order):
 - Any `hold` row present → report "<n> held — awaiting human merge-release" and STOP **without** a
   sentinel (a held row needs the human now; the run is neither complete nor cleanly parked).
 - Else if ≥1 `parked` row is present AND every non-`parked` row is `done`/`deferred` → append the
@@ -1172,8 +1186,8 @@ merge (step 11)**; a row resuming under it re-enters at acceptance (Resume). A c
 `in-review` and replays the review fan-out, which is a residual this status does not close.
 It is a **pipeline** status like the seven before it — never a resting one, so it takes no
 part in the `hold`/`parked` machinery below. **Terminal statuses** — the run converges when every row is terminal:
-`done`; `deferred` (Route `stub-defer`); `blocked` (an unmet in-run dependency; `blocked:
-too-large` awaiting a split; or a recurring `gate-error:` awaiting a config repair — see the
+`done`; `deferred` (Route `stub-defer`); `blocked` (an unmet dependency — Router → Initial
+Status; `blocked: too-large` awaiting a split; or a recurring `gate-error:` awaiting a config repair — see the
 Gate-outcome invariant). The last two wait on a human, not on another row. **Two non-terminal, resting statuses** sit outside both
 the pipeline and the terminal set: **`hold`** — a durable, human-set merge-hold that survives
 `/clear`; and **`parked`** — a row whose work is gated on an **external event** (a release cut, a
@@ -1701,12 +1715,21 @@ distinct columns (Ledger format → queue.md), so a dependency-blocked research 
    package; no runtime-dep leakage into the package).
 4. Otherwise (a bug/enhancement touching the package source) → `code` (full pipeline).
 
-**Initial Status:** Route `stub-defer` → `deferred` (terminal). Else if any `Depends on` issue is
-not `done` → `blocked` (record the dep in Notes; the semantic Route is retained so the row resumes
-as that route once the dependency clears, step 1). Else if the row's work is gated on an **external
+**Initial Status:** Route `stub-defer` → `deferred` (terminal). Else if the row's `Depends on`
+cell fails the dependency test below → `blocked` (record the dep in Notes; the semantic Route is
+retained so the row resumes as that route once the dependency clears, step 1). Else if the row's work is gated on an **external
 event** (a release cut, a dogfood window — not an in-run issue) → `parked` with Notes
 `awaiting: <condition>` (non-terminal, resting; released only by explicit human un-park, step 0.1).
 Else → `routed`.
+
+**The dependency test — the one definition; step 1 applies it at selection.** It reads the row's
+`Depends on` cell, never the issue body (Initialization, and a pull-in at step 1, derive the cell
+from the body; the test reads only the cell). `—` or an empty cell names no entries and passes. An
+entry is met only if its row in this run's `queue.md` is `done`, or — for an issue with no row in
+this run — its issue is positively known to be **completed** (e.g. GitHub `stateReason:
+COMPLETED`), not merely closed. The cell passes only if every entry is met. **Anything else is
+unmet, including an entry or a cell you cannot read as issue references: if you cannot tell, it is
+unmet.**
 
 ---
 
@@ -2167,7 +2190,7 @@ answers, and the cap exists to force that question rather than to end anything. 
 round 3 on your own;** where a human directs further work it exists because they directed it.
 Reaching the cap is also not a verdict: an escalated gate has still returned no pass, so the
 Gate-outcome invariant governs what may be journalled. It does not mark the row `blocked` — that
-status is for a row waiting on something outside this gate (an unmet in-run dependency, a
+status is for a row waiting on something outside this gate (an unmet dependency, a
 `blocked: too-large` split, a recurring `gate-error:`), and a dirty round 2 waits on a human answer
 about *this* gate.
 
