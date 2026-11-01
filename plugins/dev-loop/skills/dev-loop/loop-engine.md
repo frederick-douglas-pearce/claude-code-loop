@@ -186,12 +186,12 @@ This paragraph is the sub-unit the step-0.1 parked path invokes standalone.
 
 **Candidates** are the rows whose status is `queued`/`routed`, plus rows `blocked` on a dependency
 — never a `blocked: too-large` row, which waits on a split, nor a `gate-error:` block, which waits
-on a config repair. **If you cannot tell a `blocked` row is blocked on a dependency, it is not a
-candidate.** A `parked` row is never a candidate — it is released only by explicit human
-un-park (step 0.1). Walk the candidates in `PRIORITY_LABELS` order, tiebreak issue-number
-ascending, and evaluate each only when it is the top one remaining: it is **selectable** iff its
-`Depends on` cell passes the Router's dependency test (Router → Initial Status). Any lookup outside `queue.md` the
-test needs is for the top candidate's own entries only.
+on a config repair. **If you cannot tell from its Notes that a `blocked` row is blocked on a
+dependency, it is not a candidate.** A `parked` row is never a candidate — it is released only by
+explicit human un-park (step 0.1). Walk the candidates in `PRIORITY_LABELS` order, tiebreak
+issue-number ascending, and evaluate each only when it is the top one remaining: it is
+**selectable** iff its `Depends on` cell passes the Router's dependency test (Router → Initial
+Status). Any lookup outside `queue.md` the test needs is for the top candidate's own entries only.
 - A `blocked` candidate that passes is selected — re-route it via step 2. One that fails stays
   `blocked`; pass over it and record nothing.
 - A `queued`/`routed` candidate that fails was mis-statused: the Router would have written it
@@ -204,7 +204,8 @@ test needs is for the top candidate's own entries only.
   longer `queued`/`routed`, so the correction never repeats, and once its dependency is met it is
   selected as a `blocked` candidate.
 
-Select the first selectable candidate. If none is selectable, determine the resting state from the remaining non-terminal rows (test in this order):
+Select the first selectable candidate. If none is selectable, determine the resting state from the
+remaining non-terminal rows (test in this order):
 - Any `hold` row present → report "<n> held — awaiting human merge-release" and STOP **without** a
   sentinel (a held row needs the human now; the run is neither complete nor cleanly parked).
 - Else if ≥1 `parked` row is present AND every non-`parked` row is `done`/`deferred` → append the
@@ -216,8 +217,7 @@ Select the first selectable candidate. If none is selectable, determine the rest
 - Else if EVERY row is terminal (`done`/`deferred`/`blocked`) → append the `RUN COMPLETE —
   <run-slug>` sentinel (see Convergence) to `progress.md` (counts + any blocked/deferred items) and
   STOP (convergence).
-- Else (rows still `blocked` on an unmet dependency, or `blocked: too-large` awaiting a split)
-  → report what's pending and STOP without a sentinel.
+- Else → report what's pending and STOP without a sentinel.
 **Size guard:** before entering the pipeline, estimate scope from the issue body — if it
 plausibly touches many files or spans multiple unrelated acceptance-criteria clusters (won't
 fit one context window), mark it `blocked: too-large`, escalate to `SCOPE_AGENT` to split, and
@@ -1188,8 +1188,8 @@ merge (step 11)**; a row resuming under it re-enters at acceptance (Resume). A c
 It is a **pipeline** status like the seven before it — never a resting one, so it takes no
 part in the `hold`/`parked` machinery below. **Terminal statuses** — the run converges when every row is terminal:
 `done`; `deferred` (Route `stub-defer`); `blocked` (an unmet dependency — Router → Initial
-Status; `blocked: too-large` awaiting a split; or a recurring `gate-error:` awaiting a config repair — see the
-Gate-outcome invariant). The last two wait on a human. **Two non-terminal, resting statuses** sit outside both
+Status; `blocked: too-large` awaiting a split; or a recurring `gate-error:` awaiting a config
+repair — see the Gate-outcome invariant). The last two wait on a human. **Two non-terminal, resting statuses** sit outside both
 the pipeline and the terminal set: **`hold`** — a durable, human-set merge-hold that survives
 `/clear`; and **`parked`** — a row whose work is gated on an **external event** (a release cut, a
 dogfood window — *not* an in-run dependency), with the awaited condition in Notes as
@@ -1718,14 +1718,13 @@ distinct columns (Ledger format → queue.md), so a dependency-blocked research 
 
 **Initial Status:** Route `stub-defer` → `deferred` (terminal). Else if the row's `Depends on`
 cell fails the dependency test below → `blocked` (record the dep in Notes; the semantic Route is
-retained so the row resumes as that route once the dependency clears, step 1). Else if the row's work is gated on an **external
-event** (a release cut, a dogfood window — not an in-run issue) → `parked` with Notes
-`awaiting: <condition>` (non-terminal, resting; released only by explicit human un-park, step 0.1).
-Else → `routed`.
+retained so the row resumes as that route once the dependency clears, step 1). Else if the row's
+work is gated on an **external event** (a release cut, a dogfood window — not an in-run issue) →
+`parked` with Notes `awaiting: <condition>` (non-terminal, resting; released only by explicit human
+un-park, step 0.1). Else → `routed`.
 
 **The dependency test — the one definition; step 1 applies it at selection.** It reads the row's
-`Depends on` cell, never the issue body (Initialization, and a pull-in at step 1, derive the cell
-from the body; the test reads only the cell). `—` or an empty cell names no entries and passes. An
+`Depends on` cell, never the issue body. `—` or an empty cell names no entries and passes. An
 entry is met only if its row in this run's `queue.md` is `done`, or — for an issue with no row in
 this run — its issue is positively known to be **completed** (e.g. GitHub `stateReason:
 COMPLETED`), not merely closed. The cell passes only if every entry is met. **Anything else is
@@ -2292,9 +2291,8 @@ order (last-wins, since the log is append-only) and acts only on it:
   re-invocation short-circuits without re-scanning.
 - **`RUN PARKED — awaiting <condition>`** (resting, **non-terminal**) — all *workable* rows are
   terminal but ≥1 `parked` row awaits an external event (a release cut, a dogfood window). A re-invocation short-circuits onto step 0.1's cheap parked path until the human explicitly releases a **named** condition or a pulled-in joiner / cleared dep makes work selectable again.
-- **held / pending** (no sentinel) — a `hold` row needs the human now, or a row is still `blocked`
-  on an unmet dependency; the orchestrator reports and stops without a sentinel (the run is
-  not complete and not cleanly parked).
+- **held / pending** (no sentinel) — a `hold` row needs the human now; the orchestrator reports and
+  stops without a sentinel (the run is not complete and not cleanly parked).
 
 **Guardrails:** iteration/budget caps live in the `queue.md` header (`iteration-cap:`/
 `subagent-cap:`) and are checked at iteration start against the ledger — **advisory in manual
