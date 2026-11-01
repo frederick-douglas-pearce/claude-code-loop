@@ -541,6 +541,12 @@ version, what actually works, where the live backlog is, and which repos have ad
 rot silently, and the recurring failure mode is that nobody notices until a reader does. Treat it as
 part of "done" for a release, not a separate chore.
 
+**The same PR re-checks the model-tiers epic's re-check table** ([#308](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/308)):
+every row whose trigger is "each minor release" gets checked against the installed Claude Code
+version and its "last checked" cell updated. Those rows record harness behavior the `MODEL_TIERS`
+design rests on and Anthropic can change without notice; without a trigger they are a deferral
+with no capture mechanism.
+
 The README's **trust-model section** ("What the loop can do to your repo") has the same property for
 a different trigger: it restates the engine's gating posture and hard limits, so a change to the
 merge gate, the mode semantics, the **plan-gate posture**, or the guard hook's scope must update it
