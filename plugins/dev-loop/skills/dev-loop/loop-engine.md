@@ -127,10 +127,13 @@ invocation resumes correctly.
    procedure, against live git/PR state — BEFORE selecting a new one; a `hold` or `parked` row is
    NOT an interruption (Resume).
 
-   **Then run the orphan scan: look for an open PR that no row covers.** A row exists for every
-   backlogged issue at init, but external state can exist with no row behind it: work that closes no
-   issue, a ledger lost, replaced or stale, a PR left open by an earlier run. Enumerate the repo's
-   **open PRs**.
+   **Then run the orphan scan: look for an open PR that no row covers.** The scan above classifies
+   *rows*, and a row is created for every backlogged issue at init — so most interruptions do leave
+   one. External state can
+   still exist with no row behind it: work that closes no issue and was never queued, a ledger lost
+   or
+   replaced (it is gitignored, so it can be absent or stale while the PRs it described are still
+   open), or a PR left open by an earlier run. Enumerate the repo's **open PRs**.
 
    **Then decide what each one is, default-deny.** These are the only things that are **not** an
    interruption: a PR belonging to **any `queue.md` row the scan above already classified** —
@@ -272,8 +275,10 @@ If any `ARCHITECT_TRIGGERS` condition fires OR you are unsure about the design, 
 and trivial research.
 
 **Instruct it verdict-first** (Verdict-first invariant, under Gates): a complete ruling on every
-question you put to it, then depth with whatever remains. State it at the invoke site:
-`DESIGN_AGENT` has no prompt template of its own (Tool surface).
+question you put to it, then depth with whatever remains. This agent has no prompt template of its
+own — its definition is user-global and you may not edit it (Tool surface) — so this sentence at the
+invoke site is the whole of the invariant's reach here, and it is weaker than a template for that
+reason.
 
 **Do these three things in this order.** Freeze, then invoke, then apply — in any other order the
 step-5 diff compares a text with itself.
@@ -610,9 +615,13 @@ the `record-templates` unit gives it; that template is the one statement of what
 not re-derive the fields here.
 
 **Write it now rather than at step 12, for the reason step 5 journals its `- Plan-gate:` line where
-that gate resolves.** Otherwise a `/clear`, compaction or crash before step 12 leaves an open PR
-with no ledger trace; this record is what step 0.3's orphan scan reports beside the PR. It does not
-make `progress.md` self-sufficient — live git/PR state still wins (Resume).
+that gate resolves.** A `/clear`, a compaction, or a crash between this step and step 12 otherwise
+leaves an **open PR with no ledger trace at all**. Step 0.3's orphan scan is the backstop for that
+case; this record is what the scan reports alongside the PR, so whoever resolves it has the issue,
+the branch and the PR identity on disk rather than a bare stranger. **Do not
+read this as making `progress.md` self-sufficient** — the standing contract is `queue.md` +
+`progress.md` + **live git/PR state**, which wins on conflict (Resume). This record makes an
+iteration *recoverable by the human*, not the ledger *authoritative*.
 
 Then wait for CI; fix until green, pushing each CI fix as soon as it is committed.
 
@@ -984,8 +993,14 @@ all four are **yours**, because the agent cannot discharge them from inside its 
 
   **An agent that died or was interrupted still produced something, and it is collected on the same
   terms.** Read this duty as *whatever is in the copy*, never as *what the agent managed to finish*.
-  Look in the copy before you remove it — a dead agent hands you no summary of what it left behind.
-  (A stranded copy is found by `git worktree list`, below.)
+  A pass that ended early leaves a partial artifact — a spec it had already written, a half-built
+  report, a verdict covering some criteria and not others — and that artifact is the only surviving
+  evidence of budget already spent. **Do not discard it** because nothing was formally "delivered":
+  that leaves the re-spawn starting from nothing, having paid twice for the same ground. The narrow
+  reading is the live hazard, because a dead agent hands you no summary of what it left behind: you
+  find that out by **looking in the copy before you remove it**, which is the one order this duty
+  fixes. (Where such a copy is *stranded* — nobody holds a handle to it — the paragraph below is how
+  you find it at all; that is the same duty reached by a different route, not a second one.)
 - **Never let its copy stand in for the change under review.** A file inside an isolated tree is not
   evidence of anything until you have applied it; cite `file:line` in the merge candidate, never in
   a copy. (The **Relay invariant**, Gates, applied to an agent's *artifacts* rather than its
@@ -1012,9 +1027,12 @@ all four are **yours**, because the agent cannot discharge them from inside its 
 The concrete path an isolated tree appears at is a **host** fact, not a project one, so this engine
 names none. **Get it from `git worktree list`**, which answers whatever the host does or does not
 report back, and answers for a copy left behind by an agent that errored or was interrupted — the
-case where you have no handle at all and the one where the duty matters most. The acceptance gate's
-untracked scan is no substitute: it honours `.gitignore` and runs before Part 2 creates the copy
-most likely to be stranded. A host whose isolated trees land *outside*
+case where you have no handle at all and the one where the duty matters most. Do not rely on the
+acceptance gate's untracked scan to find a stray copy: it is `git ls-files --others
+--exclude-standard`, so a repo that gitignores the isolation path — which is what a maintainer does
+after seeing one appear — sees nothing. Its position is no help either: that scan runs in the
+acceptance gate's Part 1, *before* Part 2 creates the copy most likely to be stranded.
+`git worktree list` has neither blind spot. A host whose isolated trees land *outside*
 the repository discharges the first duty for free and still owes the other three.
 
 **Execution policy — the parent owns the tree, and nothing may concurrently mutate it.** Pipeline
@@ -1027,7 +1045,8 @@ of on whether someone remembered to add it to a list. It has two satisfying form
 
 - **Read-only.** The step 8 `CODE_REVIEW` finder fan-out is the standing example and is **permitted
   by name**: several finders on distinct angles, running at once, reading the diff and the
-  acceptance criteria. Nothing *in this policy* bounds the fan-out. The
+  acceptance criteria. Angle diversity is what makes that gate find anything, so nothing *in this
+  policy* bounds the fan-out — read-only agents hold no copy and cannot corrupt your tree. The
   converse duty is yours: do not mutate the tree in place while a reader is in flight over it (Part
   2's in-tree rung is the one place you would). Other bounds are unaffected: each finder counts
   separately toward the **next** iteration's `subagent-cap` check (progress.md → the Budget line) —
