@@ -128,10 +128,8 @@ invocation resumes correctly.
    NOT an interruption (Resume).
 
    **Then run the orphan scan: look for an open PR that no row covers.** The scan above classifies
-   *rows*, and a row is created for every backlogged issue at init — so most interruptions do leave
-   one. External state can
-   still exist with no row behind it: work that closes no issue and was never queued, a ledger lost
-   or
+   *rows*, and a row is created for every backlogged issue at init — so most interruptions do leave one. External state can
+   still exist with no row behind it: work that closes no issue and was never queued, a ledger lost or
    replaced (it is gitignored, so it can be absent or stale while the PRs it described are still
    open), or a PR left open by an earlier run. Enumerate the repo's **open PRs**.
 
