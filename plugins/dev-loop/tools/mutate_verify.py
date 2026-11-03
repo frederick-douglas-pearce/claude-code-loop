@@ -47,7 +47,7 @@ which continue past the failure and report the *last* command's status — the p
 caller's own tree, mutating working code beside uncommitted deliverables and reporting green.
 (An ``&&`` chain short-circuits and does not produce that shape; it is the safer spelling, not the
 hazard.) ``--in-tree-authorized`` is the sole way past the refusal — the engine's escalated in-tree
-rung, chosen by a human, recorded in the report and on stderr so it can never be journalled as an
+rung, chosen by a human, recorded in the report and on stderr so it can never be journaled as an
 ordinary pass.
 
 See ``trees_overlap`` for what "isolated" means here and for the bound it leaves; the short version
@@ -511,7 +511,7 @@ class Report:
     control_proved: bool = False
     errors: List[str] = field(default_factory=list)
     snapshot_dir: Optional[str] = None
-    # Carried so a pass that ran on the parent's own tree cannot be journalled as an ordinary one.
+    # Carried so a pass that ran on the parent's own tree cannot be journaled as an ordinary one.
     # The flag is the only thing separating an authorized in-tree pass from the failure this
     # harness now refuses, so it travels with the verdict rather than being left to the caller.
     in_tree_authorized: bool = False
@@ -606,7 +606,7 @@ def trees_overlap(root: object, parent_root: object) -> bool:
 
     **Input resolution fails closed:** `_resolved_dir` raises `AttributionError` for a path that
     is missing, is not a directory, or cannot be inspected. The `_identity` refinement below is
-    best-effort defence in depth and degrades to the path comparison rather than raising — say no
+    best-effort defense in depth and degrades to the path comparison rather than raising — say no
     more for it than that.
     """
     if parent_root is None:

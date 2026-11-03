@@ -83,7 +83,7 @@ _PHASES = _PAYLOAD_ROOT / "skills" / "dev-loop" / "phases"
 _REFERENCE = _PAYLOAD_ROOT / "skills" / "dev-loop" / "reference"
 
 # Sources are joined on a blank line so each one's first and last paragraphs stay
-# separate from its neighbours': ``MutationNaReasonTests`` reads the corpus
+# separate from its neighbors': ``MutationNaReasonTests`` reads the corpus
 # paragraph-wise by splitting on ``"\n\n"``. A source that does not end in a newline is
 # the case this defends -- under a bare ``"\n"`` join its last paragraph would merge
 # into the next source's first.
@@ -349,7 +349,7 @@ _PAYLOAD_INVENTORY = frozenset({
 # tuple with every non-shipping root file would turn a curated backstop into an enumeration
 # of the unsafe set. ``LICENSE-prose.md`` qualifies on adjacency: ``LICENSE`` *does* ship, the
 # two sit side by side at the root under near-identical names, and the payload's own
-# ``LICENSE`` is deliberately the *unscoped* MIT text (D013) -- so "keep the licences in step"
+# ``LICENSE`` is deliberately the *unscoped* MIT text (D013) -- so "keep the licenses in step"
 # is exactly the helpful edit that would carry a CC-BY grant into the payload, which is no
 # part of the top-level ``posts/`` tree and needs no scope clause at all. ``AI-DISCLOSURE.md`` has no such adjacency and is deliberately absent.
 _PAYLOAD_MUST_NOT_CONTAIN = (
@@ -423,7 +423,7 @@ class PayloadContentsTests(unittest.TestCase):
         self.assertEqual(
             unexpected,
             [],
-            "unrecognised path(s) inside the plugin payload -- these would be copied into "
+            "unrecognized path(s) inside the plugin payload -- these would be copied into "
             "every consumer's cache. Add to _PAYLOAD_INVENTORY only what a consumer needs in "
             "the cache -- and if you cannot establish that, it does not ship. Otherwise move "
             "it out of "
@@ -690,7 +690,7 @@ class PipelineStepOrderTests(unittest.TestCase):
     13 numbered headings, SKILL.md restates all 13 with numbers, and the
     description gives 12 unnumbered labels -- omitting the one internal step
     (load/resume) and saying ``review`` where the engine says ``Code
-    review``. So correspondence is by normalised word overlap: two labels
+    review``. So correspondence is by normalized word overlap: two labels
     correspond when their content words intersect, and each label binds to its
     *best*-overlapping candidate rather than its first (see ``_assign`` and
     ``test_skill_labels_match_their_engine_headings`` for why first-match
@@ -742,7 +742,7 @@ class PipelineStepOrderTests(unittest.TestCase):
     _NUMBERED_H3 = re.compile(r"^(\d+)\. (.+)$")
     _FENCED_BLOCK = re.compile(r"^```.*?^```", re.MULTILINE | re.DOTALL)
     # The chains in SKILL.md and plugin.json. Only the OPENING is matched by
-    # regex; the close is found by counting paren depth, so a parenthesised
+    # regex; the close is found by counting paren depth, so a parenthesized
     # aside inside a chain ("5 human gate (conditional)") does not silently
     # truncate the parse. The openers require an arrow to be present, so an
     # unrelated earlier paren -- prose in SKILL.md, a different aside in the
@@ -751,7 +751,7 @@ class PipelineStepOrderTests(unittest.TestCase):
     _PLUGIN_CHAIN_OPEN = re.compile(r"\((?=[^()]*->[^()]*->)")
 
     # Dropped so that "Load or initialize state" and "load/resume" compare on
-    # content words. Parenthesised asides are stripped before this applies.
+    # content words. Parenthesized asides are stripped before this applies.
     _STOPWORDS = frozenset({"a", "an", "and", "by", "in", "of", "or", "the", "to"})
 
     # SKILL.md's YAML frontmatter `description`. Scoped strictly to the
@@ -921,7 +921,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         """
         self.assertIsNotNone(
             opening,
-            f"{source} no longer contains a parenthesised, arrow-separated "
+            f"{source} no longer contains a parenthesized, arrow-separated "
             "pipeline chain; the restatement moved or was reworded, so this "
             "check can no longer verify it against loop-engine.md",
         )
@@ -974,7 +974,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         cursor = 0
         for label in labels:
             words = self._words(label)
-            # Ties resolve to the earliest heading (-i maximised) by default;
+            # Ties resolve to the earliest heading (-i maximized) by default;
             # `latest_tie` flips that to the LAST equally-good heading. Which is
             # right depends on whether the chain collapses several headings into
             # one label -- see the two callers.
@@ -997,9 +997,9 @@ class PipelineStepOrderTests(unittest.TestCase):
 
     @staticmethod
     def _words(label: str) -> frozenset[str]:
-        """Normalise a step label to its content words.
+        """Normalize a step label to its content words.
 
-        Parenthesised asides go first -- the engine qualifies headings with
+        Parenthesized asides go first -- the engine qualifies headings with
         "(conditional)", "(by route)", "(you, the parent thread)", none of
         which the short restatements carry.
         """
@@ -1262,7 +1262,7 @@ class PipelineStepOrderTests(unittest.TestCase):
         least as well as any other label. The two-sided form is what allows the
         comparison to be non-strict: requiring a strict win would fail an
         order-preserving reword whose overlap merely ties with a word-colliding
-        neighbour ("human gate" -> "approval gate" ties with "Architect gate"
+        neighbor ("human gate" -> "approval gate" ties with "Architect gate"
         on ``gate``), reporting an ordering problem that does not exist. The
         reverse pass is what keeps every genuine swap caught anyway.
         """
@@ -1876,7 +1876,7 @@ class PhaseIndexIdentityTests(unittest.TestCase):
         return lines
 
     def _table_rows(self) -> list[tuple[str, str, str]]:
-        """[(unit, file, read-at)] for every body row. An unrecognised row fails."""
+        """[(unit, file, read-at)] for every body row. An unrecognized row fails."""
         _header, separator, *body = self._table_lines()
         self.assertRegex(separator, r"^\|(\s*:?-+:?\s*\|)+\s*$", "table separator row")
         rows = []
@@ -1885,7 +1885,7 @@ class PhaseIndexIdentityTests(unittest.TestCase):
             self.assertEqual(len(cells), 3, f"phase-index row is not 3 cells: {line!r}")
             unit = self._UNIT_CELL.fullmatch(cells[0])
             self.assertIsNotNone(
-                unit, f"unrecognised Unit cell {cells[0]!r} -- expected one backticked name"
+                unit, f"unrecognized Unit cell {cells[0]!r} -- expected one backticked name"
             )
             rows.append((unit.group(1), cells[1], cells[2]))
         return rows
@@ -1914,7 +1914,7 @@ class PhaseIndexIdentityTests(unittest.TestCase):
                 match = self._FILE_CELL.fullmatch(file_cell)
                 self.assertIsNotNone(
                     match,
-                    f"unrecognised File cell {file_cell!r}: expected "
+                    f"unrecognized File cell {file_cell!r}: expected "
                     "one backticked ${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/{phases,reference}/<name>.md",
                 )
                 self.assertTrue(
@@ -2084,7 +2084,7 @@ class VerdictFirstInvariantTests(unittest.TestCase):
         "**Verdict-first invariant (a verdict before depth).**",
         # Re-anchored when the Relay invariant was inserted between this section and
         # Convergence. The end anchor must be the NEXT thing after this invariant, or
-        # the span silently widens to swallow a neighbour and the containment check
+        # the span silently widens to swallow a neighbor and the containment check
         # can be satisfied by someone else's text.
         "**Relay invariant (a subagent's claim is not evidence",
     )
@@ -2098,7 +2098,7 @@ class VerdictFirstInvariantTests(unittest.TestCase):
 
     def _span(self, text: str, start: str, end: str, label: str) -> str:
         # A duplicated START anchor fails OPEN: `find` takes the first occurrence, so
-        # the span can silently widen to swallow neighbouring regions and then satisfy
+        # the span can silently widen to swallow neighboring regions and then satisfy
         # the containment check on someone else's text.
         # Assert the property the anchor actually relies on rather than bounding the
         # resulting width, which cannot distinguish a legitimately long region from a
@@ -2108,7 +2108,7 @@ class VerdictFirstInvariantTests(unittest.TestCase):
             f"the start anchor for the {label} region occurs {text.count(start)} "
             f"times in the engine corpus (_engine_text()) ({start!r}); it must occur exactly once. More "
             "than one lets the span silently widen past this region and find the "
-            "name in a neighbour's text.",
+            "name in a neighbor's text.",
         )
         i = text.find(start)
         j = text.find(end, i + len(start))
@@ -2225,7 +2225,7 @@ class VerdictFirstInvariantTests(unittest.TestCase):
 class RelayInvariantTests(unittest.TestCase):
     """#115's Relay invariant reaches its orchestrator-facing sites by NAME.
 
-    Modelled on ``VerdictFirstInvariantTests``. One declared deviation: ``_normalize``
+    Modeled on ``VerdictFirstInvariantTests``. One declared deviation: ``_normalize``
     lowercases here and does not there.
 
     Covers the **orchestrator-facing recipes**, which name the invariant and resolve it
@@ -2263,13 +2263,13 @@ class RelayInvariantTests(unittest.TestCase):
     Every pointer site is now a region.
 
     **The stopping rule was pre-committed before the first defeat and has now been
-    HONOURED** (the #122 lesson). It read: defeated twice => deleted, and the property
+    HONORED** (the #122 lesson). It read: defeated twice => deleted, and the property
     recorded here as review's, never rewritten a third time with a longer literal.
 
     What it cost, recorded so nobody re-adds it by reflex:
 
     * **Defeat 1** -- ``_VERBATIM`` ended at the paragraph *after* the prompt, so the
-      span meant "the neighbourhood of the prompt". Moving the clause out of the quoted
+      span meant "the neighborhood of the prompt". Moving the clause out of the quoted
       block into orchestrator prose below it left the clause verbatim and instructional,
       never reaching the agent, with the suite green.
     * **Defeat 2** -- re-anchoring to the prompt's closing *sentence* narrowed the hole
@@ -2337,7 +2337,7 @@ class RelayInvariantTests(unittest.TestCase):
 
     def _span(self, text: str, start: str, end: str, label: str) -> str:
         # A duplicated START anchor fails OPEN: `find` takes the first occurrence, so
-        # the span can widen past this region and satisfy the check on a neighbour's
+        # the span can widen past this region and satisfy the check on a neighbor's
         # text. Assert uniqueness rather than bounding the width.
         self.assertEqual(
             text.count(start), 1,
@@ -2627,18 +2627,14 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
     **The failure this catches is a silent disagreement, not a missing sentence.**
     Revert one site to ``main...HEAD`` while the others still say
     ``<reviewed>..HEAD`` and every word of each still reads correctly -- the
-    orchestrator follows one of them, the gate returns a verdict either way, and
-    nothing downstream can tell which range was actually read. The same holds if the
-    ledger paragraph drops the notation: the anchor stops being written, every
-    resumed round quietly falls back to full, and the only evidence is a saving that
-    stopped happening.
+    orchestrator follows one of them, and the gate returns a verdict either way.
 
     **Both region sets were narrowed after review defeated an earlier draft**, and the
-    reason generalises. The step-8 span originally ran to the end of the scoping
+    reason generalizes. The step-8 span originally ran to the end of the scoping
     passage, which swept in an illustrative ``git diff --numstat`` line carrying the
     same token -- so the normative bullet could go dark with the suite green. The
     ledger check originally asserted the anchor NAME, which that paragraph's rationale
-    carries as well as its spec -- so deleting the entire format spec passed. **An
+    carried as well as its spec -- so deleting the entire format spec passed. **An
     example is not a specification, and a rationale is not one either:** when a region
     must contain a rule, anchor it on text that exists only in the rule.
 
@@ -2675,10 +2671,9 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
     _NOTATION = "<reviewed>..HEAD"
 
     # The ledger's own spelling of a scoped round, pinned SEPARATELY and deliberately
-    # NOT on the anchor name. The anchor name appears in that paragraph's rationale
-    # as well as its spec, so asserting it there passed when the entire format spec --
-    # the only text discharging "the journal line records the range" -- was deleted and
-    # the rationale sentence left behind. This constant occurs only in the spec.
+    # NOT on the anchor name. The anchor name appeared in that paragraph's rationale
+    # as well as its spec, so asserting it there passed when the entire format spec
+    # was deleted and the rationale sentence left behind. This constant occurs only in the spec.
     _LEDGER_SPELLING = "<sha>..<head>"
 
     # Used only by the anchor-contamination meta-test, which needs a token shorter
@@ -2731,7 +2726,7 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
     def _span(self, text: str, start: str, end: str, label: str) -> str:
         # A duplicated START anchor fails OPEN: `find` takes the first occurrence, so
         # the span can widen past this region and satisfy the containment check on a
-        # neighbour's text. Assert uniqueness rather than bounding the width, which
+        # neighbor's text. Assert uniqueness rather than bounding the width, which
         # cannot tell a long region from a runaway one.
         self.assertEqual(
             text.count(start), 1,
@@ -2795,9 +2790,8 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
             f"{missing}.\n\n"
             "A MISMATCH IS SILENT. Step 8 and the Gates recipe both fix what a round "
             "after the first reads; if one reverts to the full `main...HEAD` while "
-            "the other stays scoped, both still read correctly, the gate still "
-            "returns a verdict, and nothing downstream records which range was "
-            "actually read.\n\n"
+            "the other stays scoped, both still read correctly and the gate still "
+            "returns a verdict.\n\n"
             "Each region is checked SEPARATELY: a global count passes when one site "
             "drops the notation and another gains a spare mention. If you changed the "
             "notation deliberately, change it in EVERY region and update _NOTATION. "
@@ -2807,13 +2801,11 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
 
     def test_the_ledger_paragraph_still_specifies_a_scoped_round(self) -> None:
         # Distinct failure from the one above, which is why it is its own test. The
-        # two engine sites can agree perfectly while the ledger paragraph stops
-        # specifying the range -- and then nothing writes the anchor down, every
-        # resumed round takes step 8's full fallback, and the only symptom is a
-        # saving that silently stopped.
+        # ``_REGIONS`` sites can agree perfectly while the ledger paragraph stops
+        # specifying the range.
         #
         # Pinned on the SPEC's spelling, not on the anchor name: an earlier draft
-        # asserted the anchor name, which also appears in the paragraph's rationale,
+        # asserted the anchor name, which also appeared in the paragraph's rationale,
         # so deleting the whole format spec and leaving the rationale passed green.
         body = self._span(
             self._engine(), *self._LEDGER_REGION,
@@ -2824,11 +2816,6 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
             self._normalize(body),
             "the Ledger format's `- Code-review:` paragraph no longer specifies the "
             f"scoped-round spelling {self._LEDGER_SPELLING!r}.\n\n"
-            "That spelling is what discharges 'the round's journal line records the "
-            "commit range it was scoped to', and each element is where that round's "
-            "anchor PERSISTS across /clear -- state lives in the ledger, not in "
-            "context. Without it nothing writes the anchor down, so step 8's full "
-            "fallback becomes the only path a resumed round can take.\n\n"
             "Do NOT satisfy this by mentioning the anchor in the surrounding prose: "
             "this constant is pinned on the format spec precisely because a rationale "
             "sentence once kept the check green while the spec was deleted.",
@@ -3145,7 +3132,7 @@ class FindingClassAgreementTests(unittest.TestCase):
     def test_step_11_points_at_the_escalate_list(self) -> None:
         text = _engine_text()
         # A duplicated start anchor would let the span widen past step 11 and
-        # find the labels in a neighbour's text.
+        # find the labels in a neighbor's text.
         self.assertEqual(
             text.count(self._STEP11_START), 1,
             f"the step 11 start anchor ({self._STEP11_START!r}) occurs "
@@ -3211,7 +3198,7 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
     """
 
     _LABEL = "`guard-efficacy`"
-    _MANDATE = "must carry a lens labelled `guard-efficacy`"
+    _MANDATE = "must carry a lens labeled `guard-efficacy`"
     # The label+separator a SKIP must be written with. Pinned as a literal for the same
     # reason the mandate is: the region check passes on any sibling mention, and this is
     # the spelling that makes a not-due floor auditable rather than silent.
@@ -3488,7 +3475,7 @@ class LensDifferentialAgreementTests(unittest.TestCase):
     Step 8 says a roster may not carry two lenses that would return the same
     findings, and that you state, per lens, one thing it would find that no other
     lens in that roster would. That rule is enforced by **one thing only**: the
-    differentials are journalled with the roster, so the record is the control
+    differentials are journaled with the roster, so the record is the control
     rather than a default. The roster paragraph is what makes that true, by saying
     each entry carries the differential.
 
@@ -3496,7 +3483,7 @@ class LensDifferentialAgreementTests(unittest.TestCase):
     clause does (see ``CurrencyExemptionAgreementTests``). Edit either side and the
     rule silently loses its enforcement: drop ``differential`` from the roster entry
     and the rule still reads correctly while nothing records what it asks for; drop
-    the journalling sentence from the rule and the roster keeps carrying a field no
+    the journaling sentence from the rule and the roster keeps carrying a field no
     rule requires. Neither shows up as a broken sentence.
 
     **This is the shape a prose guard can reach: two passages pinned against each
@@ -3545,7 +3532,7 @@ class LensDifferentialAgreementTests(unittest.TestCase):
         self.assertIn(
             self._TERM, rule,
             "step 8's distinctness rule no longer says the differentials are "
-            "journalled.\n\nThat sentence is the rule's whole enforcement -- without "
+            "journaled.\n\nThat sentence is the rule's whole enforcement -- without "
             "it the rule asks you to state something nothing records, which is a "
             "default rather than a control. If the enforcement moved somewhere else, "
             "re-anchor this test at the new site; do not delete it.")
@@ -3555,7 +3542,7 @@ class LensDifferentialAgreementTests(unittest.TestCase):
         self.assertIn(
             self._TERM, roster,
             "the roster entry no longer carries the differential.\n\nStep 8's "
-            "distinctness rule says the differentials are journalled with the "
+            "distinctness rule says the differentials are journaled with the "
             "roster, so this field is what makes that claim true. Dropping it "
             "leaves the rule asserting a record that does not exist, and the rule "
             "still reads correctly -- which is why this is pinned rather than left "

@@ -70,7 +70,7 @@ finding ID this gate records (below), so two finders sharing one collide.
 **Distinct in question, not only in label — a roster may not carry two lenses that would return the
 same findings.** State, when you spawn the round, one thing each lens would find that no other lens
 in that roster would; **a lens you cannot state one for is the same lens, so run one of them.** Those
-differentials are journalled with the roster (below), and that record is the control rather than a
+differentials are journaled with the roster (below), and that record is the control rather than a
 default. **Doubt subtracts under this rule**, so it needs saying that the
 general default-deny below — the one that sends an unknown *range* to a FULL round — does not reach
 it: that rule governs how much of the change a round reads, this one governs how many lenses read
@@ -124,7 +124,7 @@ answer is available to the other.
 
 **This lens is NOT the acceptance gate's Class B pass, and neither stands in for the other.** They
 ask different questions at different steps against different objects, and conflating them would let
-one be journalled as the other.
+one be journaled as the other.
 
 **A surviving mutant is step 10's and only step 10's.** A read cannot establish one — which is why
 this is a floor on *reading* and not a second mutation pass — and **neither gate's verdict discharges
@@ -263,7 +263,7 @@ whatever still runs after this step — step 9 where its route makes it due, ste
 sweep's edits, at no extra round.
 **Three rules make it safe, and none is optional:**
 1. **Apply only a remedy the finder specified.** A finding whose remedy is not specified precisely
-   enough to apply as given is **BLOCKING** by the same default-deny — the licence not to re-review
+   enough to apply as given is **BLOCKING** by the same default-deny — the license not to re-review
    rests entirely on the reviewer having said what to write, so where they did not, it is absent.
 2. **The sweep may touch only paths that are neither source nor tests, and that no floor above would
    promote.** Every such path is one the currency clause's existing exemption already covers — the
@@ -288,7 +288,7 @@ step's rule, a CI fix, a change the human asked for at the merge gate, a step-10
 is the currency clause's own, which is **sufficient, not exhaustive** (Gates → currency). Naming one
 member here and letting the rest fall through to the unqualified bound would be the enumerable-safe-set
 trap in its fail-open direction: a round re-armed by something unnamed would sweep again. **Whatever
-re-armed it, a round that runs after the sweep does not sweep.** The licence to apply a finding
+re-armed it, a round that runs after the sweep does not sweep.** The license to apply a finding
 unreviewed rests on containment inside *this step's* commit boundary, and that containment is gone
 once the pipeline has advanced past it — a sweep run then would sit downstream of step 9, which is
 exactly the certification the placement above buys.

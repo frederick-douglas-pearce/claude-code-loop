@@ -557,7 +557,7 @@ class ProvenanceGitFixtureTests(unittest.TestCase):
 class ProvenanceFormatTests(unittest.TestCase):
     """The field order in `_PROVENANCE_FORMAT` is a security property.
 
-    Pinned on the constant as well as behaviourally (see
+    Pinned on the constant as well as behaviorally (see
     `test_a_split_forging_subject_cannot_forge_our_ownership`): the free-text
     field must come LAST, so that every fragment a `splitlines()` split produces
     lands in the author slot with an empty subject. Reversed, a crafted subject

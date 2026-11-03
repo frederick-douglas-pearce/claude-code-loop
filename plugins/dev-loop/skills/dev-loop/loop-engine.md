@@ -113,14 +113,14 @@ invocation resumes correctly.
    `hold`/`parked` rows) and the tail of `progress.md`. **Then emit the plan-gate inference record
    if it is owed** (Ledger format → `progress.md` → `- Plan-gate-inferred:`) — that section states
    when it is owed and sends you to the `plan-gate-inferred` unit, which states how it dedupes to
-   once per run and that it is surfaced to the human as well as journalled. **Its dedupe SEARCHES
+   once per run and that it is surfaced to the human as well as journaled. **Its dedupe SEARCHES
    the FULL `progress.md`, not the tail read above** — never a bulk read of it, for the reason
    step 0.1 gives. Do not write the field: it is
    the human's.
-3. **Resume before selecting (see the Resume procedure below).** **Recognise each issue row's
+3. **Resume before selecting (see the Resume procedure below).** **Recognize each issue row's
    Status first, then classify it** — the three Status sets are closed (Ledger format → queue.md),
-   and a Status in none of them is unrecognised: **STOP and ask the human** rather than deciding
-   what it probably meant. Classify a recognised Status thus: a **pipeline** status other than
+   and a Status in none of them is unrecognized: **STOP and ask the human** rather than deciding
+   what it probably meant. Classify a recognized Status thus: a **pipeline** status other than
    `queued`/`routed` is *interrupted*; `hold`/`parked` rest (below); a terminal status takes no
    resume action. Test membership against the vocabulary, never by excluding a list of statuses that
    rest. If any row is *interrupted*, a prior iteration was cut off. Finish it — per the Resume
@@ -533,8 +533,8 @@ ambiguous, and the fail-safe reading has to be written down rather than inferred
 **"The block would not run" is never a reason to proceed.** A namespace tool refused by a hardened
 host, or a blocking plugin that is not installed, produces a non-zero exit — and the tempting
 reading, *can't apply the block, so there is nothing to check*, is the silently-skipped gate in new
-clothing. **Neither outcome is a pass**, but they are journalled differently, so the discriminator
-has to be stated rather than left to judgement. It is **whether any test ran**:
+clothing. **Neither outcome is a pass**, but they are journaled differently, so the discriminator
+has to be stated rather than left to judgment. It is **whether any test ran**:
 - **The wrapper failed before the tier started** — command not found, permission denied, the
   namespace refused, the plugin missing. No test was executed, so there is no verdict about the
   tier: `- gate-error:` and **escalate** (Gate-outcome invariant). The iteration STOPS.
@@ -639,7 +639,7 @@ under this heading does not resolve points into the `reviewing` unit.**
 risk surface, and that judgment stands — this puts a floor beneath it and **never a ceiling**.
 
 **Due when** the round's delta touches at least one path `SOURCE_LAYOUT` does not positively
-declare `docs` or `research`. On a round it is due on, the roster **must carry a lens labelled
+declare `docs` or `research`. On a round it is due on, the roster **must carry a lens labeled
 `guard-efficacy`**. That is one predicate over the round, not a file-by-file test: a single
 unmatched path anywhere in the delta arms it. **If you cannot tell whether a declaration covers a
 path, it does not — the path is unmatched and the lens is due.**
@@ -669,7 +669,7 @@ Two classes:
 beside the acceptance criteria and the standing authoring check. What
 you may do is **raise** it, by any floor the `reviewing` unit defines — **promotion only, never the reverse.**
 
-**Default-deny over every floor:** an unclassified, unrecognised, or ambiguous finding is BLOCKING.
+**Default-deny over every floor:** an unclassified, unrecognized, or ambiguous finding is BLOCKING.
 Never *"it is not on the BLOCKING list, so it is editorial."*
 
 **Implement viable BLOCKING findings** — **except one raising a design question, which stops for
@@ -694,7 +694,7 @@ but an **empty** delta, which reports clean rather than reporting the wrong thin
 empty-delta fallback in the `reviewing` unit). Spawn **one lighter
 checker** — its inputs are fixed under Gates (Fresh-re-check invariant → the code-review bullet) and
 are not restated here — rather than re-running the full finder fan-out; that recipe carries its
-licence to object too. Bounded to 2 rounds (round 1 being the review
+license to object too. Bounded to 2 rounds (round 1 being the review
 itself, that re-check being round 2) — contested findings, and **any BLOCKING finding** the re-check
 returns, whether one round 1 raised or one only the fix introduced, escalate to the human, do not
 loop. **An EDITORIAL finding raised before the sweep has run does not re-arm and does not escalate** —
@@ -768,11 +768,11 @@ recommended, and what was put to the human*, and the gate-decision block is wher
 outcomes already live.
 
 **There is deliberately no dedicated `- Scope-ruling:` *disposition* line, and none is owed when this
-gate is not due** — the Gate-outcome invariant's not-run journalling does not reach this row, because
+gate is not due** — the Gate-outcome invariant's not-run journaling does not reach this row, because
 a not-due spelling would be a claim in its own right and this gate has no path on which such a claim
 holds. Two consequences, and the second is the one that keeps it fail-safe. **The `- gate-error:`
 line above is untouched by this** — it is owed whenever the gate *was* due and no ruling came back,
-and "no disposition line" is never licence to skip it. And **absence of a ruling in a round's block
+and "no disposition line" is never license to skip it. And **absence of a ruling in a round's block
 carries no claim about due-ness**, which is why the trigger is default-deny: *if you cannot tell
 whether this gate was due, it was — consult and stop.*
 
@@ -878,7 +878,7 @@ disclosure exists to surface:
   cannot tell which blocks belong to this iteration, that is unknown: escalate.
 
 Where the row instead **auto-merges** there
-is no human to tell, which is why the same count is journalled either way.
+is no human to tell, which is why the same count is journaled either way.
 **If the human holds the merge (now or in any later invocation),
 WRITE the hold to the row before stopping** — set Status `hold` (record the reason in Notes) so
 it persists across `/clear`; resume (step 0.3), step 1, and this gate all key on Status `hold` and
@@ -972,7 +972,7 @@ a tool result is capped independently of the range — a `Read` is bounded by to
 and a shell slice is bounded by the command-output cap, which truncates **silently** — so a pair of
 slices whose *requested* ranges tile the file can still arrive with the middle missing. **If you
 cannot confirm the file's extent, it is not known, and you page it one turn at a time.** This governs
-*slices of one file you have already sized*; it is **not** a licence to merge independent tool calls
+*slices of one file you have already sized*; it is **not** a license to merge independent tool calls
 in general. (The engine — core and every unit — must still
 be read with `Read` rather than shell slices — see the engine-read protocol in `SKILL.md`.)
 
@@ -1112,7 +1112,7 @@ flips it back to `routed`). While any `hold` **or `parked`** row remains the run
 blocks selecting other queued work (steps 0–1).
 
 **The three sets above are CLOSED, and a Status outside them escalates.** A row whose Status is
-none of them is **unrecognised**: do not classify it, do not resume it, do not select it — **STOP
+none of them is **unrecognized**: do not classify it, do not resume it, do not select it — **STOP
 and ask the human**, naming the row and quoting the literal string you found. Step 0.3 and Resume
 apply this rule; the sets it closes over are the ones enumerated above.
 
@@ -1123,11 +1123,11 @@ apply this rule; the sets it closes over are the ones enumerated above.
 - **Match the whole Status, and accept exactly one compound form: `blocked: too-large`.** Trim
   surrounding whitespace and compare case-insensitively; otherwise match the literal string. **Do
   NOT split on `:` and accept whatever precedes it.** Anything that is
-  neither a bare status nor that one compound form is unrecognised, and unrecognised stops the run.
+  neither a bare status nor that one compound form is unrecognized, and unrecognized stops the run.
 - **Escalate; do not resolve it to a default.** A Status has no over-gating reading, so the fail-safe is the human.
 - **What this buys, and where it stops.** A status this engine has not heard of stops the run
   instead of being silently mapped to a stage. It cannot help an engine that predates the rule, it
-  cannot see a *recognised* token whose meaning shifted underneath it (the same status at a
+  cannot see a *recognized* token whose meaning shifted underneath it (the same status at a
   renumbered pipeline position reads as valid), and it runs on the resume path — the step-0.1
   **parked cheap path** re-derives selectability from `queue.md` without that scan. The upgrade rule
   in `README.md` is what addresses the second of those, and nothing here enforces it.
@@ -1336,7 +1336,7 @@ findings split cleanly and sum to the round's total; they do not. **If you canno
 finding turned on a claim, count it.**
 
 **You are not classifying findings.** The finding class is the finder's and stays the finder's (step
-8); this counts a property of findings already recorded, and it changes no class, no gate behaviour,
+8); this counts a property of findings already recorded, and it changes no class, no gate behavior,
 and nothing any step reads back. Write it inside the result, in the vocabulary already used there —
 `round 2 (a18061d..HEAD) — 3 findings, claims=3` — and add nothing to a round that reported none.
 **Keep it off the `- Budget:` line**.
@@ -1511,7 +1511,7 @@ uses `=`, including where prose would reach for something softer: write
 
 **Forward stability.** The four slots in the chain the journal step prescribes (`subagent-runs`,
 `gate-rounds`, `wall-clock`, `tokens`) are **required**. Every slot beyond those four is
-**optional**, order-insignificant, and a reader ignores names it does not recognise. One constraint on reading them: **an absent slot does not
+**optional**, order-insignificant, and a reader ignores names it does not recognize. One constraint on reading them: **an absent slot does not
 mean zero.** A missing `ac-findings` says nothing about how many findings there were; only
 `ac-findings=0` does — which is why a slot with no producing procedure is omitted rather than zeroed.
 Where a slot's procedure exists but was **not due** on this row, that is its own reading — write
@@ -1523,7 +1523,7 @@ distinguishable: a value, a visible not-due, and an omission that means only "un
 
 **When it is owed — this is the one statement of the trigger, and step 0 invokes it by reference
 rather than restating the condition.** It is owed when the run's `queue.md` header carries **no
-`plan-gate:` field, or a value step 5 does not recognise**.
+`plan-gate:` field, or a value step 5 does not recognize**.
 
 **When it is owed, read the `plan-gate-inferred` unit now** —
 `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/plan-gate-inferred.md`, in full, under the load
@@ -1735,7 +1735,7 @@ plan-informing Architect gate and never reaches the ruling. The one gate whose d
 knowable only from its binding is `HERMETIC_TEST_CMD`; its carve-out below states that unknown
 reads as due.) A gate the route or its trigger condition never made due was never owed a verdict,
 so journal it as not run (`skipped` / `n/a`) with the reason; not-due is not a pass either. An
-explicit `—` **plus a reason** in the config is a deliberate "not applicable", journalled `n/a:
+explicit `—` **plus a reason** in the config is a deliberate "not applicable", journaled `n/a:
 <that reason>` — **not** an absent binding; it is the only way a config marks a gate not-due, and
 it is deliberately visible.
 
@@ -1765,7 +1765,7 @@ attempted and has no command to quote, so write `- gate-error: hermetic — HERM
 <unbound | TODO-valued | no-reason> — no-binding`, naming the state you found; the
 `no-stderr` convention below is the precedent for naming an absent string rather than inventing one.
 
-For a gate that **is** due: it may be journalled **passed** only with the gate's own verdict as
+For a gate that **is** due: it may be journaled **passed** only with the gate's own verdict as
 evidence — it ran and returned clean/met. **No verdict ⇒ not passed**, and there are two ways that
 happens. The discriminator is **what you can see without running it**: your own config and toolset
 are *inspection*, so a binding naming a skill, agent or command absent from them is **static** —
@@ -1824,7 +1824,7 @@ does.** Step 7 sets when commits are pushed, and the head check stops a label (s
 or a merge (step 11) on heads that disagree. **The head check is
 `git fetch && git rev-list --left-right --count @{u}...HEAD`, and it passes only when it succeeds and
 reports both counts as `0`.** Anything else — commits on either side, or an error — is a STOP:
-escalate, journalling an error as
+escalate, journaling an error as
 `- gate-error: remote-currency — <the command that failed> — <first line of the error>` with
 volatile arguments elided (Gate-outcome invariant). **Run nothing that moves either head to make it
 pass**: git answers a rejected push by suggesting a pull, and anything that brings the remote's
@@ -1970,7 +1970,7 @@ your *conclusions*, not the instructions the checker needs).
   record and the merge gate's count read it. **One lighter
   checker**, not a re-run of the full finder fan-out. **Anything the
   fixes broke is in scope**: a defect the fix commits introduced is a finding even though no one
-  listed it. "Lighter" bounds the fan-out, never the checker's licence to object. It carries the
+  listed it. "Lighter" bounds the fan-out, never the checker's license to object. It carries the
   **Verdict-first invariant** (Gates) too: a verdict on every claimed fix first, depth after.
 
   **The declines are not optional, and they are the one input scoping would otherwise delete.** Hand over each declined
@@ -2000,14 +2000,14 @@ two sites that state this bound. The scope is **code review only**: the acceptan
 design-question trigger to key on.
 
 **Reaching a cap is a handoff, never a terminal state.** The cap ends the *round* — not the run, not
-the issue. **STOP and put the decision to the human**, and do not proceed on your own judgement: an
+the issue. **STOP and put the decision to the human**, and do not proceed on your own judgment: an
 unanswered or non-committal reply is not a decision, so journal it and stop. The iteration then
 continues on what they decide, and the decision is frequently **not** "run another round" —
 narrowing the change, splitting it, or diagnosing why the fixes keep landing dirty are all live
 answers, and the cap exists to force that question rather than to end anything. **You never open
 round 3 on your own;** where a human directs further work it exists because they directed it.
 Reaching the cap is also not a verdict: an escalated gate has still returned no pass, so the
-Gate-outcome invariant governs what may be journalled. It does not mark the row `blocked` — that
+Gate-outcome invariant governs what may be journaled. It does not mark the row `blocked` — that
 status is for a row waiting on something outside this gate (an unmet dependency, a
 `blocked: too-large` split, a recurring `gate-error:`), and a dirty round 2 waits on a human answer
 about *this* gate.
@@ -2016,7 +2016,7 @@ Cost: **one extra subagent per dirty class per iteration** — so two
 at the acceptance gate when Class A and Class B are both dirty, since their inputs differ and cannot
 be merged into one checker. Bounded either way, and it cannot grow into an unbounded ladder.
 
-**Journalling it.** A fresh re-check is a distinct subagent invocation, so it increments
+**Journaling it.** A fresh re-check is a distinct subagent invocation, so it increments
 `subagent-runs` (one run = one subagent invocation — progress.md → the Budget line).
 **A journal recording a re-check while `subagent-runs` did not move
 records a re-check that did not happen** — the parent re-read its own work and narrated otherwise.
