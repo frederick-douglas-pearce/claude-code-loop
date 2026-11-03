@@ -94,22 +94,13 @@ establish it, so **Floor 1** below carries it — as does that floor's *"if you 
 BLOCKING"* catch-all. Being a reader, it joins the fan-out under the
 Execution policy's read-only form like any other finder. **It never mutates** — improvising a
 mutation outside the harness is forbidden (AC-verifier → Part 2), and a mutating finder could not
-join a fan-out licensed on being read-only.
+join a fan-out licensed on being read-only. Its **differential** is fixed by construction — writing
+its question as its differential is sufficient, and no round need invent prose for it.
 
-**What its prompt must carry**, over and above every finder's standing inputs at this step (the
-acceptance criteria, the standing authoring check, the Verdict-first invariant, the Relay invariant,
-and the finding-class rule): **(1) Part 2's blockquote, verbatim** (kept in core: Gates →
-Fresh-re-check invariant → *the mechanism blockquote*; no unit to load) — the worked example is
-what makes the distinction operable; **(2) that it must not edit, break or execute anything to decide** — the
-prohibition on improvising a mutation does not otherwise reach a finder; and **(3) that it must say
-plainly when it cannot tell** — the rule making that a dirty answer lives here, where the finder
-cannot see it, so an unprompted finder hedges and the gate reads clean. The Class B limit-case
-re-checker's spawn prompt carries these for the same reasons. **Named by content, never by number**
-— that recipe's items are numbered in another section.
-What does **not** carry over is that recipe's antecedent: it is written for a re-check of an
-already-found gap, and this lens has no prior finding and no fix in hand. Its **differential** is
-fixed by construction — writing its question as its differential is sufficient, and no round need
-invent prose for it.
+**What its prompt must carry** is everything the Class B limit-case recipe's spawn prompt carries,
+over and above every finder's standing inputs at this step — see Gates (Fresh-re-check invariant →
+the Class B limit-case bullet), whose second-caller note also says what does not carry over; do
+not restate it here.
 
 **A lens may find nothing to apply its question to, and returns exactly that — on a delta that
 adds or modifies no guard, that is the ordinary outcome, and it is the lens that says so, not
@@ -124,15 +115,7 @@ answer is available to the other.
 
 **This lens is NOT the acceptance gate's Class B pass, and neither stands in for the other.** They
 ask different questions at different steps against different objects, and conflating them would let
-one be journalled as the other:
-
-| | `guard-efficacy` lens (step 8) | Class B (step 10) |
-|---|---|---|
-| asks | do the assertions pin the mechanism? | does a real mutant survive the suite? |
-| method | **reads** the guard | **runs** the harness against a mutated tree |
-| object | the round's delta | the merge candidate |
-| due when | the floor (core, step 8) says so | Part 2's three questions say so |
-| records to | the round's roster record | `mutation-survivors=`, `- Restore:`, the `- AC-verify:` line |
+one be journalled as the other.
 
 **A surviving mutant is step 10's and only step 10's.** A read cannot establish one — which is why
 this is a floor on *reading* and not a second mutation pass — and **neither gate's verdict discharges
@@ -234,14 +217,6 @@ safe states** — a stale, ambiguous, self-contradictory or unlocatable declarat
 as unknown and promote.** (The fallback list this floor models itself on carries the same two clauses,
 and dropping them here would have inherited its known-answer reading without its catch-all.)
 
-**The two use opposite unmatched-readings on purpose, and unifying them is a regression.**
-`SOURCE_LAYOUT` enumerates the **exceptions** to a `code` default, so an unmentioned path is `code`;
-security routing enumerates the sensitive set **positively**, so an unmentioned path is not sensitive.
-Reading 2b's known-answer rule into 2a lets a path no declaration mentions survive as EDITORIAL,
-which is fail-open on the default route. Reading 2a's rule into 2b sends every finding to BLOCKING in
-any project whose sensitive surface is narrow, which is most of them. **Do not merge these into one
-floor.**
-
 **What the path floors cost, stated here rather than discovered later.** They are deliberately blunt,
 and their reach is the consequence: EDITORIAL survives only on paths a project has **explicitly
 declared inert**. Where source is `code`-route, a stale docstring or a wrong comment *inside source*
@@ -250,17 +225,6 @@ and this mechanism is inert until it declares some. That is the safe direction a
 **Do not describe the saving as larger than it is**, here or in a journal, and **do not state a
 measured round saving anywhere in this engine** — whether the classes save rounds is a corpus
 question this document is not the place to answer.
-
-**A worked negative example — the case where the floors disagree, and why content must win.**
-Take a project whose deliverable is prose an agent executes, and a change confined to a file that
-project's own config **positively declares `docs`**: a contributor guide, say, that ships to no
-consumer but that every agent working the repo reads as instructions. A finder returns *"this sentence
-says the generated artifact is unreachable by any later release — that is false; the generator is
-edited every release."* **Neither path floor fires** — the path is declared `docs`, and it is not
-security-sensitive. **Floor 1 does** — the finding asserts a proposition about the tree and says it is
-false. So the finding is **BLOCKING**. Decided by path alone it would have been swept in without
-re-review, and the round that would have caught what the fix broke would never have run at all. **A
-finding that says "this is false" is never editorial, wherever it lives.**
 
 **Recording an EDITORIAL finding — when its round resolves, under an ID stable across the fan-out.**
 Write each one into that round's gate-decision block (Ledger format → progress.md), beside the

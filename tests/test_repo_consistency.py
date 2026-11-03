@@ -2260,7 +2260,11 @@ class RelayInvariantTests(unittest.TestCase):
     is the shape this repo *endorses*. The enumerable-assertion
     trap ``CLAUDE.md`` documents is about stale COUNTS and growable ALLOW-LISTS
     (``ALLOWED_NON_BINDINGS``, ``_STOPWORDS``), neither of which an anchor table is.
-    Every pointer site is now a region.
+    Every pointer site is now a region. **The guard-efficacy lens prompt list is no
+    longer one** (#290): it became a pointer to the Class B limit-case recipe, which
+    the recipe region below pins, and the lens's own Relay input is every finder's,
+    which the finder fan-out region pins -- the shape ``VerdictFirstInvariantTests``
+    already had. That the lens is a finder is prose (``reviewing.md``), not pinned.
 
     **The stopping rule was pre-committed before the first defeat and has now been
     HONOURED** (the #122 lesson). It read: defeated twice => deleted, and the property
@@ -2313,10 +2317,6 @@ class RelayInvariantTests(unittest.TestCase):
         "step 8 (the finder fan-out)": (
             "**Give every finder the issue's acceptance criteria alongside the diff.**",
             "**Pick finder angles from the diff's risk surface",
-        ),
-        "step 8 (the guard-efficacy lens prompt list)": (
-            "**What its prompt must carry**",
-            "**(1) Part 2's blockquote, verbatim**",
         ),
         "the Class B limit-case checker recipe": (
             "**The spawn prompt must carry five things",
@@ -3171,8 +3171,7 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
 
     Step 8 declares a **floor**: on a round it is due on, the finder roster must carry a
     lens with a fixed label. Several other passages depend on that exact string -- the
-    distinction from the acceptance gate's Class B pass, the journal-slot separation,
-    the roster's naming duty, Tool surface's bound on the fan-out, the
+    journal-slot separation, the roster's naming duty, Tool surface's bound on the fan-out, the
     ``mutation-survivors`` slot's exclusion, Part 2's pointer, and the recipe's
     second-caller note. Rename it at one site and the others go dark while every word
     still reads correctly: a roster then satisfies a floor that mandates something
@@ -3298,9 +3297,8 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
     _REGIONS = {
         "step 8's floor (mandates the lens)": (
             "step 8", "**One lens is a floor, not a choice:", "**Finding classes"),
-        "step 8's Class B distinction table": (
-            "reviewing", "**This lens is NOT the acceptance gate's Class B pass",
-            "**A surviving mutant is step 10's"),
+        # No region for the lens-vs-Class-B distinction since #290: the label lived in
+        # its table, which was deleted, and the prose that remains names no label.
         "step 8's journal-slot separation": (
             "reviewing", "**A surviving mutant is step 10's",
             "**Record the round's lens roster"),
