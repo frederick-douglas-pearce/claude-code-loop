@@ -201,7 +201,7 @@ small — and the check matters anyway.** Step 7 committed and opened the PR, an
 fixes, so on most iterations the change is already committed here; the residue is a fix
 written but not yet committed, or whatever a crash left behind. That is a **narrower** target than
 it once was, not a safer one: a copy missing the one uncommitted fix mutates the code as it stood
-*before* that fix, and reports clean. Do not read the shrinking remainder as licence to skip the
+*before* that fix, and reports clean. Do not read the shrinking remainder as license to skip the
 check. Confirm with `git -C <copy> diff "$BASE" --stat`, using the **same `$BASE`**
 Part 1 resolved: every file the change adds or modifies must appear, and **the added or modified
 test above all**, since that guard is the whole object of the pass. **Pair it with `git -C <copy>
@@ -268,7 +268,7 @@ that was *supposed* to be isolated and was not is the one use it must never have
 **If the isolated copy cannot be used — whichever of the three preconditions failed — the
 fallback is in-tree mutation with BOTH compensating controls —
 explicit-path staging (step 6) **and** the restore journal (below) — and never in-tree mutation
-alone.** But **do not take that rung on your own judgement.** It moves a deliberately-destructive
+alone.** But **do not take that rung on your own judgment.** It moves a deliberately-destructive
 operation onto the tree holding the human's uncommitted work, which is a destructive and
 irreversible action, so the Escalation rubric applies: **escalate to the human and let them choose
 it.** If they decline, the pass was due and produced no verdict, so emit

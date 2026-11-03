@@ -3,13 +3,13 @@
 
 ``posts/README.md`` states the contract in prose; this module is what makes it a rule
 rather than a suggestion. Everything asserted here is **structural** -- a field's
-presence, a value's shape, one string equalling another. Nothing here judges whether a
+presence, a value's shape, one string equaling another. Nothing here judges whether a
 post is any good, whether its prose reads human, or whether its claims are true. Those
 are propositions about content, which ``CLAUDE.md`` puts beyond what a guard can pin,
 and all three are attested by a frontmatter field instead.
 
 **Default-deny on the field set.** The check is an exact-set comparison, not a
-"required fields are present" containment: an unrecognised key fails just as loudly as
+"required fields are present" containment: an unrecognized key fails just as loudly as
 a missing one. A contract that only checks for the fields it knows about silently
 accepts a typo'd key name (``claims_verifed``) while the real field goes missing.
 
@@ -152,7 +152,7 @@ def check_post(filename, text):
         problems.append("missing field: %s" % missing)
     for extra in sorted(present - _REQUIRED_FIELDS):
         problems.append(
-            "unrecognised field: %s -- the field set is closed; a typo'd key "
+            "unrecognized field: %s -- the field set is closed; a typo'd key "
             "reads as one of these" % extra
         )
 
@@ -312,7 +312,7 @@ class CheckerBatteryTests(unittest.TestCase):
         Asserting only that *some* problem was reported is outcome-shaped: a mutation
         that happens to trip an unrelated rule would pass while the rule under test was
         dead. Each case below names the wording it expects, so a rule that stops firing
-        fails here instead of being covered for by a neighbour.
+        fails here instead of being covered for by a neighbor.
         """
         self.assertTrue(problems, "checker reported nothing")
         for needle in needles:
@@ -334,7 +334,7 @@ class CheckerBatteryTests(unittest.TestCase):
         self._assert_complains(
             self._mutated("claims_verified:", "claims_verifed:"),
             "missing field: claims_verified",
-            "unrecognised field: claims_verifed",
+            "unrecognized field: claims_verifed",
         )
 
     def test_empty_value_is_caught(self) -> None:

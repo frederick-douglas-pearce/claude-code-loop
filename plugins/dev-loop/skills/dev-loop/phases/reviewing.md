@@ -263,7 +263,7 @@ whatever still runs after this step — step 9 where its route makes it due, ste
 sweep's edits, at no extra round.
 **Three rules make it safe, and none is optional:**
 1. **Apply only a remedy the finder specified.** A finding whose remedy is not specified precisely
-   enough to apply as given is **BLOCKING** by the same default-deny — the licence not to re-review
+   enough to apply as given is **BLOCKING** by the same default-deny — the license not to re-review
    rests entirely on the reviewer having said what to write, so where they did not, it is absent.
 2. **The sweep may touch only paths that are neither source nor tests, and that no floor above would
    promote.** Every such path is one the currency clause's existing exemption already covers — the
@@ -288,7 +288,7 @@ step's rule, a CI fix, a change the human asked for at the merge gate, a step-10
 is the currency clause's own, which is **sufficient, not exhaustive** (Gates → currency). Naming one
 member here and letting the rest fall through to the unqualified bound would be the enumerable-safe-set
 trap in its fail-open direction: a round re-armed by something unnamed would sweep again. **Whatever
-re-armed it, a round that runs after the sweep does not sweep.** The licence to apply a finding
+re-armed it, a round that runs after the sweep does not sweep.** The license to apply a finding
 unreviewed rests on containment inside *this step's* commit boundary, and that containment is gone
 once the pipeline has advanced past it — a sweep run then would sit downstream of step 9, which is
 exactly the certification the placement above buys.

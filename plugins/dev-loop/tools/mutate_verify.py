@@ -606,7 +606,7 @@ def trees_overlap(root: object, parent_root: object) -> bool:
 
     **Input resolution fails closed:** `_resolved_dir` raises `AttributionError` for a path that
     is missing, is not a directory, or cannot be inspected. The `_identity` refinement below is
-    best-effort defence in depth and degrades to the path comparison rather than raising — say no
+    best-effort defense in depth and degrades to the path comparison rather than raising — say no
     more for it than that.
     """
     if parent_root is None:

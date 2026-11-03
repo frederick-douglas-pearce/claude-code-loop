@@ -5,7 +5,7 @@ Covers ``hooks/guard_append_only.py``: the subset-of-IDs detection (drop,
 append, body-edit, count-preserving swap), the anchored ID regex, suffix-based
 file matching, the config-driven registry (absent -> silent inert; malformed ->
 loud inert; valid -> active, including the ``\\s`` JSON round-trip), the fail
-directions, and event-level behaviour.
+directions, and event-level behavior.
 
 Stdlib ``unittest`` only -- the plugin repo has no pytest / CI. Run with:
 
