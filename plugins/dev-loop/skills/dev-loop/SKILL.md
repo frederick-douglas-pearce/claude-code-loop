@@ -26,24 +26,16 @@ invariants below without them:
    file it lives in, and when to read it — the AC-verifier, for one, lives in the `accepting` unit,
    and Initialization in the `reference` unit.
 
-   **Read it with `Read`, never with `cat`/`sed`/`head`.** The engine is far larger than the Bash
-   output cap, so a shell read returns a **silently truncated fragment** that ends inside the
-   pipeline — before every gate, and before the ledger format, router and Resume — and
-   spills the rest to a file you then have to page back anyway. `Read` reports `totalLines` on its
+   **Read it with `Read`, never with `cat`/`sed`/`head`.** `Read` reports `totalLines` on its
    first result. **Keep that first read on its own turn** — it is what establishes the extent — and
    then **request every remaining page in a single turn**, one `Read` per page issued together,
    each with its own explicit `offset` and `limit` (the next `offset` is the previous `offset` plus
-   its `limit`), rather than one page per turn: slices of a file whose extent you already know
-   cannot depend on each other, so waiting for each in turn buys nothing and costs a full
-   re-submission of your accumulated context every time.
+   its `limit`).
 
    **Then confirm what came back is contiguous from line 1 through `totalLines` — every line
    covered, no interior gap — and re-read anything missing.** Do not assume a page returned the
    `limit` you asked for: a result is capped by **tokens** as well as lines, so a dense file returns
-   short pages and your next `offset` was computed from a boundary the tool did not honour. Paging
-   one at a time made that self-correcting, because each request started from what the last result
-   actually returned; asking for them together gives that up. A hole in the returned set still reads
-   like a complete load, and the slice you are missing may be the one carrying a gate. **If you cannot confirm the file's extent, it is not known, and
+   short pages and your next `offset` was computed from a boundary the tool did not honour. **If you cannot confirm the file's extent, it is not known, and
    you page it one turn at a time.**
 
 Read config for **bindings**, engine for **logic**. Execute the engine's pipeline exactly, for
