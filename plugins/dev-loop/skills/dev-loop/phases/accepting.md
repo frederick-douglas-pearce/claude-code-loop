@@ -237,7 +237,7 @@ check that rather than assume it.** **Run this one FIRST, whatever its number** 
 third only so the two above keep the numbers they already had. Until it holds, neither of the others
 means anything, because they are then answering questions about the parent's own tree, and
 precondition 1 in particular *runs your suite* — on an unattributed copy that means running it in
-your own tree, which is the recorded incident below, verbatim. **The check is two commands, and the second runs in the
+your own tree. **The check is two commands, and the second runs in the
 parent — `git -C` is there so you never need to `cd` into the copy at all:**
 
 ```bash
@@ -247,18 +247,7 @@ git rev-parse --show-toplevel               # the parent's, for comparison
 
 **It is orthogonal to the second precondition, and that is the whole reason it exists.** A copy that
 *is* the parent tree contains the change trivially, so precondition 2 passes on it — cleanly,
-loudly, with a correct-looking diff. The recorded instance is exactly this: a sequence that created
-a worktree, changed into it, and ran the suite, where the **create failed**, the `cd` therefore
-failed, and the suite ran in the **main repository** and printed `98 passed`. Read quickly that is a
-satisfied precondition. Nothing had been tested in any copy.
-
-**So CHECK each step; do not infer it from the sequence's exit status.** A `;`-separated sequence,
-or steps issued separately, keeps going after a failed `cd` and reports the **last** command's
-status — so the suite runs in the parent and the whole thing exits 0. An `&&` chain does *not*
-produce that shape: it short-circuits, so nothing after the failed `cd` runs at all. **`&&` is the
-safer spelling and this engine uses it deliberately elsewhere; the hazard is the unchecked sequence,
-not the operator.** What makes either safe is the same thing: create the copy, check that it exists
-and that its toplevel differs from yours, and only then run anything in it.
+loudly, with a correct-looking diff.
 
 **The verdict, and this is the load-bearing half: a green result from an unattributed copy is
 `unproven`, never clean.** It is not a pass you may journal, exactly as a run with no control is not

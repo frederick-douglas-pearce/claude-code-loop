@@ -3171,8 +3171,7 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
 
     Step 8 declares a **floor**: on a round it is due on, the finder roster must carry a
     lens with a fixed label. Several other passages depend on that exact string -- the
-    distinction from the acceptance gate's Class B pass, the journal-slot separation,
-    the roster's naming duty, Tool surface's bound on the fan-out, the
+    journal-slot separation, the roster's naming duty, Tool surface's bound on the fan-out, the
     ``mutation-survivors`` slot's exclusion, Part 2's pointer, and the recipe's
     second-caller note. Rename it at one site and the others go dark while every word
     still reads correctly: a roster then satisfies a floor that mandates something
@@ -3298,9 +3297,8 @@ class GuardEfficacyLensLabelTests(unittest.TestCase):
     _REGIONS = {
         "step 8's floor (mandates the lens)": (
             "step 8", "**One lens is a floor, not a choice:", "**Finding classes"),
-        "step 8's Class B distinction table": (
-            "reviewing", "**This lens is NOT the acceptance gate's Class B pass",
-            "**A surviving mutant is step 10's"),
+        # No region for the lens-vs-Class-B distinction since #290: the label lived in
+        # its table, which was deleted, and the prose that remains names no label.
         "step 8's journal-slot separation": (
             "reviewing", "**A surviving mutant is step 10's",
             "**Record the round's lens roster"),

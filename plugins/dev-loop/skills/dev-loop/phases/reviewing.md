@@ -124,15 +124,7 @@ answer is available to the other.
 
 **This lens is NOT the acceptance gate's Class B pass, and neither stands in for the other.** They
 ask different questions at different steps against different objects, and conflating them would let
-one be journalled as the other:
-
-| | `guard-efficacy` lens (step 8) | Class B (step 10) |
-|---|---|---|
-| asks | do the assertions pin the mechanism? | does a real mutant survive the suite? |
-| method | **reads** the guard | **runs** the harness against a mutated tree |
-| object | the round's delta | the merge candidate |
-| due when | the floor (core, step 8) says so | Part 2's three questions say so |
-| records to | the round's roster record | `mutation-survivors=`, `- Restore:`, the `- AC-verify:` line |
+one be journalled as the other.
 
 **A surviving mutant is step 10's and only step 10's.** A read cannot establish one — which is why
 this is a floor on *reading* and not a second mutation pass — and **neither gate's verdict discharges
@@ -234,14 +226,6 @@ safe states** — a stale, ambiguous, self-contradictory or unlocatable declarat
 as unknown and promote.** (The fallback list this floor models itself on carries the same two clauses,
 and dropping them here would have inherited its known-answer reading without its catch-all.)
 
-**The two use opposite unmatched-readings on purpose, and unifying them is a regression.**
-`SOURCE_LAYOUT` enumerates the **exceptions** to a `code` default, so an unmentioned path is `code`;
-security routing enumerates the sensitive set **positively**, so an unmentioned path is not sensitive.
-Reading 2b's known-answer rule into 2a lets a path no declaration mentions survive as EDITORIAL,
-which is fail-open on the default route. Reading 2a's rule into 2b sends every finding to BLOCKING in
-any project whose sensitive surface is narrow, which is most of them. **Do not merge these into one
-floor.**
-
 **What the path floors cost, stated here rather than discovered later.** They are deliberately blunt,
 and their reach is the consequence: EDITORIAL survives only on paths a project has **explicitly
 declared inert**. Where source is `code`-route, a stale docstring or a wrong comment *inside source*
@@ -250,17 +234,6 @@ and this mechanism is inert until it declares some. That is the safe direction a
 **Do not describe the saving as larger than it is**, here or in a journal, and **do not state a
 measured round saving anywhere in this engine** — whether the classes save rounds is a corpus
 question this document is not the place to answer.
-
-**A worked negative example — the case where the floors disagree, and why content must win.**
-Take a project whose deliverable is prose an agent executes, and a change confined to a file that
-project's own config **positively declares `docs`**: a contributor guide, say, that ships to no
-consumer but that every agent working the repo reads as instructions. A finder returns *"this sentence
-says the generated artifact is unreachable by any later release — that is false; the generator is
-edited every release."* **Neither path floor fires** — the path is declared `docs`, and it is not
-security-sensitive. **Floor 1 does** — the finding asserts a proposition about the tree and says it is
-false. So the finding is **BLOCKING**. Decided by path alone it would have been swept in without
-re-review, and the round that would have caught what the fix broke would never have run at all. **A
-finding that says "this is false" is never editorial, wherever it lives.**
 
 **Recording an EDITORIAL finding — when its round resolves, under an ID stable across the fan-out.**
 Write each one into that round's gate-decision block (Ledger format → progress.md), beside the

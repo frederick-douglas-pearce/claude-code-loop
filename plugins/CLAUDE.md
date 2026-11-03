@@ -177,3 +177,37 @@ even though nothing will fail loudly:
   appears in step 9's span and in both of step 11's. Keep the rule that **nothing moves either head
   to make the check pass**: git answers a rejected push by suggesting `git pull`, which would carry
   ungated commits through the check that exists to keep them out.
+- **Moved out of the payload by #290 (cost epic #271): history behind two units' rules.** Kept
+  here because it explains a rule a later editor might "simplify". From `phases/reviewing.md`,
+  step 8's finding-class **floors** (Floor 1 is the content floor, 2a the `SOURCE_LAYOUT` path
+  floor, 2b the sensitive-surface path floor; "the two" below are 2a and 2b):
+
+  **The two use opposite unmatched-readings on purpose, and unifying them is a regression.**
+  `SOURCE_LAYOUT` enumerates the **exceptions** to a `code` default, so an unmentioned path is `code`;
+  security routing enumerates the sensitive set **positively**, so an unmentioned path is not sensitive.
+  Reading 2b's known-answer rule into 2a lets a path no declaration mentions survive as EDITORIAL,
+  which is fail-open on the default route. Reading 2a's rule into 2b sends every finding to BLOCKING in
+  any project whose sensitive surface is narrow, which is most of them. **Do not merge these into one
+  floor.**
+
+  **A worked negative example — the case where the floors disagree, and why content must win.**
+  Take a project whose deliverable is prose an agent executes, and a change confined to a file that
+  project's own config **positively declares `docs`**: a contributor guide, say, that ships to no
+  consumer but that every agent working the repo reads as instructions. A finder returns *"this sentence
+  says the generated artifact is unreachable by any later release — that is false; the generator is
+  edited every release."* **Neither path floor fires** — the path is declared `docs`, and it is not
+  security-sensitive. **Floor 1 does** — the finding asserts a proposition about the tree and says it is
+  false. So the finding is **BLOCKING**. Decided by path alone it would have been swept in without
+  re-review, and the round that would have caught what the fix broke would never have run at all. **A
+  finding that says "this is false" is never editorial, wherever it lives.**
+
+  From `phases/accepting.md`, AC-verifier → Part 2, the attribution precondition ("its third
+  precondition" — the copy must be a different tree from the parent): the recorded instance
+  behind it, verbatim. In the unit it directly followed this sentence, which stays there: "A copy
+  that *is* the parent tree contains the change trivially, so precondition 2 passes on it —
+  cleanly, loudly, with a correct-looking diff."
+
+  The recorded instance is exactly this: a sequence that created
+  a worktree, changed into it, and ran the suite, where the **create failed**, the `cd` therefore
+  failed, and the suite ran in the **main repository** and printed `98 passed`. Read quickly that is a
+  satisfied precondition. Nothing had been tested in any copy.
