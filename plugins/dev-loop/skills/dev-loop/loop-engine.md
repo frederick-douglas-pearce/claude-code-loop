@@ -1122,17 +1122,9 @@ apply this rule; the sets it closes over are the ones enumerated above.
   `gate-error:` were a Status token would look for something the engine never emits.
 - **Match the whole Status, and accept exactly one compound form: `blocked: too-large`.** Trim
   surrounding whitespace and compare case-insensitively; otherwise match the literal string. **Do
-  NOT split on `:` and accept whatever precedes it.** `blocked: too-large` is how this engine has
-  extended a status once already, so `<known token>: <qualifier>` is precisely the shape a *future*
-  status will arrive in — and a rule that accepts the base token would read `blocked:
-  needs-config-repair` as plain `blocked` — terminal, and eligible for step 1 to re-select once it
-  reads the dependency test as satisfied. That is this gate's own failure mode reproduced inside
-  the recognizer, and it fails **open**. Anything that is
+  NOT split on `:` and accept whatever precedes it.** Anything that is
   neither a bare status nor that one compound form is unrecognised, and unrecognised stops the run.
-- **Escalate; do not resolve it to a default.** `plan-gate:` can read an unrecognised value as
-  `always` because its values are ordered and one of them is stricter. A Status has no such
-  ordering — there is no over-gating reading of "unknown stage" — so the fail-safe here is the
-  human, not a fallback.
+- **Escalate; do not resolve it to a default.** A Status has no over-gating reading, so the fail-safe is the human.
 - **What this buys, and where it stops.** A status this engine has not heard of stops the run
   instead of being silently mapped to a stage. It cannot help an engine that predates the rule, it
   cannot see a *recognised* token whose meaning shifted underneath it (the same status at a
@@ -1192,10 +1184,7 @@ Initialization writes it per mode — `calibration` ⇒ `always`, a project with
 ⇒ `conditional`. **After that the two fields are independent, and this is load-bearing rather than
 incidental.** Changing `mode:` never re-derives `plan-gate:`, in either direction: flipping to
 `escalation-only` does not loosen the plan gate, and flipping back to `calibration` does not
-re-tighten it. Were they coupled, a project that found a mandatory plan stop too heavy could only
-escape it by loosening its **merge** gate — trading away the protection it actually wanted to keep
-in order to adjust the one it did not. Consumers at different trust levels need to set these
-independently, which is the whole reason this is a field rather than a property of `mode:`.
+re-tighten it.
 
 **That independence holds *within* a run.** A **new** run's Initialization re-derives the default
 from the mode branch, so a `plan-gate:` value a human sets by hand is **not yet carried across runs**
@@ -1247,12 +1236,6 @@ two.** Step 5's `- Plan-gate:` line is written *at step 5*, which is **before** 
 between the two. So a single iteration commonly spans several appends; that is the intended shape,
 not drift.
 
-**Why the open record is a separate record and not a heading on the close record:** the two are
-written at different times *by different invocations of this skill*, and the whole point of the first
-is that it survives the loss of the second. A template that only shows the close record demands
-outcomes an iteration does not have yet, which pressures the orchestrator to defer the entire
-journal to step 12 — the failure this split exists to remove.
-
 **The two records' shapes are in the `record-templates` unit** —
 `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/record-templates.md`, read at step 7 and step 12
 (phase index).
@@ -1288,10 +1271,7 @@ issue stops, so the line reads as an approval by the human and
 **`plan auto-approved` is never legitimate for this gate** — name the posture. Under
 `plan-gate: conditional` an unstopped issue reads `plan auto-approved (<why>)`, the `<why>` being the judgment call that let it pass (e.g. route and low ambiguity).
 
-The **`- Plan-gate:`** line records the always-on stop's frozen-vs-live diff (step 5), which is
-otherwise invisible for the same reason: it resolves before implementation, so a run that never took
-the diff and a run that took it and found nothing leave an identical ledger. It is also the only
-evidence this condition's falsifier can ever be evaluated against. **This is the one enumeration of
+The **`- Plan-gate:`** line records the always-on stop's frozen-vs-live diff (step 5). **This is the one enumeration of
 the spellings; step 5 points here rather than restating them.** Write it **at step 5, when the gate
 resolves** — not at step 12. Every iteration **that reaches step 5** writes exactly one; an
 iteration that re-enters *past* step 5 (Resume — a `plan-approved` row goes straight to implement)
@@ -1311,8 +1291,7 @@ enumerates a writes-none path.
   ran at all**: not at step 4, and not at step 5. If any *plan-informing* pass ran, by any actor,
   this spelling is
   unavailable — step 8's scope ruling is not one, and a row carrying only that ruling still spells
-  it this way. The qualifier is load-bearing: these four spellings are a closed set and exactly one
-  must be written, so an unqualified reading leaves such a row with no legal spelling at all.
+  it this way.
 
 **An absent or `TODO`-valued binding is never an `n/a: no offline/hermetic tier declared`** — that
 reason quotes a config that did not give one. On a row the trigger fires on it is unknown, unknown
@@ -1328,14 +1307,9 @@ for a reader, not a store a later step parses**: the orchestrator holds the anch
 long as it can use it, and a round that no longer holds one runs full (step 8), so nothing reads
 this line back, and the only grammar imposed on it is the shapes below plus the `claims=` count.
 
-**Write each element when its round resolves — not at step 12**, for the reason the `- Plan-gate:`
-line is written at step 5: an append-only journal records what happened when it happened, and a
-record reconstructed at the end of an iteration is written by whoever survived it, from memory,
-about rounds that may have run before a `/clear`. The iteration appends the element in the
+**Write each element when its round resolves — not at step 12**. The iteration appends the element in the
 gate-decision block where that round resolves (`progress.md` licenses one block per gate decision),
-and the close record carries the accumulated line. Each element takes one of three shapes —
-enumerated for the same reason `- Hermetic:` and `- Restore:` enumerate theirs, that a shape whose
-only legal rendering asserts a scoped round is a template that pressures you to record one:
+and the close record carries the accumulated line. Each element takes one of three shapes:
 
 - **`round <n> (main...<sha>) — <result>`** — an **unscoped** round: round 1 always, and any later
   round that fell back to full. Where it is a *fallback*, **name the reason** — `round 2
@@ -1365,32 +1339,17 @@ finding turned on a claim, count it.**
 8); this counts a property of findings already recorded, and it changes no class, no gate behaviour,
 and nothing any step reads back. Write it inside the result, in the vocabulary already used there —
 `round 2 (a18061d..HEAD) — 3 findings, claims=3` — and add nothing to a round that reported none.
-**Keep it off the `- Budget:` line**, which is open to new `name=value` slots and would otherwise be
-the obvious home: this belongs to a round, and that line has no per-round structure to hang it on.
+**Keep it off the `- Budget:` line**.
 
-**Why a count and not a note.** "Round 4 found 3 findings" cannot distinguish a gate catching defects
-in the code from a gate spending a round on prose about code that was already right, and those call
-for different responses. A run that records it can answer from **its own** corpus whether a cheaper
-pass over the claims a fix commit writes would pay for itself; a run that does not has to argue that
-question from recollection. **Record it even when the answer is boring** — `claims=0` on a round that
-found things is exactly the observation that would settle the question against the idea, and a slot
-written only when it looks interesting measures nothing.
+**Record it even when the answer is boring** — `claims=0` on a round that found things is a real observation, and a slot written only when it looks interesting measures nothing.
 
 The **`- Editorial:`** line records step 8's editorial sweep — what was applied **without
-re-review**, and to what. It exists for the reason `- Hermetic:` and `- Restore:` do: everything the
-sweep's containment rules do is *prevention*, and prevention that fails, fails silently. Without this
-line an iteration that swept ten findings and one that raised none are identical in the ledger, and
-the merge gate's disclosure (step 11) would have nothing behind it to read. **Write it at step 8, when
-the sweep resolves — not at step 12**, for the reason the `- Plan-gate:` line fixes its own
-write-time: the sweep resolves several steps before the journal, and the merge gate reads this line
-back rather than recalling the number. It is **owed by an iteration whose step 8 closes**; an
+re-review**, and to what. **Write it at step 8, when
+the sweep resolves — not at step 12**. It is **owed by an iteration whose step 8 closes**; an
 iteration that escalates at step 8 and stops runs no sweep and writes none, exactly as `- Hermetic:`
 enumerates a writes-none path. **The close record carries the line too**, as it carries `- Hermetic:`
 and `- Restore:` — written at step 8 when the sweep resolves, and repeated in the close record so one
-block holds the iteration's whole outcome. It takes the same **enumerated** forms, for the
-same reason — a single
-fixed shape whose only legal rendering asserts a clean sweep is a template that pressures you to
-assert one:
+block holds the iteration's whole outcome. Enumerated forms:
 
 - **`- Editorial: <count> applied without re-review — <id> (<path>): <what was applied>; …`** — the
   sweep ran. Each `<id>` is the `r<round>.<lens>.<k>` the finding was recorded under (step 8), so a
@@ -1400,10 +1359,7 @@ assert one:
   above>`** — nothing to sweep. **These reasons are sufficient, not exhaustive**: name the route that
   actually promoted the findings rather than forcing it into the nearest reason listed here.
   **`0`, not `none`**,
-  so this line and the merge gate's count are the same statement; and **which** of those it was
-  matters, because "the finders raised none" and "the floors promoted every one" are different facts
-  about the change — in a project whose declared-inert set is small the second is the ordinary
-  outcome.
+  and name **which** of those it was — "the finders raised none" and "the floors promoted every one" are different facts about the change.
 - **`- Editorial: finding — <the sweep edit that would have landed outside the swept set>`** — the
   sweep's containment rule 2 fired, so a finding was misclassified. This is a **BLOCKING** finding:
   escalate, do not apply, and do not merge while it stands.
@@ -1446,9 +1402,7 @@ only legal rendering asserts success is a template that pressures you to assert 
 
 Two ordering rules, because both are easy to get backwards:
 - **Remove the agent's copy before asserting the parent is clean.** Where the host places an isolated
-  tree inside the repository the parent is *not* clean while that copy is there, so the assertion
-  made in the wrong order either certifies clean against a tree still holding the agent's files or
-  reports dirty for a reason that is not a leak. Clean up first (Tool surface), then look.
+  tree inside the repository the parent is *not* clean while that copy is there. Clean up first (Tool surface), then look.
 - **`git status` is not sufficient on its own.** A repo that gitignores the isolation path reports
   clean with a copy still present, so pair it with `git worktree list` (Tool surface).
 
@@ -1463,20 +1417,13 @@ claim this section makes on its behalf.
 
 The `- Budget:` line is the per-iteration cost record: a `·`-separated list of `name=value` **slots**.
 
-It carries three different kinds of thing, and mixing them up is the standing confusion — **a count
-of how many times something ran** (`gate-rounds`), **a count of what was found** (the result-class
-slots), and **a free-text note** annotating either. Only `gate-rounds` nests; a gate's *rounds* live
-inside it, while a gate's *results* are their own top-level slots, because `post-gate-survivors`
-belongs to no round at all.
+Only `gate-rounds` nests; a gate's *results* are their own top-level slots.
 
 Fields:
 - **`subagent-runs`** — the proxy cost signal the orchestrator can count for free. **One run = one
   subagent invocation**, so N parallel finders count as N, not as the one gate round they serve
   (the `subagent-cap` check above reads this number, so an under-count silently loosens
-  the cap; it reads the leading integer and ignores any parenthetical). Its blind
-  spot: parent-thread token burn (a long implement step spawns no subagent yet can be the largest
-  consumer) is invisible to run-count — which is precisely what the deferred `tokens` field
-  eventually fixes.
+  the cap; it reads the leading integer and ignores any parenthetical).
 - **`gate-rounds`** — architect / code-review / ac-verify round counts (feeds review-thrash
   detection downstream). **A different axis from `subagent-runs`, and neither implies the other:** a
   round can consume zero subagents (a review done in the parent thread — never a capped gate's
@@ -1486,9 +1433,7 @@ Fields:
 - **`justification=<short reason>`** — why the spend was warranted. Counts alone cannot separate a
   justified high-stakes iteration from review thrash, which is exactly the distinction the human
   needs when deciding whether to loosen a gate. **Expected whenever any `gate-rounds` value exceeds
-  1** — the single-pass baseline — and *permitted* on any line. The trigger is deliberately the one
-  thing decidable from the same line: it is the engine's own shape, not a per-project number, so it
-  needs no binding and cannot drift upward as a run gets more expensive.
+  1** — the single-pass baseline — and *permitted* on any line.
 - **`ac-findings` / `post-gate-survivors`** — what the acceptance gate **found** in Class A, and
   what **escaped** it, recorded **separately** (Class B is its own slot, `mutation-survivors`,
   below — the gate's two *result classes* are `ac-findings` and `mutation-survivors`; this pairing
@@ -1499,11 +1444,7 @@ Fields:
   only at the merge gate, since code review and security now run *before* the acceptance gate; the
   window running from the gate to this journal entry. The larger channel is a later iteration.
   A survivor found in a *later* iteration is recorded on that iteration's line, naming the
-  one it escaped; this journal is append-only and is never rewritten to add it. Collapsed into one
-  number these cancel out — a gate that found nothing and a gate that missed something read
-  identically, and two stories measuring opposite signals off this line would each think they were
-  confirmed. They are top-level slots, not nested in `gate-rounds`, because they count **outcomes
-  rather than runs**.
+  one it escaped; this journal is append-only and is never rewritten to add it.
 - **`mutation-survivors`** — **Class B**: a guard the change added that does not guard — a test
   that stayed green when the code it protects was broken, or, where no test was added at all, that
   absence (AC-verifier → Part 2). It takes **three distinct readings, and the difference between them
@@ -1532,10 +1473,6 @@ Fields:
       parent at all — where the human then declines the
       in-tree fallback, is **also** a `- gate-error:` (Part 2's fallback ladder) — the pass was due
       and produced no verdict, which is not the same as never being due.
-
-    Writing `n/a` for any of them would erase a finding or excuse a binding that did not work, which
-    is the one reading this slot must never permit. The `n/a: <reason>` spelling follows the
-    Gate-outcome invariant's not-run vocabulary, and it is deliberately visible.
   - **omitted** — **unknown**. This is what every line written before this slot existed
     carries, and those lines keep exactly that meaning. An omission must **never** be read
     retroactively as "the pass was scoped out": the corpus is append-only and is never rewritten, so
@@ -1552,9 +1489,7 @@ Fields:
   a cap input** (an iteration that waited overnight for approval is not "expensive").
 - **`tokens=deferred`** — a reserved, named slot. Per-iteration token/cost is computed **post-hoc
   from the loop's own JSONL by an out-of-band analyzer** (the loop JSONL is a first-class corpus),
-  not inside the skill (the orchestrator can't cleanly slice its live session mid-turn). A future
-  SDK driver backfills it via usage callbacks — keeping the slot named now makes that a backfill,
-  not a format change.
+  not inside the skill (the orchestrator can't cleanly slice its live session mid-turn).
 
 **Notes on any slot.** A short free-text parenthetical may follow **any** slot's value —
 `subagent-runs=4 (Explore map + architect + 2 finders)`,
@@ -1575,13 +1510,8 @@ uses `=`, including where prose would reach for something softer: write
 `wall-clock=≈2h`, never `wall-clock≈2h`, or the slot parses as a nameless fragment and is lost.
 
 **Forward stability.** The four slots in the chain the journal step prescribes (`subagent-runs`,
-`gate-rounds`, `wall-clock`, `tokens`) are **required**: `subagent-runs` because the `subagent-cap`
-check reads it and an absent one leaves that check undefined and silently inert, and the other three
-because every line in the existing corpus carries them — a reader comparing iterations needs the
-same spine on each. Every slot beyond those four is
-**optional**, order-insignificant, and a reader ignores names it does not recognise — the
-`tokens=deferred` precedent generalised from one reserved name to a rule, so a later release adds
-slots without invalidating existing lines. One constraint on reading them: **an absent slot does not
+`gate-rounds`, `wall-clock`, `tokens`) are **required**. Every slot beyond those four is
+**optional**, order-insignificant, and a reader ignores names it does not recognise. One constraint on reading them: **an absent slot does not
 mean zero.** A missing `ac-findings` says nothing about how many findings there were; only
 `ac-findings=0` does — which is why a slot with no producing procedure is omitted rather than zeroed.
 Where a slot's procedure exists but was **not due** on this row, that is its own reading — write
@@ -1687,15 +1617,12 @@ has not left it.
    surfaces in use across real consumers are an **issue comment**, an **issue-body marker** (a line
    in the body itself, e.g. "Architect review complete — approved <date>"), and a **decision-log
    entry** in the repo. A project may use more than one, and some use no comments at all — so
-   "no comment found" is **not** evidence the architect never ran, and treating it as such
-   re-invokes a gate that already ran and, worse, invites the back-dated freeze that (2) below bars.
+   "no comment found" is **not** evidence the architect never ran.
    If you cannot establish which surface this project uses, that is a question for the human, not a
    reason to re-invoke.
    **But do not treat the record as the whole of the step:** if a record exists and `## Approach`
    does not yet reflect its `blocking`/`important` outcome, the crash landed between the two, so
-   **apply the outcome now** (step 4) before reaching step 5. Skipping the re-invoke while leaving
-   the outcome unapplied strands it — the diff comes back empty and the always-on stop passes
-   silently, on the one path this guard was added to harden;
+   **apply the outcome now** (step 4) before reaching step 5;
 2. it freezes `## Approach as reviewed (frozen before the design gate) — write-once, do not edit`
    into `issue-<N>.plan.md`
    **before** invoking the agent — **if that block exists, leave it exactly as it is; and if the
@@ -1731,11 +1658,7 @@ protocol) **and hand off to AC-verifier → Part 2, *Interrupted-pass
 recovery*, which owns the diagnosis, the repair, and when to escalate — do not re-derive it here.**
 **If the unit is not loaded, or you cannot tell whether either is present, STOP and escalate to the
 human: touch nothing in the tree, and never `git restore`.**
-Two things are worth knowing before you hand off, because they decide whether you hand off at all:
-the trigger is the *artifacts*, never the status (a crash can leave a status stale, so keying this
-check on one would let a mislabeled row carry a live mutation straight past it), and `git restore`
-is exactly what must not repair a mutation (it restores from the index, which does not know about
-the surrounding work in progress). Once Part 2's recovery completes **without escalating**, remove
+Once Part 2's recovery completes **without escalating**, remove
 any leftover copy per Part 2 and Tool surface's **collect-then-remove** duty — the copy's contents
 are sometimes the deliverable, so that duty governs and this paragraph does not override it.
 
@@ -1744,10 +1667,7 @@ sets the default.**
 - **On an `in-review` or `in-acceptance` resume: do not keep a production-code delta you cannot
   attribute.** Attributable means you can place it in something specific — a fix this gate's own
   round wrote, or a review finding it answers — and **not** merely that it looks plausible.
-  **Plausibility is what a mutation counterfeits:** it is built to be a small, sane-looking edit, so
-  "it matches the plan" is the one test it is designed to pass, which is why the plan is not an
-  attribution source on these rows. These rows are past implement, so no stage is still legitimately
-  producing *unexplained* work in the tree. Where the change **is** this gate's own uncommitted fix,
+  The plan is not an attribution source on these rows — a mutation is built to look like a plan step — and no stage past implement legitimately produces unexplained work. Where the change **is** this gate's own uncommitted fix,
   that is attributable and **kept** — step 10 mandates a window in which such a fix is written and
   not yet committed, so expect to meet it here.
 - **Where you cannot attribute it, STOP and ask the human — do not `git restore` it.** The same
@@ -2024,15 +1944,7 @@ your *conclusions*, not the instructions the checker needs).
   prior finding and no fix in hand. What follows is written for the acceptance gate.)
 
   **Why a read is a legitimate check here, when Part 2 says only mutation detects a survivor.**
-  Two reasons, each from this engine's own text rather than from the cost of mutating: the defect
-  is, in the quote's own words, *a property of the assertion* — so it is visible **in the
-  assertion**, to a reader who knows which behavior is at risk, and this checker is handed that
-  behavior (above); and the fix side already applies this yardstick without mutating anything
-  (`Strengthen the guard (assert the *mechanism*, per the mechanism blockquote, not the outcome)`), so
-  reading whether the mechanism *is* asserted is the symmetric operation. "Cannot tell ⇒ dirty"
-  keeps it fail-safe where an instruction to be careful never is. None of this substitutes for the
-  apparatus — a *surviving mutant* still requires it, and no argument here is offered against
-  "only mutation detects it."
+  The defect is *a property of the assertion*, so it is visible in the assertion to a reader handed the at-risk behavior; "cannot tell ⇒ dirty" keeps it fail-safe. A *surviving mutant* still requires the apparatus.
   (**A re-check of a *surviving mutant* re-runs the harness on the same spec entry, with its control
   retained** — a lone entry declares no control, so the harness returns *unproven* on exactly the
   outcome the re-check is looking for, a kill (a survivor is self-proving and still reports as one)
@@ -2061,19 +1973,13 @@ your *conclusions*, not the instructions the checker needs).
   listed it. "Lighter" bounds the fan-out, never the checker's licence to object. It carries the
   **Verdict-first invariant** (Gates) too: a verdict on every claimed fix first, depth after.
 
-  **The declines are not optional, and they are the one input scoping would otherwise delete.** A
-  finding round 1 raised and the orchestrator **declined** leaves nothing in the delta — no fix, no
-  diff, nothing for a scoped checker to see — so without the declines list a decline would pass
-  unexamined by any fresh instance, which the unscoped recipe never allowed. Hand over each declined
+  **The declines are not optional, and they are the one input scoping would otherwise delete.** Hand over each declined
   finding **with the one-line rationale given for it** (step 8), and say plainly that the checker may
   **contest a decline**: that is a finding like any other, and it counts against this round.
 
   **Scoping bounds what must be re-certified, never what the checker may read — and that is an
   instruction to give it, not diligence to hope for.** Tell it to **read the definition of any
-  symbol the delta references but does not itself contain.** A fix whose correctness turns on
-  earlier-read code unchanged since `<reviewed>` is the other thing the delta genuinely does not
-  show; step 8's fallback conditions need not catch it — such a fix need not touch a sensitive
-  path, and nothing else in that list keys on it.
+  symbol the delta references but does not itself contain.**
 
 **The bound — one fresh re-check, then escalate; there is no ladder.** The fresh re-check **is**
 round 2 of the 2-round cap each gate already carries, never a round on top of it. If round 2 comes
@@ -2125,15 +2031,6 @@ produce a verdict. **That agent's prompt instructs it to produce a complete verd
 criterion first, then deepen with whatever budget remains — never letting deepening prevent it from
 returning a verdict.**
 
-**Why this is a rule rather than advice about prompting.** Under the Gate-outcome invariant a pass
-that returns no verdict is **not passed**. So an agent that spends its budget on depth and stops
-before answering has bought nothing **as a verdict**: the gate is still owed one, so nothing that
-pass produced can be journalled as a result (whatever it wrote is still *collected* — Tool surface —
-but evidence is not a verdict), and the re-spawn pays full price a second time. A shallow verdict is
-useful; **no verdict is worthless and costs the same.** The failure is also invisible from inside the
-agent — depth feels like progress right up to the point the budget ends — which is why this belongs
-in the prompt and not in your judgement about how deep to let it go.
-
 **Two kinds of site carry it, and treating them alike defeats it.**
 - **Text handed to the agent verbatim** — the AC-verifier's `Prompt:` block (Part 1) above all.
   That text reaches an agent which reads neither this section nor anything else in this file, so a
@@ -2164,21 +2061,11 @@ yourself** —
 or you relay it **explicitly marked unverified**. What you may never do is pass it on unmarked,
 because the reader cannot tell the two apart and will spend a decision on it.
 
-**Why this is a rule and not a caution about reading carefully.** A subagent's authority is bounded
-by what it was given, and nothing in its output records that boundary. An agent handed a brief and
-asked about a config it was never shown will answer about the config — accurately as to the brief,
-and speculatively as to the file — and the speculation reads exactly like the finding. The failure
-is therefore invisible from where you sit, which is why it belongs in the prompt and in this
-default rather than in your judgement about which parts of a return look solid.
-
 **What this does NOT govern, because the distinction is easy to lose.** It is about **claims of fact
 about artifacts** — what an agent says is *so*. It is not about a gate's own **judgments** that this
 engine deliberately sources from outside you: a finder's finding class is emitted by the finder and
 you may only raise it, never assign it (step 8), and a lens's outcome is recorded as the lens
-reported it (step 8's roster). Those rules distrust **you**, not the agent, and reading them as
-instances of this one inverts them — and would make the class rule unsatisfiable, since a judgment is
-never "reproduced" and step 8 defines no unverified-class state. The nearest relative of those two is
-the **Fresh-re-check invariant** (above), not this one.
+reported it (step 8's roster). Those rules distrust **you**, not the agent.
 
 **Two kinds of site carry it, exactly as Verdict-first distinguishes them:**
 - **Text handed to the agent verbatim** — the AC-verifier's `Prompt:` block (Part 1) above all.
@@ -2188,11 +2075,6 @@ the **Fresh-re-check invariant** (above), not this one.
   the material given to you — or INFERRED, for anything about an artifact you were not given.*
 - **Orchestrator-facing recipes** — the lists telling *you* what a spawn prompt must carry. Those
   **must** name the invariant; you resolve it when you compose the prompt.
-
-**Incomplete coverage fails safe, and that is the point of the default rather than an excuse for
-it.** A prompt that never asks the question yields output you must treat as unverified — you
-over-escalate, and check something that was in fact reproduced. The opposite default would let a
-prompt nobody updated silently promote speculation to fact.
 
 **Convergence & the resting states.** When nothing is selectable, step 1 classifies the run
 into one of four outcomes (tested in order: hold → parked → complete → pending) and appends a
