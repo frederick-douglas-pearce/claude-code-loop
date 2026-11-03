@@ -2260,11 +2260,7 @@ class RelayInvariantTests(unittest.TestCase):
     is the shape this repo *endorses*. The enumerable-assertion
     trap ``CLAUDE.md`` documents is about stale COUNTS and growable ALLOW-LISTS
     (``ALLOWED_NON_BINDINGS``, ``_STOPWORDS``), neither of which an anchor table is.
-    Every pointer site is now a region. **The guard-efficacy lens prompt list is no
-    longer one** (#290): it became a pointer to the Class B limit-case recipe, which
-    the recipe region below pins, and the lens's own Relay input is every finder's,
-    which the finder fan-out region pins -- the shape ``VerdictFirstInvariantTests``
-    already had. That the lens is a finder is prose (``reviewing.md``), not pinned.
+    Every pointer site is now a region.
 
     **The stopping rule was pre-committed before the first defeat and has now been
     HONOURED** (the #122 lesson). It read: defeated twice => deleted, and the property
@@ -2317,6 +2313,10 @@ class RelayInvariantTests(unittest.TestCase):
         "step 8 (the finder fan-out)": (
             "**Give every finder the issue's acceptance criteria alongside the diff.**",
             "**Pick finder angles from the diff's risk surface",
+        ),
+        "step 8 (the guard-efficacy lens prompt list)": (
+            "**What its prompt must carry**",
+            "**(1) Part 2's blockquote, verbatim**",
         ),
         "the Class B limit-case checker recipe": (
             "**The spawn prompt must carry five things",

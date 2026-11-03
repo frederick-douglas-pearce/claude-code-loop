@@ -94,13 +94,22 @@ establish it, so **Floor 1** below carries it — as does that floor's *"if you 
 BLOCKING"* catch-all. Being a reader, it joins the fan-out under the
 Execution policy's read-only form like any other finder. **It never mutates** — improvising a
 mutation outside the harness is forbidden (AC-verifier → Part 2), and a mutating finder could not
-join a fan-out licensed on being read-only. Its **differential** is fixed by construction — writing
-its question as its differential is sufficient, and no round need invent prose for it.
+join a fan-out licensed on being read-only.
 
-**What its prompt must carry** is everything the Class B limit-case recipe's spawn prompt carries,
-over and above every finder's standing inputs at this step — see Gates (Fresh-re-check invariant →
-the Class B limit-case bullet), whose second-caller note also says what does not carry over; do
-not restate it here.
+**What its prompt must carry**, over and above every finder's standing inputs at this step (the
+acceptance criteria, the standing authoring check, the Verdict-first invariant, the Relay invariant,
+and the finding-class rule): **(1) Part 2's blockquote, verbatim** (kept in core: Gates →
+Fresh-re-check invariant → *the mechanism blockquote*; no unit to load) — the worked example is
+what makes the distinction operable; **(2) that it must not edit, break or execute anything to decide** — the
+prohibition on improvising a mutation does not otherwise reach a finder; and **(3) that it must say
+plainly when it cannot tell** — the rule making that a dirty answer lives here, where the finder
+cannot see it, so an unprompted finder hedges and the gate reads clean. The Class B limit-case
+re-checker's spawn prompt carries these for the same reasons. **Named by content, never by number**
+— that recipe's items are numbered in another section.
+What does **not** carry over is that recipe's antecedent: it is written for a re-check of an
+already-found gap, and this lens has no prior finding and no fix in hand. Its **differential** is
+fixed by construction — writing its question as its differential is sufficient, and no round need
+invent prose for it.
 
 **A lens may find nothing to apply its question to, and returns exactly that — on a delta that
 adds or modifies no guard, that is the ordinary outcome, and it is the lens that says so, not

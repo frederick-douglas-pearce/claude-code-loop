@@ -178,9 +178,9 @@ even though nothing will fail loudly:
   to make the check pass**: git answers a rejected push by suggesting `git pull`, which would carry
   ungated commits through the check that exists to keep them out.
 - **Moved out of the payload by #290 (cost epic #271): history behind two units' rules.** Kept
-  here because it explains a rule a later editor might "simplify"; the rules themselves stay in
-  the units. From `phases/reviewing.md`, step 8's finding-class **floors** (Floor 1 is the content
-  floor, 2a the `SOURCE_LAYOUT` path floor, 2b the sensitive-surface path floor):
+  here because it explains a rule a later editor might "simplify". From `phases/reviewing.md`,
+  step 8's finding-class **floors** (Floor 1 is the content floor, 2a the `SOURCE_LAYOUT` path
+  floor, 2b the sensitive-surface path floor; "the two" below are 2a and 2b):
 
   **The two use opposite unmatched-readings on purpose, and unifying them is a regression.**
   `SOURCE_LAYOUT` enumerates the **exceptions** to a `code` default, so an unmentioned path is `code`;
@@ -203,7 +203,9 @@ even though nothing will fail loudly:
 
   From `phases/accepting.md`, AC-verifier → Part 2, the attribution precondition ("its third
   precondition" — the copy must be a different tree from the parent): the recorded instance
-  behind it, verbatim.
+  behind it, verbatim. In the unit it directly followed this sentence, which stays there: "A copy
+  that *is* the parent tree contains the change trivially, so precondition 2 passes on it —
+  cleanly, loudly, with a correct-looking diff."
 
   The recorded instance is exactly this: a sequence that created
   a worktree, changed into it, and ran the suite, where the **create failed**, the `cd` therefore
