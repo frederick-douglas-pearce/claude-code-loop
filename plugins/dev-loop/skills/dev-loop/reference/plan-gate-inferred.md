@@ -24,7 +24,7 @@ does not. This still is not a per-issue record: the line can only change when th
 which is the property AC-level "once per run" is about.
 
 **Surface first, then journal — the order is load-bearing.** An invocation can stop between the two
-(step 0.3 halts on an orphan PR, the driver halts on a budget breach, a `/clear` lands). Journalling
+(step 0.3 halts on an orphan PR, the driver halts on a budget breach, a `/clear` lands). Journaling
 first and stopping suppresses the message permanently while the ledger shows full compliance;
 surfacing first and stopping merely re-emits next invocation, which is harmless.
 

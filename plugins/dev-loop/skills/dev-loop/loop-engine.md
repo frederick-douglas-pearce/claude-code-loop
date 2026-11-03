@@ -113,7 +113,7 @@ invocation resumes correctly.
    `hold`/`parked` rows) and the tail of `progress.md`. **Then emit the plan-gate inference record
    if it is owed** (Ledger format → `progress.md` → `- Plan-gate-inferred:`) — that section states
    when it is owed and sends you to the `plan-gate-inferred` unit, which states how it dedupes to
-   once per run and that it is surfaced to the human as well as journalled. **Its dedupe SEARCHES
+   once per run and that it is surfaced to the human as well as journaled. **Its dedupe SEARCHES
    the FULL `progress.md`, not the tail read above** — never a bulk read of it, for the reason
    step 0.1 gives. Do not write the field: it is
    the human's.
@@ -533,7 +533,7 @@ ambiguous, and the fail-safe reading has to be written down rather than inferred
 **"The block would not run" is never a reason to proceed.** A namespace tool refused by a hardened
 host, or a blocking plugin that is not installed, produces a non-zero exit — and the tempting
 reading, *can't apply the block, so there is nothing to check*, is the silently-skipped gate in new
-clothing. **Neither outcome is a pass**, but they are journalled differently, so the discriminator
+clothing. **Neither outcome is a pass**, but they are journaled differently, so the discriminator
 has to be stated rather than left to judgment. It is **whether any test ran**:
 - **The wrapper failed before the tier started** — command not found, permission denied, the
   namespace refused, the plugin missing. No test was executed, so there is no verdict about the
@@ -768,7 +768,7 @@ recommended, and what was put to the human*, and the gate-decision block is wher
 outcomes already live.
 
 **There is deliberately no dedicated `- Scope-ruling:` *disposition* line, and none is owed when this
-gate is not due** — the Gate-outcome invariant's not-run journalling does not reach this row, because
+gate is not due** — the Gate-outcome invariant's not-run journaling does not reach this row, because
 a not-due spelling would be a claim in its own right and this gate has no path on which such a claim
 holds. Two consequences, and the second is the one that keeps it fail-safe. **The `- gate-error:`
 line above is untouched by this** — it is owed whenever the gate *was* due and no ruling came back,
@@ -878,7 +878,7 @@ disclosure exists to surface:
   cannot tell which blocks belong to this iteration, that is unknown: escalate.
 
 Where the row instead **auto-merges** there
-is no human to tell, which is why the same count is journalled either way.
+is no human to tell, which is why the same count is journaled either way.
 **If the human holds the merge (now or in any later invocation),
 WRITE the hold to the row before stopping** — set Status `hold` (record the reason in Notes) so
 it persists across `/clear`; resume (step 0.3), step 1, and this gate all key on Status `hold` and
@@ -1735,7 +1735,7 @@ plan-informing Architect gate and never reaches the ruling. The one gate whose d
 knowable only from its binding is `HERMETIC_TEST_CMD`; its carve-out below states that unknown
 reads as due.) A gate the route or its trigger condition never made due was never owed a verdict,
 so journal it as not run (`skipped` / `n/a`) with the reason; not-due is not a pass either. An
-explicit `—` **plus a reason** in the config is a deliberate "not applicable", journalled `n/a:
+explicit `—` **plus a reason** in the config is a deliberate "not applicable", journaled `n/a:
 <that reason>` — **not** an absent binding; it is the only way a config marks a gate not-due, and
 it is deliberately visible.
 
@@ -1765,7 +1765,7 @@ attempted and has no command to quote, so write `- gate-error: hermetic — HERM
 <unbound | TODO-valued | no-reason> — no-binding`, naming the state you found; the
 `no-stderr` convention below is the precedent for naming an absent string rather than inventing one.
 
-For a gate that **is** due: it may be journalled **passed** only with the gate's own verdict as
+For a gate that **is** due: it may be journaled **passed** only with the gate's own verdict as
 evidence — it ran and returned clean/met. **No verdict ⇒ not passed**, and there are two ways that
 happens. The discriminator is **what you can see without running it**: your own config and toolset
 are *inspection*, so a binding naming a skill, agent or command absent from them is **static** —
@@ -1824,7 +1824,7 @@ does.** Step 7 sets when commits are pushed, and the head check stops a label (s
 or a merge (step 11) on heads that disagree. **The head check is
 `git fetch && git rev-list --left-right --count @{u}...HEAD`, and it passes only when it succeeds and
 reports both counts as `0`.** Anything else — commits on either side, or an error — is a STOP:
-escalate, journalling an error as
+escalate, journaling an error as
 `- gate-error: remote-currency — <the command that failed> — <first line of the error>` with
 volatile arguments elided (Gate-outcome invariant). **Run nothing that moves either head to make it
 pass**: git answers a rejected push by suggesting a pull, and anything that brings the remote's
@@ -2007,7 +2007,7 @@ narrowing the change, splitting it, or diagnosing why the fixes keep landing dir
 answers, and the cap exists to force that question rather than to end anything. **You never open
 round 3 on your own;** where a human directs further work it exists because they directed it.
 Reaching the cap is also not a verdict: an escalated gate has still returned no pass, so the
-Gate-outcome invariant governs what may be journalled. It does not mark the row `blocked` — that
+Gate-outcome invariant governs what may be journaled. It does not mark the row `blocked` — that
 status is for a row waiting on something outside this gate (an unmet dependency, a
 `blocked: too-large` split, a recurring `gate-error:`), and a dirty round 2 waits on a human answer
 about *this* gate.
@@ -2016,7 +2016,7 @@ Cost: **one extra subagent per dirty class per iteration** — so two
 at the acceptance gate when Class A and Class B are both dirty, since their inputs differ and cannot
 be merged into one checker. Bounded either way, and it cannot grow into an unbounded ladder.
 
-**Journalling it.** A fresh re-check is a distinct subagent invocation, so it increments
+**Journaling it.** A fresh re-check is a distinct subagent invocation, so it increments
 `subagent-runs` (one run = one subagent invocation — progress.md → the Budget line).
 **A journal recording a re-check while `subagent-runs` did not move
 records a re-check that did not happen** — the parent re-read its own work and narrated otherwise.

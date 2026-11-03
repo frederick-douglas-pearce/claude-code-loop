@@ -2627,8 +2627,7 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
     **The failure this catches is a silent disagreement, not a missing sentence.**
     Revert one site to ``main...HEAD`` while the others still say
     ``<reviewed>..HEAD`` and every word of each still reads correctly -- the
-    orchestrator follows one of them, the gate returns a verdict either way, and
-    nothing downstream can tell which range was actually read.
+    orchestrator follows one of them, and the gate returns a verdict either way.
 
     **Both region sets were narrowed after review defeated an earlier draft**, and the
     reason generalizes. The step-8 span originally ran to the end of the scoping
@@ -2791,9 +2790,8 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
             f"{missing}.\n\n"
             "A MISMATCH IS SILENT. Step 8 and the Gates recipe both fix what a round "
             "after the first reads; if one reverts to the full `main...HEAD` while "
-            "the other stays scoped, both still read correctly, the gate still "
-            "returns a verdict, and nothing downstream records which range was "
-            "actually read.\n\n"
+            "the other stays scoped, both still read correctly and the gate still "
+            "returns a verdict.\n\n"
             "Each region is checked SEPARATELY: a global count passes when one site "
             "drops the notation and another gains a spare mention. If you changed the "
             "notation deliberately, change it in EVERY region and update _NOTATION. "
@@ -2803,7 +2801,7 @@ class DeltaScopedRoundNotationTests(unittest.TestCase):
 
     def test_the_ledger_paragraph_still_specifies_a_scoped_round(self) -> None:
         # Distinct failure from the one above, which is why it is its own test. The
-        # two engine sites can agree perfectly while the ledger paragraph stops
+        # ``_REGIONS`` sites can agree perfectly while the ledger paragraph stops
         # specifying the range.
         #
         # Pinned on the SPEC's spelling, not on the anchor name: an earlier draft
@@ -3477,7 +3475,7 @@ class LensDifferentialAgreementTests(unittest.TestCase):
     Step 8 says a roster may not carry two lenses that would return the same
     findings, and that you state, per lens, one thing it would find that no other
     lens in that roster would. That rule is enforced by **one thing only**: the
-    differentials are journalled with the roster, so the record is the control
+    differentials are journaled with the roster, so the record is the control
     rather than a default. The roster paragraph is what makes that true, by saying
     each entry carries the differential.
 
@@ -3485,7 +3483,7 @@ class LensDifferentialAgreementTests(unittest.TestCase):
     clause does (see ``CurrencyExemptionAgreementTests``). Edit either side and the
     rule silently loses its enforcement: drop ``differential`` from the roster entry
     and the rule still reads correctly while nothing records what it asks for; drop
-    the journalling sentence from the rule and the roster keeps carrying a field no
+    the journaling sentence from the rule and the roster keeps carrying a field no
     rule requires. Neither shows up as a broken sentence.
 
     **This is the shape a prose guard can reach: two passages pinned against each
@@ -3534,7 +3532,7 @@ class LensDifferentialAgreementTests(unittest.TestCase):
         self.assertIn(
             self._TERM, rule,
             "step 8's distinctness rule no longer says the differentials are "
-            "journalled.\n\nThat sentence is the rule's whole enforcement -- without "
+            "journaled.\n\nThat sentence is the rule's whole enforcement -- without "
             "it the rule asks you to state something nothing records, which is a "
             "default rather than a control. If the enforcement moved somewhere else, "
             "re-anchor this test at the new site; do not delete it.")
@@ -3544,7 +3542,7 @@ class LensDifferentialAgreementTests(unittest.TestCase):
         self.assertIn(
             self._TERM, roster,
             "the roster entry no longer carries the differential.\n\nStep 8's "
-            "distinctness rule says the differentials are journalled with the "
+            "distinctness rule says the differentials are journaled with the "
             "roster, so this field is what makes that claim true. Dropping it "
             "leaves the rule asserting a record that does not exist, and the rule "
             "still reads correctly -- which is why this is pinned rather than left "

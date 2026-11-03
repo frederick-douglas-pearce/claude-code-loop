@@ -70,7 +70,7 @@ finding ID this gate records (below), so two finders sharing one collide.
 **Distinct in question, not only in label — a roster may not carry two lenses that would return the
 same findings.** State, when you spawn the round, one thing each lens would find that no other lens
 in that roster would; **a lens you cannot state one for is the same lens, so run one of them.** Those
-differentials are journalled with the roster (below), and that record is the control rather than a
+differentials are journaled with the roster (below), and that record is the control rather than a
 default. **Doubt subtracts under this rule**, so it needs saying that the
 general default-deny below — the one that sends an unknown *range* to a FULL round — does not reach
 it: that rule governs how much of the change a round reads, this one governs how many lenses read
@@ -124,7 +124,7 @@ answer is available to the other.
 
 **This lens is NOT the acceptance gate's Class B pass, and neither stands in for the other.** They
 ask different questions at different steps against different objects, and conflating them would let
-one be journalled as the other.
+one be journaled as the other.
 
 **A surviving mutant is step 10's and only step 10's.** A read cannot establish one — which is why
 this is a floor on *reading* and not a second mutation pass — and **neither gate's verdict discharges
