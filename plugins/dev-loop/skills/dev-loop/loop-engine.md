@@ -77,13 +77,10 @@ invocation resumes correctly.
    last of `{RUN COMPLETE, RUN PARKED, RUN RESUMED}` by append order (the log is append-only, so
    a superseded sentinel still sits above; last one wins) — and act only on it. **Find it by
    searching the file for those three strings and taking the last hit that is a sentinel; never
-   bulk-read the journal.** That file grows without bound, a bulk read is capped **silently**,
-   and a cap drops the end — which is where last-wins puts the answer, so that failure is
-   invisible and always in the wrong direction. The search owes two things a read does not: the
-   journal *discusses* sentinels in prose and a discussion is not one; and if you cannot tell
+   bulk-read the journal.** A bulk read is capped silently and drops the end, where last-wins puts
+   the answer; a sentinel the journal *discusses* in prose is not one. If you cannot tell
    which hits are sentinels, or cannot confirm the search covered the whole file, **STOP and ask
-   the human** — acting on the wrong sentinel either re-enters a terminal run or releases a park
-   nothing released. Then:
+   the human**. Then:
    - `RUN COMPLETE` (see Convergence) → report done and STOP; do not re-scan (the run is terminal).
    - `RUN PARKED — awaiting <condition>` (see Convergence) — the run finished all *workable* rows
      and rests on an external event:
@@ -101,19 +98,15 @@ invocation resumes correctly.
        `progress.md` by the same searched read (never a bulk one — this is the path that exists to
        be cheap, and the journal is the largest file in the ledger), **emit the plan-gate inference
        record if it is owed** (Ledger format → `progress.md` → `- Plan-gate-inferred:`, which states
-       when it is owed and which unit to read) — **this path never reaches step 0.2**, so without it a
-       parked run can fall through to selection below and work an issue under a posture nobody
-       stated, and it goes before the reconciliation because that sub-unit can stop for a human
-       answer — run the step-1 roster
+       when it is owed and which unit to read) — before the reconciliation below, which can stop for
+       a human answer — run the step-1 roster
        reconciliation (the one scan a parked run still owes —
        this is how `BACKLOG_SOURCE` drift is still caught), then **re-derive selectability from
        `queue.md` alone** (no git/PR reconcile). If that produced selectable work (a joiner the
        human pulled in, or an in-run dep that has since cleared) fall through to step 1 **at
        selection** (the reconciliation just ran — do not repeat it); otherwise STOP and report
        "parked — awaiting <condition>" **without** running the step-3 resume or any per-row live
-       reconcile — skipping resume is provably safe **for rows** here (a valid PARKED state has every
-       non-`parked` row terminal, so no interrupted pipeline row can coexist). It proves nothing about
-       state with **no** row, which no row-status argument constrains.
+       reconcile.
    - `RUN RESUMED` or no sentinel → continue to step 0.2 (a released or never-parked run runs
      normally).
 2. Read `queue.md` (note its `mode:` / `graduated-routes:` / `plan-gate:` header and any
@@ -129,10 +122,10 @@ invocation resumes correctly.
    and a Status in none of them is unrecognised: **STOP and ask the human** rather than deciding
    what it probably meant. Classify a recognised Status thus: a **pipeline** status other than
    `queued`/`routed` is *interrupted*; `hold`/`parked` rest (below); a terminal status takes no
-   resume action. Test
-   membership against the vocabulary rather than by excluding a list of statuses that rest — an
-   exclusion test silently absorbs anything it has never heard of into *interrupted*, which is the
-   guess this ordering exists to prevent. If any row is *interrupted*, a prior iteration was cut off. Finish it — per the Resume procedure, against live git/PR state — BEFORE selecting a new one; a `hold` or `parked` row is NOT an interruption (Resume).
+   resume action. Test membership against the vocabulary, never by excluding a list of statuses that
+   rest. If any row is *interrupted*, a prior iteration was cut off. Finish it — per the Resume
+   procedure, against live git/PR state — BEFORE selecting a new one; a `hold` or `parked` row is
+   NOT an interruption (Resume).
 
    **Then run the orphan scan: look for an open PR that no row covers.** The scan above classifies
    *rows*, and a row is created for every backlogged issue at init — so most interruptions do leave one. External state can
@@ -243,9 +236,7 @@ call depends on the other. Only once it is loaded, set the row status to `planni
 research/docs.
 
 **Value framing (opens the plan, route-scaled).** State *why this should exist* in
-user terms — the question the architect/AC-verifier/code-review gates never ask (they check we
-build the thing right, not that it's the right thing). You write it inline; it is not extra
-ceremony. Scale it to the route:
+user terms. Scale it to the route:
 - **`feat:`** — a compact user-story map: one backbone activity + 1–3 `as a <user>, I want
   <capability>, so that <outcome>` stories. Each carries **who benefits**, its **prevalence**
   (how often real configs/corpora actually hit it), and a **falsifier** — *what single
@@ -287,38 +278,28 @@ own — its definition is user-global and you may not edit it (Tool surface) —
 invoke site is the whole of the invariant's reach here, and it is weaker than a template for that
 reason.
 
-**Do these three things in this order.** The order is the mechanism, not presentation: freeze, then
-invoke, then apply. Executed in any other order the step-5 diff compares a text with itself and the
-always-on stop passes silently.
+**Do these three things in this order.** Freeze, then invoke, then apply — in any other order the
+step-5 diff compares a text with itself.
 
 **(a) FIRST, before you invoke `DESIGN_AGENT`, freeze the plan's approach.** Copy `## Approach`
 verbatim into a
 `## Approach as reviewed (frozen before the design gate) — write-once, do not edit` block in
-`issue-<N>.plan.md` (the heading is fixed — step 5 looks for it by name). That block
-is the **pre-image** step 5's materiality test diffs against — without it the test has nothing to
-compare and degrades to self-assessment, which is what it exists to replace. (The ledger is
-gitignored, so there is no git pre-image to recover instead.) The freeze is owed whenever you are
+`issue-<N>.plan.md` (the heading is fixed — step 5 looks for it by name). That block is the
+**pre-image** step 5's materiality test diffs against. The freeze is owed whenever you are
 about to consult `DESIGN_AGENT` **to inform the plan** — here, or at step 5 where that step first
 consults it. An architect pass that never happens can rewrite nothing, and neither does a consult
 that does not inform the plan: step 8's scope ruling on a review finding is the one this engine
 defines, and it owes no freeze. **If you cannot tell whether a consult informs the plan, it does —
-freeze, and treat step 5's condition as due.** That default is not decoration: misjudging this one
-way costs a copied heading, and the other way removes the freeze *and* makes the condition not-due
-at once, which is the absent-pre-image stop the whole mechanism exists to force.
+freeze, and treat step 5's condition as due.**
 
 **A freeze taken after the agent has returned is not a pre-image.** It copies the already-redirected
 text, so treat the block as **absent** — which step 5 reads as material. Never back-date one.
 
 **(b) THEN invoke, and (c) write the outcome into `## Approach` before step 5 — not at implement
-time.** "Address the
-concerns before coding" is satisfied too late if you carry the architect's rulings in your head to
-step 6: `## Approach` would still read exactly as frozen, and step 5's diff would come back **empty
-on precisely the run the gate exists to catch** — the always-on condition reporting "no material
-change" by *literal compliance*, on the run where the architect rewrote the plan. **This bites under
-every `plan-gate:` value, and `always` is not a reprieve from it.** Under `conditional` the row
-auto-approves outright; under `always` the human is stopped but shown a diff that says nothing
-changed, which is the same failure wearing a stop as a disguise — the gate exists to show them
-*what* the architect changed, and an empty diff withholds exactly that. **You** perform this edit, not the agent — `DESIGN_AGENT` returns its review and
+time.** Rulings carried in your head to step 6 leave `## Approach` reading exactly as frozen, so
+step 5's diff comes back empty on precisely the run the gate exists to catch — under every
+`plan-gate:` value; `always` is not a reprieve. **You** perform this edit, not the agent —
+`DESIGN_AGENT` returns its review and
 **never writes to the tree** (Tool surface); **you** record the outcome wherever this project
 records architect decisions (an issue comment, an issue-body marker, or a decision-log entry — see
 step 4's write-once note under Resume). So an unedited `## Approach` is the orchestrator's omission
@@ -330,15 +311,11 @@ a decline that alters no text is itself the record that the approach stands.
 `## Approach` and nothing else, so an AC reinterpretation written only under `## Acceptance criteria`
 or `## Risks / open questions for human` — and an approach-level redirect on a `research`/`docs` plan
 whose `## Approach` is thin — is invisible to the test. Record it where it belongs *and* note it
-there, or the one materiality axis this step also flags as an issue-amendment hazard never reaches
-the gate.
+there.
 
-**The block is write-once: if it already exists, never rewrite it.** Re-running the copy after the
-architect has edited `## Approach` would overwrite the pre-image with the post-architect text — the
-step-5 diff would then come back empty and the gate would **silently pass**, which is precisely the
-failure the test exists to catch. This is the same write-once discipline Resume already applies to
-this step's other side effect (the recorded architect outcome, however this project records it);
-both are stated there.
+**The block is write-once: if it already exists, never rewrite it.** Re-copying after the architect
+edited `## Approach` overwrites the pre-image and the step-5 diff silently passes; Resume applies
+the same write-once discipline to this step's recorded architect outcome.
 
 ### 5. Human gate (posture set by `plan-gate:` — plus one always-on condition)
 **Read `plan-gate:` from the `queue.md` header** (Ledger format → queue.md). That field, and never
@@ -406,14 +383,11 @@ never be a reason to record less.**
   if any of: a step was added, removed, or reordered; the files-to-touch set changed; a different
   fork was chosen; an acceptance criterion was reinterpreted. Pure wording is not material.
   **The list is sufficient, not exhaustive — extend it, never prune it**, and **if you are unsure
-  whether an edit is material, it is material** (default-deny, as at every other gate). The
-  catch-all is what makes extension safe and pruning a regression.
+  whether an edit is material, it is material** (default-deny, as at every other gate).
 
   **An empty diff is only evidence when both halves are present. Architect ran + block absent ⇒
   material ⇒ STOP.** A missing pre-image is not "nothing changed" — it is a gate with nothing to
-  read, and reading it as a pass restores the self-assessment this test removes. It happens for
-  ordinary reasons (a crash between invoking the agent and the freeze, a hand-edited plan file, an
-  earlier iteration that predates this rule), none of which is evidence about the approach. Where
+  read, and reading it as a pass restores the self-assessment this test removes. Where
   the architect was **skipped**, the block is legitimately absent and the condition is not due at
   all — the distinction is whether the gate ran, never whether the artifact is there.
 
@@ -423,9 +397,7 @@ never be a reason to record less.**
   agent can first run *here*, after step 4 declined it. **The freeze is owed at step 4 or at
   step 5**: freeze `## Approach` before
   consulting, and apply the outcome to the plan text before deciding. A consultation at this step
-  that redirects the plan is material on the same terms — otherwise the one architect call the
-  freeze rule forgot to name becomes the path the whole condition is bypassed through, journalled
-  `n/a: architect skipped` while a pass was in fact run and did in fact redirect.
+  that redirects the plan is material on the same terms.
 
   **What "plan-informing" excludes — and the set is open, not closed at one member.** The one
   exclusion this engine defines is **step 8's scope ruling on a BLOCKING design-question finding**:
@@ -493,13 +465,9 @@ empty and points at a commit no remote has. Unstaging it is `git rm --cached <pa
 unstage. Deliberately-broken code and scratch files are the loud version of this failure; the
 gitlink is the quiet one.
 
-**`HERMETIC_TEST_CMD` — the declared-offline tier, run with the network actually cut.** A project
-that documents a hermetic test tier ("unit tests are offline — no network, no DB") holds an
-invariant **no other command checks**: `TEST_CMD` runs with the network up, so a test that quietly
-reaches the internet is green, and green *for the wrong reason* — the live resource silently
-displaces the fixture the test meant to exercise, changing what is under test without changing
-anything that is asserted. A documented invariant nothing enforces is the defect class this engine
-exists to name; where a project binds this parameter, the tier gets run for real.
+**`HERMETIC_TEST_CMD` — the declared-offline tier, run with the network actually cut.** `TEST_CMD`
+runs with the network up, so a test that quietly reaches the internet is green for the wrong reason;
+where a project binds this parameter, the tier gets run for real.
 
 **Due when** the row's Route is `code` **and** the change adds or modifies **at least one test** —
 any test, not only one you judge to sit in the tier. Once per issue, not per test run. Deciding
@@ -519,9 +487,8 @@ was for, and all three are forbidden —
 1. weakening or removing the block;
 2. moving the test out of the tier without saying so;
 3. **changing what the test asserts** — skipping or xfailing it under the block, or stubbing the
-   fetch so it no longer exercises what it did. This is the likeliest escape and the hardest to see,
-   because it is the incident in reverse: cutting the network *changes what the test exercises*, so
-   a "fix" can green the tier while silently reducing coverage.
+   fetch so it no longer exercises what it did. This is the likeliest escape: a "fix" can green the
+   tier while silently reducing coverage.
 
 **Re-run the tier under the block after the fix** — the exit status is the verdict, not your
 reading of it. "Once per issue" bounds the *trigger*, never the re-runs a finding forces.
@@ -533,28 +500,21 @@ three matter most because they are rules it cannot see from where it sits: the t
 stands; the behavior the test covered before; that it must decide by **reading**, never by running
 or altering anything; that it must **say plainly when it cannot tell — which is a dirty answer, not
 a clean one**; and the **Verdict-first invariant** (Gates) — the complete answer first, depth after.
-Withhold your conclusions. An unprompted checker hedges, and a hedge read as agreement is how
-this gate goes quietly soft.
-
-This borrows the *shape* of the Fresh-re-check invariant without being governed by it: that
-invariant covers the two gates carrying a round cap (step 8 and step 10), and this gate carries none —
-it blocks until green, like any other step-6 command. So there is no round to count and no cap to
-consume. **If the fresh read comes back dirty, or cannot tell, escalate to the human and STOP** —
+Withhold your conclusions. This gate carries no round cap — it blocks until green, like any other
+step-6 command — so it is not governed by the Fresh-re-check invariant; it only borrows its shape.
+**If the fresh read comes back dirty, or cannot tell, escalate to the human and STOP** —
 do not absorb it, and do not fix-and-re-ask in a loop. A hermetic finding you stop on never reaches
 the merge gate; the always-escalate entry at step 11 is there for the other path, where a row somehow
 arrives carrying one.
 
-**A test added later re-arms the trigger.** Step 8 and step 10 routinely add tests — the Class B limit
-case is fixed by adding one, and review findings often are too. A gate journalled `n/a: no test
-change` at step 6 and then handed a new test at step 10 has left the tier unrun on an issue that
-*did* add a test, which is precisely what this gate is due on. Re-evaluate the trigger before you
+**A test added later re-arms the trigger.** Steps 8 and 10 routinely add tests. Re-evaluate the
+trigger before you
 commit the fixes, and let the `- Hermetic:` line record the final state rather than the first
 reading.
 
 **Every iteration leaves a record of this gate** — a `- Hermetic:` line in the iteration
-block, or, where the gate produced no verdict at all, the `- gate-error:` that carries it instead (Ledger format → progress.md). This gate blocks at this step, so its findings are resolved
-before the acceptance gate ever runs: without the line it leaves **no trace at all**, and "reported
-as prominently as a bug" would be discharged by the blocking alone. **Never record it in
+block, or, where the gate produced no verdict at all, the `- gate-error:` that carries it instead
+(Ledger format → progress.md). **Never record it in
 `mutation-survivors`** — that slot records whether a guard guards, a different question, and its
 `n/a` list is closed at two reasons neither of which is about this gate.
 
@@ -591,46 +551,24 @@ prose an agent executes — any claim that prose makes about the tree), the **le
 under `LEDGER_ROOT`, the per-issue plan file included, not just the two you write most often — and
 your **report to the human**.
 
-**The ledger is the surface whose failure outlives the run.** It is what the next invocation resumes
-from, so a false claim there is not a documentation defect — it is state that a later iteration reads
-as the record of something that happened. A false claim in a report costs the human a wasted action;
-a false claim in the ledger costs every invocation after it.
-
 A claim that a test, guard, or invariant exists **elsewhere** must **name it** — the test name,
 `file:line`, or the invariant's own name where this document defines one — and you must **confirm the
-named thing exists and asserts what you claim** before you write it. An
-unnamed claim is worse than no comment: the next reader — human or agent — stops looking, so the
-claim *defeats* the reviewer rather than merely failing to help, and it does so most effectively
-when it sits directly on top of the gap. A **named** claim that does not resolve is worse still: it
-buys that credibility with a citation the reader is now less likely to check. A claim that
-misdescribes what it sits on is the same defect without the citation — write neither.
+named thing exists and asserts what you claim** before you write it. A claim that misdescribes what
+it sits on is the same defect — write neither.
 
 **This governs assertions written as fact, and changes no other ledger rule.** In particular it does
 not license "correcting" a `parked`/`blocked` row's Notes by inserting live evidence: those Notes
 record the durable curation DECISION precisely so a later re-check cannot destabilize them (Ledger
-format → queue.md). Truth discipline and mutability discipline are different rules over the same
-surface: truth discipline never licenses a rewrite this rule forbids.
+format → queue.md).
 
 **And a false claim already in `progress.md` is corrected by appending, never by editing.** That log
 is append-only and may be guard-protected; the correction is a new entry naming the earlier one and
-what is wrong with it, exactly as a retraction reads. The pressure runs the other way — a line that
-"costs every invocation after it" is precisely the one you will want to reach back and fix — so the
-rule is stated here rather than left to be derived under that pressure.
+what is wrong with it, exactly as a retraction reads.
 
 **What checks this — stated as the surface that IS checked, never as a list of the ones that are
 not.** Exactly one pass reads what you wrote and asks whether it is *true*: **step 8's finders, over
 the diff**. **Treat every other surface you write as unchecked** — the ledger and your report today,
 and anything else you may write later, with no edit to this rule needed to cover it.
-
-**Two things that sentence does not say, because the unqualified version of it is false.** Other
-machinery does read the ledger, and it is not nothing: Resume reconciles a row's Status against live
-git/PR state, the orphan scan catches an open PR the ledger omits, and the merge gate treats a
-missing `- Editorial:` line as unknown and escalates. Those check **state and presence** against
-ground truth; none of them inspects whether an assertion you wrote in prose is true, which is what
-this rule governs. And the finder pass is **review, not a sandbox** — an agent reading under
-instruction, exactly as `README.md` → *How the limits are enforced*
-says. So: one surface is reviewed, none is enforced, and
-"unchecked" above means unchecked *for the truth of what you asserted*.
 
 **Before you leave this step, walk the acceptance criteria once and name a `file:line` for each.**
 For every AC, point at the change that satisfies it. If you cannot point at anything, you have not
@@ -647,11 +585,6 @@ PR and no CI. This walk is a cheap catch for **gross omission** and buys nothing
   memory;
 - **do not journal it as a gate outcome.** It produces no verdict, so it cannot be recorded as one
   (Gate-outcome invariant), and a `- AC-verify:` line may only ever carry step 10's result.
-
-It does not conflict with the rule that the parent cannot self-certify. That rule is about **test
-assertions** — whether a guard would notice a regression, which is exactly what you cannot judge
-about your own work. *Whether a criterion was implemented at all* is a different question, answerable
-by looking, and the one reader who can answer it fastest is the one who just wrote the change.
 
 ### 7. Commit + PR
 **Read the `record-templates` unit now, before staging** —
@@ -713,17 +646,13 @@ path, it does not — the path is unmatched and the lens is due.**
 
 **This is a path test. Route does not gate it, and neither does whether the delta carries a
 guard.** An unmatched path reads as `code`, because `code` is the Router's
-**default** (Router rule 4) — so a project that declares its `research` route by *label* (Router
-rule 3) and declares no research **path** gets the floor on that row too. Route-scoping a lens
-*inside* this gate would subtract from a gate the Gate table makes due on **every** route; and
-conditioning it on finding a guard would let *"there is no guard here"* — the answer this lens
-exists to return — be given by the orchestrator instead of by the lens.
+**default** (Router rule 4) — so a `research` route declared by label with no declared research path
+gets the floor too.
 
 Where a project declares no inert paths, every round 1 carries this lens whatever its route, until it declares some.
 
 **The floor is round 1's.** A later round of this gate is one lighter checker rather than a fan-out
-(below), so it carries no roster and no floor; round 1 is also the round that reads the whole
-change, so the floor reads every guard the change carried when the PR was opened.
+(below), so it carries no roster and no floor.
 
 **A round that owes this lens and does not carry it has produced no verdict.** Spawn the missing
 lens before the round resolves; if you cannot, `- gate-error:` and escalate (Gate-outcome
@@ -737,9 +666,7 @@ Two classes:
 - **EDITORIAL** — discharged in one contained sweep at the close of this step.
 
 **The finder emits the class; you never assign or reassign one.** Put it in the finder's prompt
-beside the acceptance criteria and the standing authoring check. Inference by the author is the
-judgment this gate exists to remove: an orchestrator under budget pressure will want to read a real
-finding as EDITORIAL, and the only structural defence is that the class arrives from outside. What
+beside the acceptance criteria and the standing authoring check. What
 you may do is **raise** it, by any floor the `reviewing` unit defines — **promotion only, never the reverse.**
 
 **Default-deny over every floor:** an unclassified, unrecognised, or ambiguous finding is BLOCKING.
@@ -935,9 +862,8 @@ If the row is **not** auto-merge-eligible — which includes *every* row under `
 (the default) and any `hold` row — STOP and ask the human before merging; never auto-merge.
 
 **What the stop must state, and it is not optional: how many EDITORIAL findings were applied without
-re-review** (step 8's sweep), and on which paths. A count, never a reassurance. Those are findings a
-gate raised that no fresh instance ever re-read — a trade the human is the only actor positioned to
-price, and absorbed silently it reads as a clean review. **Read the number off the `- Editorial:`
+re-review** (step 8's sweep), and on which paths. A count, never a reassurance. **Read the number
+off the `- Editorial:`
 line** (Ledger format → progress.md) rather than from memory: the sweep resolved back at step 8, so on
 a resumed iteration the ledger is where it survives. **Write `0` where the line says `0`** —
 a measured zero and an absent count are different statements, and this is the one number this
@@ -970,8 +896,7 @@ merge via `MERGE_METHOD` with an explicit `--subject` carrying the correct `COMM
 Append the iteration's **close record** to `progress.md`. Its shape is in the `record-templates`
 unit — `${CLAUDE_PLUGIN_ROOT}/skills/dev-loop/reference/record-templates.md`; read it now, in full,
 under the load protocol (preamble). Step 7 writes the open record; if this iteration re-entered *past* step 7 on resume,
-there may be none — **do not write one now.** Back-dating it would assert a record of a moment nobody
-observed, which is the same bar the architect freeze and the gate lines are under.
+there may be none — **do not write one now.**
 
 The `- Budget:` line is specified once, in Ledger format → `progress.md` → `- Budget:`: four required slots (`subagent-runs`, `gate-rounds`, `wall-clock`, `tokens`), one physical line, a note on any slot, `justification=` whenever a `gate-rounds` value exceeds 1, and the acceptance gate's three counts kept separate. Write it as that section gives it.
 
@@ -1031,47 +956,38 @@ branch; never `git add` unrelated pre-existing working-tree changes; **never sta
 writing subagent's isolated copy is live** (Execution policy, below — the window closes when *you*
 remove the copy, not when the agent exits); never edit the user-global
 `SCOPE_AGENT`/`DESIGN_AGENT` definitions; **never edit `loop.config.md`** — a binding
-that looks wrong is a finding you journal and hand to the human, because a gate you rebind to match
-your own reading entrenches your misreading instead of correcting it. The C1 append-only guard and
-the human/merge gates are the enforced backstops; the rest of this list is your contract.
+that looks wrong is a finding you journal and hand to the human.
 
 **Paging a file of known extent — ask for the remaining slices in one turn.** Where you are reading
 a file in slices and already know how long it is, every slice after the first is an independent
-request: issue them together rather than one per turn, since a turn re-submits your whole
-accumulated context, and issuing five calls together costs **one** such re-submission instead of
-five. The results themselves are not free — only the turn is — so ask for each slice once and do not
-pad the ranges against a boundary you are unsure of; widening a slice to be safe is how this rule
-starts costing more than it saves. Establish the extent first, from whatever the tool reports —
+request: issue them together rather than one per turn. Ask for each slice once and do not pad the
+ranges against a boundary you are unsure of. Establish the extent first, from whatever the tool
+reports —
 `Read`'s `totalLines`, or a `wc -l` ahead of shell slices, among others; treat those as examples
 rather than the whole list. Read `wc -l` as a **floor, never the extent**: it counts newlines, so a
 file whose last line carries no newline is one line longer than it reports, and that line is the one
 you would never ask for. **Then confirm what came back is contiguous and covers the whole file, and
-re-read anything missing** — asking one at a time made that self-correcting, because each request
-started from what the last result actually returned, and asking together gives that up: a hole still
-reads like a complete load. **Confirm the extent you received, not merely the range you asked for**:
+re-read anything missing**. **Confirm the extent you received, not merely the range you asked for**:
 a tool result is capped independently of the range — a `Read` is bounded by tokens as well as lines,
 and a shell slice is bounded by the command-output cap, which truncates **silently** — so a pair of
 slices whose *requested* ranges tile the file can still arrive with the middle missing. **If you
 cannot confirm the file's extent, it is not known, and you page it one turn at a time.** This governs
 *slices of one file you have already sized*; it is **not** a licence to merge independent tool calls
-in general, because in general nothing distinguishes a dependent read from an independent one and
-merging across a dependency reorders effects. (The engine — core and every unit — must still
+in general. (The engine — core and every unit — must still
 be read with `Read` rather than shell slices — see the engine-read protocol in `SKILL.md`.)
 
-**The working tree is parent-owned state; any agent that must write to it gets its own copy.** This
-governs every agent you spawn, not only a mutating one — the tree holds your uncommitted
-deliverables, and a subagent writing to it is writing to your work. Read-only agents need no copy;
+**The working tree is parent-owned state; any agent that must write to it gets its own copy.**
+Read-only agents need no copy;
 any agent that writes gets one, via the host's worktree-isolation option. Four duties follow, and
 all four are **yours**, because the agent cannot discharge them from inside its own copy:
 - **Never stage its copy.** Where the host materializes the isolated tree inside the repository it
   shows up in your `git status` as untracked, and a blanket `git add` lands it as a gitlink.
   Explicit-path staging (step 6) is the control, and that step describes what the mistake looks like.
-- **Collect anything you asked it to produce, then remove the copy.** These are one duty in two
-  parts, and skipping the first destroys work: where the agent's writes **are** the deliverable — a
+- **Collect anything you asked it to produce, then remove the copy.** Where the agent's writes
+  **are** the deliverable — a
   fix you delegated (Fresh-re-check invariant) — the parent takes the diff out of the copy and
   applies it *before* removing anything. Only a copy whose contents you do not want is discarded
-  unread. Hosts that auto-clean an *unchanged* isolated tree will not clean one the agent wrote to,
-  which is every case this invariant is about, so removal is always yours.
+  unread. Removal is always yours.
 
   **An agent that died or was interrupted still produced something, and it is collected on the same
   terms.** Read this duty as *whatever is in the copy*, never as *what the agent managed to finish*.
@@ -1136,9 +1052,7 @@ of on whether someone remembered to add it to a list. It has two satisfying form
   with the risk surface, the `guard-efficacy` floor, and the distinct-question rule — are the bounds
   that act on the fan-out you are about to launch.
 - **Isolated.** An agent that writes runs against **its own copy** of the tree, per the isolation
-  duty above. **The escape hatch is isolation, not care** — "be careful not to collide" is not an
-  available option, because the duties that make writing safe are ones the agent cannot discharge
-  from inside its own copy.
+  duty above.
 
 There is no third form: an agent that would write to the parent's tree does not get spawned more
 carefully, it gets a copy first.
@@ -1158,16 +1072,14 @@ that way deliberately: "read-only" here is a property of the prompt you wrote, n
 the host enforces, so a reader that writes a scratch file is a misclassification you want step 6 to
 catch. Treat the copy as what makes the window *outlast* the agent, never as what makes it exist.
 
-**This does not retire explicit-path staging — it sequences around it.** The two rules answer
-different questions and neither replaces the other: *when* you may reach a commit boundary at all
-(here), and *how* you stage once you are at one (step 6, at **every** boundary, which is why it is
-called the control both above and in Part 2's envelope). **No commit boundary legitimately falls
+**This does not retire explicit-path staging — it sequences around it.** Step 6 governs *how* you
+stage at a boundary; this governs *when* you may reach one. **No commit boundary legitimately falls
 inside the window.** Every one the pipeline defines is sequenceable outside it — a fix you delegated
 at step 8 is collected, applied, and its copy removed before that step's fix commit, and step 10's
 mutation copy is removed before the acceptance gate's own fix commit. Both copies are created and
 retired *within* the step that opened them; neither may still be live when the next boundary
-arrives. Removing the copy is always available to you, so remove it
-first. If you believe a boundary must fall inside the window, that is a finding to journal and hand
+arrives. If you believe a boundary must fall inside the window, that is a finding to journal and
+hand
 to the human, not a case to stage carefully and proceed through.
 
 ---
