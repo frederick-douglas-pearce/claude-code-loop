@@ -38,8 +38,8 @@ invariants below without them:
    **Then confirm what came back is contiguous from line 1 through `totalLines` — every line
    covered, no interior gap — and re-read anything missing.** Do not assume a page returned the
    `limit` you asked for: a result is capped by **tokens** as well as lines, so a dense file returns
-   short pages and your next `offset` was computed from a boundary the tool did not honor. **If you cannot confirm the file's extent, it is not known, and
-   you page it one turn at a time.**
+   short pages and your next `offset` was computed from a boundary the tool did not honor. **If you
+   cannot confirm the file's extent, it is not known, and you page it one turn at a time.**
 
 Read config for **bindings**, engine for **logic**. Execute the engine's pipeline exactly, for
 exactly one issue, then STOP.
