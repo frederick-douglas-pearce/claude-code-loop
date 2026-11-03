@@ -26,7 +26,10 @@ invariants below without them:
    file it lives in, and when to read it — the AC-verifier, for one, lives in the `accepting` unit,
    and Initialization in the `reference` unit.
 
-   **Read it with `Read`, never with `cat`/`sed`/`head`.** `Read` reports `totalLines` on its
+   **Read it with `Read`, never with `cat`/`sed`/`head`.** The engine is far larger than the Bash
+   output cap, so a shell read returns a **silently truncated fragment** that ends inside the
+   pipeline — before every gate, and before the ledger format, router and Resume — and
+   spills the rest to a file you then have to page back anyway. `Read` reports `totalLines` on its
    first result. **Keep that first read on its own turn** — it is what establishes the extent — and
    then **request every remaining page in a single turn**, one `Read` per page issued together,
    each with its own explicit `offset` and `limit` (the next `offset` is the previous `offset` plus
