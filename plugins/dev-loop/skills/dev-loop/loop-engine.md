@@ -1255,7 +1255,8 @@ nothing downstream would ever show that it ran or what it caught. Every iteratio
 of the first three spellings, or takes the fourth path, which writes none:
 - **`- Hermetic: pass`** — the tier ran under the block and exited zero.
 - **`- Hermetic: finding — <what failed only under the block, and what it was really doing>`** — a
-  test was passing for the wrong reason.
+  test was passing for the wrong reason. This is the line that discharges "reported as prominently
+  as a bug"; blocking alone does not, because blocking leaves no record.
 - **`- Hermetic: n/a: <reason>`** — not due: `no test change`, or `<route> route` off a non-`code`
   row, or the config's own reason where the binding is `—` (e.g. `n/a: no offline/hermetic tier
   declared`). The first two say the **trigger** never fired and are available whatever the binding
@@ -1300,7 +1301,11 @@ nothing else made due, and halting a `docs` typo fix over a binding it would nev
 fail-safe, just broken.
 
 The **`- Code-review:`** line names **the commit range each round read**, one element per round,
-alongside that round's result. Nothing reads it back; its only grammar is the shapes below plus the `claims=` count.
+alongside that round's result. It is what lets a later reader tell **what a verdict covers** —
+the question the currency clause turns on and the thing a merge gate has to weigh. **It is a record
+for a reader, not a store a later step parses**: the orchestrator holds the anchor in context for as
+long as it can use it, and a round that no longer holds one runs full (step 8), so nothing reads
+this line back, and the only grammar imposed on it is the shapes below plus the `claims=` count.
 
 **Write each element when its round resolves — not at step 12**. The iteration appends the element in the
 gate-decision block where that round resolves (`progress.md` licenses one block per gate decision),
@@ -1324,7 +1329,10 @@ Keep the range **off** the `- Budget:` line: that line is one physical line and 
 factual assertion being wrong** — a comment, docstring, or prose claim that is false, stale,
 unresolvable, self-contradictory, or misdescribes what it sits on.
 
-**It is a subset count, not a partition.** A finding can be both a wrong claim and a defect in the code. **If you cannot tell whether a
+**It is a subset count, not a partition, and there is deliberately no second bucket.** A finding can
+be both a wrong claim and a defect in the code, and where the deliverable is prose an agent executes
+it routinely is — the content floor says so in as many words (step 8). Two buckets would imply the
+findings split cleanly and sum to the round's total; they do not. **If you cannot tell whether a
 finding turned on a claim, count it.**
 
 **You are not classifying findings.** The finding class is the finder's and stays the finder's (step
@@ -1465,7 +1473,6 @@ Fields:
       parent at all — where the human then declines the
       in-tree fallback, is **also** a `- gate-error:` (Part 2's fallback ladder) — the pass was due
       and produced no verdict, which is not the same as never being due.
-
   - **omitted** — **unknown**. This is what every line written before this slot existed
     carries, and those lines keep exactly that meaning. An omission must **never** be read
     retroactively as "the pass was scoped out": the corpus is append-only and is never rewritten, so
