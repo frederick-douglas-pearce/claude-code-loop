@@ -991,7 +991,8 @@ all four are **yours**, because the agent cannot discharge them from inside its 
   **are** the deliverable — a
   fix you delegated (Fresh-re-check invariant) — the parent takes the diff out of the copy and
   applies it *before* removing anything. Only a copy whose contents you do not want is discarded
-  unread. Removal is always yours.
+  unread. Hosts that auto-clean an *unchanged* isolated tree will not clean one the agent wrote to,
+  which is every case this invariant is about, so removal is always yours.
 
   **An agent that died or was interrupted still produced something, and it is collected on the same
   terms.** Read this duty as *whatever is in the copy*, never as *what the agent managed to finish*.

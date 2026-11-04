@@ -63,7 +63,8 @@ def load_snapshot():
         LINE_STARTS.append(pos)
         pos += len(ln) + 1
 
-# Rows the 2026-10-27 sequencing review moved to another issue. --apply refuses each one unless it
+# Rows the 2026-10-27 sequencing review moved to another issue, and rows #323 restored after they
+# were cut (never re-apply them). --apply refuses each one unless it
 # is named in --include-reassigned: a reassigned row applied by the wrong PR picks a winner silently.
 REASSIGNED = {
     "C1-07": "#277 (the two copies disagree on test order; needs a ruling)",
@@ -73,6 +74,8 @@ REASSIGNED = {
     "C3-80": "#278 (inside the moved Plan-gate-inferred subsection)",
     **{i: "#35 (inside B2's replacement ranges)" for i in
        ("C2-14", "C2-15", "C2-36", "C2-38", "C3-36", "C3-37", "C3-38", "C3-39", "C3-87", "C3-91")},
+    **{i: "#323 restored (F220): never re-apply" for i in
+       ("C3-01", "C3-42", "C3-43", "C3-45", "C3-81")},
 }
 
 
