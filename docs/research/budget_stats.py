@@ -131,6 +131,13 @@ ERAS = [
     # 2026-10-30 local (16:10-19:47 -0700), so 10-30 takes the EARLIER era by the
     # rule above and the first unambiguous day is 10-31.
     ("0.4.0", "2026-10-31", None),
+    # 0.5.0 is the cost epic's second round of unmeasured deletions plus #109. #109's
+    # `- status-corrected:` is new vocabulary but NOT a usable marker: it is written
+    # only when a mis-statused row is corrected, and the 0.4.0-driven journal that
+    # implemented #109 already contains it. Date-only, deliberately. Every consumer
+    # re-installed on 2026-11-04 local (01:13-02:05 -0800), so 11-04 takes the
+    # EARLIER era by the rule above and the first unambiguous day is 11-05.
+    ("0.5.0", "2026-11-05", None),
 ]
 
 # `era_by_date` scans ERAS in order and breaks at the first future row, and the
