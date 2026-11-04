@@ -863,8 +863,9 @@ If the row is **not** auto-merge-eligible — which includes *every* row under `
 (the default) and any `hold` row — STOP and ask the human before merging; never auto-merge.
 
 **What the stop must state, and it is not optional: how many EDITORIAL findings were applied without
-re-review** (step 8's sweep), and on which paths. A count, never a reassurance. **Read the number
-off the `- Editorial:`
+re-review** (step 8's sweep), and on which paths. A count, never a reassurance. Those are findings a
+gate raised that no fresh instance ever re-read — a trade the human is the only actor positioned to
+price, and absorbed silently it reads as a clean review. **Read the number off the `- Editorial:`
 line** (Ledger format → progress.md) rather than from memory: the sweep resolved back at step 8, so on
 a resumed iteration the ledger is where it survives. **Write `0` where the line says `0`** —
 a measured zero and an absent count are different statements, and this is the one number this

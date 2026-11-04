@@ -75,7 +75,7 @@ REASSIGNED = {
     **{i: "#35 (inside B2's replacement ranges)" for i in
        ("C2-14", "C2-15", "C2-36", "C2-38", "C3-36", "C3-37", "C3-38", "C3-39", "C3-87", "C3-91")},
     **{i: "#323 restored (F220): never re-apply" for i in
-       ("C3-01", "C3-42", "C3-43", "C3-45", "C3-81")},
+       ("C3-01", "C3-40", "C3-42", "C3-43", "C3-45", "C3-81")},
 }
 
 
