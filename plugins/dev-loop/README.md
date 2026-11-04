@@ -13,7 +13,7 @@ The engine was originally built and hardened in
 v0.11.0 releases) and extracted here. Install it once, generate a per-project `loop.config.md` with
 `/init-loop`, and run your backlog as a loop.
 
-> **v0.4.0, not yet stable**: six repos drive it today; see *Status* for what that does and
+> **v0.5.0, not yet stable**: seven repos drive it today; see *Status* for what that does and
 > doesn't establish.
 
 ## Why try it
@@ -173,28 +173,44 @@ skeleton does not offer.
 
 ## Status
 
-> **Status — v0.4.0; not yet stable.** Four pieces ship: the
+> **Status — v0.5.0; not yet stable.** Four pieces ship: the
 > `dev-loop` skill (`SKILL.md`, a core `loop-engine.md`, and the units under `phases/` and
 > `reference/` that it reads on demand), the `/init-loop` onboarding
 > command, the append-only guard hook, and the mutation harness the acceptance gate
-> runs (`plugins/dev-loop/tools/mutate_verify.py`). **Six repos drive it**: the first external adoption
+> runs (`plugins/dev-loop/tools/mutate_verify.py`). **Seven repos drive it**: the first external adoption
 > [us-presidential-vote-analysis](https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis),
 > the ongoing AgentFluent dogfood,
 > [claude-code-sessions](https://github.com/frederick-douglas-pearce/claude-code-sessions),
 > [sportswear-esg-news-classifier](https://github.com/frederick-douglas-pearce/sportswear-esg-news-classifier)
 > (since 2026-09-06), `claude-hook-validator` (a private repo, onboarded directly at v0.3.1 on
-> 2026-10-09), and (since 2026-07-28) this repo, which runs the loop it develops and
+> 2026-10-09), the GitHub Pages site the blog series publishes to (onboarded at v0.3.1 on
+> 2026-10-26), and (since 2026-07-28) this repo, which runs the loop it develops and
 > is the source of most of the findings below. **They sit on different engine versions
 > deliberately — and this list is not the authority on which.** Version pinning is
 > per-project; read it from `~/.claude/plugins/installed_plugins.json`, never from prose
 > here. At the v0.3.0 cut (2026-09-11) three repos took that release — this one,
 > `us-presidential-vote-analysis` and `sportswear-esg-news-classifier` — and the same three
-> took v0.3.1 on 2026-10-08 and 2026-10-09. AgentFluent and `claude-code-sessions` stay held
+> took v0.3.1 on 2026-10-08 and 2026-10-09. AgentFluent and `claude-code-sessions` were held
 > on v0.2.0 as an untreated control for the cost research in [`docs/research/`](docs/research/)
-> (see *How the loop gets better*). **111 issues had been carried to `done` by the loop as of
+> until 2026-10-31, when every consumer took v0.4.0 and the control was dropped
+> ([#285](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/285)). **111 issues had been carried to `done` by the loop as of
 > the v0.3.0 cut**, across the five repos driving it then. That is enough to say the
 > plugin/config seam holds and that the hardening works under load; it is not enough to call
 > it stable.
+>
+> **v0.5.0 is a minor bump because it changes which issue the loop picks.** Before it
+> selects a `queued` or `routed` row, the loop now checks that row's `Depends on` cell. A row
+> whose dependency is unmet is corrected to `blocked`, and the correction is journaled. A
+> dependency outside the run counts as met only when it is known to be completed; if the loop
+> cannot tell, the row waits
+> ([#109](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/109)). The rest is
+> the second half of the cost work's deletions
+> ([#271](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/271)), again
+> shipped unmeasured: rationale prose cut from the engine core (#276, #314), and duplicates and
+> history cut from the units and `SKILL.md` (#290, #316). An audit then restored, word for word,
+> the six cut reasons that let a rule win against a conflicting instruction from Claude Code
+> itself (#323). The engine core and `SKILL.md` are 8.8% smaller in bytes than in v0.4.0. That
+> is a smaller footprint, not yet a saving.
 >
 > **v0.4.0 is a minor bump because it adds stops.** The loop now pushes every commit on the
 > PR branch as soon as it makes it, and before it applies a review label or merges it checks
@@ -414,7 +430,7 @@ enforcement: nothing in the plugin can stop you upgrading mid-iteration.
 
 ## What the loop can do to your repo
 
-**This section describes v0.4.0.** Every engine older than v0.3.0 gates less at nearly
+**This section describes v0.5.0.** Every engine older than v0.3.0 gates less at nearly
 every point below, and the lists here are illustrative, never the set — **assume nothing
 in this section is live until you have re-installed.** An installed **v0.2.0** has no
 design-question stop, no blocking/editorial split at code review, no guard-efficacy
@@ -867,9 +883,6 @@ before each run, so the assignment mechanism is ours:
   [cost-experiments epic](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/211)
   starts with the replicate harness it needs.
 - **Randomized config assignment** for future runs, so the propensity is known rather than assumed.
-- **Difference-in-differences on the staggered engine rollout** — free, because the data is
-  already on disk. Releases reach consuming repos on different dates, and two of them are
-  deliberately held on v0.2.0 as an untreated control.
 
 **The run environment is treated as a treatment too.** When the default model and effort level
 changed partway through the v0.3.0 baseline window, every instrument was stratified by
@@ -891,14 +904,11 @@ confidence — correlational at best — beside it.
 and each milestone's description says what it is for and whether it is frozen. This section
 describes direction; it deliberately does not restate what is in each milestone.
 
-- **Finish measuring v0.3.1.** The sharding milestone stays open until
-  [#133](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/133) has enough
-  completed v0.3.1 sessions in each treated repo to judge its pre-registered predictions.
 - **Cost, turns first.** The cost review
   ([#271](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/271)) found the bill
   is driven by turns, and the largest lever on turns is the review round that exists because the
-  previous round's fix introduced a new defect. v0.4.0 shipped the review's safe deletions
-  unmeasured. Next come more deletions and a paired benchmark, and then the levers that act on rounds.
+  previous round's fix introduced a new defect. v0.4.0 and v0.5.0 shipped the review's deletions
+  unmeasured. Next comes a paired benchmark, and then the levers that act on rounds.
 - **Cost attribution per iteration.** Recording session IDs in the journal
   ([#234](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/234)) would let an
   iteration's token usage be tied to its PR.
