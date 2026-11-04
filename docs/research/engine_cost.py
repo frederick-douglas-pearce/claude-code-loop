@@ -164,6 +164,18 @@ LOAD_TOKENS = {
     ("0.3.1", "phases/accepting.md"): 14042,           # claude-hook-validator 7b6d7a80
     ("0.3.1", "phases/reviewing.md"): 11826,           # vote 76f03bf5, a4a60fb7
     ("0.3.1", "reference/initialization.md"): 1510,    # f60e1176
+    # 0.4.0, measured 2026-11-04 over claude-opus-5-5 parents only: three Fable
+    # (claude-fable-5-1) sessions with complete reads are left out, since no row
+    # here was measured on that tokenizer. `reviewing` and `initialization` are
+    # byte-identical to 0.3.1's (`cmp` of the two cached payloads), so as for
+    # 0.2.0/0.2.1 each row is the minimum over both eras. The 0.3.1 rows are left
+    # as #133 was judged with them, though 0.4.0's `reviewing` load is lower.
+    ("0.4.0", CORE): 70653,                            # esg 5f73b0a0
+    ("0.4.0", "phases/accepting.md"): 14090,           # esg 5f73b0a0, vote 1dad2c07
+    ("0.4.0", "phases/reviewing.md"): 11803,           # esg 5f73b0a0, vote 58f2954f
+    ("0.4.0", "reference/initialization.md"): 1510,    # 0.3.1 f60e1176; 0.4.0's only: loop 1675ea10, 1596
+    ("0.4.0", "reference/plan-template.md"): 1134,     # Pages 88d3c313
+    ("0.4.0", "reference/record-templates.md"): 1087,  # esg 5f73b0a0, vote 1dad2c07
 }
 
 # Every row was measured on one tokenizer family (claude-opus-5 / -5-5 parents).
