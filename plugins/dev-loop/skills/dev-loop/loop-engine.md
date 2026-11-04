@@ -80,7 +80,8 @@ invocation resumes correctly.
    bulk-read the journal.** A bulk read is capped silently and drops the end, where last-wins puts
    the answer; a sentinel the journal *discusses* in prose is not one. If you cannot tell
    which hits are sentinels, or cannot confirm the search covered the whole file, **STOP and ask
-   the human**. Then:
+   the human** — acting on the wrong sentinel either re-enters a terminal run or releases a park
+   nothing released. Then:
    - `RUN COMPLETE` (see Convergence) → report done and STOP; do not re-scan (the run is terminal).
    - `RUN PARKED — awaiting <condition>` (see Convergence) — the run finished all *workable* rows
      and rests on an external event:
@@ -956,7 +957,9 @@ branch; never `git add` unrelated pre-existing working-tree changes; **never sta
 writing subagent's isolated copy is live** (Execution policy, below — the window closes when *you*
 remove the copy, not when the agent exits); never edit the user-global
 `SCOPE_AGENT`/`DESIGN_AGENT` definitions; **never edit `loop.config.md`** — a binding
-that looks wrong is a finding you journal and hand to the human.
+that looks wrong is a finding you journal and hand to the human, because a gate you rebind to match
+your own reading entrenches your misreading instead of correcting it. The C1 append-only guard and
+the human/merge gates are the enforced backstops; the rest of this list is your contract.
 
 **Paging a file of known extent — ask for the remaining slices in one turn.** Where you are reading
 a file in slices and already know how long it is, every slice after the first is an independent
@@ -973,7 +976,8 @@ and a shell slice is bounded by the command-output cap, which truncates **silent
 slices whose *requested* ranges tile the file can still arrive with the middle missing. **If you
 cannot confirm the file's extent, it is not known, and you page it one turn at a time.** This governs
 *slices of one file you have already sized*; it is **not** a license to merge independent tool calls
-in general. (The engine — core and every unit — must still
+in general, because in general nothing distinguishes a dependent read from an independent one and
+merging across a dependency reorders effects. (The engine — core and every unit — must still
 be read with `Read` rather than shell slices — see the engine-read protocol in `SKILL.md`.)
 
 **The working tree is parent-owned state; any agent that must write to it gets its own copy.**
@@ -1617,7 +1621,8 @@ has not left it.
    surfaces in use across real consumers are an **issue comment**, an **issue-body marker** (a line
    in the body itself, e.g. "Architect review complete — approved <date>"), and a **decision-log
    entry** in the repo. A project may use more than one, and some use no comments at all — so
-   "no comment found" is **not** evidence the architect never ran.
+   "no comment found" is **not** evidence the architect never ran, and treating it as such
+   re-invokes a gate that already ran and, worse, invites the back-dated freeze that (2) below bars.
    If you cannot establish which surface this project uses, that is a question for the human, not a
    reason to re-invoke.
    **But do not treat the record as the whole of the step:** if a record exists and `## Approach`
