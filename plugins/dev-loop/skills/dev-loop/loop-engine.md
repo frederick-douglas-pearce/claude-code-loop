@@ -80,7 +80,8 @@ invocation resumes correctly.
    bulk-read the journal.** A bulk read is capped silently and drops the end, where last-wins puts
    the answer; a sentinel the journal *discusses* in prose is not one. If you cannot tell
    which hits are sentinels, or cannot confirm the search covered the whole file, **STOP and ask
-   the human**. Then:
+   the human** — acting on the wrong sentinel either re-enters a terminal run or releases a park
+   nothing released. Then:
    - `RUN COMPLETE` (see Convergence) → report done and STOP; do not re-scan (the run is terminal).
    - `RUN PARKED — awaiting <condition>` (see Convergence) — the run finished all *workable* rows
      and rests on an external event:
@@ -862,8 +863,9 @@ If the row is **not** auto-merge-eligible — which includes *every* row under `
 (the default) and any `hold` row — STOP and ask the human before merging; never auto-merge.
 
 **What the stop must state, and it is not optional: how many EDITORIAL findings were applied without
-re-review** (step 8's sweep), and on which paths. A count, never a reassurance. **Read the number
-off the `- Editorial:`
+re-review** (step 8's sweep), and on which paths. A count, never a reassurance. Those are findings a
+gate raised that no fresh instance ever re-read — a trade the human is the only actor positioned to
+price, and absorbed silently it reads as a clean review. **Read the number off the `- Editorial:`
 line** (Ledger format → progress.md) rather than from memory: the sweep resolved back at step 8, so on
 a resumed iteration the ledger is where it survives. **Write `0` where the line says `0`** —
 a measured zero and an absent count are different statements, and this is the one number this
@@ -956,7 +958,9 @@ branch; never `git add` unrelated pre-existing working-tree changes; **never sta
 writing subagent's isolated copy is live** (Execution policy, below — the window closes when *you*
 remove the copy, not when the agent exits); never edit the user-global
 `SCOPE_AGENT`/`DESIGN_AGENT` definitions; **never edit `loop.config.md`** — a binding
-that looks wrong is a finding you journal and hand to the human.
+that looks wrong is a finding you journal and hand to the human, because a gate you rebind to match
+your own reading entrenches your misreading instead of correcting it. The C1 append-only guard and
+the human/merge gates are the enforced backstops; the rest of this list is your contract.
 
 **Paging a file of known extent — ask for the remaining slices in one turn.** Where you are reading
 a file in slices and already know how long it is, every slice after the first is an independent
@@ -973,7 +977,8 @@ and a shell slice is bounded by the command-output cap, which truncates **silent
 slices whose *requested* ranges tile the file can still arrive with the middle missing. **If you
 cannot confirm the file's extent, it is not known, and you page it one turn at a time.** This governs
 *slices of one file you have already sized*; it is **not** a license to merge independent tool calls
-in general. (The engine — core and every unit — must still
+in general, because in general nothing distinguishes a dependent read from an independent one and
+merging across a dependency reorders effects. (The engine — core and every unit — must still
 be read with `Read` rather than shell slices — see the engine-read protocol in `SKILL.md`.)
 
 **The working tree is parent-owned state; any agent that must write to it gets its own copy.**
@@ -987,7 +992,8 @@ all four are **yours**, because the agent cannot discharge them from inside its 
   **are** the deliverable — a
   fix you delegated (Fresh-re-check invariant) — the parent takes the diff out of the copy and
   applies it *before* removing anything. Only a copy whose contents you do not want is discarded
-  unread. Removal is always yours.
+  unread. Hosts that auto-clean an *unchanged* isolated tree will not clean one the agent wrote to,
+  which is every case this invariant is about, so removal is always yours.
 
   **An agent that died or was interrupted still produced something, and it is collected on the same
   terms.** Read this duty as *whatever is in the copy*, never as *what the agent managed to finish*.
@@ -1617,7 +1623,8 @@ has not left it.
    surfaces in use across real consumers are an **issue comment**, an **issue-body marker** (a line
    in the body itself, e.g. "Architect review complete — approved <date>"), and a **decision-log
    entry** in the repo. A project may use more than one, and some use no comments at all — so
-   "no comment found" is **not** evidence the architect never ran.
+   "no comment found" is **not** evidence the architect never ran, and treating it as such
+   re-invokes a gate that already ran and, worse, invites the back-dated freeze that (2) below bars.
    If you cannot establish which surface this project uses, that is a question for the human, not a
    reason to re-invoke.
    **But do not treat the record as the whole of the step:** if a record exists and `## Approach`
