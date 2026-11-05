@@ -74,8 +74,9 @@ session is measured only if every engine file it read at all -- the core always,
 every other file but `SKILL.md` once read -- cleared its floor: 98% of one measured
 complete load of that file on the parent's tokenizer family (`LOAD_TOKENS`). These
 refuse it outright:
-  * a parent model with no tokenizer family (`TOKENIZER_FAMILY`), an unstratified
-    parent, or a mid-session model switch -- no rows were measured on it;
+  * a parent model with no tokenizer family (`TOKENIZER_FAMILY`), a parent turn
+    with no model, or a switch across families -- no rows were measured on it
+    (an effort switch, or a switch within one family, keeps the family);
   * a required file with no measured row, or an unknown era -- nothing sizes it;
   * a short load of any required file.
 A read naming several files (`grep x phases/a.md phases/b.md`) makes each of them
@@ -185,8 +186,8 @@ LOAD_TOKENS = {
 # A context-token level is a property of the file AND the tokenizer, so the rows
 # are keyed by the parent's tokenizer family, and the family is looked up by EXACT
 # model id -- never by prefix (#212/AC10), so a `claude-opus-5-7` is not silently
-# an `opus-5`. Default-deny: a parent model not named here, an unstratified parent,
-# or a mid-session switch has NO family, hence no rows, and its session is
+# an `opus-5`. Default-deny: a parent model not named here, a parent turn with no
+# model, or a switch across families has NO family, hence no rows, and its session is
 # inadmissible with that reason until its own rows are measured. Only the parent's
 # Reads count toward a load (`profile` drops sidechains), so subagent models do not
 # enter this key; they are #310's grouping, not admissibility.
@@ -612,15 +613,25 @@ def profile(path, floor=None):
     # read it -- alone, or as a member of a `+` key. Only a single-file read credits
     # a file; a `+` key's ingestion counts in P2 and belongs to none of its members.
     named = {m for k in file_reads if k != UNATTRIBUTED for m in k.split("+")}
-    # Floors are per tokenizer family. No family -- unstratified, switched, or a
-    # model with no rows -- is inadmissible outright, even under a `--floor`
-    # override, because the override sizes the core only and the units would
-    # still be judged on another tokenizer's rows.
-    model = stratum.parent[0] if stratum.stratified else None
-    family = family_of(model)
-    no_rows = None if family else (
-        "unstratified parent (%s)" % stratum.reason if model is None
-        else "no load rows for parent model %s" % model)
+    # Floors are per tokenizer family, read off the parent turns' MODELS alone:
+    # effort does not change tokenization, so an effort switch keeps its family,
+    # and so does a switch between two ids of one family. No single family -- a
+    # turn with no model, a model with no family, or a switch across families --
+    # is inadmissible outright, even under a `--floor` override, because the
+    # override sizes the core only and the units would still be judged on another
+    # tokenizer's rows. Its files are then n/a, not short: nothing was compared.
+    parent_models = sorted({str(t.model) for t in ts})
+    families = {family_of(m) for m in parent_models if m != "None"}
+    family = next(iter(families)) if len(families) == 1 and "None" not in parent_models else None
+    if family:
+        no_rows = None
+    elif "None" in parent_models:
+        no_rows = "a parent turn records no model"
+    elif None in families:
+        no_rows = "no load rows for parent model %s" % ", ".join(
+            m for m in parent_models if family_of(m) is None)
+    else:
+        no_rows = "parent switched tokenizer family: %s" % ", ".join(parent_models)
     files = {}
     for f in sorted({CORE} | {m for m in named if is_unit(m)}):
         got = file_tokens.get(f, 0.0)
@@ -628,7 +639,7 @@ def profile(path, floor=None):
         files[f] = {
             "reads": file_reads.get(f, 0), "ingested": got,
             "level": load_level(era, f, family=family), "floor": fl,
-            "complete": fl is not None and got >= fl,
+            "complete": None if no_rows else (fl is not None and got >= fl),
             "centroid": file_weight[f] / got / n if got else None,
         }
     for f in file_reads:
@@ -643,7 +654,7 @@ def profile(path, floor=None):
         "path": path, "turns": n, "compactions": compactions,
         "era": era, "eras_seen": dict(versions),
         "floor": files[CORE]["floor"],
-        "family": family, "no_rows": no_rows,
+        "family": family, "no_rows": no_rows, "parent_models": parent_models,
         "admissible": not incomplete and not unattributed and not no_rows,
         "files": files, "incomplete": incomplete, "unattributed": unattributed,
         "subagents": subagent_count(path),

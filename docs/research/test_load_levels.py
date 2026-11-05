@@ -91,7 +91,7 @@ class ReportTests(unittest.TestCase):
     def test_the_row_is_the_minimum_and_names_its_setter(self):
         out = L.report("0.5.0", opus({"loop-engine.md": [(105, "a/s2"), (100, "a/s1")]}), [])
         self.assertIn("loop-engine.md: row=100  n=2 range=100-105  set by a/s1", out)
-        self.assertIn("    suggested: ('0.5.0', CORE): 100,", out)
+        self.assertIn("    suggested for LOAD_TOKENS_BY_FAMILY['opus-5']: ('0.5.0', CORE): 100,", out)
 
     def test_skill_md_is_never_given_a_row(self):
         out = L.report("0.5.0", opus({"SKILL.md": [(50, "a/s1")]}), [])
@@ -100,17 +100,17 @@ class ReportTests(unittest.TestCase):
     def test_an_identical_file_takes_the_minimum_over_both_eras(self):
         with mock.patch.dict(L.ec.LOAD_TOKENS, {("0.4.0", "reference/same.md"): 90}):
             out = L.report("0.5.0", opus({"reference/same.md": [(95, "a/s1")]}), [], prev="0.4.0")
-        self.assertIn("    suggested: ('0.5.0', 'reference/same.md'): 90,", out)
+        self.assertIn("    suggested for LOAD_TOKENS_BY_FAMILY['opus-5']: ('0.5.0', 'reference/same.md'): 90,", out)
 
     def test_an_identical_file_with_no_read_inherits_the_previous_row(self):
         with mock.patch.dict(L.ec.LOAD_TOKENS, {("0.4.0", "reference/same.md"): 90}):
             out = L.report("0.5.0", opus({}), [], prev="0.4.0")
-        self.assertIn("    suggested: ('0.5.0', 'reference/same.md'): 90,", out)
+        self.assertIn("    suggested for LOAD_TOKENS_BY_FAMILY['opus-5']: ('0.5.0', 'reference/same.md'): 90,", out)
 
     def test_a_changed_file_ignores_the_previous_row(self):
         with mock.patch.dict(L.ec.LOAD_TOKENS, {("0.4.0", "loop-engine.md"): 10}):
             out = L.report("0.5.0", opus({"loop-engine.md": [(100, "a/s1")]}), [], prev="0.4.0")
-        self.assertIn("    suggested: ('0.5.0', CORE): 100,", out)
+        self.assertIn("    suggested for LOAD_TOKENS_BY_FAMILY['opus-5']: ('0.5.0', CORE): 100,", out)
 
     def test_a_row_from_the_previous_era_names_that_era_as_its_setter(self):
         with mock.patch.dict(L.ec.LOAD_TOKENS, {("0.4.0", "reference/same.md"): 90}):
@@ -128,14 +128,18 @@ class ReportTests(unittest.TestCase):
         found = opus({"loop-engine.md": [(100, "a/s1")]})
         found["other-1"] = {"loop-engine.md": [(80, "b/s2", "claude-other-1")]}
         out = L.report("0.5.0", found, [])
-        i, j = out.index("== family opus-5"), out.index("== family other-1  (no rows yet: a new table)")
+        i, j = out.index("== family opus-5: rows go in LOAD_TOKENS_BY_FAMILY['opus-5']"), out.index(
+            "== family other-1: rows go in LOAD_TOKENS_BY_FAMILY['other-1']  (NO TABLE YET: "
+            "add it first; never paste these into another family's)")
         opus_part, other_part = out[i:j], out[j:]
         self.assertIn("loop-engine.md: row=100  n=1 range=100-100  set by a/s1", opus_part)
         self.assertIn("loop-engine.md: row=80  n=1 range=80-80  set by b/s2", other_part)
+        self.assertIn("    suggested for LOAD_TOKENS_BY_FAMILY['other-1']: ('0.5.0', CORE): 80,",
+                      other_part)
 
     def test_a_family_with_rows_is_reported_even_with_no_reads(self):
         out = L.report("0.5.0", {}, [])
-        self.assertIn("== family opus-5", out)
+        self.assertIn("== family opus-5: rows go in LOAD_TOKENS_BY_FAMILY['opus-5']", out)
         self.assertIn("loop-engine.md: UNMEASURED -- no complete read; no row (default-deny)", out)
 
     def test_ids_within_a_family_show_their_own_minima(self):
@@ -149,24 +153,24 @@ class ReportTests(unittest.TestCase):
         self.assertIn("left out: a/s9 -- parent ('claude-fable-5-1', 'xhigh')", out)
 
 
-class _Stratum:
-    def __init__(self, model):
-        self.parent = (model, "xhigh") if model else None
-
-
 def prof(model="claude-opus-5-5", eras=("0.5.0",), ingested=100.0):
-    return {"stratum": _Stratum(model), "eras_seen": {e: 1 for e in eras},
+    """The fields of `profile`'s result that `scan` reads; the family comes from
+    the real lookup, so scan's binning is tested against engine_cost's key."""
+    family = L.ec.family_of(model)
+    return {"family": family, "parent_models": [model],
+            "no_rows": None if family else f"no load rows for parent model {model}",
+            "eras_seen": {e: 1 for e in eras},
             "files": {"loop-engine.md": {"ingested": ingested}}}
 
 
 class ScanTests(unittest.TestCase):
     """`scan`'s exclusions: each one is NAMED in left_out, never silent."""
 
-    def run_scan(self, profile, **kw):
+    def run_scan(self, profile):
         full = [read("loop-engine.md", 1, 10, 10)]
         with mock.patch.object(L.ec, "load", return_value=full), \
                 mock.patch.object(L.ec, "profile", side_effect=profile):
-            return L.scan(["/p/proj/s1234567.jsonl"], "0.5.0", **kw)
+            return L.scan(["/p/proj/s1234567.jsonl"], "0.5.0")
 
     def test_an_opus_parent_sets_a_row(self):
         found, left = self.run_scan(lambda _: prof())
@@ -182,7 +186,15 @@ class ScanTests(unittest.TestCase):
     def test_another_tokenizer_family_is_left_out_not_averaged_in(self):
         found, left = self.run_scan(lambda _: prof("claude-fable-5-1"))
         self.assertEqual(dict(found), {})
-        self.assertIn("no tokenizer family: parent ('claude-fable-5-1', 'xhigh')", left[0][1])
+        self.assertEqual(left[0][1],
+                         "no tokenizer family: no load rows for parent model claude-fable-5-1")
+
+    def test_two_ids_of_one_family_are_labeled_with_both(self):
+        p = prof()
+        p["parent_models"] = ["claude-opus-5", "claude-opus-5-5"]
+        found, _ = self.run_scan(lambda _: p)
+        self.assertEqual(found["opus-5"]["loop-engine.md"][0][2],
+                         "claude-opus-5+claude-opus-5-5")
 
     def test_a_mixed_era_session_is_left_out(self):
         found, left = self.run_scan(lambda _: prof(eras=("0.4.0", "0.5.0")))

@@ -103,18 +103,18 @@ def scan(paths, era):
         if not p:
             left_out.append((session_tag(path), "profile found no parent turns"))
             continue
-        parent = p["stratum"].parent if p.get("stratum") else None
-        family = ec.family_of(parent[0]) if parent else None
+        family = p["family"]  # profile's own key, so the two can never drift
         if not family:
-            left_out.append((session_tag(path), f"no tokenizer family: parent {parent}"))
+            left_out.append((session_tag(path), f"no tokenizer family: {p['no_rows']}"))
             continue
+        model = "+".join(p["parent_models"])  # two ids of one family show as both
         if set(p["eras_seen"]) != {era}:
             left_out.append((session_tag(path), f"mixed eras {sorted(p['eras_seen'])}"))
             continue
         for f in full:
             d = p["files"].get(f)
             if d and d["ingested"]:
-                found[family][f].append((round(d["ingested"]), session_tag(path), parent[0]))
+                found[family][f].append((round(d["ingested"]), session_tag(path), model))
             else:  # a detector disagreement: hand-check it, never drop it silently
                 left_out.append((session_tag(path),
                                  f"{f}: complete read, but profile credited no ingestion"))
@@ -141,7 +141,11 @@ def report(era, found, left_out, prev=None):
     names = payload_files(era) or sorted({f for fs in found.values() for f in fs})
     for family in sorted(set(ec.LOAD_TOKENS_BY_FAMILY) | set(found)):
         rows, fam = ec.LOAD_TOKENS_BY_FAMILY.get(family, {}), found.get(family, {})
-        out.append(f"== family {family}" + ("" if rows else "  (no rows yet: a new table)"))
+        table = f"LOAD_TOKENS_BY_FAMILY[{family!r}]"
+        # Every suggestion names its table: a row pasted into another family's
+        # table lowers that family's floors (rows are minima) -- a fail-open.
+        out.append(f"== family {family}: rows go in {table}" + (
+            "" if rows else "  (NO TABLE YET: add it first; never paste these into another family's)"))
         for f in names:
             if f == ec.ENTRY:
                 continue  # SKILL.md never needs a floor
@@ -171,7 +175,7 @@ def report(era, found, left_out, prev=None):
                 out.append("    per model: " + ", ".join(
                     f"{m}={x}" for m, x in sorted(per_model.items())))
             key = "CORE" if f == ec.CORE else repr(f)
-            out.append(f"    suggested: ({era!r}, {key}): {row},")
+            out.append(f"    suggested for {table}: ({era!r}, {key}): {row},")
     for tag, why in left_out:
         out.append(f"left out: {tag} -- {why}")
     return out

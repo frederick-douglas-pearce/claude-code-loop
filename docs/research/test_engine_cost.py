@@ -196,6 +196,9 @@ class AdmissibilityTests(unittest.TestCase):
                     {"type": "tool_result", "tool_use_id": "t0", "content": "x" * 500}]}},
                 {"type": "assistant", "message": {"id": "m1", "usage":
                  {"cache_read_input_tokens": 3000}, "content": []}}]
+        for r in recs:  # stratified, so the floor -- not the family -- decides
+            if r["type"] == "assistant":
+                r["effort"], r["message"]["model"] = "high", "claude-opus-5-5"
         fh = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
         for r in recs:
             fh.write(_json.dumps(r) + "\n")
@@ -204,6 +207,8 @@ class AdmissibilityTests(unittest.TestCase):
             p = profile(fh.name)
             self.assertIn("admissible", p)
             self.assertFalse(p["admissible"])   # tiny fixture is far below the floor
+            self.assertIsNone(p["no_rows"])
+            self.assertEqual(p["incomplete"], [CORE])
         finally:
             os.unlink(fh.name)
 
@@ -765,10 +770,51 @@ class FamilyTests(unittest.TestCase):
         self.assertIsNone(p["family"])
         self.assertEqual(p["no_rows"], "no load rows for parent model claude-fable-5-1")
 
-    def test_an_unstratified_parent_is_inadmissible(self):
-        p = self.complete(effort=None)
+    def test_its_files_are_not_applicable_rather_than_short(self):
+        """A complete load with no family was never compared, so it is not 'short'."""
+        p = self.complete(model="claude-fable-5-1")
+        self.assertEqual(p["incomplete"], [])
+        self.assertIsNone(p["files"][CORE]["complete"])
+
+    def test_a_turn_with_no_model_is_inadmissible(self):
+        p = self.complete(model=None)
         self.assertFalse(p["admissible"])
-        self.assertTrue(p["no_rows"].startswith("unstratified parent"))
+        self.assertEqual(p["no_rows"], "a parent turn records no model")
+
+    def test_effort_does_not_change_the_family(self):
+        """An effort switch, or no effort at all, keeps an Opus session admissible:
+        tokenization depends on the model, not the effort."""
+        recs = transcript([(ENG31 % CORE, full("0.3.1", CORE))])
+        for i, r in enumerate(x for x in recs if x["type"] == "assistant"):
+            r["effort"] = ("medium", "high")[i % 2]
+        self.assertTrue(run_profile(recs)["admissible"])
+        self.assertTrue(self.complete(effort=None)["admissible"])
+
+    def assistant_models(self, *models):
+        recs = transcript([(ENG31 % CORE, full("0.3.1", CORE))])
+        asst = [r for r in recs if r["type"] == "assistant"]
+        for r, m in zip(asst, models):
+            r["message"]["model"] = m
+        return run_profile(recs)
+
+    def test_one_turn_with_no_model_denies_the_family(self):
+        """Its tokenizer is unknown, so the session's is too (default-deny)."""
+        p = self.assistant_models("claude-opus-5-5", None)
+        self.assertFalse(p["admissible"])
+        self.assertEqual(p["no_rows"], "a parent turn records no model")
+
+    def test_a_switch_within_one_family_keeps_it(self):
+        p = self.assistant_models("claude-opus-5", "claude-opus-5-5")
+        self.assertEqual(p["family"], OPUS)
+        self.assertEqual(p["parent_models"], ["claude-opus-5", "claude-opus-5-5"])
+        self.assertTrue(p["admissible"])
+
+    def test_a_switch_across_families_is_inadmissible(self):
+        fams = dict(ec.TOKENIZER_FAMILY, **{"claude-x-1": "x"})
+        with mock.patch.object(ec, "TOKENIZER_FAMILY", fams):
+            p = self.assistant_models("claude-opus-5-5", "claude-x-1")
+        self.assertFalse(p["admissible"])
+        self.assertTrue(p["no_rows"].startswith("parent switched tokenizer family"))
 
     def test_the_floor_flag_does_not_admit_an_unmeasured_family(self):
         p = run_profile(transcript([(ENG31 % CORE, 100)], model="claude-fable-5-1"), floor=1)
