@@ -72,7 +72,10 @@ tool_result BLOCK content, which is what actually entered the context window.
 ADMISSIBILITY IS PER FILE, IN CONTEXT TOKENS (F191, #133), and default-deny. A
 session is measured only if every engine file it read at all -- the core always,
 every other file but `SKILL.md` once read -- cleared its floor: 98% of one measured
-complete load of that file (`LOAD_TOKENS`). These refuse it outright:
+complete load of that file on the parent's tokenizer family (`LOAD_TOKENS`). These
+refuse it outright:
+  * a parent model with no tokenizer family (`TOKENIZER_FAMILY`), an unstratified
+    parent, or a mid-session model switch -- no rows were measured on it;
   * a required file with no measured row, or an unknown era -- nothing sizes it;
   * a short load of any required file.
 A read naming several files (`grep x phases/a.md phases/b.md`) makes each of them
@@ -179,9 +182,20 @@ LOAD_TOKENS = {
 }
 
 # Every row was measured on one tokenizer family (claude-opus-5 / -5-5 parents).
-# A context-token level is a property of the file AND the tokenizer, so a parent
-# model on a different tokenizer needs its rows re-measured before its sessions
-# are scored against these.
+# A context-token level is a property of the file AND the tokenizer, so the rows
+# are keyed by the parent's tokenizer family, and the family is looked up by EXACT
+# model id -- never by prefix (#212/AC10), so a `claude-opus-5-7` is not silently
+# an `opus-5`. Default-deny: a parent model not named here, an unstratified parent,
+# or a mid-session switch has NO family, hence no rows, and its session is
+# inadmissible with that reason until its own rows are measured. Only the parent's
+# Reads count toward a load (`profile` drops sidechains), so subagent models do not
+# enter this key; they are #310's grouping, not admissibility.
+#
+# `claude-opus-5` and `-5-5` are one family by assertion, not measurement: the
+# rows above mix both. `load_levels.py` prints the minimum per exact id within a
+# family, which keeps the equivalence checkable.
+TOKENIZER_FAMILY = {"claude-opus-5": "opus-5", "claude-opus-5-5": "opus-5"}
+LOAD_TOKENS_BY_FAMILY = {"opus-5": LOAD_TOKENS}
 #
 # A complete load measures slightly differently from session to session:
 # ingestion is a context delta shared out across a turn's tool results by size,
@@ -235,17 +249,24 @@ def _cached_versions():
         return []
 
 
-def load_level(version, f=CORE):
-    """One measured complete load of file `f` under `version`, in context tokens,
-    or None -- an unknown era, or a file nobody has measured. None is not complete:
-    the caller refuses the session rather than estimate a level."""
-    return LOAD_TOKENS.get((version, f))
+def family_of(model):
+    """The tokenizer family of an exact parent model id, or None (default-deny)."""
+    return TOKENIZER_FAMILY.get(model) if isinstance(model, str) else None
 
 
-def floor_for(version, f=CORE):
-    """Admissibility floor in context tokens for file `f` of engine `version`, or
-    None where there is no measured load (see `load_level`)."""
-    level = load_level(version, f)
+def load_level(version, f=CORE, *, family):
+    """One measured complete load of file `f` under `version` on tokenizer
+    `family`, in context tokens, or None -- an unknown era, family, or a file nobody
+    has measured. None is not complete: the caller refuses the session rather than
+    estimate a level. `family` is required so a caller that forgets it errors
+    instead of silently refusing everything."""
+    return LOAD_TOKENS_BY_FAMILY.get(family, {}).get((version, f))
+
+
+def floor_for(version, f=CORE, *, family):
+    """Admissibility floor in context tokens for file `f` of engine `version` on
+    tokenizer `family`, or None where there is no measured load (`load_level`)."""
+    level = load_level(version, f, family=family)
     return level * LOAD_TOLERANCE if level else None
 
 
@@ -591,13 +612,22 @@ def profile(path, floor=None):
     # read it -- alone, or as a member of a `+` key. Only a single-file read credits
     # a file; a `+` key's ingestion counts in P2 and belongs to none of its members.
     named = {m for k in file_reads if k != UNATTRIBUTED for m in k.split("+")}
+    # Floors are per tokenizer family. No family -- unstratified, switched, or a
+    # model with no rows -- is inadmissible outright, even under a `--floor`
+    # override, because the override sizes the core only and the units would
+    # still be judged on another tokenizer's rows.
+    model = stratum.parent[0] if stratum.stratified else None
+    family = family_of(model)
+    no_rows = None if family else (
+        "unstratified parent (%s)" % stratum.reason if model is None
+        else "no load rows for parent model %s" % model)
     files = {}
     for f in sorted({CORE} | {m for m in named if is_unit(m)}):
         got = file_tokens.get(f, 0.0)
-        fl = floor if (f == CORE and floor is not None) else floor_for(era, f)
+        fl = floor if (f == CORE and floor is not None) else floor_for(era, f, family=family)
         files[f] = {
             "reads": file_reads.get(f, 0), "ingested": got,
-            "level": load_level(era, f), "floor": fl,
+            "level": load_level(era, f, family=family), "floor": fl,
             "complete": fl is not None and got >= fl,
             "centroid": file_weight[f] / got / n if got else None,
         }
@@ -613,7 +643,8 @@ def profile(path, floor=None):
         "path": path, "turns": n, "compactions": compactions,
         "era": era, "eras_seen": dict(versions),
         "floor": files[CORE]["floor"],
-        "admissible": not incomplete and not unattributed,
+        "family": family, "no_rows": no_rows,
+        "admissible": not incomplete and not unattributed and not no_rows,
         "files": files, "incomplete": incomplete, "unattributed": unattributed,
         "subagents": subagent_count(path),
         "reads": reads, "by_tool": by_tool, "kind_counts": kind_counts,
@@ -664,6 +695,8 @@ def render(p):
         c = f"{d['centroid']:.2f}" if d["centroid"] is not None else "--"
         print(f"  {f:<30}{d['reads']:>6}{d['ingested']:>11,.0f}{fl:>10}{ok:>10}{c:>10}")
     if not p["admissible"]:
+        if p["no_rows"]:
+            print(f"  !! INADMISSIBLE -- {p['no_rows']}: no measured loads on its tokenizer.")
         if p["incomplete"]:
             print(f"  !! INADMISSIBLE -- below its floor, or no measured load: "
                   f"{', '.join(p['incomplete'])}.")
@@ -715,7 +748,8 @@ def table_row(p):
     cells = (os.path.basename(p["path"])[:8], p["era"] or "UNKNOWN",
              "%s@%s" % s.parent if s.stratified else "UNSTRATIFIED",
              "yes" if p["admissible"] else "NO",
-             ",".join(p["incomplete"] + (["unattributable"] if p["unattributed"] else [])) or "-",
+             ",".join((["no-rows"] if p["no_rows"] else []) + p["incomplete"]
+                      + (["unattributable"] if p["unattributed"] else [])) or "-",
              p["turns"], round(p["ingested"]),
              "%.4f" % p2c(p) if p2c(p) is not None else "-",
              p["compactions"], p["subagents"], p["peak_ctx"],

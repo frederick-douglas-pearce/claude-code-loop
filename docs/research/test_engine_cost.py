@@ -20,10 +20,23 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from engine_cost import (  # noqa: E402
     classify, strip_heredocs, profile, main,
-    engine_version, engine_bytes, floor_for, KNOWN_ENGINE_BYTES,
-    engine_file, file_bytes, load_level, median_interval,
+    engine_version, engine_bytes, KNOWN_ENGINE_BYTES,
+    engine_file, file_bytes, median_interval, family_of,
     LOAD_TOKENS, LOAD_TOLERANCE, CORE, ENTRY,
 )
+import engine_cost as ec  # noqa: E402
+
+# The version-aware tests below are about ONE tokenizer family, the one every row
+# was measured on; FamilyTests covers the family key itself.
+OPUS = "opus-5"
+
+
+def floor_for(version, f=CORE):
+    return ec.floor_for(version, f, family=OPUS)
+
+
+def load_level(version, f=CORE):
+    return ec.load_level(version, f, family=OPUS)
 
 CACHE = "/home/u/.claude/plugins/cache/claude-code-loop/dev-loop/0.2.0/skills/dev-loop/loop-engine.md"
 TREE = "/home/u/Documents/Projects/git/claude-code-loop/skills/dev-loop/loop-engine.md"
@@ -265,7 +278,7 @@ ENG31 = "/home/u/.claude/plugins/cache/claude-code-loop/dev-loop/0.3.1/skills/de
 TREE31 = "/home/u/Documents/Projects/git/claude-code-loop/plugins/dev-loop/skills/dev-loop/%s"
 
 
-def transcript(steps):
+def transcript(steps, model="claude-opus-5-5", effort="high"):
     """Records for a session whose parent takes one turn per step, plus a final one.
 
     A step is `(path, tokens)` -- a Read of `path` whose result raises the next
@@ -285,9 +298,10 @@ def transcript(steps):
         content = ([{"type": "tool_use", "id": "t%d" % k, "name": tool,
                      "input": inp}] if use
                    else [{"type": "text", "text": "."}])
-        recs.append({"type": "assistant", "message": {"id": "m%d" % k, "usage": {
-            "input_tokens": ctx, "cache_read_input_tokens": 0,
-            "cache_creation_input_tokens": 0, "output_tokens": out},
+        recs.append({"type": "assistant", "effort": effort, "message": {
+            "id": "m%d" % k, "model": model, "usage": {
+                "input_tokens": ctx, "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0, "output_tokens": out},
             "content": content}})
         if use:
             recs.append({"type": "user", "message": {"content": [
@@ -728,6 +742,43 @@ class SubagentCountTests(unittest.TestCase):
             shutil.rmtree(d)
 
 
+class FamilyTests(unittest.TestCase):
+    """A load level belongs to a file AND a tokenizer. A parent whose model has no
+    measured rows is inadmissible, never scored against another family's rows."""
+
+    def complete(self, **kw):
+        return run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE))], **kw))
+
+    def test_both_opus_ids_share_one_family(self):
+        self.assertEqual(family_of("claude-opus-5"), OPUS)
+        self.assertEqual(family_of("claude-opus-5-5"), OPUS)
+        self.assertTrue(self.complete(model="claude-opus-5")["admissible"])
+
+    def test_family_is_by_exact_id_never_by_prefix(self):
+        self.assertIsNone(family_of("claude-opus-5-7"))
+        self.assertIsNone(family_of(None))
+
+    def test_a_complete_load_on_another_tokenizer_is_inadmissible_and_named(self):
+        p = self.complete(model="claude-fable-5-1")
+        self.assertFalse(p["admissible"])
+        self.assertIsNone(p["family"])
+        self.assertEqual(p["no_rows"], "no load rows for parent model claude-fable-5-1")
+
+    def test_an_unstratified_parent_is_inadmissible(self):
+        p = self.complete(effort=None)
+        self.assertFalse(p["admissible"])
+        self.assertTrue(p["no_rows"].startswith("unstratified parent"))
+
+    def test_the_floor_flag_does_not_admit_an_unmeasured_family(self):
+        p = run_profile(transcript([(ENG31 % CORE, 100)], model="claude-fable-5-1"), floor=1)
+        self.assertFalse(p["admissible"])
+
+    def test_family_is_required(self):
+        with self.assertRaises(TypeError):
+            ec.floor_for("0.3.1", CORE)
+        self.assertIsNone(ec.load_level("0.3.1", CORE, family=None))
+
+
 class CliFloorTests(unittest.TestCase):
     """`main()` must apply the PER-SESSION floor, not a constant.
 
@@ -756,8 +807,8 @@ class CliFloorTests(unittest.TestCase):
         """
         base_in, base_out = 10, 5
         return [
-            {"type": "assistant", "message": {
-                "id": "m0",
+            {"type": "assistant", "effort": "high", "message": {
+                "id": "m0", "model": "claude-opus-5-5",
                 "usage": {"input_tokens": base_in, "cache_read_input_tokens": 0,
                           "cache_creation_input_tokens": 0,
                           "output_tokens": base_out},
@@ -766,8 +817,8 @@ class CliFloorTests(unittest.TestCase):
             {"type": "user", "message": {"content": [
                 {"type": "tool_result", "tool_use_id": "t0",
                  "content": "engine text"}]}},
-            {"type": "assistant", "message": {
-                "id": "m1",
+            {"type": "assistant", "effort": "high", "message": {
+                "id": "m1", "model": "claude-opus-5-5",
                 "usage": {"input_tokens": base_in + base_out + ingest_tokens,
                           "cache_read_input_tokens": 0,
                           "cache_creation_input_tokens": 0,

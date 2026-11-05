@@ -9,10 +9,11 @@ against `totalLines`, less the trailing line Read counts after a final newline.
 Ingestion comes from `engine_cost.profile`, so this tool inherits its detection
 (cache paths only, spill files, heredocs) and adds none of its own.
 
-Only parents on the tokenizer family the existing rows were measured on count
-(`--model`, default `claude-opus-5`, a prefix). A context-token level is a
-property of the file AND the tokenizer, so a session on another family is
-listed as left out, never averaged in.
+A context-token level is a property of the file AND the tokenizer, so sessions
+are binned by the parent's tokenizer family (`engine_cost.TOKENIZER_FAMILY`, by
+exact model id) and each family gets its own section and rows. A parent with no
+family is listed as left out, never averaged in; give it a family in
+`engine_cost.py` first, and its rows come out as a new table.
 
 `--prev ERA` compares the two cached payloads. Where a file is byte-identical,
 its row is the minimum over both eras (the 0.2.0/0.2.1 precedent), and the
@@ -36,15 +37,15 @@ Stdlib only.  Self-test: `python3 test_load_levels.py`
 import collections
 import filecmp
 import glob
-import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import engine_cost as ec  # noqa: E402
 
 PROJECTS = os.path.expanduser("~/.claude/projects")
-DEFAULT_MODEL = "claude-opus-5"
+ERA = re.compile(r"\d+\.\d+\.\d+")
 
 
 def era_file(path, era):
@@ -82,23 +83,30 @@ def session_tag(path):
     return f"{os.path.basename(os.path.dirname(path))}/{os.path.basename(path)[:8]}"
 
 
-def scan(paths, era, model=DEFAULT_MODEL):
-    """({file: [(ingested, tag)]}, [left-out (tag, reason)]) over `paths`."""
-    found, left_out = collections.defaultdict(list), []
+def scan(paths, era):
+    """({family: {file: [(ingested, tag, model)]}}, [left-out (tag, reason)]).
+
+    Sessions are binned by the parent's tokenizer family (`ec.family_of`, an exact
+    id lookup), so a family's rows are never set by another tokenizer's loads. A
+    parent with no family is left out under its exact id."""
+    found = collections.defaultdict(lambda: collections.defaultdict(list))
+    left_out = []
     for path in paths:
         full = complete_reads(ec.load(path), era)
         if not full:
             continue
         try:
             p = ec.profile(path)
-        except Exception as exc:  # Unpriced, or anything profile refuses on
+        except ec.Unpriced as exc:  # the one refusal family; a bug still raises
             left_out.append((session_tag(path), f"profile refused: {exc}"))
             continue
         if not p:
+            left_out.append((session_tag(path), "profile found no parent turns"))
             continue
         parent = p["stratum"].parent if p.get("stratum") else None
-        if not parent or not parent[0].startswith(model):
-            left_out.append((session_tag(path), f"parent {parent}"))
+        family = ec.family_of(parent[0]) if parent else None
+        if not family:
+            left_out.append((session_tag(path), f"no tokenizer family: parent {parent}"))
             continue
         if set(p["eras_seen"]) != {era}:
             left_out.append((session_tag(path), f"mixed eras {sorted(p['eras_seen'])}"))
@@ -106,7 +114,10 @@ def scan(paths, era, model=DEFAULT_MODEL):
         for f in full:
             d = p["files"].get(f)
             if d and d["ingested"]:
-                found[f].append((round(d["ingested"]), session_tag(path)))
+                found[family][f].append((round(d["ingested"]), session_tag(path), parent[0]))
+            else:  # a detector disagreement: hand-check it, never drop it silently
+                left_out.append((session_tag(path),
+                                 f"{f}: complete read, but profile credited no ingestion"))
     return found, left_out
 
 
@@ -122,27 +133,45 @@ def identical(era, prev, f):
 
 
 def report(era, found, left_out, prev=None):
+    """One section per tokenizer family: every family that has rows, plus any a
+    kept session ran on. Within a family the minimum per exact model id is shown
+    when the ids differ, so the assertion that they share a tokenizer stays
+    checkable."""
     out = []
-    files = payload_files(era) or sorted(found)
-    for f in files:
-        if f == ec.ENTRY:
-            continue  # SKILL.md never needs a floor
-        v = sorted(found.get(f, []))
-        same = prev and identical(era, prev, f)
-        prev_row = ec.LOAD_TOKENS.get((prev, f)) if same else None
-        if not v and prev_row is None:
-            out.append(f"{f}: UNMEASURED -- no complete read; no row (default-deny)")
-            continue
-        row = min([x for x, _ in v] + ([prev_row] if prev_row is not None else []))
-        line = f"{f}: row={row}"
-        if v:
-            line += (f"  n={len(v)} range={v[0][0]}-{v[-1][0]}"
-                     f"  set by {', '.join(t for x, t in v if x == v[0][0])}")
-        if same:
-            line += f"  byte-identical to {prev} (its row: {prev_row})"
-        out.append(line)
-        key = "CORE" if f == ec.CORE else repr(f)
-        out.append(f"    suggested: ({era!r}, {key}): {row},")
+    names = payload_files(era) or sorted({f for fs in found.values() for f in fs})
+    for family in sorted(set(ec.LOAD_TOKENS_BY_FAMILY) | set(found)):
+        rows, fam = ec.LOAD_TOKENS_BY_FAMILY.get(family, {}), found.get(family, {})
+        out.append(f"== family {family}" + ("" if rows else "  (no rows yet: a new table)"))
+        for f in names:
+            if f == ec.ENTRY:
+                continue  # SKILL.md never needs a floor
+            v = sorted(fam.get(f, []))
+            same = prev and identical(era, prev, f)
+            prev_row = rows.get((prev, f)) if same else None
+            if not v and prev_row is None:
+                out.append(f"{f}: UNMEASURED -- no complete read; no row (default-deny)")
+                continue
+            row = min([x for x, _, _ in v] + ([prev_row] if prev_row is not None else []))
+            line = f"{f}: row={row}"
+            # The setter is whoever measured `row`: this era's lowest sessions, the
+            # previous era's row, or both when they tie.
+            setters = [t for x, t, _ in v if x == row]
+            if prev_row == row:
+                setters.append(f"{prev}'s row")
+            if v:
+                line += f"  n={len(v)} range={v[0][0]}-{v[-1][0]}"
+            line += f"  set by {', '.join(setters)}"
+            if same:
+                line += f"  byte-identical to {prev} (its row: {prev_row})"
+            out.append(line)
+            per_model = {}
+            for x, _, m in v:
+                per_model[m] = min(x, per_model.get(m, x))
+            if len(per_model) > 1:
+                out.append("    per model: " + ", ".join(
+                    f"{m}={x}" for m, x in sorted(per_model.items())))
+            key = "CORE" if f == ec.CORE else repr(f)
+            out.append(f"    suggested: ({era!r}, {key}): {row},")
     for tag, why in left_out:
         out.append(f"left out: {tag} -- {why}")
     return out
@@ -154,7 +183,7 @@ def census(paths, era):
     for path in paths:
         try:
             p = ec.profile(path)
-        except Exception as exc:
+        except ec.Unpriced as exc:
             counts["refused"] += 1
             out.append(f"REFUSED {session_tag(path)}: {exc}")
             continue
@@ -167,7 +196,7 @@ def census(paths, era):
             counts["admissible"] += 1
             continue
         counts["inadmissible"] += 1
-        why = []
+        why = [p["no_rows"]] if p.get("no_rows") else []
         if p["incomplete"]:
             why.append("short or unmeasured: " + ", ".join(p["incomplete"]))
         if p["unattributed"]:
@@ -200,15 +229,19 @@ def main(argv):
             del args[i:i + 2]
             return val
         return None
-    prev, model = opt("--prev"), opt("--model") or DEFAULT_MODEL
+    prev = opt("--prev")
     do_census = "--census" in args
     args = [a for a in args if a != "--census"]
     if not args:
         print(__doc__)
         return 1
+    bad = [e for e in (args[0], prev) if e is not None and not ERA.fullmatch(e)]
+    if bad:  # a mistyped era matches no transcript and would print an empty report
+        print(f"not an era (want X.Y.Z, e.g. 0.5.0): {', '.join(bad)}", file=sys.stderr)
+        return 2
     era, paths = args[0], args[1:] or transcripts(args[0])
     print(f"era {era}: {len(paths)} transcript(s)")
-    lines = census(paths, era) if do_census else report(era, *scan(paths, era, model), prev)
+    lines = census(paths, era) if do_census else report(era, *scan(paths, era), prev)
     print("\n".join(lines))
     return 0
 

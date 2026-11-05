@@ -29,7 +29,7 @@ All stdlib-only, all read Claude Code session transcripts from `~/.claude/projec
 | script | answers | tests |
 |---|---|---|
 | `engine_cost.py` | What does carrying the engine — core, on-demand units, and tool reads of `SKILL.md` — cost across a whole run? (P2, P2c, P6, P9, per-unit reads and arrival centroids; `--table` adds the P2c median's order-statistic interval) **Admissibility is per file, in context tokens: every engine file the session read but `SKILL.md` must clear its floor, 98% of one measured complete load for the session's own era; an unmeasured file refuses** — never a chars-per-token constant (F191). | `test_engine_cost.py` |
-| `load_levels.py` | Which sessions read each engine file of one era in full, and what did the smallest complete load ingest? The scan behind each era's `LOAD_TOKENS` rows: Opus-family parents only, `--prev` takes the minimum over a byte-identical earlier copy, an unread file gets **no** row (default-deny), and the output only *suggests* rows. `--census` then scores every session of the era and names each refusal and skip. Hand-check the session that sets the most rows before committing them. | `test_load_levels.py` |
+| `load_levels.py` | Which sessions read each engine file of one era in full, and what did the smallest complete load ingest? The scan behind each era's `LOAD_TOKENS` rows, one section per parent tokenizer family (`engine_cost.TOKENIZER_FAMILY`, by exact model id; a parent with no family is left out, never averaged in), `--prev` takes the minimum over a byte-identical earlier copy, an unread file gets **no** row (default-deny), and the output only *suggests* rows. `--census` then scores every session of the era and names each refusal and skip. Hand-check the session that sets the most rows before committing them. | `test_load_levels.py` |
 | `plan_gate_cost.py` | What is the parent carrying when the plan is written, and where did all of it come from? Attributes **everything** before implementation starts — including the two buckets no delta-based instrument sees: the always-loaded baseline and the model's own output. Splits that output by block type (only some of it stays resident) and prices the **selection phase** in resident-turn tokens. | `test_plan_gate_cost.py` |
 | `rounds_vs_turns.py` | Do gate rounds predict parent turns and bill? (Finding 11) | `test_rounds_vs_turns.py` |
 | `calls_per_turn.py` | How many tool calls per turn, and how many turns could have been merged? (Finding 12) | `test_calls_per_turn.py` |
@@ -136,7 +136,7 @@ Two defences, both cheap, and they are the only things that have worked:
   found 3. None was found by reasoning about the pattern.
 - **Sanity-check the output distribution against what the system can physically do.** One issue per
   invocation; engine ingestion ≥ one copy of the engine. `engine_cost.py` enforces the latter as an
-  **admissibility precondition** (derived per session from the engine era; override with `--floor`) — a session below it is
+  **admissibility precondition** (derived per session from the engine era and the parent's tokenizer family; override the core's with `--floor`) — a session whose parent model has no measured rows is inadmissible, and a session below it is
   *unmeasured*, not cheap, and is refused loudly rather than averaged in.
 
   *This sentence asserted that behaviour for a day before the code had it: the rule was documented
