@@ -16,6 +16,7 @@ detection bugs is pinned by the case that caught it.
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from engine_cost import (  # noqa: E402
@@ -772,6 +773,21 @@ class FamilyTests(unittest.TestCase):
     def test_the_floor_flag_does_not_admit_an_unmeasured_family(self):
         p = run_profile(transcript([(ENG31 % CORE, 100)], model="claude-fable-5-1"), floor=1)
         self.assertFalse(p["admissible"])
+
+    def test_a_second_family_is_judged_on_its_own_rows(self):
+        """With two tables, a session's floors come from ITS family, not Opus's."""
+        own = full("0.3.1", CORE) * 2          # this tokenizer runs denser
+        fams = {"claude-opus-5": OPUS, "claude-opus-5-5": OPUS, "claude-x-1": "x"}
+        tables = {OPUS: LOAD_TOKENS, "x": {("0.3.1", CORE): own}}
+        with mock.patch.object(ec, "TOKENIZER_FAMILY", fams), \
+                mock.patch.object(ec, "LOAD_TOKENS_BY_FAMILY", tables):
+            short = run_profile(transcript([(ENG31 % CORE, full("0.3.1", CORE))],
+                                           model="claude-x-1"))
+            whole = run_profile(transcript([(ENG31 % CORE, own)], model="claude-x-1"))
+        self.assertFalse(short["admissible"])   # clears Opus's floor, not its own
+        self.assertEqual(short["incomplete"], [CORE])
+        self.assertTrue(whole["admissible"])
+        self.assertEqual(whole["family"], "x")
 
     def test_family_is_required(self):
         with self.assertRaises(TypeError):
