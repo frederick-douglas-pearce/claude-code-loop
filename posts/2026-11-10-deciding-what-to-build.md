@@ -17,9 +17,9 @@ Coding agents produce more code than anyone can comfortably review, and most of 
 
 I recently almost merged a feature that had passed every technical check in my setup: the architect's review, the code review, and the check against its acceptance criteria. Then I reviewed the source it was based on and asked a question none of those checks asks: how would a user benefit from this? A value review by my pm agent found no user it would help, and a check against real configurations found nothing for it to catch. I closed the pull request unmerged.
 
-This post is about that upstream check: who makes it, where it belongs in the process, and how to set work up so that a coding agent has something worth building from.
+This post is about that upstream check: who makes it, where it belongs in the process, and how to set work up so that coding agents have something worth building from.
 
-My setup is the `dev-loop`, the Claude Code plugin I introduced in [the first post in this series](https://frederick-douglas-pearce.github.io/blog/2026/a-loop-to-remember/). It works a backlog of GitHub issues one at a time. Each issue gets a plan before any code exists. Then Claude builds it, and other agents review the code and check it against the issue's acceptance criteria. By default the loop stops for my approval of every plan and every merge.
+My setup is the `dev-loop`, the Claude Code plugin I introduced in [the first post in this series](https://frederick-douglas-pearce.github.io/blog/2026/a-loop-to-remember/). It runs my agent team through a backlog of GitHub issues, one at a time. Each issue gets a plan before any code exists. Then Claude builds it, and other agents review the code and check it against the issue's acceptance criteria. By default the loop stops for my approval of every plan and every merge.
 
 ## The hardest part, still
 
