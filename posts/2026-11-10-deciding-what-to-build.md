@@ -2,7 +2,7 @@
 layout: post
 title: "Deciding What to Build Isn't Easier with Agents"
 date: 2026-11-10 09:00:00-0800
-description: "Writing requirements for coding agents is increasingly the developer's job. What the spec-driven tools agree on, how little is proven, and how to set up work so a dev loop can consume it."
+description: "Developers sit between the business asking for a feature and the agents building it. Why deciding what to build is still hard, and how my agent team checks it."
 categories: ["claude-code-loop"]
 tags: ["claude-code", "dev-loop", "agents", "requirements", "pm", "method"]
 og_image: https://frederick-douglas-pearce.github.io/assets/img/deciding-what-to-build-og.png
