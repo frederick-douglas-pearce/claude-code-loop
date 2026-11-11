@@ -61,7 +61,7 @@ Each story also carries a falsifier: an observation that would show the feature 
 
 It has stopped features since. In my election-data project, a proposed fix to the dashboard's cache assumed visitors would request the same uncached page at the same moment. The plan checked a month of the dashboard's own logs: 97 cache misses, and not one pair on the same page within 30 seconds. The pm recommended closing it, and I did, with no code written ([#333](https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis/issues/333)). In this plugin's own repo, [another feature](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/30) was deferred at its plan gate: its evidence came to a single past instance, too thin to justify wording that would be copied into every new project's config.
 
-Watching this happen again and again is why I loop rather than vibe code, for two reasons. The first is what these examples show: I want each feature checked as it's built, including whether it should exist at all. Prompting your way to a full-featured app in one go tends to skip that question, and the app may work anyway. The cost stays hidden until someone has to find the features nobody needed and clean them up. The second is context. Reviewing each issue as it lands is how I learn what the project actually delivers and why it's built the way it is, and that's what lets me make good calls at the next plan and merge gates. If I never review the work from both the business and the engineering side, I don't see how I can be an effective approver of it.
+Watching this happen again and again is why I loop rather than vibe code, for two reasons. The first is what these examples show: I want each feature checked as it's built, including whether it should exist at all. Prompting your way to a full-featured app in one go tends to skip that question, even though the app may work. The cost stays hidden until someone has to find the features nobody needed and clean them up. The second is context. Reviewing each issue as it lands is how I learn about each increment of value the project delivers and why it's built the way it is, and that's what lets me make good calls at the next plan and merge gates. If I never review the work from both the business and the engineering side, I don't see how I can be an effective approver of it.
 
 ## What the field converged on
 
@@ -86,14 +86,14 @@ The dev loop already covers most of that list. Planning happens before code. Suc
 
 The loop doesn't elicit, though. It checks the what but never interviews you, and it starts from issues that already exist, so the thinking that put those words in the issue has to happen upstream.
 
-There, I brainstorm a feature directly with Claude, then hand the conversation to my pm agent, outside the loop, to write the PRD, epics, and issues. An interview skill such as grill-me is a more structured version of that first step. That part is my practice, not the plugin's, because the plugin ships no agents. `SCOPE_AGENT` names your own pm agent, if you have one. The flow I run is: elicit, write it into shared documents (PRD, epics, issues with acceptance criteria), then run the loop.
+I typically brainstorm a feature directly with Claude, then hand the conversation to my pm agent, outside the loop, to write the PRD, epics, and issues. An interview skill such as grill-me is a more structured version of that first step. That part is my practice, not the plugin's, because the plugin ships no agents. `SCOPE_AGENT` names your own pm agent, if you have one. The flow I run is: elicit, write it into shared documents (PRD, epics, issues with acceptance criteria), then run the loop.
 
 ## Setting up work the loop can consume
 
 Each item below is something the engine reads, except the decision log, which is my practice rather than a requirement.
 
 - [ ] **A GitHub milestone, epic, or label as the backlog.** At the start of a run, the loop asks which backlog to run (a milestone, an epic or other label, or a `TODO.md`). If issues join or leave afterward, it asks you once and never changes the queue on its own.
-- [ ] **Issues sized to fit.** If an issue plausibly spans many files or several unrelated clusters of criteria, the loop marks it `blocked: too-large` and sends it to your pm agent to split.
+- [ ] **Issues sized to fit.** If an issue plausibly spans many files or several unrelated clusters of criteria, the loop marks it `blocked: too-large` and sends it to your pm agent, which recommends a split for you to approve.
 - [ ] **Acceptance criteria someone can verify.** They are copied verbatim into the plan, and the loop's final verifier checks the diff against each one. For a feature, also name the user and the falsifier in the issue.
 - [ ] **Labels for routing.** Your docs label and your research label route an issue, a "NOT implementation-ready" line in its body defers it, and priority labels set the order.
 - [ ] **Dependencies written down.** The loop reads "Depends on" and "blocked by" in the issue body. An entry it can't read as an issue reference counts as unmet.
@@ -101,7 +101,7 @@ Each item below is something the engine reads, except the decision log, which is
 
 ## What the config settles
 
-Which labels mean what and which agent plays the pm are settings in a per-project config file, along with merge and commit conventions. Whether you review every plan is set per run, and by default the plan gate stops for your approval. Post 4 walks through the config.
+Which labels mean what and which agents play the pm and the architect are settings in a per-project config file, along with merge and commit conventions. Whether you review every plan is set per run, and by default the plan gate stops for your approval. Post 4 walks through the config.
 
 ## Try this week
 
@@ -113,7 +113,7 @@ Then, before you approve the plan, ask for a user-story map: who benefits, how o
 
 ## Next
 
-Shared documents only work if everyone means the same thing by the same words. That is the ba's job, the role that keeps the pm, the architect, the implementer, and the humans from talking past each other. It isn't in the plugin's engine. Two of my projects wired it in through their own configs. That's Post 3.
+Shared documents only work if everyone means the same thing by the same words. That is the ba's job, the role that keeps the pm, the architect, the implementer, and the humans from talking past each other. It isn't in the plugin's engine. So far, two of my projects have wired it in through their own configs. In my election-data project, the ba keeps the dashboard's terms consistent from page to page, maps every API term to its name on the dashboard, and maintains a glossary that will become the site's definitions page. It's a single source of truth for terminology, the same idea as the requirement documents above. That's Post 3.
 
 ---
 
