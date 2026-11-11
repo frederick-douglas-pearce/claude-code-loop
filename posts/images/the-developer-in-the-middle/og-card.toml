@@ -1,0 +1,33 @@
+# OG-card brief for posts/2026-11-10-the-developer-in-the-middle.md.
+#
+# Render:
+#     uv run tooling/render-og-card.py posts/images/the-developer-in-the-middle/og-card.toml
+
+[card]
+title = ["The Developer in the Middle", "A Value Check Before Agents Build"]
+subhead = "Agents made features cheap to build. They didn't make it cheaper to decide which ones are worth it."
+series_mark = "A Cross-Functional Team of One"
+
+[[panel]]
+label = "At the merge gate"
+sublabel = "every technical check passed"
+mono = true
+rows = [
+  ["does it work?", "yes"],
+  ["meets its ACs?", "every one"],
+  ["who benefits?", "not asked"],
+  ["in real configs", "not checked"],
+  ["outcome", "ready to merge"],
+]
+
+[[panel]]
+label = "After the value review"
+sublabel = "asked who it's for"
+mono = true
+rows = [
+  ["does it work?", "yes"],
+  ["meets its ACs?", "every one"],
+  ["who benefits?", "none found"],
+  ["in real configs", "0 instances"],
+  ["outcome", "closed unmerged"],
+]
