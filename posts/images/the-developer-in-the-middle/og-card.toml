@@ -1,10 +1,10 @@
-# OG-card brief for posts/2026-11-10-deciding-what-to-build.md.
+# OG-card brief for posts/2026-11-10-the-developer-in-the-middle.md.
 #
 # Render:
-#     uv run tooling/render-og-card.py posts/images/deciding-what-to-build/og-card.toml
+#     uv run tooling/render-og-card.py posts/images/the-developer-in-the-middle/og-card.toml
 
 [card]
-title = ["Deciding What to Build", "Isn't Easier with Agents"]
+title = ["The Developer in the Middle", "A Value Check Before Agents Build"]
 subhead = "Agents made features cheap to build. They didn't make it cheaper to decide which ones are worth it."
 series_mark = "A Cross-Functional Team of One"
 

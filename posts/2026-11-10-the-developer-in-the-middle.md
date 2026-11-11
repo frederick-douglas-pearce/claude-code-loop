@@ -1,12 +1,12 @@
 ---
 layout: post
-title: "Deciding What to Build Isn't Easier with Agents"
+title: "The Developer in the Middle: A Value Check Before Agents Build"
 date: 2026-11-10 09:00:00-0800
 description: "Developers sit between the business asking for a feature and the agents building it. Why deciding what to build is still hard, and how my agent team checks it."
 categories: ["claude-code-loop"]
 tags: ["claude-code", "dev-loop", "agents", "requirements", "pm", "method"]
-og_image: https://frederick-douglas-pearce.github.io/assets/img/deciding-what-to-build-og.png
-og_card_source: posts/images/deciding-what-to-build/og-card.png
+og_image: https://frederick-douglas-pearce.github.io/assets/img/the-developer-in-the-middle-og.png
+og_card_source: posts/images/the-developer-in-the-middle/og-card.png
 featured: false
 claude_code_version_verified: v2.1.318
 humanizer_pass: v3.0.0
