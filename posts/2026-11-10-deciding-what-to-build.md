@@ -19,7 +19,7 @@ I recently almost merged a feature that had passed every technical check in my s
 
 This post is about that upstream check: who makes it, where it belongs in the process, and how to set work up so that coding agents have something worth building from.
 
-My setup is the `dev-loop`, the Claude Code plugin I introduced in [the first post in this series](https://frederick-douglas-pearce.github.io/blog/2026/a-loop-to-remember/). It runs my agent team through a backlog of GitHub issues, one at a time. Each issue gets a plan before any code exists. My architect agent reviews any design questions in the plan, and if an issue is too large to build in one pass, my pm agent splits it. Then Claude builds it, and other agents review the code and check it against the issue's acceptance criteria. By default the loop stops for my approval of every plan and every merge.
+My setup is the `dev-loop`, the Claude Code plugin I introduced in [the first post in this series](https://frederick-douglas-pearce.github.io/blog/2026/a-loop-to-remember/). It runs my agent team through a backlog of GitHub issues, one at a time. Each issue gets a plan before any code exists. My architect agent reviews any design questions in the plan, and if an issue is too large to build in one pass, my pm agent proposes a split. Then Claude builds it, and other agents review the code and check it against the issue's acceptance criteria. By default the loop stops for my approval of every plan and every merge.
 
 ## The hardest part, still
 
@@ -39,7 +39,7 @@ I call the agent a third reader of the requirement, after the stakeholder and th
 
 ## Single source of truth
 
-The practical answer is one set of requirement documents that the business stakeholders, the developer, and the agent all read. In my setup that is a PRD, epics, issues with acceptance criteria, and a decision log. An executive can read the PRD and its milestones. A product manager can read the epics and issues. The developer and the agent build from those same issues.
+The practical answer is one set of requirement documents that the business stakeholders, the developer, and the agents all read. In my setup that is a PRD, epics, issues with acceptance criteria, and a decision log. An executive can read the PRD and its milestones. A product manager can read the epics and issues. The developer and the agents build from those same issues.
 
 The documents also need a boundary between what gets built and how. GitHub's [Spec Kit](https://github.com/github/spec-kit/blob/main/templates/commands/specify.md) makes it a checklist item for the spec: "No implementation details (languages, frameworks, APIs)." The what is the business side's to confirm. The how is the engineering team's to choose. Mix them and a business reader can't judge the document, and an engineer can't tell which parts are negotiable.
 
@@ -47,9 +47,9 @@ The loop keeps that line structurally. The issue's acceptance criteria are copie
 
 ## The feature that passed every gate
 
-[AgentFluent #437](https://github.com/frederick-douglas-pearce/agentfluent/issues/437) proposed a scanner that would flag a pattern in the prompts users write for their own agents. The justification was an incident reported somewhere a user couldn't touch.
+[AgentFluent #437](https://github.com/frederick-douglas-pearce/agentfluent/issues/437) proposed a scanner that would flag a pattern in the prompts users write for their own agents. Its motivation cited an [Anthropic postmortem](https://www.anthropic.com/engineering/april-23-postmortem), and the issue summarized it well enough that I didn't reread the source during planning. The plan didn't prompt me to, either, because nothing in it asked who the feature was for. The incident it cited had happened somewhere a user couldn't touch.
 
-The architect reviewed the plan and caught two acceptance criteria that contradicted each other ([comment](https://github.com/frederick-douglas-pearce/agentfluent/issues/437#issuecomment-4860023609)). Easy fix. The feature was built and passed every technical gate. At the merge gate, which is mine, I read the source and wrote to Claude: "I don't see how a user could benefit from this… Push back if I'm off base with a reasoned counter argument."
+The architect reviewed the plan, scoped to "regex correctness + currency, not a redesign," and caught two acceptance criteria that contradicted each other ([comment](https://github.com/frederick-douglas-pearce/agentfluent/issues/437#issuecomment-4860023609)). Easy fix. The feature was built and passed every technical gate. At the merge gate, which is mine, I read the source and wrote to Claude: "I don't see how a user could benefit from this… Push back if I'm off base with a reasoned counter argument."
 
 I asked for a user-story mapping, and the pm agent ran a value review ([comment](https://github.com/frederick-douglas-pearce/agentfluent/issues/437#issuecomment-4861059604)). It found two problems. The incident happened in Claude Code's own system prompt, which the scanner can't see, and the evidence was a single incident. A check of real agent configurations then found zero instances of the pattern. I closed the issue, and the pull request went unmerged ([comment](https://github.com/frederick-douglas-pearce/agentfluent/issues/437#issuecomment-4861228107)). You don't need the code to follow any of that. The question that exposed the problem was "who is this for?", and the answer was in the source the issue cited.
 
