@@ -13,7 +13,7 @@ humanizer_pass: v3.0.0
 claims_verified: 2026-11-10
 ---
 
-Coding agents produce more code than anyone can comfortably review, and most of the review goes to whether it works, not whether it's needed. Agents have made features cheap to build, but they haven't made it cheaper to decide which ones are worth building. A feature nobody needs still costs something to build, and more to maintain or remove later.
+Coding agents produce more code than anyone can comfortably review, and most of the review goes to whether it works, not whether it's needed. Agents have made features easier to build, but they haven't made it easier to decide which ones are worth building. A feature nobody needs still costs something to build, and more to maintain or remove later.
 
 I recently almost merged a feature that had passed every technical check in my setup: the architect's review, the code review, and the check against its acceptance criteria. Then I reviewed the source it was based on and asked a question none of those checks asks: how would a user benefit from this? A value review by my pm agent found no user it would help, and a check against real configurations found nothing for it to catch. I closed the pull request unmerged.
 
