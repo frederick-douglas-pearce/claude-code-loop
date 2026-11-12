@@ -810,7 +810,8 @@ never edited per project — only the config.
 ### Per-role model tiers: `MODEL_TIERS`
 
 By default a subagent the loop spawns runs as it did before: the loop passes it no model and no
-effort. `MODEL_TIERS` lets you choose per role. Its value in `loop.config.md` is a list of entries, one per line, `<role>: <tier>[@<effort>]`:
+effort. `MODEL_TIERS` lets you choose per role. Its value in `loop.config.md` is a list of entries,
+one per line, `<role>: <tier>[@<effort>]`:
 
 ```
 role ∈ scope | design | finder | recheck | ac-verify | mutation | hermetic
