@@ -63,7 +63,7 @@ Watching this happen again and again is why I loop rather than vibe code. Prompt
 
 ## What the field converged on
 
-Writing requirements for agents has become common practice and is typically referred to as spec-driven development. Researchers at Carnegie Mellon University (CMU) and Google found spec files in [73,030 public GitHub repositories](https://arxiv.org/abs/2608.25202), almost all first committed in 2025 or later. Tools for writing specs range from a single interview prompt to full spec-to-code pipelines, but they agree on a short list of practices:
+Saving requirements to files an agent builds from, rather than typing them into a prompt, now has a name: spec-driven development. Researchers at Carnegie Mellon University (CMU) and Google found spec files in [73,030 public GitHub repositories](https://arxiv.org/abs/2608.25202), almost all first committed in 2025 or later. Tools for writing specs range from a single interview prompt to full spec-to-code pipelines, but they agree on a short list of practices:
 
 - **Interview before building.** Matt Pocock's [grill-me](https://github.com/mattpocock/skills/tree/main/skills/productivity/grill-me) skill, through the `grilling` skill it calls, tells the agent to "interview the user relentlessly until you reach a shared understanding." Anthropic's [Claude Code guide](https://code.claude.com/docs/en/best-practices) has its own version, a prompt you type yourself: "Interview me until you could write the spec, then write it to SPEC.md."
 - **Write intent to a file, and keep the what apart from the how.** Spec Kit's `spec.md`, Kiro's requirements-first flow (`requirements.md` before `design.md`), and OpenSpec's `proposal.md` do versions of this.
