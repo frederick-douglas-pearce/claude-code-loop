@@ -673,10 +673,10 @@ when #309 landed.
 (F198; R4). The Agent tool's per-call `model` takes only the four aliases. `ANTHROPIC_DEFAULT_*_MODEL`
 pins what each alias means, and the third-party provider guides converge on that recipe (`OPUS`,
 `SONNET`, `HAIKU`, increasingly `FABLE`). They do so unevenly, and some pin every alias to one
-model. Step 6 runs in the parent thread (D017), and a forked phase ignores both spawn parameters,
-so no fork can carry an `implement` role. #281 proposed two things this design rejects: pinning
-user-global agent frontmatter, which the engine forbids the orchestrator from editing, and tiering
-parent turns, which are not spawns.
+model. Step 6 runs in the parent thread (`loop-engine.md` step 6; D017 keeps it in core), and a
+forked phase ignores both spawn parameters, so no fork can carry an `implement` role. #281 proposed
+two things this design rejects: pinning user-global agent frontmatter, which the engine forbids the
+orchestrator from editing, and tiering parent turns, which are not spawns.
 
 **Decision.**
 1. One `CAPS` parameter, `MODEL_TIERS`, in `loop.config.md`, with entries `role: tier[@effort]`:
@@ -699,13 +699,17 @@ parent turns, which are not spawns.
    in consumer configs. A key is added only with a spawn site, because a stranded key cannot be
    removed. `ModelTiersKeyIdentityTests` pins that the engine's and the README's role lines name the
    same set.
-5. Role attribution is by purpose:
-   - a spawn carrying any acceptance-criteria work is `ac-verify`; one made for the mutation pass
-     alone is `mutation`; if you cannot tell, it is `ac-verify`;
-   - the pass that confirms each finding is `finder`;
-   - a spawn the map does not name has no role and passes neither parameter. **The step-8 delegated
-     fix writer is one.** #288 decides whether it joins `fix`, and so whether `fix` covers more than
-     R1's fix agent.
+5. **Each spawn's role is stated once, at its spawn site.** Core defines only the roles that have
+   no site: `scope` and `design` (every consult of their binding) and `explore` (an ad-hoc read-only
+   spawn). The pass that confirms each finding is `finder`, and a mutating verifier that also
+   carries acceptance-criteria work stays `ac-verify`, both named at their sites. **A spawn with no
+   role passes neither parameter**: one whose site names no role, or whose role you cannot tell.
+   This replaces a purpose-defined role map that the #338 round-1 review falsified five ways
+   (overlapping definitions, and a role stated both in core and at the site, with the two copies
+   disagreeing). **The step-8 delegated fix writer has no role.** #288 decides whether it joins
+   `fix`, and so whether `fix` covers more than R1's fix agent. A spawn the harness refuses for its
+   model or effort is never re-spawned with either dropped, because that would rebind the entry;
+   where it serves a gate, that gate has no verdict.
 6. Provider choice is a settings `env` block, per-user by default and committed only as a team
    choice. The token is never committed. Mixed providers need a name-routing gateway.
 7. No default tier changes until #274 measures it, on the transcript's resolved models and efforts,

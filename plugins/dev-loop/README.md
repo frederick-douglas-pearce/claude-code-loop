@@ -472,7 +472,7 @@ gate finding still there after one fresh re-check, which stop and ask you regard
 **A model tier the loop cannot read changes nothing.** A role whose `MODEL_TIERS` entry is missing,
 misspelled or unparseable runs as it did before the setting existed: the loop passes no model and no
 effort for it, and the run's journal marks the entry it could not read. The loop never routes a
-request to a provider. The harness's own model aliases are all it passes, and what those aliases
+request to a provider. For a model it passes only the harness's own aliases, and what those aliases
 resolve to is your environment's setting, not the loop's.
 
 **When its design reviewer rewrites the plan, you see the plan.** One mid-pipeline stop is
@@ -798,7 +798,7 @@ described in *Design: three layers*. It binds the backlog and its priority order
 (`SCOPE_AGENT`, `DESIGN_AGENT`, `CODE_REVIEW`, `SECURITY_REVIEW`, `VERIFY`), your build and CI
 commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`, `CI_STATUS_CMD`), your git and
 release conventions (`BRANCH_FMT`, `COMMIT_CONV`, `PR_TEMPLATE`, `MERGE_METHOD`, `RELEASE_SCHEME`),
-the model and effort each kind of subagent runs on (`MODEL_TIERS`), and the project-specific logic
+the model and effort each subagent role runs on (`MODEL_TIERS`), and the project-specific logic
 the engine delegates — when to call the architect (`ARCHITECT_TRIGGERS`) and how to route a change
 (`SOURCE_LAYOUT`). The `/init-loop` skeleton is the full list.
 
@@ -809,9 +809,8 @@ never edited per project — only the config.
 
 ### Per-role model tiers: `MODEL_TIERS`
 
-By default every subagent the loop spawns runs on whatever it ran on before: the agent definition's
-own model and effort if it sets them, otherwise your session's. `MODEL_TIERS` lets you choose per
-role. Its value in `loop.config.md` is a list of entries, one per line, `<role>: <tier>[@<effort>]`:
+By default a subagent the loop spawns runs as it did before: the loop passes it no model and no
+effort. `MODEL_TIERS` lets you choose per role. Its value in `loop.config.md` is a list of entries, one per line, `<role>: <tier>[@<effort>]`:
 
 ```
 role ∈ scope | design | explore | finder | recheck | ac-verify | mutation | hermetic
@@ -820,7 +819,7 @@ effort ∈ low | medium | high | xhigh | max
 ```
 
 - `scope` and `design` are every consult of `SCOPE_AGENT` and `DESIGN_AGENT`.
-- `finder` is the first round of code review, including the pass that confirms each finding, so a
+- `finder` is the code-review finders, including the pass that confirms each finding, so a
   cheaper `finder` also cheapens the step that decides which findings survive.
 - `recheck` is a fresh checker that reads a fix.
 - `ac-verify` is the acceptance verifier, and `mutation` a spawn made only for the mutation pass.
@@ -838,15 +837,12 @@ so change an entry only after you have measured it.
 
 Four things to know before you change one:
 
-- **The code, tests and docs an issue needs are written on your session's model.** The loop writes
-  them in the main conversation, not in a subagent, so `MODEL_TIERS` cannot reach them. The lever is
-  the session's own model and effort. That makes the **inverted roster** the supported way to save
-  on implementation: run the session on a cheaper model or a lower effort, and tier the judgment
-  roles up, for example `design: opus`, `finder: opus`, `ac-verify: opus`. It is unmeasured.
-- **`opus` from an Opus session does nothing.** A per-spawn `opus` resolves to the main model's
-  exact ID when the main model is already an Opus, and the same happens on a non-Anthropic provider
-  whenever the harness cannot tell the model family. So moving a role *up* with `opus` only works
-  from a session that is not already in the Opus family.
+- **No role covers the code, tests and docs an issue needs,** so `MODEL_TIERS` cannot reach them.
+  The lever is the session's own model and effort. That makes the **inverted roster** the supported
+  way to save on implementation: run the session on a cheaper model or a lower effort, and tier the
+  judgment roles up. It is unmeasured.
+- **A family alias can resolve to your session's model.** A per-spawn `opus` from a session already
+  on an Opus model runs on that session's exact model, not the version the alias points to.
 - **Two harness variables override the table from outside it.**
   - `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` makes every per-spawn model ignored.
   - `CLAUDE_CODE_EFFORT_LEVEL` outranks every per-spawn effort, and some third-party provider setup

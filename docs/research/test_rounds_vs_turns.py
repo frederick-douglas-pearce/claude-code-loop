@@ -96,10 +96,10 @@ class BudgetParsingTests(unittest.TestCase):
         self.assertEqual(self.parse([assistant_writing(txt)]), [])
 
     def test_a_models_slot_changes_nothing_the_parser_reads(self):
-        """#309's `models=` slot writes `:` between role and tier, so no role reads
-        as a `<gate>=N` round; `ac-verify:unread` must not touch ac-verify's count."""
+        """#309's `models=` slot: `ac-verify:unread` must not touch ac-verify's count."""
         slot = FLAT.replace(" · x=1", " · models=scope:inherit,finder:inherit@low,"
                             "ac-verify:unread,mutation:sonnet@medium · x=1")
+        self.assertIn(" · models=", slot)
         got = self.parse([assistant_writing(slot)])
         self.assertEqual(len(got), 1)
         self.assertEqual(got[0]["rounds"], 3)

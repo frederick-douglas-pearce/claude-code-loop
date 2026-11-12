@@ -234,10 +234,8 @@ class ModelsSlotToleranceTests(unittest.TestCase):
     """#309 adds a `models=<role>:<tier>[@<effort>],...` slot to the `- Budget:` line.
 
     The parser reads every slot by an unanchored regex over the whole iteration
-    block, so the hazard is a role spelled like a gate count (`ac-verify=1`) being
-    added to the rounds. The slot writes `:` between role and tier for exactly
-    that reason; this pins that the line parses identically with and without it,
-    era classification included.
+    block. This pins that a Budget line parses identically with and without the
+    slot, era classification included.
     """
 
     BASE = ("- Budget: subagent-runs=4 · gate-rounds=architect=1,code-review=1(correctness),"
@@ -255,15 +253,20 @@ class ModelsSlotToleranceTests(unittest.TestCase):
         return rows[0]
 
     def test_the_models_slot_changes_nothing_the_parser_reads(self):
+        line = self.BASE.replace(" · wall-clock", self.MODELS + " · wall-clock")
+        self.assertIn("models=", line)
         without = self._parse(self.BASE)
-        with_slot = self._parse(self.BASE.replace(" · wall-clock", self.MODELS + " · wall-clock"))
+        with_slot = self._parse(line)
         for key in ("runs", "gates", "rounds", "survivors", "era_marker"):
             self.assertEqual(with_slot[key], without[key], key)
         self.assertEqual(with_slot["rounds"], 3)
         self.assertEqual(with_slot["runs"], 4)
 
     def test_a_role_written_with_equals_would_be_miscounted(self):
-        """Control: shows the separator is load-bearing, so the test above can fail.
+        """Control: a gate-shaped numeric token in the slot would change the parse,
+        so the comparison above is not vacuous. Under the slot's grammar the value
+        after a role is never numeric, so the engine's `:` separator guards against
+        looser future readers, not these two.
 
         `GATE.findall` feeds a dict, so a later `ac-verify=<n>` overwrites the real
         count rather than adding to it; a value other than the real one shows it."""

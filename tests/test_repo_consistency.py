@@ -660,17 +660,17 @@ class ModelTiersKeyIdentityTests(unittest.TestCase):
     consumer configs is stranded there), so the README is where a consumer learns the
     keys. A key the engine reads and the README omits is a role nobody can tier; a key
     the README lists and the engine does not read is worse -- the consumer believes the
-    role is tiered and it silently inherits. So this asserts **set equality**, which
-    contains AC2's one direction.
+    role is tiered and it inherits, seen only as an ignored key in the ``models=`` note.
+    So this asserts **set equality**, which contains AC2's one direction.
 
     An identity coupling between two literals, inside the ceiling ``tests/CLAUDE.md``
-    sets: it pins that both places name the same keys, and nothing about whether a key
-    is wired to its spawn site or passed correctly -- no test over prose can hold that.
+    sets: it pins that the two ``role ∈`` lines name the same keys, and nothing else --
+    not the role names at spawn sites (#339), and not whether a role is passed correctly.
 
     Each side must carry the ``role ∈ ...`` line **exactly once** (the engine side also
-    pins that the passage has a single home across core and its units), and every token
-    must look like a key, so a regex that starts swallowing prose fails loudly instead
-    of comparing two equally-garbled sets.
+    pins that the grammar line has a single home across core and its units), and every
+    token must look like a key, so a regex that starts swallowing prose fails loudly
+    instead of comparing two equally-garbled sets.
     """
 
     _ROLE_LINE = re.compile(r"^role ∈ (.+)$", re.MULTILINE)
@@ -686,7 +686,6 @@ class ModelTiersKeyIdentityTests(unittest.TestCase):
         malformed = [t for t in tokens if not self._KEY.fullmatch(t)]
         self.assertEqual(malformed, [], f"{where}: tokens that are not role keys: {malformed}")
         self.assertEqual(len(tokens), len(set(tokens)), f"{where}: a role key repeats: {tokens}")
-        self.assertTrue(tokens, f"{where}: no role keys")
         return set(tokens)
 
     def _readme_section(self) -> str:

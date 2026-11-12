@@ -502,8 +502,8 @@ stands; the behavior the test covered before; that it must decide by **reading**
 or altering anything; that it must **say plainly when it cannot tell — which is a dirty answer, not
 a clean one**; and the **Verdict-first invariant** (Gates) — the complete answer first, depth after.
 Withhold your conclusions. Spawn it with the `model` and `effort` `MODEL_TIERS` resolves for role
-`hermetic` (Tool surface → Model tiers). This gate carries no round cap — it blocks until green, like any other
-step-6 command — so it is not governed by the Fresh-re-check invariant; it only borrows its shape.
+`hermetic` (Tool surface → Model tiers). This gate carries no round cap — it blocks until green,
+like any other step-6 command — so it is not governed by the Fresh-re-check invariant; it only borrows its shape.
 **If the fresh read comes back dirty, or cannot tell, escalate to the human and STOP** —
 do not absorb it, and do not fix-and-re-ask in a loop. A hermetic finding you stop on never reaches
 the merge gate; the always-escalate entry at step 11 is there for the other path, where a row somehow
@@ -1090,10 +1090,9 @@ arrives. If you believe a boundary must fall inside the window, that is a findin
 hand
 to the human, not a case to stage carefully and proceed through.
 
-**Model tiers — `MODEL_TIERS`.** The one statement of how a spawn's `model` and `effort` are chosen,
-and the authoritative map of roles to spawns; a site that names a role points here and restates
-nothing. Spawn every agent this map names with what its role resolves to. The binding is a list of
-entries, one per line, `<role>: <tier>[@<effort>]`:
+**Model tiers — `MODEL_TIERS`.** The one statement of how a spawn's `model` and `effort` are chosen;
+a site that names a role points here and restates none of it. Spawn an agent that has a role with
+what that role resolves to. The binding is a list of entries, one per line, `<role>: <tier>[@<effort>]`:
 
 ```
 role ∈ scope | design | explore | finder | recheck | ac-verify | mutation | hermetic
@@ -1101,19 +1100,15 @@ tier ∈ inherit | haiku | sonnet | opus | fable
 effort ∈ low | medium | high | xhigh | max
 ```
 
-Roles, by what the spawn is for: `scope`, every `SCOPE_AGENT` consult; `design`, every `DESIGN_AGENT`
-consult, plan-informing and scope ruling alike; `finder`, a first-round code-review finder, the floor
-lens and the pass that confirms each finding included; `recheck`, a fresh checker that decides by
-reading and is not the acceptance verifier; `hermetic`, the fresh instance judging whether a
-hermetic-tier fix preserved what its test asserts; `ac-verify`, any spawn carrying acceptance-criteria
-work, whatever else it does; `mutation`, a spawn made for the mutation pass alone — selecting,
-applying, judging, or re-running the harness; `explore`, an ad-hoc spawn whose prompt makes it
-read-only. **If you cannot tell `ac-verify` from `mutation`, it is `ac-verify`; if you cannot tell
-that an ad-hoc spawn is read-only, it has no role.** A spawn this map does not name, a delegated fix
-writer among them, has no role and gets neither parameter. `fix` and `implement` are reserved: no
-spawn resolves under them in this version.
+`scope` is every `SCOPE_AGENT` consult and `design` every `DESIGN_AGENT` consult; `explore` is an
+ad-hoc spawn whose prompt makes it read-only. Every other role belongs to the spawn whose site names
+it, and the site, not this passage, says which. **A spawn with no role gets neither parameter: one
+whose site names no role, a delegated fix writer among them, and any spawn whose role you cannot
+tell.** `fix` and `implement` are reserved: no spawn resolves under them in this version.
 
-An entry belongs to the token before its first `:`; a line whose token is not a role is not an entry.
+Before reading a line, drop surrounding whitespace, one leading list marker, and code-span backticks;
+in a table cell, `<br>` separates lines. An entry belongs to the token before its first `:`; a line
+whose token is not a role is not an entry, and any other decoration left on an entry makes it unread.
 An entry resolves per half: pass `model` only when its tier is not `inherit`, and `effort` only when
 `@<effort>` is present, so `inherit@low` keeps the model and lowers the effort. **Every other outcome
 makes the role inherit — pass neither parameter**, exactly as with no binding: no entry for the role;
@@ -1121,9 +1116,11 @@ a tier or effort not spelled exactly as above, in lower case; a remainder you ca
 appears twice; a binding that is absent, blank, `TODO`, or `—` with or without a reason. An entry
 with any unreadable half applies neither half, and an unread key falls through to nothing — not to
 its duplicate, not to any other entry. **None of these escalates or writes a `- gate-error:`**:
-inheriting is the behavior of a project that never set the binding. **If you cannot read it, the role
-inherits.** Inheriting leaves the choice where it was: the agent definition's own model and effort
-where it sets them, else the session's.
+inheriting is the behavior of a project that never set the binding. Name an unread entry or an
+ignored key to the human in your stop message, as a config finding; it never stops the run. **If you
+cannot read it, the role inherits.** A spawn the harness refuses for its `model` or `effort` did not
+run: never re-spawn it with either dropped, which would rebind the entry; where it serves a gate,
+that gate has no verdict (Gate-outcome invariant).
 
 Model and effort are parameters of the spawn, never text in its prompt, so no prompt recipe in this
 engine gains an item or changes its count. A tier name is resolved by the harness and the consumer's
@@ -1540,11 +1537,11 @@ Fields:
   from the loop's own JSONL by an out-of-band analyzer** (the loop JSONL is a first-class corpus),
   not inside the skill (the orchestrator can't cleanly slice its live session mid-turn).
 - **`models=<role>:<tier>[@<effort>],…`** — what each role you spawned was **passed** (Tool surface →
-  Model tiers): `inherit` written literally where nothing was passed, and **`<role>:unread`** where an
-  entry existed and could not be read. That is a value token, never a parenthetical, which the note
+  Model tiers): `inherit` where the role had no entry or its entry reads `inherit`, and
+  **`<role>:unread`** where it had an entry, or more than one, that you did not apply. That is a value token, never a parenthetical, which the note
   rule below would strip. Commas split the value; a note goes only after the whole value, and it
   **names every key the binding carries that is not a role** (`finders`, `fix`), so a misspelled key is
-  seen rather than absorbed. `models=n/a: no subagent spawned` where none was. A gate invoked as a skill
+  seen rather than absorbed. `models=n/a: no role spawned` where no spawn had a role. A gate invoked as a skill
   by name passes nothing and gets no entry. **A role missing from the slot, or the slot omitted, is
   unknown — never `inherit`.** Write `:` between role and tier, never `=`, so no reader counts a role
   as a gate round.
@@ -1560,8 +1557,8 @@ catch things is what lets a review-tier matrix later be chosen from corpus rathe
 intuition. A note annotates; it never replaces a slot.
 
 **Writing it so it can be read back.** The line is **one physical line, never wrapped** — every reader of this line is line-based. **No slot value and no note may contain
-the `·` separator**, and a note's parentheses must be balanced: a reader splits `gate-rounds` on
-commas **outside** parentheses, which is what keeps `code-review=2(correctness,robustness)` one
+the `·` separator**, and a note's parentheses must be balanced: a reader splits `gate-rounds` and
+`models` on commas **outside** parentheses, which is what keeps `code-review=2(correctness,robustness)` one
 sub-slot rather than three. A slot is split from its value on the **first** `=`, never on a later
 one — `gate-rounds=architect=0` depends on this, and so does any note containing an `=`. Every slot
 uses `=`, including where prose would reach for something softer: write
