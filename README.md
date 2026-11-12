@@ -813,7 +813,7 @@ By default a subagent the loop spawns runs as it did before: the loop passes it 
 effort. `MODEL_TIERS` lets you choose per role. Its value in `loop.config.md` is a list of entries, one per line, `<role>: <tier>[@<effort>]`:
 
 ```
-role ∈ scope | design | explore | finder | recheck | ac-verify | mutation | hermetic
+role ∈ scope | design | finder | recheck | ac-verify | mutation | hermetic
 tier ∈ inherit | haiku | sonnet | opus | fable
 effort ∈ low | medium | high | xhigh | max
 ```
@@ -824,7 +824,6 @@ effort ∈ low | medium | high | xhigh | max
 - `recheck` is a fresh checker that reads a fix.
 - `ac-verify` is the acceptance verifier, and `mutation` a spawn made only for the mutation pass.
 - `hermetic` judges a fix to the offline test tier.
-- `explore` is an ad-hoc read-only spawn.
 
 `fix` and `implement` are reserved names that do nothing in this version.
 
@@ -835,7 +834,7 @@ ignored and named in that slot's note. A `—`, a `TODO`, or a missing row means
 and none of them stops a run. The skeleton ships `—`, and no tiering preset has been measured yet,
 so change an entry only after you have measured it.
 
-Four things to know before you change one:
+Before you change one:
 
 - **No role covers the code, tests and docs an issue needs,** so `MODEL_TIERS` cannot reach them.
   The lever is the session's own model and effort. That makes the **inverted roster** the supported
@@ -850,9 +849,6 @@ Four things to know before you change one:
 
   The `models=` slot records what the loop *passed*, not what ran. The session transcript is the
   record of what ran.
-- **Effort with no `@effort` follows the harness's rule.** On the main conversation's model, a
-  subagent runs at the session's effort. On another model the session's level doesn't apply, so set
-  `@effort` if you want to choose one.
 
 ### Optional: `loop.append-guard.json` (append-only protection)
 

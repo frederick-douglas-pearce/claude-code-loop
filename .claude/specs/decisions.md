@@ -680,7 +680,7 @@ orchestrator from editing, and tiering parent turns, which are not spawns.
 
 **Decision.**
 1. One `CAPS` parameter, `MODEL_TIERS`, in `loop.config.md`, with entries `role: tier[@effort]`:
-   - role ∈ `scope|design|explore|finder|recheck|ac-verify|mutation|hermetic`;
+   - role ∈ `scope|design|finder|recheck|ac-verify|mutation|hermetic`;
    - tier ∈ `inherit|haiku|sonnet|opus|fable`;
    - one entry per role, resolved by exact key, each half separately (`inherit@low` is legal).
 2. Default-deny. Any outcome the engine cannot read as an entry resolves to `inherit`, and the
@@ -700,16 +700,15 @@ orchestrator from editing, and tiering parent turns, which are not spawns.
    removed. `ModelTiersKeyIdentityTests` pins that the engine's and the README's role lines name the
    same set.
 5. **Each spawn's role is stated once, at its spawn site.** Core defines only the roles that have
-   no site: `scope` and `design` (every consult of their binding) and `explore` (an ad-hoc read-only
-   spawn). The pass that confirms each finding is `finder`, and a mutating verifier that also
-   carries acceptance-criteria work stays `ac-verify`, both named at their sites. **A spawn with no
-   role passes neither parameter**: one whose site names no role, or whose role you cannot tell.
-   This replaces a purpose-defined role map that the #338 round-1 review falsified five ways
-   (overlapping definitions, and a role stated both in core and at the site, with the two copies
-   disagreeing). **The step-8 delegated fix writer has no role.** #288 decides whether it joins
-   `fix`, and so whether `fix` covers more than R1's fix agent. A spawn the harness refuses for its
-   model or effort is never re-spawned with either dropped, because that would rebind the entry;
-   where it serves a gate, that gate has no verdict.
+   no site: `scope` and `design` (every consult of their binding). The pass that confirms each
+   finding is `finder`, and a mutating verifier that also carries acceptance-criteria work stays
+   `ac-verify`, both named at their sites. **A spawn with no role passes neither parameter**: one
+   whose site names no role, or whose role you cannot tell. This replaces a purpose-defined role map
+   that the #338 round-1 review falsified five ways (overlapping definitions, and a role stated both
+   in core and at the site, with the two copies disagreeing). **The step-8 delegated fix writer has
+   no role.** #288 decides whether it joins `fix`, and so whether `fix` covers more than R1's fix
+   agent. The design's `explore` role was cut at #338's round 2, because it had no spawn site; #340
+   evaluates bringing it back with one.
 6. Provider choice is a settings `env` block, per-user by default and committed only as a team
    choice. The token is never committed. Mixed providers need a name-routing gateway.
 7. No default tier changes until #274 measures it, on the transcript's resolved models and efforts,

@@ -660,7 +660,7 @@ class ModelTiersKeyIdentityTests(unittest.TestCase):
     consumer configs is stranded there), so the README is where a consumer learns the
     keys. A key the engine reads and the README omits is a role nobody can tier; a key
     the README lists and the engine does not read is worse -- the consumer believes the
-    role is tiered and it inherits, seen only as an ignored key in the ``models=`` note.
+    role is tiered and it inherits.
     So this asserts **set equality**, which contains AC2's one direction.
 
     An identity coupling between two literals, inside the ceiling ``tests/CLAUDE.md``
