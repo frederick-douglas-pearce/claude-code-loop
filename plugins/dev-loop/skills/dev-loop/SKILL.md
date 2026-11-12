@@ -124,6 +124,9 @@ engine is authoritative; on any conflict, follow the engine — but never do les
   what a gate found, the re-check is a **new spawn** — not you re-reading your own diff, and not the
   round-1 agent re-contacted. If the fresh re-check is still dirty, **escalate to the human** rather
   than iterating.
+- **Pass a spawn's `model` or `effort` only as `loop-engine.md`'s `MODEL_TIERS` passage resolves
+  them.** Reading this without that passage loaded, pass neither: inheriting is the behavior of a
+  project that never set the binding.
 - **Never edit the user-global `SCOPE_AGENT`/`DESIGN_AGENT` definitions**, and never `git add`
   unrelated pre-existing working-tree changes, and never blanket-stage
   (`git add -A`/`git add .`) — stage explicit paths and read `git diff --cached` before committing,

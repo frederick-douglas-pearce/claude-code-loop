@@ -19,7 +19,8 @@ criterion — verify state, not your claim. If gaps, fix and re-verify **once**:
 gate's own first run, so that re-verify is **round 2 of this gate's 2-round cap**, and if it comes
 back dirty, escalate. **The re-verify is a fresh instance, never the author of the fix**
 (Fresh-re-check invariant, under Gates: a new spawn, not you and not the round-1 agent
-re-contacted).
+re-contacted). Spawn the verifier and its re-verify with the `model` and `effort` `MODEL_TIERS`
+resolves for role `ac-verify` (core → Tool surface → Model tiers).
 **"Gaps" means a finding of either class** — an unmet criterion or a surviving
 mutant both send you back to fix and re-verify under the same cap.
 
@@ -179,7 +180,8 @@ than reinventing it. **Both are live**: where question 3 answers yes, this is ho
 
 **Primary — the mutating agent gets its own copy of the tree.** Spawn it with the host's
 worktree-isolation option, so its mutations are *physically incapable* of reaching the parent's
-index. Two duties stay with the **parent**, not the agent:
+index, and with what `MODEL_TIERS` resolves for role `mutation` — or `ac-verify`, where the same
+spawn also carries acceptance-criteria work (core → Tool surface → Model tiers). Two duties stay with the **parent**, not the agent:
 - **Never stage the agent's copy.** Where the host materializes it inside the repository the parent
   sees it as an untracked directory, and a blanket `git add` lands it — as a **gitlink**, not as its
   files, which is the quiet signature described at step 6. Isolation moves the leak rather than
@@ -471,7 +473,9 @@ the guard (assert the *mechanism*, per the mechanism blockquote, not the outcome
 same 2-round cap; past that, escalate. **That re-verify is a fresh instance, never the author of the
 strengthened guard** (Fresh-re-check invariant, under Gates) — this leg needs saying separately
 because it is the one place a *guard* is what got fixed, and a guard confirmed by the person who
-just wrote it is precisely the defect Class B exists to catch. Recording a finding and proceeding is
+just wrote it is precisely the defect Class B exists to catch. Its role is `mutation` where it
+re-runs the harness and `recheck` where it re-reads a guard (core → Tool surface → Model tiers).
+Recording a finding and proceeding is
 not compliance — a finding "reported as prominently as a bug" that no step acts on is a bug report
 filed into a drawer.
 **An unresolved Class B finding at the merge gate is an always-escalate condition (step 11), so a

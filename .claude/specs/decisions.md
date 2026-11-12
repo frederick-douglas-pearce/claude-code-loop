@@ -662,3 +662,72 @@ text out of core, and never by quietly restating X.
 
 The issue amendments carrying this (#128 AC1, P1 and Scope; #166 AC1, AC4 and AC7; #133 AC3; the
 `v0.3.1` milestone description) were applied on 2026-09-30.
+
+## D018 — 2026-11-12 — Model tiers are a config table of alias names; unknown resolves to inherit; the engine never names a provider
+
+Drafted 2026-10-31 in `docs/research/model-selection-2026-10-31.md` §7.10. It was amended at
+#309's plan gate for the skeleton ruling of 2026-11-01 and the architect's rulings, and recorded
+when #309 landed.
+
+**Context.** Subagents are 33–38% of the whole-tree bill, and every one runs the parent's model
+(F198; R4). The Agent tool's per-call `model` takes only the four aliases. `ANTHROPIC_DEFAULT_*_MODEL`
+pins what each alias means, and the third-party provider guides converge on that recipe (`OPUS`,
+`SONNET`, `HAIKU`, increasingly `FABLE`). They do so unevenly, and some pin every alias to one
+model. Step 6 runs in the parent thread (D017), and a forked phase ignores both spawn parameters,
+so no fork can carry an `implement` role. #281 proposed two things this design rejects: pinning
+user-global agent frontmatter, which the engine forbids the orchestrator from editing, and tiering
+parent turns, which are not spawns.
+
+**Decision.**
+1. One `CAPS` parameter, `MODEL_TIERS`, in `loop.config.md`, with entries `role: tier[@effort]`:
+   - role ∈ `scope|design|explore|finder|recheck|ac-verify|mutation|hermetic`;
+   - tier ∈ `inherit|haiku|sonnet|opus|fable`;
+   - one entry per role, resolved by exact key, each half separately (`inherit@low` is legal).
+2. Default-deny. Any outcome the engine cannot read as an entry resolves to `inherit`, and the
+   engine passes neither `model` nor `effort`, exactly as before:
+   - an absent, blank, `TODO` or `—` binding resolves this way, and never escalates;
+   - an entry with any unreadable half, or a key that appears twice, resolves to `inherit` with no
+     fall-through, and the journal records the role as `<role>:unread`. The spelling is a value
+     token, not the design's `inherit(unread)`, which the Budget line's note syntax would strip;
+   - a key that names no role is ignored and named in the slot's note.
+   The rule is not defended with a list of safe roles.
+3. The engine passes the resolved values on each spawn and journals them in a `models=` slot on the
+   `- Budget:` line. Under the existing rule an absent slot or role reads as unknown. The engine
+   names no provider and no harness variable.
+4. The skeleton ships a placeholder row (`—`, every role inherits) that points at the plugin
+   README, which is the consumer-facing home of the key list. The keys themselves are not stranded
+   in consumer configs. A key is added only with a spawn site, because a stranded key cannot be
+   removed. `ModelTiersKeyIdentityTests` pins that the engine's and the README's role lines name the
+   same set.
+5. Role attribution is by purpose:
+   - a spawn carrying any acceptance-criteria work is `ac-verify`; one made for the mutation pass
+     alone is `mutation`; if you cannot tell, it is `ac-verify`;
+   - the pass that confirms each finding is `finder`;
+   - a spawn the map does not name has no role and passes neither parameter. **The step-8 delegated
+     fix writer is one.** #288 decides whether it joins `fix`, and so whether `fix` covers more than
+     R1's fix agent.
+6. Provider choice is a settings `env` block, per-user by default and committed only as a team
+   choice. The token is never committed. Mixed providers need a name-routing gateway.
+7. No default tier changes until #274 measures it, on the transcript's resolved models and efforts,
+   with #272's quality outcome, under a pre-registered saving threshold and a rounds-per-issue
+   non-inferiority margin.
+8. `fix` and `implement` are reserved, and no spawn resolves under them in this version. `implement`
+   needs a non-fork spawn that R2's current path does not supply. In v1 the implementer runs on the
+   session model, and the supported v1 shape that reaches it is the inverted roster: a cheaper or
+   lower-effort session with the judgment roles tiered up.
+9. The route qualifier `role.route` is deferred to phase 2.
+
+**Why.** The alias is the only unit a spawn can pass and the only one providers remap, so it is the
+one portable contract. Default-deny, with today's behavior as the safe outcome, is the repo's prose
+rule applied where a silent change would be invisible. `inherit` is safe because it is today's
+behavior, not because it is a quality floor: in a cheaper session a typo moves a judgment role
+down. That is why the fallback is loud as well as inert. The alternatives were rejected on the
+matrix in the design's §6:
+- a second config file;
+- per-role `CAPS` names;
+- `/model` per step;
+- external CLIs;
+- an SDK orchestrator.
+
+A routing mod and a `PreToolUse` hook are recorded there as the alternatives that add parent-thread
+reach and enforcement.

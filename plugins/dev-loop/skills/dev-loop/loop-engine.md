@@ -501,7 +501,8 @@ three matter most because they are rules it cannot see from where it sits: the t
 stands; the behavior the test covered before; that it must decide by **reading**, never by running
 or altering anything; that it must **say plainly when it cannot tell — which is a dirty answer, not
 a clean one**; and the **Verdict-first invariant** (Gates) — the complete answer first, depth after.
-Withhold your conclusions. This gate carries no round cap — it blocks until green, like any other
+Withhold your conclusions. Spawn it with the `model` and `effort` `MODEL_TIERS` resolves for role
+`hermetic` (Tool surface → Model tiers). This gate carries no round cap — it blocks until green, like any other
 step-6 command — so it is not governed by the Fresh-re-check invariant; it only borrows its shape.
 **If the fresh read comes back dirty, or cannot tell, escalate to the human and STOP** —
 do not absorb it, and do not fix-and-re-ask in a loop. A hermetic finding you stop on never reaches
@@ -695,7 +696,8 @@ but an **empty** delta, which reports clean rather than reporting the wrong thin
 empty-delta fallback in the `reviewing` unit). Spawn **one lighter
 checker** — its inputs are fixed under Gates (Fresh-re-check invariant → the code-review bullet) and
 are not restated here — rather than re-running the full finder fan-out; that recipe carries its
-license to object too. Bounded to 2 rounds (round 1 being the review
+license to object too. Spawn it with the `model` and `effort` `MODEL_TIERS` resolves for role
+`recheck` (Tool surface → Model tiers). Bounded to 2 rounds (round 1 being the review
 itself, that re-check being round 2) — contested findings, and **any BLOCKING finding** the re-check
 returns, whether one round 1 raised or one only the fix introduced, escalate to the human, do not
 loop. **An EDITORIAL finding raised before the sweep has run does not re-arm and does not escalate** —
@@ -1088,6 +1090,46 @@ arrives. If you believe a boundary must fall inside the window, that is a findin
 hand
 to the human, not a case to stage carefully and proceed through.
 
+**Model tiers — `MODEL_TIERS`.** The one statement of how a spawn's `model` and `effort` are chosen,
+and the authoritative map of roles to spawns; a site that names a role points here and restates
+nothing. Spawn every agent this map names with what its role resolves to. The binding is a list of
+entries, one per line, `<role>: <tier>[@<effort>]`:
+
+```
+role ∈ scope | design | explore | finder | recheck | ac-verify | mutation | hermetic
+tier ∈ inherit | haiku | sonnet | opus | fable
+effort ∈ low | medium | high | xhigh | max
+```
+
+Roles, by what the spawn is for: `scope`, every `SCOPE_AGENT` consult; `design`, every `DESIGN_AGENT`
+consult, plan-informing and scope ruling alike; `finder`, a first-round code-review finder, the floor
+lens and the pass that confirms each finding included; `recheck`, a fresh checker that decides by
+reading and is not the acceptance verifier; `hermetic`, the fresh instance judging whether a
+hermetic-tier fix preserved what its test asserts; `ac-verify`, any spawn carrying acceptance-criteria
+work, whatever else it does; `mutation`, a spawn made for the mutation pass alone — selecting,
+applying, judging, or re-running the harness; `explore`, an ad-hoc spawn whose prompt makes it
+read-only. **If you cannot tell `ac-verify` from `mutation`, it is `ac-verify`; if you cannot tell
+that an ad-hoc spawn is read-only, it has no role.** A spawn this map does not name, a delegated fix
+writer among them, has no role and gets neither parameter. `fix` and `implement` are reserved: no
+spawn resolves under them in this version.
+
+An entry belongs to the token before its first `:`; a line whose token is not a role is not an entry.
+An entry resolves per half: pass `model` only when its tier is not `inherit`, and `effort` only when
+`@<effort>` is present, so `inherit@low` keeps the model and lowers the effort. **Every other outcome
+makes the role inherit — pass neither parameter**, exactly as with no binding: no entry for the role;
+a tier or effort not spelled exactly as above, in lower case; a remainder you cannot parse; a key that
+appears twice; a binding that is absent, blank, `TODO`, or `—` with or without a reason. An entry
+with any unreadable half applies neither half, and an unread key falls through to nothing — not to
+its duplicate, not to any other entry. **None of these escalates or writes a `- gate-error:`**:
+inheriting is the behavior of a project that never set the binding. **If you cannot read it, the role
+inherits.** Inheriting leaves the choice where it was: the agent definition's own model and effort
+where it sets them, else the session's.
+
+Model and effort are parameters of the spawn, never text in its prompt, so no prompt recipe in this
+engine gains an item or changes its count. A tier name is resolved by the harness and the consumer's
+environment, never by this engine. Record what you passed in the `- Budget:` line's `models=` slot
+(Ledger format → `progress.md`), which also spells an unread entry and an ignored key.
+
 ---
 
 ## Ledger format
@@ -1423,7 +1465,8 @@ claim this section makes on its behalf.
 
 The `- Budget:` line is the per-iteration cost record: a `·`-separated list of `name=value` **slots**.
 
-Only `gate-rounds` nests; a gate's *results* are their own top-level slots.
+Only `gate-rounds` nests, and only `gate-rounds` and `models` split on commas; a gate's *results* are
+their own top-level slots.
 
 Fields:
 - **`subagent-runs`** — the proxy cost signal the orchestrator can count for free. **One run = one
@@ -1496,6 +1539,15 @@ Fields:
 - **`tokens=deferred`** — a reserved, named slot. Per-iteration token/cost is computed **post-hoc
   from the loop's own JSONL by an out-of-band analyzer** (the loop JSONL is a first-class corpus),
   not inside the skill (the orchestrator can't cleanly slice its live session mid-turn).
+- **`models=<role>:<tier>[@<effort>],…`** — what each role you spawned was **passed** (Tool surface →
+  Model tiers): `inherit` written literally where nothing was passed, and **`<role>:unread`** where an
+  entry existed and could not be read. That is a value token, never a parenthetical, which the note
+  rule below would strip. Commas split the value; a note goes only after the whole value, and it
+  **names every key the binding carries that is not a role** (`finders`, `fix`), so a misspelled key is
+  seen rather than absorbed. `models=n/a: no subagent spawned` where none was. A gate invoked as a skill
+  by name passes nothing and gets no entry. **A role missing from the slot, or the slot omitted, is
+  unknown — never `inherit`.** Write `:` between role and tier, never `=`, so no reader counts a role
+  as a gate round.
 
 **Notes on any slot.** A short free-text parenthetical may follow **any** slot's value —
 `subagent-runs=4 (Explore map + architect + 2 finders)`,
@@ -1936,6 +1988,9 @@ your *conclusions*, not the instructions the checker needs).
   5. the **Relay invariant** (Gates) — it marks what it reproduced against what it inferred, and you
      treat anything unmarked as unverified.
 
+  Spawn it with the `model` and `effort` `MODEL_TIERS` resolves for role `recheck` (Tool surface →
+  Model tiers).
+
   **The mechanism blockquote** — "Part 2's blockquote" wherever this engine names it.
 
   > **The mechanism, stated precisely** (round 4 made it nameable): *asserting the outcome is not
@@ -1958,7 +2013,8 @@ your *conclusions*, not the instructions the checker needs).
   — and after the guard is strengthened the mutation must come back **killed**; a re-read is not
   sufficient there,
   precisely because the survivor was established by running rather than by reading. That re-run is a
-  fresh instance too, per the invariant above.)
+  fresh instance too, per the invariant above, spawned with what `MODEL_TIERS` resolves for role
+  `mutation` (Tool surface → Model tiers).)
 - **Code review (step 8) — the previous round's findings *and its declines*, the diff since the head
   that round ran on, and one narrowed question.** Review has no fixed yardstick to re-derive from,
   so those lists are what give the checker something to test rather than a blank re-review. Its diff
