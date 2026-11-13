@@ -180,6 +180,18 @@ LOAD_TOKENS = {
     ("0.4.0", "reference/initialization.md"): 1510,    # 0.3.1 f60e1176; 0.4.0's only: loop 1675ea10, 1596
     ("0.4.0", "reference/plan-template.md"): 1134,     # Pages 88d3c313
     ("0.4.0", "reference/record-templates.md"): 1087,  # esg 5f73b0a0, vote 1dad2c07
+    # 0.5.0, measured 2026-11-13 (#341) over the opus-5 family's parents.
+    # `initialization`, `plan-template` and `record-templates` are byte-identical
+    # to 0.4.0's, so each row is the minimum over both eras. The 0.4.0
+    # `plan-template` row is left as it is, though 0.5.0's load of the same file
+    # is lower.
+    ("0.5.0", CORE): 64374,                            # vote cfc5f0e7
+    ("0.5.0", "phases/accepting.md"): 13713,           # esg 5d82c9c0, vote 16590fa7
+    ("0.5.0", "phases/reviewing.md"): 11001,           # claude-hook-validator b5c5ba65
+    ("0.5.0", "reference/initialization.md"): 1510,    # 0.3.1 f60e1176; 0.5.0's own: loop f4f5924c, 1542
+    ("0.5.0", "reference/plan-gate-inferred.md"): 1831,  # agentfluent 13448c40 (claude-opus-5)
+    ("0.5.0", "reference/plan-template.md"): 1091,     # vote db3b57dd
+    ("0.5.0", "reference/record-templates.md"): 1087,  # 0.4.0's row; 0.5.0's own: vote cfc5f0e7
 }
 
 # Every row was measured on one tokenizer family (claude-opus-5 / -5-5 parents).
