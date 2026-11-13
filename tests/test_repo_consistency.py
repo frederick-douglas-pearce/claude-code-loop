@@ -653,6 +653,61 @@ class CapsVocabularyTests(unittest.TestCase):
         )
 
 
+class ModelTiersKeyIdentityTests(unittest.TestCase):
+    """The ``MODEL_TIERS`` role keys: the engine's grammar line <-> the README's (#309).
+
+    The ``/init-loop`` skeleton deliberately carries no key list (a list copied into
+    consumer configs is stranded there), so the README is where a consumer learns the
+    keys. A key the engine reads and the README omits is a role nobody can tier; a key
+    the README lists and the engine does not read is worse -- the consumer believes the
+    role is tiered and it inherits.
+    So this asserts **set equality**, which contains AC2's one direction.
+
+    An identity coupling between two literals, inside the ceiling ``tests/CLAUDE.md``
+    sets: it pins that the two ``role ∈`` lines name the same keys, and nothing else --
+    not the role names at spawn sites (#339), and not whether a role is passed correctly.
+
+    Each side must carry the ``role ∈ ...`` line **exactly once** (the engine side also
+    pins that the grammar line has a single home across core and its units), and every
+    token must look like a key, so a regex that starts swallowing prose fails loudly
+    instead of comparing two equally-garbled sets.
+    """
+
+    _ROLE_LINE = re.compile(r"^role ∈ (.+)$", re.MULTILINE)
+    _KEY = re.compile(r"[a-z]+(?:-[a-z]+)*")
+    _README_HEADING = "### Per-role model tiers"
+
+    def _keys(self, text: str, where: str) -> set[str]:
+        lines = self._ROLE_LINE.findall(text)
+        self.assertEqual(
+            len(lines), 1, f"{where}: expected exactly one `role ∈ ...` line, found {len(lines)}"
+        )
+        tokens = [t.strip() for t in lines[0].split("|")]
+        malformed = [t for t in tokens if not self._KEY.fullmatch(t)]
+        self.assertEqual(malformed, [], f"{where}: tokens that are not role keys: {malformed}")
+        self.assertEqual(len(tokens), len(set(tokens)), f"{where}: a role key repeats: {tokens}")
+        return set(tokens)
+
+    def _readme_section(self) -> str:
+        text = _README.read_text(encoding="utf-8")
+        starts = [m.start() for m in re.finditer(rf"^{re.escape(self._README_HEADING)}", text, re.M)]
+        self.assertEqual(len(starts), 1, f"README: expected one {self._README_HEADING!r} heading")
+        body = text[starts[0] + len(self._README_HEADING):]
+        end = re.search(r"^#{1,3} ", body, re.MULTILINE)
+        return body[: end.start()] if end else body
+
+    def test_engine_and_readme_name_the_same_role_keys(self) -> None:
+        engine = self._keys(_engine_text(), "engine (core + units)")
+        readme = self._keys(self._readme_section(), "README")
+        self.assertEqual(
+            engine,
+            readme,
+            "MODEL_TIERS role keys differ: engine-only "
+            f"{sorted(engine - readme)}, README-only {sorted(readme - engine)}. "
+            "Edit both role lines (and both README copies) together.",
+        )
+
+
 class PipelineStepOrderTests(unittest.TestCase):
     """The pipeline's step order, restated in several artifacts and checked
     against itself.

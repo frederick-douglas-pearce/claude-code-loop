@@ -80,6 +80,7 @@ TODO(init-loop): <what to supply> — written bare, per Step 4's rule 4.
 | `RELEASE_SCHEME` | release-please / semantic-release config, `pyproject`/`package.json` version + publish; else "no release cycle" |
 | `SCOPE_AGENT` | user-global subagent — cannot be inferred from the repo; default TODO(init-loop): name a scope subagent, or remove if none |
 | `DESIGN_AGENT` | user-global subagent — cannot be inferred from the repo; default TODO(init-loop): name a design subagent. **Never remove this row** — emit `—` plus a reason where the project has none, per the skeleton's own note on it |
+| `MODEL_TIERS` | cannot be inferred from the repo; emit the skeleton's `—` with its reason (every role inherits) — the behavior-neutral default. A project that has pointed the harness's model aliases at another provider changes nothing here |
 
 > **Backticks in the "Look here" column are this table's notation, not part of any value.** Where a
 > row says to emit a `TODO(init-loop)`, write it into `CONFIG` **bare** — Step 4's rule 4, and the
@@ -247,6 +248,7 @@ The binding table. The engine names each parameter in `CAPS`; the values here ar
 | `CODE_REVIEW` | parallel finder subagents over `git diff main...HEAD` **+ the issue's acceptance criteria**, angles chosen per the diff's risk surface (the code-review gate), then a pass confirming each finding | **`main...HEAD` is round 1's base only** — a round after the first reads the delta since the head the last round read, per the engine's code-review gate, which also fixes when such a round falls back to full. Do not restate a base here that contradicts it. The orchestrator runs this itself — the finder fan-out is the engine's inline default and the binding this repo keeps. A porting project may bind a different review procedure here, but only one the orchestrator can actually invoke: a skill marked `disable-model-invocation` is user-triggered only, so keep such skills as a human escalation, never a binding. A gate bound to something it cannot invoke is never journaled passed — the orchestrator falls back to the inline fan-out, records a `- gate-fallback:` line, and surfaces the misbinding to you (engine Gate-outcome invariant) |
 | `SECURITY_REVIEW` | <TODO(init-loop): local `/security-review` and/or a labeled workflow> | see §4 |
 | `VERIFY` | `/verify` (built-in) | runtime behavior check when an AC needs proof-by-running |
+| `MODEL_TIERS` | `—` (every role inherits — the model and effort each subagent ran on before this row existed) | per-role model tier and effort for the subagent roles the engine names; the roles and the entry grammar are under `MODEL_TIERS` in the plugin README. Change it only after measuring |
 | `PRIORITY_LABELS` | <inferred / TODO(init-loop)> | drives selection order; e.g. `priority:high > medium > low`, tiebreak issue number asc |
 | `ARCHITECT_TRIGGERS` | see §2 | **project-specific — edit when porting** |
 | `SOURCE_LAYOUT` | see §3 | router uses this; **edit when porting** |

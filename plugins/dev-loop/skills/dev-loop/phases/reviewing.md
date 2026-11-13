@@ -65,7 +65,9 @@ production-readiness — overlap far less than repeated passes of the same one, 
 review misses most of what a diff carries. Scale the count with the surface: one light pass on
 `docs`, more when the diff touches a production or public-API path. **Give each finder a distinct
 lens label, distinct from every other finder's in the same round** — the label is a component of every
-finding ID this gate records (below), so two finders sharing one collide.
+finding ID this gate records (below), so two finders sharing one collide. Spawn every finder, and
+the pass that confirms each finding, with the `model` and `effort` `MODEL_TIERS` resolves for role
+`finder` (core → Tool surface → Model tiers).
 
 **Distinct in question, not only in label — a roster may not carry two lenses that would return the
 same findings.** State, when you spawn the round, one thing each lens would find that no other lens

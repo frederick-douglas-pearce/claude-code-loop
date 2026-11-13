@@ -469,6 +469,12 @@ mention the field at all is read as `always`. Neither setting reaches the loop's
 stops — such as the architect-rewrite stop below, the design-question stop after it, or a blocking
 gate finding still there after one fresh re-check, which stop and ask you regardless of both.
 
+**A model tier the loop cannot read changes nothing.** A role whose `MODEL_TIERS` entry is missing,
+misspelled or unparseable runs as it did before the setting existed: the loop passes no model and no
+effort for it, and the run's journal marks the entry it could not read. The loop never routes a
+request to a provider. For a model it passes only the harness's own aliases, and what those aliases
+resolve to is your environment's setting, not the loop's.
+
 **When its design reviewer rewrites the plan, you see the plan.** One mid-pipeline stop is
 unconditional — no mode setting, no `plan-gate:` value, and no route graduation can loosen it: if the architect review
 **materially changed** the approach, the loop stops and shows you what changed before writing any
@@ -792,14 +798,58 @@ described in *Design: three layers*. It binds the backlog and its priority order
 (`SCOPE_AGENT`, `DESIGN_AGENT`, `CODE_REVIEW`, `SECURITY_REVIEW`, `VERIFY`), your build and CI
 commands (`LINT_CMD`/`TYPE_CMD`/`TEST_CMD`/`HERMETIC_TEST_CMD`, `CI_STATUS_CMD`), your git and
 release conventions (`BRANCH_FMT`, `COMMIT_CONV`, `PR_TEMPLATE`, `MERGE_METHOD`, `RELEASE_SCHEME`),
-and the project-specific logic the engine delegates — when to call the architect
-(`ARCHITECT_TRIGGERS`) and how to route a change (`SOURCE_LAYOUT`). The `/init-loop` skeleton is the
-full list.
+the model and effort each subagent role runs on (`MODEL_TIERS`), and the project-specific logic
+the engine delegates — when to call the architect (`ARCHITECT_TRIGGERS`) and how to route a change
+(`SOURCE_LAYOUT`). The `/init-loop` skeleton is the full list.
 
 A freshly generated config is short; a long-lived one grows, because a `—`-plus-reason value and a
 project-specific routing rule both take room and both are read at runtime. What belongs in the file
 is whatever the engine reads; rationale and history belong in your tracker. The generic engine is
 never edited per project — only the config.
+
+### Per-role model tiers: `MODEL_TIERS`
+
+By default a subagent the loop spawns runs as it did before: the loop passes it no model and no
+effort. `MODEL_TIERS` lets you choose per role. Its value in `loop.config.md` is a list of entries,
+one per line, `<role>: <tier>[@<effort>]`:
+
+```
+role ∈ scope | design | finder | recheck | ac-verify | mutation | hermetic
+tier ∈ inherit | haiku | sonnet | opus | fable
+effort ∈ low | medium | high | xhigh | max
+```
+
+- `scope` and `design` are every consult of `SCOPE_AGENT` and `DESIGN_AGENT`.
+- `finder` is the code-review finders, including the pass that confirms each finding, so a
+  cheaper `finder` also cheapens the step that decides which findings survive.
+- `recheck` is a fresh checker that reads a fix.
+- `ac-verify` is the acceptance verifier, and `mutation` a spawn made only for the mutation pass.
+- `hermetic` judges a fix to the offline test tier.
+
+`fix` and `implement` are reserved names that do nothing in this version.
+
+`inherit` passes nothing, and `inherit@low` keeps the model while lowering the effort. A role with
+no entry inherits. So does a role whose entry the loop cannot read, and the run's `- Budget:` line
+records it as `<role>:unread` in its `models=` slot. A key that names no role, such as `finders`, is
+ignored and named in that slot's note. A `—`, a `TODO`, or a missing row means every role inherits,
+and none of them stops a run. The skeleton ships `—`, and no tiering preset has been measured yet,
+so change an entry only after you have measured it.
+
+Before you change one:
+
+- **No role covers the code, tests and docs an issue needs,** so `MODEL_TIERS` cannot reach them.
+  The lever is the session's own model and effort. That makes the **inverted roster** the supported
+  way to save on implementation: run the session on a cheaper model or a lower effort, and tier the
+  judgment roles up. It is unmeasured.
+- **A family alias can resolve to your session's model.** A per-spawn `opus` from a session already
+  on an Opus model runs on that session's exact model, not the version the alias points to.
+- **Two harness variables override the table from outside it.**
+  - `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` makes every per-spawn model ignored.
+  - `CLAUDE_CODE_EFFORT_LEVEL` outranks every per-spawn effort, and some third-party provider setup
+    guides set it to `max`, which silently defeats every `@effort` entry.
+
+  The `models=` slot records what the loop *passed*, not what ran. The session transcript is the
+  record of what ran.
 
 ### Optional: `loop.append-guard.json` (append-only protection)
 

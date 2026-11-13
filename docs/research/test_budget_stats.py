@@ -23,12 +23,13 @@ the way this module exists to prevent.
 """
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from budget_stats import (  # noqa: E402
     ERAS, era_by_date, era_by_marker, installed_version, cap_span,
-    check_era_order,
+    check_era_order, parse,
 )
 
 VERSIONS = [v for v, _, _ in ERAS]
@@ -227,6 +228,50 @@ class EraByMarkerTests(unittest.TestCase):
         self.assertIn(ERAS[last][0], both.split("|"))
         self.assertNotIn(ERAS[1][0], both.split("|"))
 
+
+
+class ModelsSlotToleranceTests(unittest.TestCase):
+    """#309 adds a `models=<role>:<tier>[@<effort>],...` slot to the `- Budget:` line.
+
+    The parser reads every slot by an unanchored regex over the whole iteration
+    block. This pins that a Budget line parses identically with and without the
+    slot, era classification included.
+    """
+
+    BASE = ("- Budget: subagent-runs=4 · gate-rounds=architect=1,code-review=1(correctness),"
+            "ac-verify=1 · ac-findings=0 · mutation-survivors=0 · wall-clock=1h · tokens=deferred")
+    MODELS = (" · models=scope:inherit,design:inherit,finder:inherit@low,"
+              "ac-verify:unread,mutation:sonnet@medium (ignored: finders)")
+
+    def _parse(self, budget):
+        with tempfile.TemporaryDirectory() as root:
+            os.makedirs(os.path.join(root, "v0.6.0"))
+            with open(os.path.join(root, "v0.6.0", "progress.md"), "w", encoding="utf-8") as fh:
+                fh.write("## 2026-11-12T10:00:00Z — #309 (code) close\n%s\n" % budget)
+            rows = list(parse(root))
+        self.assertEqual(len(rows), 1)
+        return rows[0]
+
+    def test_the_models_slot_changes_nothing_the_parser_reads(self):
+        line = self.BASE.replace(" · wall-clock", self.MODELS + " · wall-clock")
+        self.assertIn("models=", line)
+        without = self._parse(self.BASE)
+        with_slot = self._parse(line)
+        for key in ("runs", "gates", "rounds", "survivors", "era_marker"):
+            self.assertEqual(with_slot[key], without[key], key)
+        self.assertEqual(with_slot["rounds"], 3)
+        self.assertEqual(with_slot["runs"], 4)
+
+    def test_a_role_written_with_equals_would_be_miscounted(self):
+        """Control: a gate-shaped numeric token in the slot would change the parse,
+        so the comparison above is not vacuous. Under the slot's grammar the value
+        after a role is never numeric, so the engine's `:` separator guards against
+        looser future readers, not these two.
+
+        `GATE.findall` feeds a dict, so a later `ac-verify=<n>` overwrites the real
+        count rather than adding to it; a value other than the real one shows it."""
+        bad = self.BASE + " · models=ac-verify=9"
+        self.assertNotEqual(self._parse(bad)["rounds"], self._parse(self.BASE)["rounds"])
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

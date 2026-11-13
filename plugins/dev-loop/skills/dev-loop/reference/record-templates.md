@@ -40,7 +40,7 @@ by; omitting the record because there is no issue number is what would break it.
 - Editorial: 0 — no EDITORIAL finding returned.
 - Restore: n/a: no mutation applied.
 - AC-verify: Class A 3/3 acceptance criteria met. Class B: mutation pass not due (research route).
-- Budget: subagent-runs=3 · gate-rounds=architect=0,code-review=1(correctness,robustness),ac-verify=1 · ac-findings=0 · mutation-survivors=n/a: research route · wall-clock=18m · tokens=deferred
+- Budget: subagent-runs=3 · gate-rounds=architect=0,code-review=1(correctness,robustness),ac-verify=1 · ac-findings=0 · mutation-survivors=n/a: research route · models=finder:inherit,ac-verify:inherit · wall-clock=18m · tokens=deferred
 - Merged: squash #<pr>. Issue #<N> closed.
 - Next: #<M> now unblocked.
 ```
