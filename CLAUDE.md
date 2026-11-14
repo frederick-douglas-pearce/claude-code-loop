@@ -292,7 +292,27 @@ the real loader and asserts **zero stderr warnings**, which is the assertion tha
   (see "Dogfooding this repo" below), so a ledger does live here, under `.claude/loop/` and
   gitignored. It is still never committed. `.claude/loop.config.md` — the binding seam — *is*
   committed, like any consumer's.
-- Commits follow Conventional Commits (`feat:`, `fix:`, `chore:`).
+- **Commits follow Conventional Commits, and the type is chosen by where the change lands** —
+  agentfluent's convention, adopted with release-please (#346). **`feat:` and `fix:` are reserved
+  for changes under `plugins/dev-loop/`**, the payload a consumer installs. A change anywhere else
+  takes `chore:`, `docs:`, `test:` or `ci:` however substantial it is: `chore(research):`,
+  `docs(posts):`, `docs(claude-md):`, `test:`, `ci:`. Inside the payload, pick by what a consumer
+  gets — `feat:` a new capability, `fix:` corrected behavior, `refactor:` or `docs:` neither. A PR
+  that spans both takes its type from its payload part.
+
+  **Why it matters now:** release-please reads these types to choose the next version and to write
+  `CHANGELOG.md` and the GitHub Release, and the Pages site's activity feed reads that Release. A
+  `feat(research):` would bump the plugin a minor version and could headline the feed with work
+  no consumer receives.
+
+  **PRs land by squash merge** (since #346), so the commit release-please reads is the squash
+  subject, not the branch's commits. Set it explicitly, ending in ` (#<PR>)`, and pass an empty
+  body: `gh pr merge <PR> --squash --subject "<type>(<scope>): <summary> (#<PR>)" --body ""
+  --delete-branch`. GitHub otherwise fills the body with the branch's commit messages, which
+  release-please can read as more Conventional Commits; with no body, a breaking change is marked
+  with `!` in the subject. A direct push to `main` (the documentation exception below) is read the
+  same way, so its message follows the same rule. The loop's form of all this is
+  `.claude/loop.config.md` → `COMMIT_CONV` and `MERGE_METHOD`.
 
 ## Dogfooding this repo
 
@@ -380,7 +400,7 @@ narrowly — the boundary is *what the file does*, not its extension:
 
 | Direct to `main` | Must go through a PR |
 |---|---|
-| the three maintainer `CLAUDE.md` files (root, `tests/`, `plugins/`) | **`README.md`** (see below), anything in `plugins/dev-loop/` (the whole payload — skills, commands, hooks, tools, `plugin.json`, **and the payload's own `README.md` and `LICENSE`**), `tests/` (its code, not its `CLAUDE.md`), `posts/`, `.github/`, `.claude/`, `.claude-plugin/`, **the root `LICENSE` and `LICENSE-prose.md`** |
+| the three maintainer `CLAUDE.md` files (root, `tests/`, `plugins/`) | **`README.md`** (see below), anything in `plugins/dev-loop/` (the whole payload — skills, commands, hooks, tools, `plugin.json`, **and the payload's own `README.md` and `LICENSE`**), `tests/` (its code, not its `CLAUDE.md`), `posts/`, `.github/`, `.claude/`, `.claude-plugin/`, **the root `LICENSE` and `LICENSE-prose.md`**, release-please's `release-please-config.json` and `.release-please-manifest.json` |
 | typo / link / formatting fixes anywhere **except** `README.md` and `plugins/dev-loop/` | any change to runtime behavior |
 
 **Row 1 wins wherever it names a path, and that is stated here once rather than re-listed in row
@@ -533,15 +553,43 @@ and #76 carry the label and no milestone. #35 carries the label too, but it was 
 evidence-gated work (#49, #61, #71) still goes to `deferred-corpus` proper. When deferring, pick
 the bucket by *what the work waits on*, and never widen `deferred-corpus`'s criterion to avoid the choice.
 
-### Standing convention: the README status block ships with the version bump
+### Standing convention: release-please cuts the release; the release-prep PR merges first
 
-**Any PR that bumps `plugins/dev-loop/.claude-plugin/plugin.json` must update the `README.md` status block in the
-same PR.** Not just the v0.2.0 release — every bump, permanently. The status block names the current
-version, what actually works, where the live backlog is, and which repos have adopted it; all four
-rot silently, and the recurring failure mode is that nobody notices until a reader does. Treat it as
-part of "done" for a release, not a separate chore.
+**Releases are cut by release-please, never by hand** (#346, adopted from agentfluent).
+`.github/workflows/release-please.yml` keeps one release PR open that bumps
+`plugins/dev-loop/.claude-plugin/plugin.json`'s `version`, `.release-please-manifest.json` and
+`CHANGELOG.md` from the squash subjects merged since the last release. **Merging that PR is the
+release:** release-please tags `vX.Y.Z` on the merge commit and publishes a GitHub Release with the
+changelog section as its notes, which the Pages site's activity feed reads. Nobody edits those three
+files by hand, and the loop never merges the release PR (`loop.config.md` → `RELEASE_SCHEME`).
 
-**The same PR re-checks the model-tiers epic's re-check table** ([#308](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/308)):
+- **The version is inferred, and you can override it.** `feat:` bumps the minor version, `fix:` the
+  patch, and `bump-minor-pre-major` keeps a pre-1.0 `!` at a minor bump. When the inferred version
+  is not the one the milestone names, merge the PR before the release with
+  `--body "Release-As: X.Y.Z"`.
+- **Holding a release means leaving the release PR unmerged.** It keeps updating as work lands.
+- **The workflow needs the `RELEASE_PLEASE_PAT` secret.** A PR opened with `GITHUB_TOKEN` starts no
+  other workflow, so the required `test-suite` check would never report on it.
+
+**The README status block ships in a release-prep PR, merged immediately before the release PR.**
+The release PR's diff is the bot's: release-please regenerates its branch on every push to `main`,
+so a commit added to it can be overwritten. The release-prep PR is typed `docs:` or `chore:`, so it
+adds nothing to the changelog, and it updates the status block in both README copies to name the
+version the release PR is about to cut. Merge the release PR next, with nothing in between, and
+confirm the result with `gh release view vX.Y.Z`. Every release, permanently. The status block
+names the current version, what actually works, where the live backlog is, and which repos have
+adopted it; all four rot silently, and the recurring failure mode is that nobody notices until a
+reader does. Treat it as part of "done" for a release, not a separate chore.
+
+**No GitHub Release exists for v0.5.0 or earlier, deliberately.** v0.2.0 through v0.5.0 were
+hand-bumped commits. A Release is dated when it is published, not by its tag's commit, so
+publishing them now would put four old versions into the activity feed under today's date. v0.5.0
+carries a plain tag on `32083f7` (PR #326's merge commit) so the first changelog's compare link
+resolves; the feed reads Releases, not tags. If v0.5.0 is ever published as a Release, delete the
+Pages repo's `_news/2026-11-03-claude-code-loop-v0-5-0.md`, which covers it by hand, or the feed
+shows it twice.
+
+**The release-prep PR also re-checks the model-tiers epic's re-check table** ([#308](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/308)):
 every row whose trigger is "each minor release" gets checked against the installed Claude Code
 version and its "last checked" cell updated. Those rows record harness behavior the `MODEL_TIERS`
 design rests on and Anthropic can change without notice; without a trigger they are a deferral

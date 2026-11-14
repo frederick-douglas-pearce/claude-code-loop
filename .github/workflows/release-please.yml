@@ -1,0 +1,37 @@
+name: Release Please
+
+# Maintainer-side release automation, adopted from agentfluent (#346). On every
+# push to main, release-please keeps one release PR open that bumps
+# plugins/dev-loop/.claude-plugin/plugin.json and CHANGELOG.md from the
+# Conventional Commit subjects merged since the last release. Merging that PR
+# IS the release: release-please tags vX.Y.Z and publishes the GitHub Release,
+# which the Pages site's activity feed reads.
+#
+# Ships to no consumer and runs nothing the suite needs, so the stdlib-only
+# rule does not reach it (CLAUDE.md, preamble). There is no build job: the
+# plugin is installed from the marketplace's ./plugins/dev-loop source on the
+# default branch, never from a release artifact.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned to a commit SHA, not a tag: this is a third-party action handed
+      # a write-scoped PAT, and a moved tag would run new code with it. Bump
+      # the SHA and the version comment together, deliberately.
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          # A PAT, not GITHUB_TOKEN: a PR opened with GITHUB_TOKEN triggers no
+          # other workflow, so test.yml would never report the required
+          # `test-suite` check and the release PR could never merge.
+          token: ${{ secrets.RELEASE_PLEASE_PAT }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
