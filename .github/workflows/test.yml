@@ -16,7 +16,11 @@ permissions:
 jobs:
   unittest:
     name: unittest (py${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: when ubuntu-latest moved to 26.04 (2026-11-14),
+    # actions/setup-python had no 3.9 build for it and the py3.9 job failed at
+    # setup. When GitHub retires this image, re-decide 3.9 then -- deliberately,
+    # not by letting the runner narrow the matrix.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
