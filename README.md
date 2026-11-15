@@ -201,8 +201,9 @@ skeleton does not offer.
 > **v0.6.0 is a minor bump because it adds a config setting, `MODEL_TIERS`, that changes
 > nothing by default.** It sets the model and effort each subagent role runs on (see *Per-role
 > model tiers*). The `/init-loop` skeleton ships it as `—`, and a missing row reads the same
-> way: every role inherits the session's model and effort, the loop passes no model or effort
-> to any spawn, and a run behaves as it did on v0.5.0
+> way: every role inherits, so the loop passes no model or effort to any spawn, and each
+> subagent runs on the model and effort it did on v0.5.0. Each iteration's `- Budget:` line
+> gains a `models=` slot recording that
 > ([#309](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/309)). It is the
 > first phase of the model-tiers epic
 > ([#308](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/308)), and the
