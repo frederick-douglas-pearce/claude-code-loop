@@ -13,7 +13,7 @@ The engine was originally built and hardened in
 v0.11.0 releases) and extracted here. Install it once, generate a per-project `loop.config.md` with
 `/init-loop`, and run your backlog as a loop.
 
-> **v0.5.0, not yet stable**: seven repos drive it today; see *Status* for what that does and
+> **v0.6.0, not yet stable**: seven repos drive it today; see *Status* for what that does and
 > doesn't establish.
 
 ## Why try it
@@ -173,7 +173,7 @@ skeleton does not offer.
 
 ## Status
 
-> **Status — v0.5.0; not yet stable.** Four pieces ship: the
+> **Status — v0.6.0; not yet stable.** Four pieces ship: the
 > `dev-loop` skill (`SKILL.md`, a core `loop-engine.md`, and the units under `phases/` and
 > `reference/` that it reads on demand), the `/init-loop` onboarding
 > command, the append-only guard hook, and the mutation harness the acceptance gate
@@ -197,6 +197,17 @@ skeleton does not offer.
 > the v0.3.0 cut**, across the five repos driving it then. That is enough to say the
 > plugin/config seam holds and that the hardening works under load; it is not enough to call
 > it stable.
+>
+> **v0.6.0 is a minor bump because it adds a config setting, `MODEL_TIERS`, that changes
+> nothing by default.** It sets the model and effort each subagent role runs on (see *Per-role
+> model tiers*). The `/init-loop` skeleton ships it as `—`, and a missing row reads the same
+> way: every role inherits the session's model and effort, the loop passes no model or effort
+> to any spawn, and a run behaves as it did on v0.5.0
+> ([#309](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/309)). It is the
+> first phase of the model-tiers epic
+> ([#308](https://github.com/frederick-douglas-pearce/claude-code-loop/issues/308)), and the
+> vocabulary the measured presets will use. The cost is context: the engine core and
+> `SKILL.md`, which every invocation reads, grew 2.29% (44,471 → 45,488 tokens by bytes ÷ 4).
 >
 > **v0.5.0 is a minor bump because it changes which issue the loop picks.** Before it
 > selects a `queued` or `routed` row, the loop now checks that row's `Depends on` cell. A row
@@ -270,7 +281,7 @@ skeleton does not offer.
 > defaults the plan gate to stopping on every issue under `calibration` — alongside
 > gate-currency expiry, an orphan-PR scan on resume, an offline-test tier, and a stop
 > on any ledger status the engine does not recognize. Expect rough edges in porting to
-> a repo unlike the six above; that is exactly what #1 collects.
+> a repo unlike the seven above; that is exactly what #1 collects.
 >
 > **Issues for this plugin live in
 > [this repo's tracker](https://github.com/frederick-douglas-pearce/claude-code-loop/issues).**
@@ -430,7 +441,7 @@ enforcement: nothing in the plugin can stop you upgrading mid-iteration.
 
 ## What the loop can do to your repo
 
-**This section describes v0.5.0.** Every engine older than v0.3.0 gates less at nearly
+**This section describes v0.6.0.** Every engine older than v0.3.0 gates less at nearly
 every point below, and the lists here are illustrative, never the set — **assume nothing
 in this section is live until you have re-installed.** An installed **v0.2.0** has no
 design-question stop, no blocking/editorial split at code review, no guard-efficacy
