@@ -128,7 +128,7 @@ ENTRY = "SKILL.md"
 #     complete load in CONTEXT TOKENS, the unit P2 is measured in, per file.
 #
 # Per-file bytes, consulted only when a version is no longer in the plugin cache.
-# The cache is the primary source. Add a version's row when it is installed.
+# The cache is the primary source.
 KNOWN_FILE_BYTES = {
     "0.2.0": {CORE: 177529},
     "0.2.1": {CORE: 177529},
@@ -145,6 +145,16 @@ KNOWN_FILE_BYTES = {
               "reference/plan-gate-inferred.md": 4787,
               "reference/plan-template.md": 2737,
               "reference/record-templates.md": 2357},
+    # 0.6.0 was measured from the tree at 5391906 (#309), the last commit before
+    # the release to change a file these rows measure, by the release-prep PR
+    # (#342), before any install. The
+    # release PR (#348) touches no file these rows measure, so the tagged files
+    # are these bytes. Check them against the cache once 0.6.0 is installed.
+    "0.6.0": {CORE: 171033, ENTRY: 10921, "phases/accepting.md": 37831,
+              "phases/reviewing.md": 30460, "reference/initialization.md": 3489,
+              "reference/plan-gate-inferred.md": 4787,
+              "reference/plan-template.md": 2737,
+              "reference/record-templates.md": 2400},
 }
 # The core's bytes per version, kept under its old name for callers that import it.
 KNOWN_ENGINE_BYTES = {v: f[CORE] for v, f in KNOWN_FILE_BYTES.items()}
