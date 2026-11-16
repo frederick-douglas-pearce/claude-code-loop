@@ -1,6 +1,6 @@
 {
   "name": "dev-loop",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Supervised dev-loop engine for Claude Code: runs exactly one routed backlog issue per invocation (select -> route -> plan -> architect -> human gate -> implement -> commit/PR -> review -> security -> AC-verify -> merge -> journal), stopping by default for human approval of every plan and every merge, with durable ledger state.",
   "author": {
     "name": "Frederick Douglas Pearce"
@@ -8,5 +8,11 @@
   "homepage": "https://github.com/frederick-douglas-pearce/claude-code-loop",
   "repository": "https://github.com/frederick-douglas-pearce/claude-code-loop",
   "license": "MIT",
-  "keywords": ["loop-engineering", "dev-loop", "orchestration", "backlog", "supervised-agent"]
+  "keywords": [
+    "loop-engineering",
+    "dev-loop",
+    "orchestration",
+    "backlog",
+    "supervised-agent"
+  ]
 }
