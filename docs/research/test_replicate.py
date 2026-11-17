@@ -199,8 +199,7 @@ class LaunchTests(Tmp):
         ro, rw, tmpfs = self.binds(argv)
         self.assertNotIn("/", ro)                         # no host root: an allowlist
         self.assertEqual(set(ro), {"/usr", "/etc", "/etc/resolv.conf", self.bin,
-                                   "/repo/docs/research", str(self.rdir / "bin"),
-                                   str(self.rdir / "marketplace")})
+                                   "/repo/docs/research", str(self.rdir / "bin")})
         self.assertEqual(ro["/etc/resolv.conf"], str(self.rdir / "resolv.conf"))
         self.assertEqual(set(rw), {str(self.rdir / "home"), str(self.rdir / "work"),
                                    str(self.rdir / "gh-calls.jsonl")})
@@ -497,6 +496,56 @@ class StrataTests(Tmp):
         obs = {"parent": {(S55, None): 1}, "pm": {(S55, "low"): 1}, "Explore": {(S55, "medium"): 1}}
         problems = R.check_strata(obs, {"parent": (S55, "medium"), "pm": (S55, "medium")})
         self.assertEqual(len(problems), 3)
+
+
+class InstallCheckTests(Tmp):
+    """The plugin must land as a git install of the marketplace commit, in the cache:
+    a directory-source marketplace runs the skill from its source dir (pilot m1)."""
+    URL = "https://github.com/o/pilot-r1-plugin.git"
+    SHA = "a" * 40
+
+    def setUp(self):
+        super().setUp()
+        self.home = self.tmp / "home" / ".claude"
+        self.cache = self.home / "plugins" / "cache" / "claude-code-loop" / "dev-loop" / "0.6.0"
+        self.cache.mkdir(parents=True)
+
+    def write(self, source=None, rows=None):
+        plugins = self.home / "plugins"
+        if source is not False:
+            (plugins / "known_marketplaces.json").write_text(json.dumps({"claude-code-loop": {
+                "source": source or {"source": "git", "url": self.URL}}}))
+        if rows is not False:
+            (plugins / "installed_plugins.json").write_text(json.dumps({"version": 2, "plugins": {
+                "dev-loop@claude-code-loop": rows if rows is not None else [
+                    {"installPath": str(self.cache), "gitCommitSha": self.SHA}]}}))
+
+    def check(self):
+        return R.check_install(self.home, self.URL, self.SHA, self.cache)
+
+    def test_git_install_of_the_commit_in_the_cache_passes(self):
+        self.write()
+        self.assertEqual(self.check(), [])
+
+    def test_directory_source_refuses(self):
+        self.write(source={"source": "directory", "path": "/r1/marketplace"})
+        self.assertIn("expected git", " ".join(self.check()))
+
+    def test_other_url_commit_path_or_count_refuses(self):
+        self.write(source={"source": "git", "url": "https://github.com/x/y.git"})
+        self.assertTrue(self.check())
+        self.write(rows=[{"installPath": str(self.cache), "gitCommitSha": "b" * 40}])
+        self.assertIn("is not the marketplace commit", " ".join(self.check()))
+        self.write(rows=[{"installPath": str(self.tmp / "elsewhere"), "gitCommitSha": self.SHA}])
+        self.assertIn("install path", " ".join(self.check()))
+        self.write(rows=[{"installPath": str(self.cache), "gitCommitSha": self.SHA}] * 2)
+        self.assertIn("2 install records", " ".join(self.check()))
+
+    def test_missing_records_or_cache_refuse(self):
+        self.assertEqual(len(self.check()), 2)        # neither record exists
+        self.write()
+        self.cache.rmdir()
+        self.assertIn("did not produce", " ".join(self.check()))
 
 
 class VersionDirTests(Tmp):
