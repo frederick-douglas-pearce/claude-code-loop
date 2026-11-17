@@ -3,7 +3,7 @@
   "why": "Throwaway pilot fixture for #208's AC6: one trivial code-route issue, so a replicate exercises plan gate, implement, PR, CI, review, acceptance and merge at the lowest cost. Not a reference issue; no comparison is drawn from it.",
   "org": "frederick-douglas-pearce-loop-sandbox",
   "label": "fixture",
-  "base_sha": "eb650a6fc7e5bc0a9febadc12d7234aeba9fa60e",
+  "base_sha": "7c311b7cfe3b594c54c7c6279977e764163c2439",
   "first_prompt": "/dev-loop:dev-loop 1",
   "ledger_root": ".loop-ledger",
   "run_slug": "fixture",
@@ -25,6 +25,12 @@
       "reply": "approve"
     },
     {
+      "status": "in-review",
+      "expect": "(?i)(scope ruling|design question)",
+      "reply": "Follow the architect's scope ruling: apply its minimal fix set if it requires one, otherwise accept the finding as non-blocking, and continue.",
+      "why": "step 8's design-question stop. Policy chosen by the human 2026-11-17 after pilot m2. The regex matches ANY in-review stop naming a scope ruling or design question, a dirty round-2 escalation included; only an in-review message naming neither halts. Not exercised by the pilot. A default-deny discriminator is owed (#357) before any #274 fixture carries this reply."
+    },
+    {
       "status": "in-acceptance",
       "expect": "(?i)merge",
       "reply": "merge"
@@ -38,9 +44,11 @@
   "builtin_agents": {
     "general-purpose": "parent",
     "Explore": "parent",
-    "Plan": "parent"
+    "Plan": "parent",
+    "claude": "parent"
   },
   "model_tiers": "\u2014 (every role inherits), as bound in the fixture's loop.config.md",
   "settings": {},
-  "builtin_agents_why": "Built-ins spawned with no model/effort are expected on the parent's stratum; any other built-in (e.g. claude-code-guide, which runs on its own default) fails check_strata by default-deny. PR B's spike confirms or amends this map."
+  "builtin_agents_why": "Built-ins spawned with no model/effort run on the parent's stratum: confirmed 2026-11-17 by two sandboxed spikes on CLI 2.1.326 (claude-sonnet-5-5 at medium: Explore, general-purpose and Plan; at high: those three and claude), every record at the parent's (model, effort). Any other built-in (statusline-setup, or claude-code-guide, which runs on its own default) fails check_strata by default-deny.",
+  "ci_status_binding": "gh run list --workflow test.yml (Actions API), not the consumer-standard gh pr checks: the sandbox gh-token is a fine-grained PAT and cannot read checks (pilot m1, 2026-11-17). A fixed factor across arms only if every #274 fixture applies the same rewrite; not enforced."
 }

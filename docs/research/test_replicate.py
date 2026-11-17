@@ -199,8 +199,7 @@ class LaunchTests(Tmp):
         ro, rw, tmpfs = self.binds(argv)
         self.assertNotIn("/", ro)                         # no host root: an allowlist
         self.assertEqual(set(ro), {"/usr", "/etc", "/etc/resolv.conf", self.bin,
-                                   "/repo/docs/research", str(self.rdir / "bin"),
-                                   str(self.rdir / "marketplace")})
+                                   "/repo/docs/research", str(self.rdir / "bin")})
         self.assertEqual(ro["/etc/resolv.conf"], str(self.rdir / "resolv.conf"))
         self.assertEqual(set(rw), {str(self.rdir / "home"), str(self.rdir / "work"),
                                    str(self.rdir / "gh-calls.jsonl")})
@@ -354,6 +353,17 @@ class StopTests(Tmp):
                          ("reply", "merge"))
         self.assertEqual(R.classify_stop("done", "Merged. Run /clear.", self.STOPS)[0], "done")
 
+    def test_review_stop_follows_the_scope_ruling(self):
+        """Pilot m2: an in-review stop naming a scope ruling gets the fixed
+        follow-the-ruling reply; one naming neither phrase halts. It does NOT tell a
+        dirty round 2 that names a ruling apart (#357)."""
+        kind, reply = R.classify_stop(
+            "in-review", "Stopped at step 8. The architect's scope ruling: ...", self.STOPS)
+        self.assertEqual(kind, "reply")
+        self.assertIn("scope ruling", reply)
+        self.assertEqual(R.classify_stop(
+            "in-review", "Round 2 is still dirty; escalating.", self.STOPS)[0], "halt")
+
     def test_pre_queue_stop_answers_the_backlog_question(self):
         """0.6.0 step 0.1 asks which BACKLOG_SOURCE before queue.md exists."""
         kind, reply = R.classify_stop(None, "Which BACKLOG_SOURCE should I run?", self.STOPS)
@@ -497,6 +507,83 @@ class StrataTests(Tmp):
         obs = {"parent": {(S55, None): 1}, "pm": {(S55, "low"): 1}, "Explore": {(S55, "medium"): 1}}
         problems = R.check_strata(obs, {"parent": (S55, "medium"), "pm": (S55, "medium")})
         self.assertEqual(len(problems), 3)
+
+
+class InstallCheckTests(Tmp):
+    """The plugin must land as a git install of the marketplace commit, in the cache:
+    a directory-source marketplace runs the skill from its source dir (pilot m1)."""
+    URL = "https://github.com/o/pilot-r1-plugin.git"
+    SHA = "a" * 40
+
+    def setUp(self):
+        super().setUp()
+        self.home = self.tmp / "home" / ".claude"
+        self.cache = self.home / "plugins" / "cache" / "claude-code-loop" / "dev-loop" / "0.6.0"
+        self.cache.mkdir(parents=True)
+
+    def write(self, source=None, rows=None):
+        plugins = self.home / "plugins"
+        if source is not False:
+            (plugins / "known_marketplaces.json").write_text(json.dumps({"claude-code-loop": {
+                "source": source or {"source": "git", "url": self.URL}}}))
+        if rows is not False:
+            (plugins / "installed_plugins.json").write_text(json.dumps({"version": 2, "plugins": {
+                "dev-loop@claude-code-loop": rows if rows is not None else [
+                    {"installPath": str(self.cache), "gitCommitSha": self.SHA}]}}))
+
+    def check(self):
+        return R.check_install(self.home, self.URL, self.SHA, self.cache)
+
+    def test_git_install_of_the_commit_in_the_cache_passes(self):
+        self.write()
+        self.assertEqual(self.check(), [])
+
+    def test_directory_source_refuses(self):
+        self.write(source={"source": "directory", "path": "/r1/marketplace"})
+        self.assertIn("expected git", " ".join(self.check()))
+
+    def test_other_url_commit_path_or_count_refuses(self):
+        self.write(source={"source": "git", "url": "https://github.com/x/y.git"})
+        self.assertIn("expected git " + self.URL, " ".join(self.check()))
+        self.write(rows=[{"installPath": str(self.cache), "gitCommitSha": "b" * 40}])
+        self.assertIn("is not the marketplace commit", " ".join(self.check()))
+        self.write(rows=[{"installPath": str(self.tmp / "elsewhere"), "gitCommitSha": self.SHA}])
+        self.assertIn("install path", " ".join(self.check()))
+        self.write(rows=[{"installPath": str(self.cache), "gitCommitSha": self.SHA}] * 2)
+        self.assertIn("2 install records", " ".join(self.check()))
+
+    def test_missing_records_or_cache_refuse(self):
+        self.assertEqual(len(self.check()), 2)        # neither record exists
+        self.write()
+        self.cache.rmdir()
+        self.assertIn("did not produce", " ".join(self.check()))
+
+
+class VersionDirTests(Tmp):
+    RUN = ["run", "--fixture", PILOT, "--replicate-id", "r1", "--plugin-src", ".",
+           "--plugin-commit", "HEAD", "--claude-bin", "/x/claude", "--claude-version", "v",
+           "--model", S55, "--effort", "medium", "--login", "someone"]
+
+    def test_accepts_only_xyz(self):
+        self.assertEqual(R.version_dir_arg("0.6.0"), "0.6.0")
+        self.assertEqual(R.version_dir_arg("10.20.300"), "10.20.300")
+        for bad in ("0.6", "v0.6.0", "0.6.0.1", "0.6.0\n", "0.6.0/..", "", "0.6.x"):
+            with self.assertRaises(R.argparse.ArgumentTypeError, msg=repr(bad)):
+                R.version_dir_arg(bad)
+
+    def test_bad_version_dir_stops_before_the_replicate_starts(self):
+        """The refusal is at parse time: no replicate directory is created."""
+        out = self.tmp / "out"
+        argv = self.RUN + ["--out", str(out), "--version-dir", "0.6"]
+        with open(os.devnull, "w") as devnull:
+            saved, sys.stderr = sys.stderr, devnull
+            try:
+                with self.assertRaises(SystemExit) as cm:
+                    R.main(argv)
+            finally:
+                sys.stderr = saved
+        self.assertEqual(cm.exception.code, 2)
+        self.assertFalse(out.exists())
 
 
 class MeasureTests(Tmp):

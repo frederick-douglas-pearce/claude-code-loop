@@ -8,7 +8,9 @@ directory that holds everything the run can touch:
       home/            HOME and CLAUDE_CONFIG_DIR (home/.claude) -- the only config
       work/<id>/       the cwd: a clone of the fixture at its base SHA
       bin/gh           the logging shim, first on PATH (a second line of defense)
-      marketplace/     the pinned plugin, git-archived at its commit
+      plugin-archive/  the pinned plugin, git-archived at its commit (A5 rewrite here)
+      marketplace/     that archive committed with a fixed identity; pushed to a
+                       private sandbox-org repo and installed from it over https
       streams/         one stream-json file per `claude -p` turn
       environment.json, result.json, audit.json, gh-calls.jsonl
 
@@ -16,7 +18,7 @@ Containment has two layers. (1) Every `claude` process of a replicate runs
 under bubblewrap (`sandbox_argv`, `run_sandboxed`) in new user, mount, pid,
 network, ipc and uts namespaces with every capability dropped. Its filesystem is
 an allowlist: `/usr`, `/etc` and the merged-usr links, read-only, then the pinned
-binary, `docs/research/`, the shim and the archived plugin, read-only, and only
+binary, `docs/research/` and the shim, read-only, and only
 the replicate's own `home/`, `work/` and `gh-calls.jsonl` read-write; nothing
 else of the host exists inside, including the human's home, `/media`, `/mnt` and
 the X11 and session sockets. Its network is slirp4netns user-mode networking
@@ -198,7 +200,7 @@ def sandbox_argv(rdir, claude_real, cwd, info_fd, block_fd, research_dir=RESEARC
     cgroup) plus an explicit `--unshare-user` and `--cap-drop ALL`; the
     filesystem is built up from nothing -- `/usr` and `/etc` read-only, the
     merged-usr links, then read-only the pinned binary, `docs/research/` (the
-    shim imports this module), the shim dir and the archived plugin, and
+    shim imports this module) and the shim dir, and
     read-write only the replicate's `home/`, `work/` and shim log. Nothing else
     of the host or of `rdir` exists inside. `info_fd` reports the child pid and
     `block_fd` holds the command until `run_sandboxed` has the network up."""
@@ -213,7 +215,7 @@ def sandbox_argv(rdir, claude_real, cwd, info_fd, block_fd, research_dir=RESEARC
         argv += [kind, src, dest]
     argv += ["--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp", "--tmpfs", "/run"]
     argv += ["--ro-bind", str(rdir / "resolv.conf"), resolv_dest]
-    for path in (claude_real, research_dir, rdir / "bin", rdir / "marketplace"):
+    for path in (claude_real, research_dir, rdir / "bin"):
         argv += ["--ro-bind", str(path), str(path)]
     for path in (rdir / "home", rdir / "work", rdir / "gh-calls.jsonl"):
         argv += ["--bind", str(path), str(path)]
@@ -833,17 +835,26 @@ def _run(a, spec, rdir, env_record):
     if problems:
         env_record["refused"] = problems
         raise Refused("; ".join(problems))
-    mk = rdir / "marketplace"
-    mk.mkdir()
+    # Plugin: git-archived at the pin, optionally re-versioned in the copy only (A5),
+    # then committed with a fixed identity and date so the marketplace commit is a
+    # pure function of the archive. It is served from a sandbox-org repo over https:
+    # a directory-source marketplace makes Claude Code run the skill from the source
+    # dir, not the cache, which no consumer does (#208 pilot m1).
+    archive = rdir / "plugin-archive"
+    archive.mkdir()
     arch = subprocess.run(["git", "-C", a.plugin_src, "archive", plugin_resolved],
                           capture_output=True, check=True).stdout
-    subprocess.run(["tar", "-x", "-C", str(mk)], input=arch, check=True)
-    pj = mk / "plugins" / "dev-loop" / ".claude-plugin" / "plugin.json"
+    subprocess.run(["tar", "-x", "-C", str(archive)], input=arch, check=True)
+    pj = archive / "plugins" / "dev-loop" / ".claude-plugin" / "plugin.json"
     manifest = json.loads(pj.read_text())
     if a.version_dir:
         manifest["version"] = a.version_dir
         pj.write_text(json.dumps(manifest, indent=2) + "\n")
     version_dir = manifest["version"]
+    mk_sha = build_base(archive, rdir / "marketplace")
+    plugin_repo = "%s/%s-%s-plugin" % (spec["org"], spec["name"], a.replicate_id)
+    mk_url = "https://github.com/%s.git" % plugin_repo
+    env_record.update(marketplace_commit=mk_sha, plugin_repo=plugin_repo)
     # Isolated home: roster, memory snapshot, settings. Nothing from the real one.
     home = rdir / "home" / ".claude"
     (home / "agents").mkdir(parents=True)
@@ -857,38 +868,47 @@ def _run(a, spec, rdir, env_record):
     env_record.update(version_dir=version_dir, memory_snapshot=snapshot_id(mem),
                       roster=pins, expected_strata={k: list(v) for k, v in expected.items()},
                       model_tiers=spec.get("model_tiers", "— (every role inherits)"),
+                      ci_status_binding=spec.get("ci_status_binding"),
                       settings_sha256=hashlib.sha256((home / "settings.json").read_bytes()).hexdigest())
     write_shim(rdir / "bin")
     (rdir / "gh-calls.jsonl").touch()
     env = launch_env(rdir, sandbox, TOKEN_DIR)
     claude_real = os.path.realpath(a.claude_bin)
     env_record["claude_real"] = claude_real
-    # Plugin install inside the isolated config (A5), sandboxed like every
-    # replicate `claude` process; refuse if it did not land.
-    for sub in (["marketplace", "add", str(mk)], ["install", "dev-loop@claude-code-loop"]):
-        rc, out = run_sandboxed(rdir, claude_real, rdir / "home", [claude_real, "plugin"] + sub,
-                                env, timeout=600)
-        if rc:
-            raise Refused("claude plugin %s exited %d: %s"
-                          % (sub[0], rc, (out or b"").decode(errors="replace").strip()[:300]))
-    cache = home / "plugins" / "cache" / "claude-code-loop" / "dev-loop" / version_dir
-    if not cache.is_dir():
-        raise Refused("plugin install did not produce %s" % cache)
-    env_record["plugin_cache_sha256"] = tree_sha256(cache)
     # Git inside the replicate: sandbox token via gh's credential helper, fixed identity.
     sh([REAL_GH, "auth", "setup-git"], env=env)
     for k, v in (("user.name", FIXED_IDENTITY[0]), ("user.email", FIXED_IDENTITY[1])):
         sh(["git", "config", "--global", k, v], env=env)
-    # Sandbox repo (harness side, harness-token only). From the create onward the
+    # Repos (harness side, harness-token only). From the first create onward the
     # audit, the cost read and the teardown run on every path, success or not.
     henv = harness_env(rdir)
     sh([REAL_GH, "auth", "setup-git"], env=henv)
     env_record["account_events_before"] = len(account_events(login))
-    sh([REAL_GH, "repo", "create", sandbox, "--private"], env=henv)
-    env_record["sandbox_created"] = env_record["run_start"] = now()
+    created = []
     try:
+        sh([REAL_GH, "repo", "create", plugin_repo, "--private"], env=henv)
+        created.append(plugin_repo)
+        sh(["git", "push", "-q", mk_url, "main"], env=henv, cwd=rdir / "marketplace")
+        # Plugin install inside the isolated config (A5), sandboxed like every
+        # replicate `claude` process; refuse unless it landed as a git install of
+        # exactly the marketplace commit, in the cache.
+        for sub in (["marketplace", "add", mk_url], ["install", "dev-loop@claude-code-loop"]):
+            rc, out = run_sandboxed(rdir, claude_real, rdir / "home",
+                                    [claude_real, "plugin"] + sub, env, timeout=600)
+            if rc:
+                raise Refused("claude plugin %s exited %d: %s"
+                              % (sub[0], rc, (out or b"").decode(errors="replace").strip()[:300]))
+        cache = home / "plugins" / "cache" / "claude-code-loop" / "dev-loop" / version_dir
+        problems = check_install(home, mk_url, mk_sha, cache)
+        if problems:
+            raise Refused("; ".join(problems))
+        env_record["plugin_cache_sha256"] = tree_sha256(cache)
+        sh([REAL_GH, "repo", "create", sandbox, "--private"], env=henv)
+        created.append(sandbox)
+        env_record["sandbox_created"] = env_record["run_start"] = now()
         _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv)
     finally:
+        env_record.setdefault("run_start", now())
         env_record.setdefault("run_end", now())
         (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
         steps = (("audit", lambda: write_audit(rdir, env_record, spec, login, version_dir)),
@@ -900,13 +920,47 @@ def _run(a, spec, rdir, env_record):
             except Exception as exc:                  # recorded, never swallowed silently
                 env_record.setdefault("errors", []).append("%s: %s" % (name, exc))
         if a.keep_sandbox:
-            env_record["sandbox_kept"] = True
+            env_record["sandbox_kept"] = created
         else:
-            r = sh([REAL_GH, "repo", "delete", sandbox, "--yes"], env=henv, check=False)
-            if r.returncode == 0:
-                env_record["sandbox_deleted"] = now()
-            else:
-                env_record["sandbox_delete_failed"] = (r.stderr or r.stdout).strip()[:300]
+            for repo in created:
+                r = sh([REAL_GH, "repo", "delete", repo, "--yes"], env=henv, check=False)
+                if r.returncode == 0:
+                    env_record.setdefault("repos_deleted", []).append(repo)
+                else:
+                    env_record.setdefault("repo_delete_failed", []).append(
+                        "%s: %s" % (repo, (r.stderr or r.stdout).strip()[:300]))
+
+
+def check_install(home, url, commit, cache):
+    """-> [refusal reasons]; empty only when the plugin was installed from the git
+    marketplace at `url`, at exactly `commit`, into `cache`. Default-deny: any
+    missing or unreadable record refuses."""
+    plugins = pathlib.Path(home) / "plugins"
+    out = []
+    try:
+        known = json.loads((plugins / "known_marketplaces.json").read_text())
+        src = known["claude-code-loop"]["source"]
+        if src != {"source": "git", "url": url}:
+            out.append("marketplace source is %s, expected git %s" % (src, url))
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        out.append("cannot read the marketplace record: %r" % exc)
+    try:
+        inst = json.loads((plugins / "installed_plugins.json").read_text())
+        rows = inst["plugins"]["dev-loop@claude-code-loop"]
+        if len(rows) != 1:
+            out.append("%d install records for dev-loop, expected 1" % len(rows))
+        else:
+            row = rows[0]
+            if row.get("gitCommitSha") != commit:
+                out.append("installed commit %s is not the marketplace commit %s"
+                           % (row.get("gitCommitSha"), commit))
+            if os.path.realpath(row.get("installPath") or "") != os.path.realpath(cache):
+                out.append("install path %s is not %s" % (row.get("installPath"), cache))
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        out.append("cannot read the install record: %r" % exc)
+    if not pathlib.Path(cache).is_dir():
+        out.append("plugin install did not produce %s" % cache)
+    return out
 
 
 def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv):
@@ -982,6 +1036,14 @@ def write_audit(rdir, env_record, spec, login, version_dir):
     return audit
 
 
+def version_dir_arg(s):
+    """--version-dir must be an `x.y.z` era directory, checked at parse time: a
+    typo otherwise surfaces only after a paid replicate has started (#357)."""
+    if not re.fullmatch(r"\d+\.\d+\.\d+", s):
+        raise argparse.ArgumentTypeError("%r is not an x.y.z version directory" % s)
+    return s
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -991,7 +1053,8 @@ def main(argv=None):
     r.add_argument("--out", required=True)
     r.add_argument("--plugin-src", required=True, help="claude-code-loop checkout")
     r.add_argument("--plugin-commit", required=True)
-    r.add_argument("--version-dir", help="override the archived plugin.json version (A5)")
+    r.add_argument("--version-dir", type=version_dir_arg,
+                   help="override the archived plugin.json version (A5); x.y.z")
     r.add_argument("--claude-bin", required=True, help="absolute path to the pinned binary")
     r.add_argument("--claude-version", required=True, help="expected `claude --version`")
     r.add_argument("--model", required=True)

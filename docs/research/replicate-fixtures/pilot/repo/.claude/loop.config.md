@@ -20,7 +20,7 @@ Frozen with the fixture. Every replicate of this fixture runs against these exac
 | `LINT_CMD` | `—` (no linter configured in this fixture) | |
 | `TYPE_CMD` | `—` (no separate type step in this fixture) | |
 | `HERMETIC_TEST_CMD` | `—` (no offline/hermetic tier declared) | |
-| `CI_STATUS_CMD` | `gh pr checks <PR>` | required check `test-suite` |
+| `CI_STATUS_CMD` | `gh run list --workflow test.yml --branch <branch> --json headSha,status,conclusion` | green only when the run whose `headSha` is the PR's head commit is `completed` with conclusion `success`; that run's job is the required check `test-suite`. Not `gh pr checks`: the replicate's sandbox token cannot read checks. |
 | `BRANCH_FMT` | `<type>/<kebab-slug>` | |
 | `COMMIT_CONV` | Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `chore:`) | |
 | `PR_TEMPLATE` | `—` (none) | |
