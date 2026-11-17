@@ -353,6 +353,16 @@ class StopTests(Tmp):
                          ("reply", "merge"))
         self.assertEqual(R.classify_stop("done", "Merged. Run /clear.", self.STOPS)[0], "done")
 
+    def test_review_stop_follows_the_scope_ruling(self):
+        """Pilot m2: step 8's design-question stop gets the fixed follow-the-ruling
+        reply; any other review stop (a dirty round 2, say) still halts."""
+        kind, reply = R.classify_stop(
+            "in-review", "Stopped at step 8. The architect's scope ruling: ...", self.STOPS)
+        self.assertEqual(kind, "reply")
+        self.assertIn("scope ruling", reply)
+        self.assertEqual(R.classify_stop(
+            "in-review", "Round 2 is still dirty; escalating.", self.STOPS)[0], "halt")
+
     def test_pre_queue_stop_answers_the_backlog_question(self):
         """0.6.0 step 0.1 asks which BACKLOG_SOURCE before queue.md exists."""
         kind, reply = R.classify_stop(None, "Which BACKLOG_SOURCE should I run?", self.STOPS)

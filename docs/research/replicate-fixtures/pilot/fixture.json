@@ -25,6 +25,12 @@
       "reply": "approve"
     },
     {
+      "status": "in-review",
+      "expect": "(?i)(scope ruling|design question)",
+      "reply": "Follow the architect's scope ruling: apply its minimal fix set if it requires one, otherwise accept the finding as non-blocking, and continue.",
+      "why": "step 8's design-question stop (BLOCKING finding + DESIGN_AGENT scope ruling). Fixed protocol policy chosen by the human 2026-11-17 after pilot m2: follow the ruling. Any other in-review stop (e.g. a dirty round 2) still halts."
+    },
+    {
       "status": "in-acceptance",
       "expect": "(?i)merge",
       "reply": "merge"
