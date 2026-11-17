@@ -138,6 +138,15 @@ ERAS = [
     # re-installed on 2026-11-04 local (01:13-02:05 -0800), so 11-04 takes the
     # EARLIER era by the rule above and the first unambiguous day is 11-05.
     ("0.5.0", "2026-11-05", None),
+    # 0.6.0 is #309's MODEL_TIERS vocabulary, behavior-neutral. Its `models=` slot is
+    # NOT a usable marker: the 0.5.0-driven journal that implemented #309 already
+    # contains it. Date-only, deliberately. Staggered re-install: vote on 2026-11-15
+    # 23:57 local as the canary, the other six on 2026-11-16 19:22-20:06 -0800, so
+    # 11-16 takes the EARLIER era by the rule above and the first unambiguous day is
+    # 11-17. ONE KNOWN MISFILING: vote's 11-16 rows, including the canary iteration
+    # (#540), ran 0.6.0 and are filed as 0.5.0. `engine_cost.py` takes each session's
+    # era from its read path and is unaffected.
+    ("0.6.0", "2026-11-17", None),
 ]
 
 # `era_by_date` scans ERAS in order and breaks at the first future row, and the
