@@ -1,0 +1,1 @@
+- (empty snapshot) This fixture's memory is deliberately empty and identical across replicates.

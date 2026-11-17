@@ -587,6 +587,7 @@ class PerTurnModelTests(unittest.TestCase):
         rows = {"claude-opus-4-6": (5, 6.25, 10, 0.5, 25),
                 "claude-sonnet-4-6": (3, 3.75, 6, 0.3, 15),
                 "claude-sonnet-5": (2, 2.5, 4, 0.2, 10),
+                "claude-sonnet-5-5": (2, 2.5, 4, 0.1, 10),   # page checked 2026-11-17 (#208)
                 "claude-haiku-4-5-20251001": (1, 1.25, 2, 0.1, 5),
                 M55: (4, 5, 8, 0.2, 20), M5: (5, 6.25, 10, 0.5, 25),
                 M48: (5, 6.25, 10, 0.5, 25), "claude-opus-4-7": (5, 6.25, 10, 0.5, 25)}
