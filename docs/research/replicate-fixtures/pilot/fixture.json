@@ -1,0 +1,46 @@
+{
+  "name": "pilot",
+  "why": "Throwaway pilot fixture for #208's AC6: one trivial code-route issue, so a replicate exercises plan gate, implement, PR, CI, review, acceptance and merge at the lowest cost. Not a reference issue; no comparison is drawn from it.",
+  "org": "frederick-douglas-pearce-loop-sandbox",
+  "label": "fixture",
+  "base_sha": "eb650a6fc7e5bc0a9febadc12d7234aeba9fa60e",
+  "first_prompt": "/dev-loop:dev-loop 1",
+  "ledger_root": ".loop-ledger",
+  "run_slug": "fixture",
+  "max_turns": 6,
+  "issue": {
+    "title": "Add a shout() helper",
+    "body": "Add `shout(name)` to `greet.py`: it returns the greeting from `greet(name)` in upper case, ending in `!` instead of `.`.\n\n## Acceptance criteria\n1. `greet.shout(\"Ada\")` returns `\"HELLO, ADA!\"`.\n2. `greet()` is unchanged.\n3. A unit test in `test_greet.py` covers `shout()`."
+  },
+  "stops": [
+    {
+      "status": null,
+      "expect": "(?i)(BACKLOG_SOURCE|backlog|which (milestone|label))",
+      "reply": "Run the `fixture` label, as BACKLOG_SOURCE binds it, and initialize the run.",
+      "why": "0.6.0 engine step 0.1 asks which BACKLOG_SOURCE to run when no run exists, before queue.md is written"
+    },
+    {
+      "status": "planning",
+      "expect": "(?i)approv",
+      "reply": "approve"
+    },
+    {
+      "status": "in-acceptance",
+      "expect": "(?i)merge",
+      "reply": "merge"
+    },
+    {
+      "status": "done",
+      "expect": "(?i)(merged|done|/clear)",
+      "final": true
+    }
+  ],
+  "builtin_agents": {
+    "general-purpose": "parent",
+    "Explore": "parent",
+    "Plan": "parent"
+  },
+  "model_tiers": "\u2014 (every role inherits), as bound in the fixture's loop.config.md",
+  "settings": {},
+  "builtin_agents_why": "Built-ins spawned with no model/effort are expected on the parent's stratum; any other built-in (e.g. claude-code-guide, which runs on its own default) fails check_strata by default-deny. PR B's spike confirms or amends this map."
+}

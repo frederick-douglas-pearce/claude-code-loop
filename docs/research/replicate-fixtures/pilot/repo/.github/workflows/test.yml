@@ -1,0 +1,11 @@
+name: test
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  test-suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m unittest -q

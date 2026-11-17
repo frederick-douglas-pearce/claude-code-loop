@@ -94,6 +94,9 @@ PRICING = {
     "claude-opus-4-8": Weights(5.0, 1.0, 1.25, 0.1, 5.0, 2.0),
     "claude-opus-4-7": Weights(5.0, 1.0, 1.25, 0.1, 5.0, 2.0),
     "claude-opus-4-6": Weights(5.0, 1.0, 1.25, 0.1, 5.0, 2.0),
+    # Sonnet 5.5: $2 in, $2.50 5m write, $4 1h write, $0.10 hit (0.05x), $10 out --
+    # PRICING_SOURCE, row checked 2026-11-17 for #208.
+    "claude-sonnet-5-5": Weights(2.0, 1.0, 1.25, 0.05, 5.0, 2.0),
     "claude-sonnet-5": Weights(2.0, 1.0, 1.25, 0.1, 5.0, 2.0),
     "claude-sonnet-4-6": Weights(3.0, 1.0, 1.25, 0.1, 5.0, 2.0),
     "claude-haiku-4-5-20251001": Weights(1.0, 1.0, 1.25, 0.1, 5.0, 2.0),
