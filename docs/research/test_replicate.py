@@ -175,33 +175,57 @@ class LaunchTests(Tmp):
         self.bin = "/opt/claude/versions/9.9.9"
 
     def binds(self, argv):
-        ro, rw, tmpfs, order = set(), set(), [], []
+        """-> ({dest: src} read-only, {dest: src} read-write, [tmpfs dests])."""
+        ro, rw, tmpfs = {}, {}, []
         for i, a in enumerate(argv):
             if a in ("--ro-bind", "--bind"):
-                (ro if a == "--ro-bind" else rw).add(argv[i + 1])
-                order.append((i, a, argv[i + 1]))
+                (ro if a == "--ro-bind" else rw)[argv[i + 2]] = argv[i + 1]
             elif a == "--tmpfs":
-                tmpfs.append((i, argv[i + 1]))
-        return ro, rw, tmpfs, order
+                tmpfs.append(argv[i + 1])
+        return ro, rw, tmpfs
 
-    def test_sandbox_hides_home_and_binds_only_the_replicate(self):
-        argv = R.sandbox_argv(self.rdir, self.bin, self.rdir / "work" / "r1",
-                              research_dir="/repo/docs/research", resolve_dir=None)
+    def test_sandbox_is_an_allowlist_in_its_own_namespaces(self):
+        argv = R.sandbox_argv(self.rdir, self.bin, self.rdir / "work" / "r1", 7, 8,
+                              research_dir="/repo/docs/research", resolv_dest="/etc/resolv.conf",
+                              links=[])
         self.assertEqual(argv[0], R.BWRAP)
-        ro, rw, tmpfs, order = self.binds(argv)
-        self.assertEqual({p for _, p in tmpfs}, {"/home", "/tmp", "/run"})
-        self.assertEqual(rw, {str(self.rdir / "home"), str(self.rdir / "work"),
-                              str(self.rdir / "gh-calls.jsonl")})
-        self.assertEqual(ro, {"/", self.bin, "/repo/docs/research", str(self.rdir / "bin"),
-                              str(self.rdir / "marketplace")})
-        first_tmpfs = min(i for i, _ in tmpfs)
-        for i, kind, path in order:
-            if path != "/":
-                self.assertGreater(i, first_tmpfs, "%s %s precedes the tmpfs mounts" % (kind, path))
-        for flag in ("--unshare-pid", "--die-with-parent", "--new-session"):
+        for flag in ("--unshare-all", "--unshare-user", "--die-with-parent", "--new-session"):
             self.assertIn(flag, argv)
-        self.assertNotIn("--share-net", argv)
-        self.assertNotIn(str(self.rdir), ro | rw)     # the replicate dir itself stays hidden
+        self.assertEqual(argv[argv.index("--cap-drop") + 1], "ALL")
+        self.assertEqual(argv[argv.index("--info-fd") + 1], "7")
+        self.assertEqual(argv[argv.index("--block-fd") + 1], "8")
+        for shared in ("--share-net", "--share-ipc"):
+            self.assertNotIn(shared, argv)               # meaningful under --unshare-all
+        ro, rw, tmpfs = self.binds(argv)
+        self.assertNotIn("/", ro)                         # no host root: an allowlist
+        self.assertEqual(set(ro), {"/usr", "/etc", "/etc/resolv.conf", self.bin,
+                                   "/repo/docs/research", str(self.rdir / "bin"),
+                                   str(self.rdir / "marketplace")})
+        self.assertEqual(ro["/etc/resolv.conf"], str(self.rdir / "resolv.conf"))
+        self.assertEqual(set(rw), {str(self.rdir / "home"), str(self.rdir / "work"),
+                                   str(self.rdir / "gh-calls.jsonl")})
+        self.assertTrue(all(src == dest for dest, src in rw.items()))
+        self.assertEqual(set(tmpfs), {"/tmp", "/run"})
+        self.assertNotIn(str(self.rdir), set(ro) | set(rw))   # the replicate dir itself stays hidden
+        self.assertLess(argv.index("/etc"), argv.index("/etc/resolv.conf"))   # resolv overlays /etc
+
+    def test_root_entries_recreates_links_and_binds_dirs(self):
+        (self.tmp / "usr" / "bin").mkdir(parents=True)
+        os.symlink("usr/bin", self.tmp / "bin")
+        (self.tmp / "realdir").mkdir()
+        got = R.root_entries([str(self.tmp / "bin"), str(self.tmp / "realdir"), str(self.tmp / "absent")])
+        self.assertEqual(got, [("--symlink", "usr/bin", str(self.tmp / "bin")),
+                               ("--ro-bind", str(self.tmp / "realdir"), str(self.tmp / "realdir"))])
+
+    def test_slirp_disables_host_loopback_and_joins_the_sandbox_userns(self):
+        argv = R.slirp_argv(4242, 5, 6)
+        self.assertEqual(argv[0], R.SLIRP)
+        self.assertIn("--disable-host-loopback", argv)
+        self.assertIn("--userns-path=/proc/4242/ns/user", argv)
+        self.assertEqual(argv[-2:], ["4242", "tap0"])
+        self.assertEqual(argv[argv.index("--ready-fd") + 1], "5")
+        self.assertEqual(argv[argv.index("--exit-fd") + 1], "6")
+        self.assertEqual(R.RESOLV, "nameserver 10.0.2.3\n")
 
     def test_launch_env_takes_the_sandbox_token_never_the_harness_token(self):
         tok = self.tmp / "tok"

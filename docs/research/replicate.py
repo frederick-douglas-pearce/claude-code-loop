@@ -12,16 +12,22 @@ directory that holds everything the run can touch:
       streams/         one stream-json file per `claude -p` turn
       environment.json, result.json, audit.json, gh-calls.jsonl
 
-Containment is by construction, in two layers. (1) Every `claude` process of a
-replicate runs under bubblewrap (`sandbox_argv`): the real `/home`, `/tmp` and
-`/run` are replaced by empty tmpfs mounts, so the human's gh login, the sandbox
-token files, SSH keys and agent socket, and the real `~/.claude` do not exist
-inside it; the pinned binary, `docs/research/`, the shim and the archived plugin
-are bound read-only; only the replicate's own `home/`, `work/` and
-`gh-calls.jsonl` are writable; and the pid namespace dies with each turn, taking
-any background process with it. (2) The only GitHub credential in its
-environment -- an explicit allowlisted dict (`launch_env`), never an inherited
-one -- is a fine-grained token owned by the sandbox org.
+Containment has two layers. (1) Every `claude` process of a replicate runs
+under bubblewrap (`sandbox_argv`, `run_sandboxed`) in new user, mount, pid,
+network, ipc and uts namespaces with every capability dropped. Its filesystem is
+an allowlist: `/usr`, `/etc` and the merged-usr links, read-only, then the pinned
+binary, `docs/research/`, the shim and the archived plugin, read-only, and only
+the replicate's own `home/`, `work/` and `gh-calls.jsonl` read-write; nothing
+else of the host exists inside, including the human's home, `/media`, `/mnt` and
+the X11 and session sockets. Its network is slirp4netns user-mode networking
+with host loopback disabled. The pid namespace dies with each turn, taking any
+background process with it. (2) The only GitHub credential in its environment
+-- an explicit allowlisted dict (`launch_env`), never an inherited one -- is a
+fine-grained token owned by the sandbox org.
+
+What remains reachable, stated rather than argued away: outbound internet;
+services on the host's non-loopback interfaces and on the LAN; and the shared
+kernel.
 
 The `gh` shim and the audit are a second line: they record and flag, they do not
 contain. The audit reads tool inputs, not their effects, and `gh-calls.jsonl` and
@@ -44,10 +50,12 @@ import json
 import os
 import pathlib
 import re
+import select
 import shlex
 import shutil
 import subprocess
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import stratum  # noqa: E402
@@ -164,26 +172,130 @@ def check_env(env):
     return env
 
 
-def sandbox_argv(rdir, claude_real, cwd, research_dir=RESEARCH_DIR,
-                 resolve_dir="/run/systemd/resolve"):
+SLIRP = "/usr/bin/slirp4netns"
+ROOT_DIRS = ("/usr", "/etc")                                   # the allowlisted host tree
+ROOT_LINKS = ("/bin", "/sbin", "/lib", "/lib64", "/lib32", "/libx32")
+RESOLV = "nameserver 10.0.2.3\n"                               # slirp4netns's DNS forwarder
+
+
+def root_entries(links=ROOT_LINKS):
+    """-> [(kind, src, dest)] for the merged-usr top-level names: a symlink is
+    recreated as one, a real directory is bound read-only, an absent one skipped."""
+    out = []
+    for p in links:
+        if os.path.islink(p):
+            out.append(("--symlink", os.readlink(p), p))
+        elif os.path.isdir(p):
+            out.append(("--ro-bind", p, p))
+    return out
+
+
+def sandbox_argv(rdir, claude_real, cwd, info_fd, block_fd, research_dir=RESEARCH_DIR,
+                 resolv_dest=None, links=None):
     """The bubblewrap prefix every replicate `claude` process runs under.
 
-    Real `/home`, `/tmp` and `/run` become empty tmpfs; then exactly these come
-    back: read-only -- the pinned binary, `docs/research/` (the shim imports
-    this module), the shim dir and the archived plugin; read-write -- the
-    replicate's `home/`, `work/` and the shim log. Nothing else of `rdir` is
-    visible, so `streams/` and `environment.json` stay out of reach."""
+    Default-deny on every axis: `--unshare-all` (user, ipc, pid, net, uts,
+    cgroup) plus an explicit `--unshare-user` and `--cap-drop ALL`; the
+    filesystem is built up from nothing -- `/usr` and `/etc` read-only, the
+    merged-usr links, then read-only the pinned binary, `docs/research/` (the
+    shim imports this module), the shim dir and the archived plugin, and
+    read-write only the replicate's `home/`, `work/` and shim log. Nothing else
+    of the host or of `rdir` exists inside. `info_fd` reports the child pid and
+    `block_fd` holds the command until `run_sandboxed` has the network up."""
     rdir = pathlib.Path(rdir)
-    argv = [BWRAP, "--ro-bind", "/", "/",
-            "--tmpfs", "/home", "--tmpfs", "/tmp", "--tmpfs", "/run"]
-    if resolve_dir and os.path.isdir(resolve_dir):
-        argv += ["--ro-bind", resolve_dir, resolve_dir]        # /etc/resolv.conf target
+    resolv_dest = resolv_dest or os.path.realpath("/etc/resolv.conf")
+    argv = [BWRAP, "--unshare-all", "--unshare-user", "--cap-drop", "ALL",
+            "--die-with-parent", "--new-session",
+            "--info-fd", str(info_fd), "--block-fd", str(block_fd)]
+    for p in ROOT_DIRS:
+        argv += ["--ro-bind", p, p]
+    for kind, src, dest in root_entries(ROOT_LINKS if links is None else links):
+        argv += [kind, src, dest]
+    argv += ["--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp", "--tmpfs", "/run"]
+    argv += ["--ro-bind", str(rdir / "resolv.conf"), resolv_dest]
     for path in (claude_real, research_dir, rdir / "bin", rdir / "marketplace"):
         argv += ["--ro-bind", str(path), str(path)]
     for path in (rdir / "home", rdir / "work", rdir / "gh-calls.jsonl"):
         argv += ["--bind", str(path), str(path)]
-    return argv + ["--dev", "/dev", "--proc", "/proc", "--unshare-pid",
-                   "--die-with-parent", "--new-session", "--chdir", str(cwd)]
+    return argv + ["--chdir", str(cwd)]
+
+
+def slirp_argv(pid, ready_fd, exit_fd):
+    """User-mode networking for the sandbox's netns. `--disable-host-loopback`
+    is load-bearing: without it 10.0.2.2 reaches the host's 127.0.0.1."""
+    return [SLIRP, "--configure", "--mtu=65520", "--disable-host-loopback",
+            "--enable-sandbox", "--enable-seccomp",
+            "--ready-fd", str(ready_fd), "--exit-fd", str(exit_fd),
+            "--userns-path=/proc/%d/ns/user" % pid, str(pid), "tap0"]
+
+
+def _read_json_fd(fd, limit=10.0):
+    buf, deadline = b"", time.monotonic() + limit
+    while time.monotonic() < deadline:
+        ready, _, _ = select.select([fd], [], [], max(0.0, deadline - time.monotonic()))
+        if not ready:
+            break
+        chunk = os.read(fd, 4096)
+        if not chunk:
+            break
+        buf += chunk
+        try:
+            return json.loads(buf.decode())
+        except ValueError:
+            continue
+    raise Refused("bwrap reported no child pid on --info-fd: %r" % buf[:200])
+
+
+def run_sandboxed(rdir, claude_real, cwd, cmd, env, stdout=subprocess.PIPE,
+                  stderr=subprocess.STDOUT, timeout=None):
+    """Run `cmd` in the sandbox with slirp4netns attached before it starts.
+    -> (returncode, stdout bytes or None). Raises subprocess.TimeoutExpired after
+    killing the sandbox; slirp4netns is stopped on every path."""
+    rdir = pathlib.Path(rdir)
+    (rdir / "resolv.conf").write_text(RESOLV)
+    info_r, info_w = os.pipe()
+    block_r, block_w = os.pipe()
+    ready_r, ready_w = os.pipe()
+    exit_r, exit_w = os.pipe()
+    box = subprocess.Popen(sandbox_argv(rdir, claude_real, cwd, info_w, block_r) + list(cmd),
+                           env=env, cwd=str(cwd), stdout=stdout, stderr=stderr,
+                           stdin=subprocess.DEVNULL, pass_fds=(info_w, block_r))
+    os.close(info_w)
+    os.close(block_r)
+    slirp = None
+    try:
+        pid = _read_json_fd(info_r)["child-pid"]
+        slirp = subprocess.Popen(slirp_argv(pid, ready_w, exit_r), pass_fds=(ready_w, exit_r),
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL)
+        os.close(ready_w)
+        os.close(exit_r)
+        ready_w = exit_r = None
+        if not select.select([ready_r], [], [], 10)[0] or os.read(ready_r, 1) != b"1":
+            raise Refused("slirp4netns did not report ready")
+        os.write(block_w, b"1")
+        os.close(block_w)
+        block_w = None
+        out, _ = box.communicate(timeout=timeout)
+        return box.returncode, out
+    except BaseException:
+        box.kill()
+        box.wait()
+        raise
+    finally:
+        for fd in (info_r, ready_r, ready_w, exit_r, block_w):
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+        os.close(exit_w)                 # slirp4netns exits when this closes
+        if slirp is not None:
+            try:
+                slirp.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                slirp.kill()
+                slirp.wait()
 
 
 def launch_env(rdir, sandbox_repo, tokdir):
@@ -736,9 +848,12 @@ def _run(a, spec, rdir, env_record):
     env_record["claude_real"] = claude_real
     # Plugin install inside the isolated config (A5), sandboxed like every
     # replicate `claude` process; refuse if it did not land.
-    box = sandbox_argv(rdir, claude_real, rdir / "home")
-    sh(box + [claude_real, "plugin", "marketplace", "add", str(mk)], env=env)
-    sh(box + [claude_real, "plugin", "install", "dev-loop@claude-code-loop"], env=env)
+    for sub in (["marketplace", "add", str(mk)], ["install", "dev-loop@claude-code-loop"]):
+        rc, out = run_sandboxed(rdir, claude_real, rdir / "home", [claude_real, "plugin"] + sub,
+                                env, timeout=600)
+        if rc:
+            raise Refused("claude plugin %s exited %d: %s"
+                          % (sub[0], rc, (out or b"").decode(errors="replace").strip()[:300]))
     cache = home / "plugins" / "cache" / "claude-code-loop" / "dev-loop" / version_dir
     if not cache.is_dir():
         raise Refused("plugin install did not produce %s" % cache)
@@ -793,7 +908,7 @@ def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv):
     turns = env_record.setdefault("turns", [])
     while outcome is None:
         n += 1
-        cmd = sandbox_argv(rdir, claude_real, clone) + [
+        cmd = [
             claude_real, "-p", prompt, "--model", a.model, "--effort", a.effort,
             "--strict-mcp-config", "--permission-mode", "bypassPermissions",
             "--output-format", "stream-json", "--verbose"]
@@ -802,8 +917,8 @@ def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv):
         stream = rdir / "streams" / ("turn-%02d.jsonl" % n)
         try:
             with open(stream, "w") as out:
-                rc = subprocess.run(cmd, env=env, cwd=clone, stdout=out, stderr=subprocess.STDOUT,
-                                    stdin=subprocess.DEVNULL, timeout=a.turn_timeout).returncode
+                rc, _ = run_sandboxed(rdir, claude_real, clone, cmd, env, stdout=out,
+                                      timeout=a.turn_timeout)
         except subprocess.TimeoutExpired:
             turns.append({"turn": n, "returncode": None, "timeout_s": a.turn_timeout})
             outcome = ("halt", "turn %d exceeded %ds" % (n, a.turn_timeout))
