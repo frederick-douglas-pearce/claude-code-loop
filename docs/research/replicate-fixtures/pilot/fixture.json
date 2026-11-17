@@ -38,9 +38,10 @@
   "builtin_agents": {
     "general-purpose": "parent",
     "Explore": "parent",
-    "Plan": "parent"
+    "Plan": "parent",
+    "claude": "parent"
   },
   "model_tiers": "\u2014 (every role inherits), as bound in the fixture's loop.config.md",
   "settings": {},
-  "builtin_agents_why": "Built-ins spawned with no model/effort are expected on the parent's stratum; any other built-in (e.g. claude-code-guide, which runs on its own default) fails check_strata by default-deny. PR B's spike confirms or amends this map."
+  "builtin_agents_why": "Built-ins spawned with no model/effort run on the parent's stratum: confirmed 2026-11-17 by two sandboxed spikes on CLI 2.1.326 (claude-sonnet-5-5 at medium: Explore, general-purpose and Plan; at high: those three and claude), every record at the parent's (model, effort). Any other built-in (statusline-setup, or claude-code-guide, which runs on its own default) fails check_strata by default-deny."
 }

@@ -499,6 +499,33 @@ class StrataTests(Tmp):
         self.assertEqual(len(problems), 3)
 
 
+class VersionDirTests(Tmp):
+    RUN = ["run", "--fixture", PILOT, "--replicate-id", "r1", "--plugin-src", ".",
+           "--plugin-commit", "HEAD", "--claude-bin", "/x/claude", "--claude-version", "v",
+           "--model", S55, "--effort", "medium", "--login", "someone"]
+
+    def test_accepts_only_xyz(self):
+        self.assertEqual(R.version_dir_arg("0.6.0"), "0.6.0")
+        self.assertEqual(R.version_dir_arg("10.20.300"), "10.20.300")
+        for bad in ("0.6", "v0.6.0", "0.6.0.1", "0.6.0\n", "0.6.0/..", "", "0.6.x"):
+            with self.assertRaises(R.argparse.ArgumentTypeError, msg=repr(bad)):
+                R.version_dir_arg(bad)
+
+    def test_bad_version_dir_stops_before_the_replicate_starts(self):
+        """The refusal is at parse time: no replicate directory is created."""
+        out = self.tmp / "out"
+        argv = self.RUN + ["--out", str(out), "--version-dir", "0.6"]
+        with open(os.devnull, "w") as devnull:
+            saved, sys.stderr = sys.stderr, devnull
+            try:
+                with self.assertRaises(SystemExit) as cm:
+                    R.main(argv)
+            finally:
+                sys.stderr = saved
+        self.assertEqual(cm.exception.code, 2)
+        self.assertFalse(out.exists())
+
+
 class MeasureTests(Tmp):
     def test_turns_sum_across_sessions(self):
         pdir = self.tmp / "proj"

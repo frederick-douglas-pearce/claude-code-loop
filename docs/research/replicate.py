@@ -982,6 +982,14 @@ def write_audit(rdir, env_record, spec, login, version_dir):
     return audit
 
 
+def version_dir_arg(s):
+    """--version-dir must be an `x.y.z` era directory, checked at parse time: a
+    typo otherwise surfaces only after a paid replicate has started (#357)."""
+    if not re.fullmatch(r"\d+\.\d+\.\d+", s):
+        raise argparse.ArgumentTypeError("%r is not an x.y.z version directory" % s)
+    return s
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -991,7 +999,8 @@ def main(argv=None):
     r.add_argument("--out", required=True)
     r.add_argument("--plugin-src", required=True, help="claude-code-loop checkout")
     r.add_argument("--plugin-commit", required=True)
-    r.add_argument("--version-dir", help="override the archived plugin.json version (A5)")
+    r.add_argument("--version-dir", type=version_dir_arg,
+                   help="override the archived plugin.json version (A5); x.y.z")
     r.add_argument("--claude-bin", required=True, help="absolute path to the pinned binary")
     r.add_argument("--claude-version", required=True, help="expected `claude --version`")
     r.add_argument("--model", required=True)
