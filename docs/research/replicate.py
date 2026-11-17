@@ -12,11 +12,22 @@ directory that holds everything the run can touch:
       streams/         one stream-json file per `claude -p` turn
       environment.json, result.json, audit.json, gh-calls.jsonl
 
-Containment does not rest on the shim. The only GitHub credential inside a
-replicate is a fine-grained token whose resource owner is the sandbox org, and the
-replicate starts from an empty environment plus an allowlist (`env -i`), so the
-harness's own tokens and SSH agent never reach it. The audit then checks the
-calls, the transcripts and the real account's event feed after the fact.
+Containment is by construction, in two layers. (1) Every `claude` process of a
+replicate runs under bubblewrap (`sandbox_argv`): the real `/home`, `/tmp` and
+`/run` are replaced by empty tmpfs mounts, so the human's gh login, the sandbox
+token files, SSH keys and agent socket, and the real `~/.claude` do not exist
+inside it; the pinned binary, `docs/research/`, the shim and the archived plugin
+are bound read-only; only the replicate's own `home/`, `work/` and
+`gh-calls.jsonl` are writable; and the pid namespace dies with each turn, taking
+any background process with it. (2) The only GitHub credential in its
+environment -- an explicit allowlisted dict (`launch_env`), never an inherited
+one -- is a fine-grained token owned by the sandbox org.
+
+The `gh` shim and the audit are a second line: they record and flag, they do not
+contain. The audit reads tool inputs, not their effects, and `gh-calls.jsonl` and
+the transcripts are writable by the replicate, so a clean audit is evidence, not
+proof. The one harness call made with the human's own gh login is the read-only
+`account_events` GET, outside the sandbox.
 
 Subcommands:
     run      build, run, record, measure and audit one replicate
@@ -44,6 +55,8 @@ import tree_cost  # noqa: E402
 import engine_cost  # noqa: E402
 
 REAL_GH = "/usr/bin/gh"
+BWRAP = "/usr/bin/bwrap"
+RESEARCH_DIR = os.path.dirname(os.path.abspath(__file__))
 TOKEN_DIR = pathlib.Path.home() / ".config" / "loop-sandbox"
 # Environment variables a replicate may receive. Everything else is dropped.
 ENV_ALLOWLIST = ("PATH", "HOME", "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN",
@@ -151,6 +164,46 @@ def check_env(env):
     return env
 
 
+def sandbox_argv(rdir, claude_real, cwd, research_dir=RESEARCH_DIR,
+                 resolve_dir="/run/systemd/resolve"):
+    """The bubblewrap prefix every replicate `claude` process runs under.
+
+    Real `/home`, `/tmp` and `/run` become empty tmpfs; then exactly these come
+    back: read-only -- the pinned binary, `docs/research/` (the shim imports
+    this module), the shim dir and the archived plugin; read-write -- the
+    replicate's `home/`, `work/` and the shim log. Nothing else of `rdir` is
+    visible, so `streams/` and `environment.json` stay out of reach."""
+    rdir = pathlib.Path(rdir)
+    argv = [BWRAP, "--ro-bind", "/", "/",
+            "--tmpfs", "/home", "--tmpfs", "/tmp", "--tmpfs", "/run"]
+    if resolve_dir and os.path.isdir(resolve_dir):
+        argv += ["--ro-bind", resolve_dir, resolve_dir]        # /etc/resolv.conf target
+    for path in (claude_real, research_dir, rdir / "bin", rdir / "marketplace"):
+        argv += ["--ro-bind", str(path), str(path)]
+    for path in (rdir / "home", rdir / "work", rdir / "gh-calls.jsonl"):
+        argv += ["--bind", str(path), str(path)]
+    return argv + ["--dev", "/dev", "--proc", "/proc", "--unshare-pid",
+                   "--die-with-parent", "--new-session", "--chdir", str(cwd)]
+
+
+def launch_env(rdir, sandbox_repo, tokdir):
+    """The replicate's environment, its two tokens read from `tokdir`: the Claude
+    token and the sandbox-org `gh-token` -- never `harness-token`."""
+    return check_env(replicate_env(rdir, sandbox_repo, read_token("claude-token", tokdir),
+                                   read_token("gh-token", tokdir)))
+
+
+def expected_strata(roster_pins, model, effort, builtins):
+    """-> {agentType: (model, effort)}: the parent, every roster agent, and each
+    built-in as the fixture declares it (`"parent"` or an explicit pair). An agent
+    absent here fails `check_strata` -- default-deny."""
+    out = dict(roster_pins)
+    out["parent"] = (model, effort)
+    for agent, pin in builtins.items():
+        out[agent] = (model, effort) if pin == "parent" else tuple(pin)
+    return out
+
+
 def snapshot_id(directory):
     """sha256 over the snapshot's sorted relative paths and bytes."""
     h = hashlib.sha256()
@@ -163,7 +216,7 @@ def snapshot_id(directory):
 
 def render_roster(roster_dir, dest, model, effort):
     """Copy the fixture's roster templates, pinning `{{MODEL}}`/`{{EFFORT}}`.
-    -> {agentType: (model, effort)} read back from the written frontmatter."""
+    -> {agentType: (model, effort)} parsed from the rendered text it writes."""
     pins = {}
     dest = pathlib.Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
@@ -195,7 +248,8 @@ def tree_sha256(directory):
 
 GH_WRITE_DENY = (("repo", "create"), ("repo", "delete"), ("repo", "edit"),
                  ("repo", "rename"), ("repo", "fork"), ("auth",), ("secret",),
-                 ("ssh-key",), ("gpg-key",), ("extension",), ("config", "set"))
+                 ("ssh-key",), ("gpg-key",), ("extension",), ("config", "set"),
+                 ("gist",), ("issue", "transfer"))
 
 
 def resolve_target(argv, env_repo, cwd_remote):
@@ -226,7 +280,12 @@ def _norm_repo(s):
 
 
 def shim_decision(argv, target, sandbox):
-    """-> (allowed, reason). Default-deny: anything not plainly sandbox-scoped refuses."""
+    """-> (allowed, reason). A second line, not the boundary: it refuses the
+    subcommands in GH_WRITE_DENY and any call whose target -- read from `-R`/
+    `--repo`, a `gh api repos/...` path, `GH_REPO` or the cwd's remote -- is not
+    the sandbox or cannot be resolved. It does NOT read positional repo arguments
+    or URLs; those fall back to `GH_REPO`. The sandbox-org token is what blocks
+    them."""
     for prefix in GH_WRITE_DENY:
         if tuple(argv[:len(prefix)]) == prefix:
             return False, "subcommand %s is never allowed" % " ".join(prefix)
@@ -294,7 +353,9 @@ def classify_stop(status, final_text, stops):
     """-> ('reply', text) | ('done', None) | ('halt', reason). Keyed on the ledger
     row's Status; the final message must agree with the stop it names (A8)."""
     for stop in stops:
-        if status is not None and status.lower() == stop["status"].lower():
+        want = stop["status"]
+        if (status is None and want is None) or (
+                status is not None and want is not None and status.lower() == want.lower()):
             if not re.search(stop["expect"], final_text or ""):
                 return "halt", ("status %r but the final message does not match %r"
                                 % (status, stop["expect"]))
@@ -388,13 +449,16 @@ GH_WORD = re.compile(r"(?:^|[\s;&|(`$/])gh\s")
 
 def audit_gh_calls(transcripts, gh_log, sandbox):
     """AC2 from the calls: every shim entry is sandbox-targeted, and every Bash
-    command that names `gh` has a shim entry inside its own call window."""
+    command that names `gh` has some shim entry inside its own call window.
+    Advisory: it pairs by time window, not one entry per call, and it does not
+    see `gh` reached from a script or the API reached without `gh`. A missing or
+    unreadable log is itself a problem."""
     problems = []
     entries = []
     try:
         entries = [json.loads(l) for l in pathlib.Path(gh_log).read_text().splitlines() if l.strip()]
-    except OSError:
-        pass
+    except (OSError, ValueError) as exc:
+        problems.append("shim log unreadable: %s" % exc)
     for e in entries:
         if e.get("allowed") and (e.get("target") or "").lower() != sandbox.lower():
             problems.append("shim allowed a non-sandbox target: %s" % e)
@@ -415,7 +479,9 @@ def audit_gh_calls(transcripts, gh_log, sandbox):
 
 
 def audit_tools(transcripts, init_events, real_home, rdir):
-    """A7: no MCP, and no read of anything under the real HOME outside the replicate."""
+    """A7, advisory: no MCP, and no tool input that literally names a path under
+    the real HOME outside the replicate. It reads inputs, not effects; the
+    sandbox, not this scan, keeps the real HOME out of reach."""
     problems = []
     for ev in init_events:
         if ev and ev.get("mcp_servers"):
@@ -435,23 +501,30 @@ def audit_tools(transcripts, init_events, real_home, rdir):
     return problems
 
 
-def audit_engine_loads(transcripts, rdir, version_dir):
-    """AC6b/A11: every engine load is the replicate's own pinned cache copy."""
+def audit_engine_loads(transcripts, rdir, version_dir, real_home=None):
+    """AC6b/A11: every engine load is the replicate's own pinned cache copy. The
+    path is `engine_cost.tool_path`'s -- the same string `classify` judged -- so a
+    Bash `sed` read and a Grep `glob` are checked like a Read."""
     problems, loads = [], 0
     want = str(pathlib.Path(rdir) / "home" / ".claude" / "plugins" / "cache") + "/"
+    real_cache = str(pathlib.Path(real_home or pathlib.Path.home()) / ".claude" / "plugins" / "cache") + "/"
     for path in transcripts:
         for name, inp, _ts, _id in tool_uses(path):
             kind = engine_cost.classify(name, inp)
-            fp = str(inp.get("file_path") or inp.get("path") or "")
+            if kind is None:
+                continue
+            fp = engine_cost.tool_path(name, inp)
             if kind == "load":
                 loads += 1
-                m = engine_cost.VERSION_IN_PATH.search(fp)
-                if not fp.startswith(want):
-                    problems.append("engine load outside the replicate cache: %s" % fp)
-                elif not m or m.group(1) != version_dir:
-                    problems.append("engine load at the wrong version: %s" % fp)
-            elif kind == "tree":
-                problems.append("engine read from a non-cache copy: %s" % fp)
+                versions = engine_cost.VERSION_IN_PATH.findall(fp)
+                if want not in fp:
+                    problems.append("engine load outside the replicate cache: %s" % fp[:200])
+                elif real_cache in fp.replace(want, ""):
+                    problems.append("engine load names the real plugin cache: %s" % fp[:200])
+                elif not versions or any(v != version_dir for v in versions):
+                    problems.append("engine load at the wrong version: %s" % fp[:200])
+            else:
+                problems.append("engine read from a non-cache copy: %s" % fp[:200])
     if loads == 0:
         problems.append("no engine load recorded")
     return problems, loads
@@ -499,11 +572,15 @@ def check_strata(observed, expected):
     return problems
 
 
+def account_events_argv(login):
+    """The one call the harness makes with the human's own gh login: a GET."""
+    return [REAL_GH, "api", "-X", "GET", "users/%s/events?per_page=100" % login]
+
+
 def account_events(login):
     """The real account's public+private event feed, read with the human's own
     login (read-only, harness side). -> [event]."""
-    r = subprocess.run([REAL_GH, "api", "users/%s/events?per_page=100" % login],
-                       capture_output=True, text=True)
+    r = subprocess.run(account_events_argv(login), capture_output=True, text=True)
     if r.returncode:
         raise Refused("cannot read the account event feed: %s" % r.stderr.strip()[:200])
     return json.loads(r.stdout)
@@ -512,10 +589,13 @@ def account_events(login):
 def foreign_events(events, start_iso, end_iso, org):
     """Events in the run window whose repo is not in the sandbox org."""
     out = []
+    t0, t1 = _epoch(start_iso), _epoch(end_iso)
     for ev in events:
         t = ev.get("created_at") or ""
+        te = _epoch(t)
         repo = (ev.get("repo") or {}).get("name", "")
-        if start_iso <= t <= end_iso and not repo.lower().startswith(org.lower() + "/"):
+        in_window = te is None or (t0 <= te <= t1)        # unreadable time: count it
+        if in_window and not repo.lower().startswith(org.lower() + "/"):
             out.append("%s %s %s" % (t, ev.get("type"), repo))
     return out
 
@@ -566,8 +646,8 @@ def sh(cmd, env=None, cwd=None, check=True, quiet=True):
     return r
 
 
-def read_token(name):
-    p = TOKEN_DIR / name
+def read_token(name, tokdir=None):
+    p = pathlib.Path(tokdir or TOKEN_DIR) / name
     if not p.is_file():
         raise Refused("missing token file %s" % p)
     return p.read_text().strip()
@@ -593,6 +673,9 @@ def cmd_run(a):
                   "gate_latency": "0 (scripted)", "approval_channel": "--resume"}
     try:
         _run(a, spec, rdir, env_record)
+    except Exception as exc:
+        env_record.setdefault("refused" if isinstance(exc, Refused) else "error", str(exc))
+        raise
     finally:
         env_record["wall_clock_end"] = now()
         (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
@@ -641,19 +724,21 @@ def _run(a, spec, rdir, env_record):
     mem = home / "projects" / slug / "memory"
     shutil.copytree(pathlib.Path(spec["dir"]) / "memory", mem)
     (home / "settings.json").write_text(json.dumps(spec.get("settings", {}), indent=2) + "\n")
-    expected = dict(pins)
-    expected["parent"] = (a.model, a.effort)
-    for builtin in spec.get("builtin_agents", []):
-        expected[builtin] = (a.model, a.effort)
+    expected = expected_strata(pins, a.model, a.effort, spec.get("builtin_agents", {}))
     env_record.update(version_dir=version_dir, memory_snapshot=snapshot_id(mem),
                       roster=pins, expected_strata={k: list(v) for k, v in expected.items()},
                       model_tiers=spec.get("model_tiers", "— (every role inherits)"),
                       settings_sha256=hashlib.sha256((home / "settings.json").read_bytes()).hexdigest())
     write_shim(rdir / "bin")
-    env = check_env(replicate_env(rdir, sandbox, read_token("claude-token"), read_token("gh-token")))
-    # Plugin install inside the isolated config (A5): refuse if it did not land.
-    sh([a.claude_bin, "plugin", "marketplace", "add", str(mk)], env=env)
-    sh([a.claude_bin, "plugin", "install", "dev-loop@claude-code-loop"], env=env)
+    (rdir / "gh-calls.jsonl").touch()
+    env = launch_env(rdir, sandbox, TOKEN_DIR)
+    claude_real = os.path.realpath(a.claude_bin)
+    env_record["claude_real"] = claude_real
+    # Plugin install inside the isolated config (A5), sandboxed like every
+    # replicate `claude` process; refuse if it did not land.
+    box = sandbox_argv(rdir, claude_real, rdir / "home")
+    sh(box + [claude_real, "plugin", "marketplace", "add", str(mk)], env=env)
+    sh(box + [claude_real, "plugin", "install", "dev-loop@claude-code-loop"], env=env)
     cache = home / "plugins" / "cache" / "claude-code-loop" / "dev-loop" / version_dir
     if not cache.is_dir():
         raise Refused("plugin install did not produce %s" % cache)
@@ -662,12 +747,39 @@ def _run(a, spec, rdir, env_record):
     sh([REAL_GH, "auth", "setup-git"], env=env)
     for k, v in (("user.name", FIXED_IDENTITY[0]), ("user.email", FIXED_IDENTITY[1])):
         sh(["git", "config", "--global", k, v], env=env)
-    # Sandbox repo (harness side, harness-token only).
+    # Sandbox repo (harness side, harness-token only). From the create onward the
+    # audit, the cost read and the teardown run on every path, success or not.
     henv = harness_env(rdir)
     sh([REAL_GH, "auth", "setup-git"], env=henv)
     env_record["account_events_before"] = len(account_events(login))
     sh([REAL_GH, "repo", "create", sandbox, "--private"], env=henv)
-    env_record["sandbox_created"] = now()
+    env_record["sandbox_created"] = env_record["run_start"] = now()
+    try:
+        _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv)
+    finally:
+        env_record.setdefault("run_end", now())
+        (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
+        steps = (("audit", lambda: write_audit(rdir, env_record, spec, login, version_dir)),
+                 ("measure", lambda: (rdir / "result.json").write_text(
+                     json.dumps(measure(project_dir(rdir)), indent=2))))
+        for name, step in steps:
+            try:
+                step()
+            except Exception as exc:                  # recorded, never swallowed silently
+                env_record.setdefault("errors", []).append("%s: %s" % (name, exc))
+        if a.keep_sandbox:
+            env_record["sandbox_kept"] = True
+        else:
+            r = sh([REAL_GH, "repo", "delete", sandbox, "--yes"], env=henv, check=False)
+            if r.returncode == 0:
+                env_record["sandbox_deleted"] = now()
+            else:
+                env_record["sandbox_delete_failed"] = (r.stderr or r.stdout).strip()[:300]
+
+
+def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv):
+    """Seed the sandbox repo, then drive the loop (A8): ledger-keyed stops answered
+    with scripted replies, never improvised; every turn sandboxed and timed."""
     sh(["git", "remote", "set-url", "origin", "https://github.com/%s.git" % sandbox], cwd=clone)
     sh(["git", "push", "-q", "origin", "main"], env=henv, cwd=clone)
     sh([REAL_GH, "label", "create", spec["label"], "-R", sandbox], env=henv)
@@ -675,43 +787,43 @@ def _run(a, spec, rdir, env_record):
               "-b", spec["issue"]["body"], "--label", spec["label"]], env=henv).stdout.strip()
     if not url.endswith("/issues/1"):
         raise Refused("fixture issue is not #1: %s" % url)
-    # Drive (A8): ledger-keyed stops answered with scripted replies, never improvised.
-    run_start = now()
-    env_record["run_start"] = run_start
     (rdir / "streams").mkdir()
-    prompt, session, turns_run, outcome = spec["first_prompt"], None, 0, None
+    prompt, session, n, outcome = spec["first_prompt"], None, 0, None
     queue = clone / spec["ledger_root"] / spec["run_slug"] / "queue.md"
+    turns = env_record.setdefault("turns", [])
     while outcome is None:
-        turns_run += 1
-        cmd = [a.claude_bin, "-p", prompt, "--model", a.model, "--effort", a.effort,
-               "--strict-mcp-config", "--permission-mode", "bypassPermissions",
-               "--output-format", "stream-json", "--verbose"]
+        n += 1
+        cmd = sandbox_argv(rdir, claude_real, clone) + [
+            claude_real, "-p", prompt, "--model", a.model, "--effort", a.effort,
+            "--strict-mcp-config", "--permission-mode", "bypassPermissions",
+            "--output-format", "stream-json", "--verbose"]
         if session:
             cmd += ["--resume", session]
-        stream = rdir / "streams" / ("turn-%02d.jsonl" % turns_run)
-        with open(stream, "w") as out:
-            subprocess.run(cmd, env=env, cwd=clone, stdout=out, stderr=subprocess.STDOUT,
-                           stdin=subprocess.DEVNULL)
+        stream = rdir / "streams" / ("turn-%02d.jsonl" % n)
+        try:
+            with open(stream, "w") as out:
+                rc = subprocess.run(cmd, env=env, cwd=clone, stdout=out, stderr=subprocess.STDOUT,
+                                    stdin=subprocess.DEVNULL, timeout=a.turn_timeout).returncode
+        except subprocess.TimeoutExpired:
+            turns.append({"turn": n, "returncode": None, "timeout_s": a.turn_timeout})
+            outcome = ("halt", "turn %d exceeded %ds" % (n, a.turn_timeout))
+            break
         _init, result = read_stream(stream)
+        status = row_status(queue, 1)
+        turns.append({"turn": n, "returncode": rc, "status": status})
         if not result:
-            outcome = ("halt", "turn %d produced no result event" % turns_run)
+            outcome = ("halt", "turn %d produced no result event" % n)
             break
         session = result.get("session_id") or session
-        kind, val = classify_stop(row_status(queue, 1), result.get("result"), spec["stops"])
-        if kind == "reply" and turns_run >= spec["max_turns"]:
+        kind, val = classify_stop(status, result.get("result"), spec["stops"])
+        if kind == "reply" and n >= spec["max_turns"]:
             kind, val = "halt", "max_turns %d reached" % spec["max_turns"]
         if kind == "reply":
             prompt = val
         else:
             outcome = (kind, val)
-    env_record.update(run_end=now(), invocations=turns_run, unattended=outcome[0] == "done",
+    env_record.update(run_end=now(), invocations=n, unattended=outcome[0] == "done",
                       outcome=outcome[1] or "done")
-    (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
-    (rdir / "result.json").write_text(json.dumps(measure(project_dir(rdir)), indent=2))
-    write_audit(rdir, env_record, spec, login, version_dir)
-    if not a.keep_sandbox:
-        sh([REAL_GH, "repo", "delete", sandbox, "--yes"], env=henv, check=False)
-        env_record["sandbox_deleted"] = now()
 
 
 def write_audit(rdir, env_record, spec, login, version_dir):
@@ -754,6 +866,8 @@ def main(argv=None):
     r.add_argument("--effort", required=True)
     r.add_argument("--login", required=True, help="the real account whose events are audited")
     r.add_argument("--keep-sandbox", action="store_true")
+    r.add_argument("--turn-timeout", type=int, default=3600,
+                   help="seconds before one `claude -p` turn is killed and the replicate halts")
     m = sub.add_parser("measure")
     m.add_argument("rdir")
     au = sub.add_parser("audit")

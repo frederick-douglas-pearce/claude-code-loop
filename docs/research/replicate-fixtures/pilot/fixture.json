@@ -14,6 +14,12 @@
   },
   "stops": [
     {
+      "status": null,
+      "expect": "(?i)(BACKLOG_SOURCE|backlog|which (milestone|label))",
+      "reply": "Run the `fixture` label, as BACKLOG_SOURCE binds it, and initialize the run.",
+      "why": "0.6.0 engine step 0.1 asks which BACKLOG_SOURCE to run when no run exists, before queue.md is written"
+    },
+    {
       "status": "planning",
       "expect": "(?i)approv",
       "reply": "approve"
@@ -29,12 +35,12 @@
       "final": true
     }
   ],
-  "builtin_agents": [
-    "general-purpose",
-    "Explore",
-    "Plan",
-    "claude"
-  ],
+  "builtin_agents": {
+    "general-purpose": "parent",
+    "Explore": "parent",
+    "Plan": "parent"
+  },
   "model_tiers": "\u2014 (every role inherits), as bound in the fixture's loop.config.md",
-  "settings": {}
+  "settings": {},
+  "builtin_agents_why": "Built-ins spawned with no model/effort are expected on the parent's stratum; any other built-in (e.g. claude-code-guide, which runs on its own default) fails check_strata by default-deny. PR B's spike confirms or amends this map."
 }

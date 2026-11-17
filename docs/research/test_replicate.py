@@ -3,6 +3,7 @@
 NOT part of the shipped suite -- under `docs/research/`, not `tests/`, per the scope
 brake; `TEST_CMD`'s research loop runs it.
 """
+import ast
 import datetime
 import itertools
 import json
@@ -77,6 +78,19 @@ class FixtureTests(Tmp):
     def test_pilot_roster_pins_every_agent(self):
         pins = R.render_roster(os.path.join(PILOT, "roster"), self.tmp / "a", S55, "high")
         self.assertEqual(pins, {"pm": (S55, "high"), "architect": (S55, "high")})
+        on_disk = {}
+        for f in sorted((self.tmp / "a").glob("*.md")):
+            text = f.read_text()
+            self.assertNotIn("{{", text, f.name)
+            fm = R.frontmatter(text)
+            on_disk[fm["name"]] = (fm["model"], fm["effort"])
+        self.assertEqual(on_disk, pins)
+
+    def test_expected_strata_reads_the_builtin_map(self):
+        got = R.expected_strata({"pm": (S55, "low")}, S55, "high",
+                                {"Explore": "parent", "Plan": ["claude-haiku-5-5", "medium"]})
+        self.assertEqual(got, {"pm": (S55, "low"), "parent": (S55, "high"),
+                               "Explore": (S55, "high"), "Plan": ("claude-haiku-5-5", "medium")})
 
     def test_roster_without_effort_refuses(self):
         src = self.tmp / "roster"
@@ -152,6 +166,77 @@ class EnvTests(Tmp):
         self.assertNotEqual(one, R.snapshot_id(d))
 
 
+class LaunchTests(Tmp):
+    """The containment boundary itself: what a replicate process can see and hold."""
+
+    def setUp(self):
+        super().setUp()
+        self.rdir = self.tmp / "r1"
+        self.bin = "/opt/claude/versions/9.9.9"
+
+    def binds(self, argv):
+        ro, rw, tmpfs, order = set(), set(), [], []
+        for i, a in enumerate(argv):
+            if a in ("--ro-bind", "--bind"):
+                (ro if a == "--ro-bind" else rw).add(argv[i + 1])
+                order.append((i, a, argv[i + 1]))
+            elif a == "--tmpfs":
+                tmpfs.append((i, argv[i + 1]))
+        return ro, rw, tmpfs, order
+
+    def test_sandbox_hides_home_and_binds_only_the_replicate(self):
+        argv = R.sandbox_argv(self.rdir, self.bin, self.rdir / "work" / "r1",
+                              research_dir="/repo/docs/research", resolve_dir=None)
+        self.assertEqual(argv[0], R.BWRAP)
+        ro, rw, tmpfs, order = self.binds(argv)
+        self.assertEqual({p for _, p in tmpfs}, {"/home", "/tmp", "/run"})
+        self.assertEqual(rw, {str(self.rdir / "home"), str(self.rdir / "work"),
+                              str(self.rdir / "gh-calls.jsonl")})
+        self.assertEqual(ro, {"/", self.bin, "/repo/docs/research", str(self.rdir / "bin"),
+                              str(self.rdir / "marketplace")})
+        first_tmpfs = min(i for i, _ in tmpfs)
+        for i, kind, path in order:
+            if path != "/":
+                self.assertGreater(i, first_tmpfs, "%s %s precedes the tmpfs mounts" % (kind, path))
+        for flag in ("--unshare-pid", "--die-with-parent", "--new-session"):
+            self.assertIn(flag, argv)
+        self.assertNotIn("--share-net", argv)
+        self.assertNotIn(str(self.rdir), ro | rw)     # the replicate dir itself stays hidden
+
+    def test_launch_env_takes_the_sandbox_token_never_the_harness_token(self):
+        tok = self.tmp / "tok"
+        tok.mkdir()
+        for name, val in (("gh-token", "GH-SANDBOX"), ("harness-token", "HARNESS-ADMIN"),
+                          ("claude-token", "CLAUDE-TOK")):
+            (tok / name).write_text(val + "\n")
+        env = R.launch_env(self.rdir, "o/sb", tok)
+        self.assertEqual(env, R.replicate_env(self.rdir, "o/sb", "CLAUDE-TOK", "GH-SANDBOX"))
+        self.assertEqual(env["GH_TOKEN"], "GH-SANDBOX")
+        self.assertNotIn("HARNESS-ADMIN", env.values())
+        self.assertTrue(set(env) <= set(R.ENV_ALLOWLIST))
+
+    def test_human_login_is_used_only_for_the_events_get(self):
+        """Every harness `gh` call passes an explicit env= (sandbox or harness
+        token), except `account_events`, whose argv is exactly one GET."""
+        self.assertEqual(R.account_events_argv("me"),
+                         [R.REAL_GH, "api", "-X", "GET", "users/me/events?per_page=100"])
+        tree = ast.parse(pathlib.Path(R.__file__).read_text())
+        offenders = []
+        for fn in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
+            for call in [c for c in ast.walk(fn) if isinstance(c, ast.Call)]:
+                name = getattr(call.func, "id", None) or getattr(call.func, "attr", None)
+                if name not in ("sh", "run") or not call.args:
+                    continue
+                first = call.args[0]
+                names_gh = isinstance(first, ast.List) and first.elts and \
+                    getattr(first.elts[0], "id", None) == "REAL_GH"
+                via_argv = isinstance(first, ast.Call) and \
+                    getattr(first.func, "id", None) == "account_events_argv"
+                if (names_gh or via_argv) and not any(k.arg == "env" for k in call.keywords):
+                    offenders.append(fn.name)
+        self.assertEqual(offenders, ["account_events"])
+
+
 class ShimPolicyTests(unittest.TestCase):
     SB = "sandbox-org/pilot-r1"
 
@@ -176,7 +261,8 @@ class ShimPolicyTests(unittest.TestCase):
         self.assertFalse(self.decide(["pr", "list"])[0])
 
     def test_never_allowed_subcommands(self):
-        for argv in (["repo", "delete", self.SB], ["auth", "status"], ["repo", "create", "x/y"]):
+        for argv in (["repo", "delete", self.SB], ["auth", "status"], ["repo", "create", "x/y"],
+                     ["gist", "create", "f.txt"], ["issue", "transfer", "1", "me/real"]):
             self.assertFalse(self.decide(argv, env_repo=self.SB)[0], argv)
 
 
@@ -227,10 +313,17 @@ class StopTests(Tmp):
                          ("reply", "merge"))
         self.assertEqual(R.classify_stop("done", "Merged. Run /clear.", self.STOPS)[0], "done")
 
+    def test_pre_queue_stop_answers_the_backlog_question(self):
+        """0.6.0 step 0.1 asks which BACKLOG_SOURCE before queue.md exists."""
+        kind, reply = R.classify_stop(None, "Which BACKLOG_SOURCE should I run?", self.STOPS)
+        self.assertEqual(kind, "reply")
+        self.assertIn("fixture", reply)
+
     def test_disagreement_and_unknown_halt(self):
         self.assertEqual(R.classify_stop("planning", "Which label?", self.STOPS)[0], "halt")
         self.assertEqual(R.classify_stop("hold", "held", self.STOPS)[0], "halt")
         self.assertEqual(R.classify_stop(None, "approve", self.STOPS)[0], "halt")
+        self.assertEqual(R.classify_stop("planning", "Which BACKLOG_SOURCE?", self.STOPS)[0], "halt")
 
     def test_row_status_reads_the_issue_row(self):
         q = self.tmp / "queue.md"
@@ -258,9 +351,21 @@ class AuditTests(Tmp):
     def test_gh_call_missing_from_the_shim_log_fails(self):
         """A `/usr/bin/gh` (or any route around the shim) leaves no shim entry."""
         t = self.gh_transcript("/usr/bin/gh issue create -R me/real -t x -b y")
-        problems, _ = R.audit_gh_calls([t], self.tmp / "none.jsonl", self.SB)
+        log = self.tmp / "empty.jsonl"
+        log.write_text("")
+        problems, _ = R.audit_gh_calls([t], log, self.SB)
         self.assertEqual(len(problems), 1)
         self.assertIn("not seen by the shim", problems[0])
+
+    def test_missing_shim_log_fails(self):
+        problems, _ = R.audit_gh_calls([], self.tmp / "none.jsonl", self.SB)
+        self.assertTrue(any("shim log unreadable" in p for p in problems))
+
+    def test_shim_entry_outside_the_calls_window_does_not_cover_it(self):
+        log = write_jsonl(self.tmp / "log.jsonl", [
+            {"ts": epoch(25), "argv": ["pr"], "target": self.SB, "allowed": True}])
+        problems, _ = R.audit_gh_calls([self.gh_transcript()], log, self.SB)
+        self.assertEqual(len(problems), 1)
 
     def test_shim_entry_allowed_to_a_foreign_target_fails(self):
         log = write_jsonl(self.tmp / "log.jsonl", [
@@ -291,6 +396,15 @@ class AuditTests(Tmp):
         self.assertEqual(len(out), 1)
         self.assertIn("me/real", out[0])
 
+    def test_foreign_events_window_in_now_format(self):
+        """`now()` writes +00:00 and the feed writes Z; an event in the run's last
+        second is still inside the window, and a look-alike org is foreign."""
+        end = "2026-11-17T02:00:00+00:00"
+        ev = [{"created_at": "2026-11-17T02:00:00Z", "type": "PushEvent", "repo": {"name": "me/real"}},
+              {"created_at": "2026-11-17T01:00:00Z", "type": "PushEvent", "repo": {"name": "o-other/x"}}]
+        out = R.foreign_events(ev, "2026-11-17T00:00:00+00:00", end, "o")
+        self.assertEqual(len(out), 2)
+
     def test_engine_loads(self):
         rdir = self.tmp / "r1"
         cache = rdir / "home" / ".claude" / "plugins" / "cache" / "claude-code-loop" / "dev-loop"
@@ -305,6 +419,22 @@ class AuditTests(Tmp):
         self.assertEqual(len(problems), 2)
         none = write_jsonl(self.tmp / "n.jsonl", [asst()])
         self.assertIn("no engine load recorded", R.audit_engine_loads([none], rdir, "0.6.0")[0])
+
+    def test_engine_loads_through_bash_and_grep(self):
+        """0.6.0 pages the engine with `sed`; those reads are loads like a Read."""
+        rdir = self.tmp / "r1"
+        cache = rdir / "home" / ".claude" / "plugins" / "cache" / "claude-code-loop" / "dev-loop"
+        eng = cache / "0.6.0" / "skills" / "dev-loop" / "loop-engine.md"
+        ok = write_jsonl(self.tmp / "b.jsonl", [asst(tools=[
+            ("a", "Bash", {"command": "sed -n 1,80p %s" % eng}),
+            ("b", "Grep", {"path": str(cache / "0.6.0" / "skills" / "dev-loop"), "glob": "loop-engine.md", "pattern": "x"})])])
+        problems, loads = R.audit_engine_loads([ok], rdir, "0.6.0", real_home=self.tmp / "realhome")
+        self.assertEqual((problems, loads), ([], 2))
+        real = self.tmp / "realhome" / ".claude" / "plugins" / "cache" / "claude-code-loop" / "dev-loop" / "0.6.0" / "SKILL.md"
+        bad = write_jsonl(self.tmp / "c.jsonl", [asst(tools=[
+            ("a", "Bash", {"command": "sed -n 1,80p %s; cat %s" % (eng, real)})])])
+        problems, _ = R.audit_engine_loads([bad], rdir, "0.6.0", real_home=self.tmp / "realhome")
+        self.assertTrue(any("real plugin cache" in p for p in problems), problems)
 
 
 class StrataTests(Tmp):
