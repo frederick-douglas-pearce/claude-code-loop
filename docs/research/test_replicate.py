@@ -354,8 +354,9 @@ class StopTests(Tmp):
         self.assertEqual(R.classify_stop("done", "Merged. Run /clear.", self.STOPS)[0], "done")
 
     def test_review_stop_follows_the_scope_ruling(self):
-        """Pilot m2: step 8's design-question stop gets the fixed follow-the-ruling
-        reply; any other review stop (a dirty round 2, say) still halts."""
+        """Pilot m2: an in-review stop naming a scope ruling gets the fixed
+        follow-the-ruling reply; one naming neither phrase halts. It does NOT tell a
+        dirty round 2 that names a ruling apart (#357)."""
         kind, reply = R.classify_stop(
             "in-review", "Stopped at step 8. The architect's scope ruling: ...", self.STOPS)
         self.assertEqual(kind, "reply")
@@ -543,7 +544,7 @@ class InstallCheckTests(Tmp):
 
     def test_other_url_commit_path_or_count_refuses(self):
         self.write(source={"source": "git", "url": "https://github.com/x/y.git"})
-        self.assertTrue(self.check())
+        self.assertIn("expected git " + self.URL, " ".join(self.check()))
         self.write(rows=[{"installPath": str(self.cache), "gitCommitSha": "b" * 40}])
         self.assertIn("is not the marketplace commit", " ".join(self.check()))
         self.write(rows=[{"installPath": str(self.tmp / "elsewhere"), "gitCommitSha": self.SHA}])
