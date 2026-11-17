@@ -227,6 +227,23 @@ class LaunchTests(Tmp):
         self.assertEqual(argv[argv.index("--exit-fd") + 1], "6")
         self.assertEqual(R.RESOLV, "nameserver 10.0.2.3\n")
 
+    def test_bwrap_exit_names_bwraps_own_failure(self):
+        """A bwrap that already died is reported with its exit code and output, not
+        as the slirp4netns symptom; a still-blocked bwrap yields None."""
+        dead = subprocess.Popen(["/bin/sh", "-c", "echo bwrap: Can\\'t find source path /nope; exit 1"],
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        msg = R._bwrap_exit(dead, grace=5)
+        dead.stdout.close()
+        self.assertIn("bwrap exited 1", msg)
+        self.assertIn("find source path /nope", msg)
+        alive = subprocess.Popen(["/bin/sleep", "5"], stdout=subprocess.PIPE)
+        try:
+            self.assertIsNone(R._bwrap_exit(alive, grace=0.2))
+        finally:
+            alive.kill()
+            alive.wait()
+            alive.stdout.close()
+
     def test_launch_env_takes_the_sandbox_token_never_the_harness_token(self):
         tok = self.tmp / "tok"
         tok.mkdir()

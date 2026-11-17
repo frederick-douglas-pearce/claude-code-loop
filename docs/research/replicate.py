@@ -246,6 +246,18 @@ def _read_json_fd(fd, limit=10.0):
     raise Refused("bwrap reported no child pid on --info-fd: %r" % buf[:200])
 
 
+def _bwrap_exit(box, grace=1.0):
+    """-> why bwrap has already exited, with its own output when it was piped,
+    or None while it is still running (still blocked on --block-fd)."""
+    try:
+        rc = box.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        return None
+    out = box.stdout.read() if box.stdout else b""
+    return "bwrap exited %d before the network was up: %s" % (
+        rc, (out or b"").decode(errors="replace").strip()[:300])
+
+
 def run_sandboxed(rdir, claude_real, cwd, cmd, env, stdout=subprocess.PIPE,
                   stderr=subprocess.STDOUT, timeout=None):
     """Run `cmd` in the sandbox with slirp4netns attached before it starts.
@@ -264,15 +276,20 @@ def run_sandboxed(rdir, claude_real, cwd, cmd, env, stdout=subprocess.PIPE,
     os.close(block_r)
     slirp = None
     try:
-        pid = _read_json_fd(info_r)["child-pid"]
-        slirp = subprocess.Popen(slirp_argv(pid, ready_w, exit_r), pass_fds=(ready_w, exit_r),
-                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL)
-        os.close(ready_w)
-        os.close(exit_r)
-        ready_w = exit_r = None
-        if not select.select([ready_r], [], [], 10)[0] or os.read(ready_r, 1) != b"1":
-            raise Refused("slirp4netns did not report ready")
+        try:
+            pid = _read_json_fd(info_r)["child-pid"]
+            slirp = subprocess.Popen(slirp_argv(pid, ready_w, exit_r), pass_fds=(ready_w, exit_r),
+                                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL)
+            os.close(ready_w)
+            os.close(exit_r)
+            ready_w = exit_r = None
+            if not select.select([ready_r], [], [], 10)[0] or os.read(ready_r, 1) != b"1":
+                raise Refused("slirp4netns did not report ready")
+        except Refused as exc:
+            # A bwrap setup failure (a bad bind, say) also leaves slirp nothing to
+            # attach to; name bwrap's own exit and output rather than the symptom.
+            raise Refused(_bwrap_exit(box) or str(exc)) from None
         os.write(block_w, b"1")
         os.close(block_w)
         block_w = None
