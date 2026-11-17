@@ -52,7 +52,7 @@ became `gh run list --workflow test.yml`, keyed on the PR's head SHA (no test pi
 the fixture gained an `in-review` reply — *follow the architect's scope ruling* — chosen by the
 human. That reply goes to **any** `in-review` stop whose final message matches
 `scope ruling|design question`, a dirty round-2 escalation that names a ruling included
-(`test_review_stop_follows_the_scope_ruling` covers only a message naming neither). No pilot
+(`test_review_stop_follows_the_scope_ruling` pins a reply for a message naming a scope ruling and a halt for one naming neither phrase; no test covers a dirty round 2 that names a ruling). No pilot
 replicate reached it: m3 and h1 never stopped at `in-review`, so there is no live evidence for it.
 
 ## AC6
