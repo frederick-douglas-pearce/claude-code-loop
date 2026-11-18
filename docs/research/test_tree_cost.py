@@ -577,25 +577,35 @@ class Builder:
     def __init__(self, timestamps=True):
         self.recs, self.subs, self.ctx, self.k = [], {}, 1000, 0
         self.timestamps = timestamps
+        self.offset = 0          # seconds added by `pause`
+        self.ctxs = []           # each turn's context, in turn order
 
     def _stamp(self, r):
         if self.timestamps:
-            r["timestamp"] = at(self.k * 10)
+            r["timestamp"] = at(self.offset + self.k * 10)
         return r
 
     def command(self):
         self.recs.append(self._stamp({"type": "user", "message": {
             "content": "<command-name>/dev-loop:dev-loop</command-name>"}}))
 
-    def turn(self, *tools, grow=0, agent_id=None):
+    def turn(self, *tools, grow=0, agent_id=None, pause=0, write=0):
+        """`pause` idles that many seconds before the turn; `write` makes it write
+        that many 1-hour cache tokens (so a long pause before it is a re-warm)."""
+        self.offset += pause
         k = self.k
         content = [{"type": "tool_use", "id": "t%d_%d" % (k, j), "name": n, "input": i}
                    for j, (n, i) in enumerate(tools)] or [{"type": "text", "text": "."}]
+        usage = {"input_tokens": self.ctx, "output_tokens": 5,
+                 "cache_read_input_tokens": 0, "cache_creation_input_tokens": write}
+        if write:
+            usage["cache_creation"] = {"ephemeral_5m_input_tokens": 0,
+                                       "ephemeral_1h_input_tokens": write}
+        self.ctxs.append(self.ctx + write)
         self.recs.append(self._stamp({
             "type": "assistant", "effort": "high", "version": "2.1.280",
-            "message": {"id": "m%d" % k, "model": M55, "content": content, "usage": {
-                "input_tokens": self.ctx, "output_tokens": 5,
-                "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}}}))
+            "message": {"id": "m%d" % k, "model": M55, "content": content,
+                        "usage": usage}}))
         for j, _ in enumerate(tools):
             r = {"type": "user", "message": {"content": [
                 {"type": "tool_result", "tool_use_id": "t%d_%d" % (k, j), "content": "x"}]}}
@@ -606,11 +616,13 @@ class Builder:
         self.k += 1
         return k
 
-    def agent(self, aid, linked=True, sub_timestamp=True):
+    def agent(self, aid, linked=True, sub_timestamp=True, sub_at=None):
+        """`sub_at` overrides the subagent's first timestamp (seconds), e.g. to
+        place it by TIME inside a different step from its launch."""
         k = self.turn(("Agent", {"prompt": "p"}), agent_id=aid if linked else None)
         sub = rec(M55, usage=READ_ONLY)
         if sub_timestamp:
-            sub["timestamp"] = at(k * 10 + 1)
+            sub["timestamp"] = at(self.offset + k * 10 + 1 if sub_at is None else sub_at)
         self.subs[aid] = [sub]
         return k
 
@@ -755,7 +767,7 @@ class ByStepTests(unittest.TestCase):
         b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
         b.turn(sh("cat >> progress.md <<'EOF'\n- next: gh pr merge 9\nEOF"))
         got = self.steps(T.by_step(b.write(self.root)))
-        self.assertEqual(got["merge/journal"]["status"], "not detected")
+        self.assertEqual(got["merge/journal"]["status"], "DETECTOR FAILURE (no marker fired)")
 
     def test_a_unit_read_inside_compaction_moves_the_step_that_resumes(self):
         """#273 C1: on appendix D's session the only acceptance marker of
@@ -790,11 +802,12 @@ class ByStepTests(unittest.TestCase):
         self.assertIn("DETECTOR FAILURE (zero turns)", line)
         self.assertNotIn("0.00", line)
 
-    def test_a_step_whose_marker_never_fired_is_not_detected_never_zero(self):
+    def test_a_step_whose_marker_never_fired_is_a_detector_failure_never_zero(self):
         b = Builder()
         full_run(b, security=False)
         p = b.write(self.root)
-        self.assertEqual(self.steps(T.by_step(p))["security"]["status"], "not detected")
+        self.assertEqual(self.steps(T.by_step(p))["security"]["status"],
+                         "DETECTOR FAILURE (no marker fired)")
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             T.report_by_step([str(p)])
@@ -887,8 +900,10 @@ class ByStepTests(unittest.TestCase):
         self.assertIn("REFUSED", out)
         self.assertNotIn("=== by step", out)
 
-    #: Appendix D's phase ranges, 1-based inclusive, verbatim from `PHASES` in
-    #: cost-review-2026-10-26/handcheck/analysis2.py (recovered #273).
+    #: Appendix D's range STARTS (1-based) from `PHASES` in
+    #: cost-review-2026-10-26/handcheck/analysis2.py (recovered #273), mapped onto
+    #: these steps. Invocation 2's `load` is `PHASES`' row (247, 260, 'inv2 steps
+    #: 0-5 select/plan…'), relabeled: appendix D has no load row there.
     D_ENTRIES = {
         0: {"plan": 4, "implement": 46, "review": 134, "security": 200,
             "acceptance": 203, "merge/journal": 227},
@@ -908,17 +923,23 @@ class ByStepTests(unittest.TestCase):
 
     @unittest.skipUnless(D_SESSION.is_file(), "appendix D's transcript is not on this machine")
     def test_appendix_d_phase_table_is_reproduced_within_the_stated_tolerance(self):
-        """AC3. Tolerance (plan, approved 2026-11-17): invocation totals exact; each
-        step boundary within 5 turns of appendix D's range edge; each mapped share
-        within 3 percentage points of session Σ context. The band covers this
-        detector's error and appendix D's hand-drawn boundaries alike."""
+        """AC3. Tolerance, as amended by the owner on 2026-11-18 (comment on #273):
+        invocation totals exact; each step's ENTRY within 5 turns of appendix D's
+        range start, which also pins every interior exit (one turn before the next
+        entry); each mapped share within 3 percentage points of session Σ context.
+        An invocation's FINAL exit is not asserted: invocation 2's merge/journal
+        ends at 423 here and at 417 in appendix D, whose turns 418-423 are a "user
+        follow-up". The band covers this detector's error and appendix D's
+        hand-drawn boundaries alike."""
         r = T.by_step(D_SESSION)
         self.assertIsNone(r["refused"])
+        self.assertIsNone(r["conservation"])
         self.assertEqual([i["hi"] - i["lo"] for i in r["invocations"]], [246, 177])
         self.assertEqual(r["linked"], r["subs"])
         for k, want in self.D_ENTRIES.items():
             got = self.steps(r, k)
             self.assertTrue(r["invocations"][k]["check"].startswith("ok"))
+            self.assertEqual(r["invocations"][k]["failures"], [], k)
             for s, turn in want.items():
                 self.assertIsNone(got[s]["status"], (k, s))
                 self.assertLessEqual(abs(got[s]["first"] + 1 - turn), 5, (k, s))
@@ -929,6 +950,274 @@ class ByStepTests(unittest.TestCase):
             for steps, pct in want.items():
                 share = sum(got[s]["share"] for s in steps) * 100
                 self.assertLessEqual(abs(share - pct), 3, (k, steps, share))
+
+
+class ByStepRound2Tests(unittest.TestCase):
+    """Guards added for #363's round-1 review: the order, iteration and
+    conservation checks (all DETECTOR FAILURE, never a guess), the bounded
+    compaction overlay, and the cost columns themselves."""
+
+    setUp, tearDown, steps = ByStepTests.setUp, ByStepTests.tearDown, ByStepTests.steps
+
+    def test_an_entry_out_of_pipeline_order_fails_the_invocation(self):
+        """e628e410's shape: an accepting.md read during planning."""
+        b = Builder()
+        b.command()
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
+        b.turn(read(ENG % "reference/plan-template.md"))
+        b.turn(read(ENG % "phases/accepting.md"))
+        b.turn(sh("git switch -c x"))
+        b.turn(sh("gh pr create"))
+        b.turn(read(ENG % "phases/reviewing.md"))
+        b.turn(skill("security-review"))
+        b.turn(sh("gh pr merge 1"))
+        r = T.by_step(b.write(self.root))
+        fails = r["invocations"][0]["failures"]
+        self.assertTrue(any(f.startswith("step entries out of pipeline order") for f in fails),
+                        fails)
+        self.assertTrue(r["invocations"][0]["check"].startswith("ok"))   # engine is separate
+
+    def test_entries_in_order_report_no_failure(self):
+        b = Builder()
+        full_run(b)
+        self.assertEqual(T.by_step(b.write(self.root))["invocations"][0]["failures"], [])
+
+    def test_a_second_merge_in_one_invocation_fails_it(self):
+        b = Builder()
+        full_run(b)
+        b.turn(sh("gh pr merge 10 --squash"))
+        fails = T.by_step(b.write(self.root))["invocations"][0]["failures"]
+        self.assertIn("more than one iteration: 2 merges, plan files issue-1.plan.md", fails)
+
+    def test_a_second_issues_plan_file_in_one_invocation_fails_it(self):
+        b = Builder()
+        full_run(b)
+        b.turn(("Write", {"file_path": "/r/.claude/loop/x/issue-2.plan.md", "content": "p"}))
+        fails = T.by_step(b.write(self.root))["invocations"][0]["failures"]
+        self.assertTrue(any("issue-1.plan.md, issue-2.plan.md" in f for f in fails), fails)
+
+    def test_rewriting_one_plan_file_is_one_iteration(self):
+        b = Builder()
+        full_run(b)
+        b.turn(sh("cat > /r/.claude/loop/x/issue-1.plan.md <<'EOF'\nx\nEOF"))
+        self.assertEqual(T.by_step(b.write(self.root))["invocations"][0]["failures"], [])
+
+    def test_the_plan_gate_question_is_the_last_one_before_the_pr(self):
+        b = Builder()
+        b.command()
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
+        b.turn(read(ENG % "reference/plan-template.md"))
+        b.turn(("AskUserQuestion", {"questions": []}))        # a clarification
+        b.turn(("Write", {"file_path": "/r/issue-1.plan.md"}))
+        gate = b.turn(("AskUserQuestion", {"questions": []}))
+        b.turn(("Edit", {"file_path": "/r/a.py"}))
+        b.turn(sh("gh pr create"))
+        b.turn(("AskUserQuestion", {"questions": []}))        # after the PR: ignored
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertEqual(got["implement"]["first"], gate + 1)
+
+    def test_a_question_outside_plan_to_pr_never_opens_implement(self):
+        b = Builder()
+        b.command()
+        b.turn(("AskUserQuestion", {"questions": []}))        # before the plan entry
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
+        b.turn(read(ENG % "reference/plan-template.md"))
+        b.turn(sh("gh pr create"))
+        b.turn(("AskUserQuestion", {"questions": []}))        # after the PR
+        b.turn()
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertEqual(got["implement"]["status"], "DETECTOR FAILURE (no marker fired)")
+
+    def compacted(self, *after):
+        """An invocation through security, a compaction, then `after` turns."""
+        b = Builder()
+        b.command()
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
+        b.turn(read(ENG % "reference/plan-template.md"))
+        b.turn(skill("security-review"))
+        b.compact()
+        return b
+
+    def test_a_compaction_with_no_re_read_is_one_turn(self):
+        b = self.compacted()
+        c = b.turn()
+        b.turn(("Edit", {"file_path": "/r/a.py"}))
+        b.turn()
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertEqual((got["compaction"]["first"], got["compaction"]["last"]), (c, c))
+
+    def test_a_late_core_read_after_live_work_does_not_extend_the_overlay(self):
+        """7a93db11's shape: live work (a side PR) before the next core read."""
+        b = self.compacted()
+        c = b.turn()
+        b.turn(sh("gh pr create"))
+        b.turn(sh("gh pr merge 5"))
+        b.turn(read(ENG % "loop-engine.md"))
+        b.turn()
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertEqual((got["compaction"]["first"], got["compaction"]["last"]), (c, c))
+
+    def test_the_overlay_ends_at_the_end_of_the_consecutive_core_run(self):
+        b = self.compacted()
+        c = b.turn(read(ENG % "phases/accepting.md"))
+        b.turn(read(ENG % "loop-engine.md"))
+        end = b.turn(read(ENG % "loop-engine.md"))
+        b.turn(("Edit", {"file_path": "/r/a.py"}))
+        b.turn(read(ENG % "loop-engine.md"))                   # later, not adjacent
+        b.turn()
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertEqual((got["compaction"]["first"], got["compaction"]["last"]), (c, end))
+
+    def test_a_compaction_before_the_first_invocation_stays_other_and_conserves(self):
+        b = Builder()
+        for _ in range(3):
+            b.turn()
+        b.compact()
+        b.turn()
+        b.turn(read(ENG % "loop-engine.md"))
+        full_run(b)
+        r = T.by_step(b.write(self.root))
+        self.assertEqual(r["other_turns"], 5)
+        self.assertNotIn("compaction", self.steps(r))
+        self.assertIsNone(r["conservation"])
+        self.assertEqual(sum(s["turns"] for s in r["invocations"][0]["steps"])
+                         + r["other_turns"], r["turns"])
+
+    def test_two_adjacent_boundaries_merge_into_one_span(self):
+        b = self.compacted()
+        c = b.turn()
+        b.compact()
+        b.turn(read(ENG % "loop-engine.md"))
+        b.turn()
+        records = list(T._records(b.write(self.root)))
+        spans = T.segment(records, T.price_records(records))["compactions"]
+        self.assertEqual(spans, [(c, c + 1)])
+
+    def test_boundaries_separated_only_by_assistant_turns_are_two_compactions(self):
+        b = self.compacted()
+        c = b.turn()
+        b.turn(("Edit", {"file_path": "/r/a.py"}))
+        b.compact()
+        c2 = b.turn()
+        records = list(T._records(b.write(self.root)))
+        spans = T.segment(records, T.price_records(records))["compactions"]
+        self.assertEqual(spans, [(c, c), (c2, c2)])
+
+    def test_a_subagent_launched_before_the_first_invocation_is_on_the_other_line(self):
+        b = Builder()
+        b.agent("early")
+        full_run(b)
+        p = b.write(self.root)
+        r = T.by_step(p)
+        self.assertEqual(r["other_subs"], 1)
+        self.assertAlmostEqual(r["other_sub_usd"], T.bill(
+            self.root / "s" / "subagents" / "agent-early.jsonl")[0].usd)
+        self.assertIsNone(r["conservation"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            T.report_by_step([str(p)])
+        self.assertIn("1 subagents launched there", buf.getvalue())
+
+    def test_rows_that_do_not_add_up_are_a_detector_failure(self):
+        b = Builder()
+        full_run(b)
+        r = T.by_step(b.write(self.root))
+        self.assertIsNone(T.conservation(r))
+        r["other_sub_usd"] -= 1.0
+        r["invocations"][0]["steps"][0]["turns"] += 1
+        self.assertEqual(T.conservation(r), "DETECTOR FAILURE (does not conserve: "
+                         "turns %d of %d; subagent $%.2f of $%.2f)"
+                         % (r["turns"] + 1, r["turns"], r["sub_usd"] - 1, r["sub_usd"]))
+
+    def test_a_link_wins_over_a_timestamp_in_another_step(self):
+        b = Builder()
+        b.command()
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
+        b.turn(read(ENG % "reference/plan-template.md"))
+        b.agent("a1", sub_at=55)                               # time says: security
+        b.turn()
+        b.turn()
+        sec = b.turn(skill("security-review"))
+        self.assertEqual(sec, 5)                               # starts at 50s, so 55s is inside it
+        b.turn()
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertEqual((got["plan"]["subs"], got["security"]["subs"]), (1, 0))
+
+    def test_cost_columns_are_the_steps_own_turns(self):
+        from stratum import turn_usd
+        b = Builder()
+        e = full_run(b)
+        p = b.write(self.root)
+        r = T.by_step(p)
+        ts = T.price_records(list(T._records(p))).turns
+        total = sum(b.ctxs)
+        for s in r["invocations"][0]["steps"]:
+            idx = range(s["first"], s["last"] + 1)
+            self.assertAlmostEqual(s["parent_usd"], sum(turn_usd(ts[i]) for i in idx), msg=s["step"])
+            self.assertEqual(s["ctx"], sum(b.ctxs[i] for i in idx), s["step"])
+            self.assertAlmostEqual(s["share"], s["ctx"] / total, msg=s["step"])
+        self.assertAlmostEqual(sum(s["share"] for s in r["invocations"][0]["steps"]), 1.0)
+        self.assertEqual(e["load"], 0)
+
+    def test_a_re_warm_lands_in_the_step_holding_its_turn(self):
+        b = Builder()
+        b.command()
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD, write=1000)
+        b.turn(read(ENG % "reference/plan-template.md"))
+        b.turn(sh("git switch -c x"), pause=7200, write=2000)  # gap > 1h TTL
+        b.turn()
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertGreater(got["implement"]["rewarm_usd"], 0)
+        self.assertEqual((got["load"]["rewarm_usd"], got["plan"]["rewarm_usd"]), (0, 0))
+
+    def test_an_unknown_re_warm_prints_unknown_not_zero(self):
+        b = Builder(timestamps=False)
+        full_run(b)
+        p = b.write(self.root)
+        self.assertIsNone(self.steps(T.by_step(p))["plan"]["rewarm_usd"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            T.report_by_step([str(p)])
+        line = [ln for ln in buf.getvalue().splitlines() if ln.strip().startswith("plan ")][0]
+        self.assertIn("unknown", line)
+
+    def test_the_floor_is_the_exact_threshold(self):
+        import engine_cost as E
+        floor = E.floor_for("0.6.0", E.CORE, family="opus-5")
+        for grow, ok in ((int(floor), False), (int(floor) + 1, True)):
+            b = Builder()
+            b.command()
+            b.turn(read(ENG % "loop-engine.md"), grow=grow)
+            b.turn()
+            check = T.by_step(b.write(self.root, stem="g%d" % grow))["invocations"][0]["check"]
+            self.assertEqual(check.startswith("ok"), ok, (grow, check))
+
+    def test_engine_ingestion_that_cannot_be_sized_is_a_detector_failure(self):
+        import engine_cost as E
+        from unittest import mock
+        b = Builder()
+        full_run(b)
+        p = b.write(self.root)
+        for effect in (E.Unpriced("x"), None):
+            kw = {"side_effect": effect} if effect else {"return_value": None}
+            with mock.patch.object(E, "profile", **kw):
+                check = T.by_step(p)["invocations"][0]["check"]
+            self.assertTrue(check.startswith("DETECTOR FAILURE (engine ingestion unknown"), check)
+
+    def test_each_invocation_takes_only_its_own_markers(self):
+        b = Builder()
+        full_run(b)
+        e2 = full_run(b)
+        got = self.steps(T.by_step(b.write(self.root)), 1)
+        for s, turn in e2.items():
+            self.assertEqual(got[s]["first"], turn, s)
+
+    def test_a_marker_before_the_first_invocation_is_not_its_entry(self):
+        b = Builder()
+        b.turn(sh("gh pr merge 1"))
+        e = full_run(b)
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertEqual(got["merge/journal"]["first"], e["merge/journal"])
 
 
 if __name__ == "__main__":

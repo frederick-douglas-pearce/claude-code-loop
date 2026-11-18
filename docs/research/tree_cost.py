@@ -55,15 +55,22 @@ not measured.
 
 **`--by-step` (#273) is SCOUTING, n=1.** It is a mode of `--sessions`: whole-tree
 USD, turns and Σ context per pipeline step, per `/dev-loop` invocation. Step
-boundaries come from the parent's `tool_use` inputs (`MARKERS`: engine unit reads,
-`gh`, `git`, `Skill`), never from journal headings. Subagent files are linked to
-their launching turn by `agentId`. It follows the cost review's §5.8 sanity rule,
-default-deny: a step whose marker fired but holds no turn, or an invocation whose
-core load is below one engine copy (`engine_cost.floor_for`) or cannot be sized,
-prints DETECTOR FAILURE, and a step whose marker never fired prints `not detected`.
-None of these prints as zero cost. One session is hand-checked: appendix D's,
-pinned by `test_appendix_d_phase_table_is_reproduced_within_the_stated_tolerance`.
-That is n=1, so do not cite its figures.
+boundaries come from three sources, never from journal headings:
+  * the parent's `tool_use` inputs (`MARKERS`, read by `tool_markers`);
+  * `/dev-loop` command records, which start an invocation;
+  * compaction records, which open the compaction overlay.
+Subagent files are linked to their launching turn by `agentId`.
+It follows the cost review's §5.8 sanity rule, default-deny. Each of these prints
+DETECTOR FAILURE, never a zero cost (`by_step` lists them in full):
+  * a step that holds no turn, whether or not its marker fired;
+  * an invocation whose core load is below one engine copy
+    (`engine_cost.floor_for`) or cannot be sized;
+  * step entries out of pipeline order, or more than one iteration in one
+    invocation;
+  * rows that do not add back up to the session's bill.
+One session is hand-checked, appendix D's, pinned by
+`test_appendix_d_phase_table_is_reproduced_within_the_stated_tolerance`. That is
+n=1, so do not cite its figures.
 
 In directory mode only sessions that delegated at least once are reported -- a
 non-delegating session has a subagent share of zero by construction and would
@@ -352,8 +359,9 @@ def _text(rec):
 def tool_markers(name, inp):
     """-> the marker kinds one parent `tool_use` fires. Engine reads go through
     `engine_cost.classify`/`engine_file` (plugin cache only), never a second path
-    test; Bash commands are matched with heredoc bodies stripped, so a journal
-    append that MENTIONS `gh pr merge` is not a merge."""
+    test. Bash commands are matched with heredoc BODIES stripped, so a journal
+    heredoc that mentions `gh pr merge` is not a merge. Quoted text, `#` comments
+    and `--help` are NOT stripped and still match (#364)."""
     import engine_cost as E
     out = []
     if not isinstance(inp, dict):
@@ -364,11 +372,13 @@ def tool_markers(name, inp):
     if name == "Bash":
         cmd = E.strip_heredocs(str(inp.get("command", "")))
         out += [k for k, rx in _BASH_MARKERS if rx.search(cmd)]
-        if _PLAN_REDIRECT.search(cmd):
-            out.append("plan file write")
+        m = _PLAN_REDIRECT.search(cmd)
+        if m:
+            out += ["plan file write", "plan file:" + _PLAN_FILE.search(m.group(0)).group(0)]
     elif name in ("Write", "Edit", "MultiEdit") and _PLAN_FILE.search(
             str(inp.get("file_path", ""))):
-        out.append("plan file write")
+        out += ["plan file write",
+                "plan file:" + _PLAN_FILE.search(str(inp["file_path"])).group(0)]
     elif name == "Skill":
         skill = str(inp.get("skill", ""))
         base = skill.rsplit(":", 1)[-1]
@@ -394,10 +404,15 @@ def _turn_of(priced):
 
 def segment(records, priced):
     """Walk one parent transcript -> dict(invocations, step, marker, compactions,
-    launches). `step[i]` names turn i's step; `invocations` is [(start, end)] in
-    turn indices, end exclusive; `marker[(k, step)]` names which marker opened
-    step `step` of invocation k ("not detected" when none fired); `launches` maps a
-    tool_use id to the turn that issued it (subagent linking)."""
+    launches, failures).
+
+    `step[i]` names turn i's step. `invocations` is [(start, end)] in turn indices,
+    end exclusive. `marker[(k, step)]` names which marker opened step `step` of
+    invocation k ("not detected" when none fired). `launches` maps a tool_use id to
+    the turn that issued it (subagent linking). `failures[k]` lists why invocation
+    k's segmentation cannot be trusted: entries out of pipeline order, or a second
+    merge or a second issue's plan file (more than one iteration). Those are
+    reported, never repaired by a guess (#273 round-1 ruling)."""
     n = len(priced.turns)
     of = _turn_of(priced)
     firsts = [t.first_index for t in priced.turns]
@@ -419,6 +434,7 @@ def segment(records, priced):
     for j, rec in enumerate(records):
         typ = rec.get("type")
         if typ == "assistant":
+            in_compaction = False
             i = of.get(id(rec))
             if i is None:
                 continue
@@ -447,7 +463,7 @@ def segment(records, priced):
     starts = sorted({s for s in starts if s < n})
     bounds = list(zip(starts, starts[1:] + [n]))
     step = ["other"] * n
-    marker = {}
+    marker, failures = {}, []
     for k, (lo, hi) in enumerate(bounds):
         ev = [(i, kind) for i, kind in events if lo <= i < hi]
         kinds = {kind for _, kind in ev}
@@ -460,16 +476,30 @@ def segment(records, priced):
                     pr = [i for i, x in ev if x == "gh pr create"]
                     hits = [i for i, x in ev if x == "agent" and pr and i > pr[0]]
                 elif kind == "turn after the plan-gate question":
+                    # The LAST question between the plan entry and the PR: an
+                    # earlier one is a clarification, not the gate.
                     plan = entries.get("plan")
                     pr = [i for i, x in ev if x == "gh pr create"]
-                    hits = [i + 1 for i, x in ev if x == "question" and plan is not None
-                            and i >= plan and (not pr or i < pr[0]) and i + 1 < hi]
+                    qs = [i + 1 for i, x in ev if x == "question" and plan is not None
+                          and i >= plan and (not pr or i < pr[0]) and i + 1 < hi]
+                    hits = qs[-1:]
                 else:
                     hits = [i for i, x in ev if x == kind] if kind in kinds else []
                 if hits:
                     entries[s] = hits[0]
                     marker[(k, s)] = kind + (" (fallback)" if rank else "")
                     break
+        why = []
+        fired = [(s, entries[s]) for s in STEPS if s in entries]
+        if any(b < a for (_, a), (_, b) in zip(fired, fired[1:])):
+            why.append("step entries out of pipeline order: " + ", ".join(
+                "%s %d" % (s, e + 1) for s, e in fired))
+        merges = sum(1 for _, x in ev if x == "gh pr merge")
+        plans = sorted({x[len("plan file:"):] for _, x in ev if x.startswith("plan file:")})
+        if merges > 1 or len(plans) > 1:
+            why.append("more than one iteration: %d merges, plan files %s"
+                       % (merges, ", ".join(plans) or "none"))
+        failures.append(why)
         # Each turn takes the step whose entry is the latest at or before it.
         # First occurrences only, so a later re-read never moves a step back.
         order = sorted(entries.items(), key=lambda kv: (kv[1], STEPS.index(kv[0])))
@@ -479,27 +509,37 @@ def segment(records, priced):
                 if e <= i:
                     cur = s
             step[i] = cur
-    # Compaction overlay: from the first turn after a boundary through the last
-    # of the consecutive core reads that follow it in the same invocation (just
-    # that turn when none does). Markers inside it still move the underlying
-    # step, so the step that resumes is the one the re-read shows (#273 C1).
+    # Compaction overlay, bounded: the first turn after a boundary, extended
+    # through the run of consecutive core reads that follows it ONLY if that run
+    # begins before any non-engine marker after the boundary (engine unit reads
+    # do not interrupt -- they are the re-read). Otherwise the span is that one
+    # turn. A boundary outside every invocation gets no overlay and stays
+    # `other`, and overlapping spans merge. Markers inside the span still move
+    # the underlying step, so the step that resumes is the one the re-read shows
+    # (#273 C1).
     core = {i for i, kind in events if kind == "unit:loop-engine.md"}
+    live = sorted({i for i, kind in events if not kind.startswith("unit:")})
     spans = []
-    for c in compact_at:
-        if c >= n:
+    for c in sorted(set(compact_at)):
+        hi = next((h for lo, h in bounds if lo <= c < h), None)
+        if hi is None:
             continue
-        hi = next((h for lo, h in bounds if lo <= c < h), n)
         first = next((i for i in range(c, hi) if i in core), None)
+        stop = next((i for i in live if i >= c), hi)
         end = c
-        if first is not None:
+        if first is not None and first <= stop:
             end = first
             while end + 1 in core and end + 1 < hi:
                 end += 1
+        if spans and c <= spans[-1][1] + 1:
+            spans[-1] = (spans[-1][0], max(end, spans[-1][1]))
+        else:
+            spans.append((c, end))
+    for c, end in spans:
         for i in range(c, end + 1):
             step[i] = "compaction"
-        spans.append((c, end))
     return {"invocations": bounds, "step": step, "marker": marker,
-            "compactions": spans, "launches": launches}
+            "compactions": spans, "launches": launches, "failures": failures}
 
 
 def link_subagents(records, launches, sub_paths):
@@ -532,10 +572,14 @@ def _ctx(t):
 def by_step(parent):
     """Per-step whole-tree cost of one session -> dict, or dict(refused=...).
 
-    Default-deny (§5.8): a step whose marker fired but which holds no parent turn
-    is a DETECTOR FAILURE, a step whose marker never fired is `not detected`, and
-    an invocation whose core ingestion is below one engine copy -- or cannot be
-    sized -- is a DETECTOR FAILURE. None of them is ever reported as zero cost."""
+    Default-deny (§5.8). Each of these is a DETECTOR FAILURE, never a zero cost:
+      * a step whose marker fired but which holds no parent turn;
+      * a step whose marker never fired;
+      * an invocation whose core ingestion is below one engine copy, or cannot
+        be sized;
+      * an invocation whose step entries are out of pipeline order, or which
+        holds more than one iteration (`segment`'s `failures`);
+      * a session whose rows do not add back up to its bill (`conservation`)."""
     import engine_cost as E
     from stratum import turn_usd
     parent = pathlib.Path(parent)
@@ -618,7 +662,10 @@ def by_step(parent):
             mk = "compaction boundary" if s == "compaction" else seg["marker"][(k, s)]
             subs_here = [r for r in sub_rows if lo <= r[0] < hi and seg["step"][r[0]] == s]
             if not fired:
-                status = "not detected"
+                # The AC's wording: a step with no turns is a detector failure.
+                # This cannot tell a step the route skipped from a missed marker,
+                # so it flags both (owner's decision, 2026-11-18).
+                status = "DETECTOR FAILURE (no marker fired)"
             elif not idx:
                 status = "DETECTOR FAILURE (zero turns)"
             else:
@@ -634,16 +681,46 @@ def by_step(parent):
                 "share": sum(ctx[i] for i in idx) / total_ctx,
                 "rewarm_usd": None if found is None else sum(rw.get(i, 0.0) for i in idx),
             })
+        # A failed step's turns went to its neighbor, so the whole invocation's
+        # rows are suspect: say so on the invocation, not only on the step.
+        failures = list(seg["failures"][k]) + [
+            "%s: %s" % (s["step"], s["status"]) for s in steps if s["status"]]
         invocations.append({"lo": lo, "hi": hi, "ingested": ing, "check": check,
-                            "steps": steps})
+                            "failures": failures, "steps": steps})
     other = [i for i in range(n) if seg["step"][i] == "other"]
-    return {"name": row["name"], "refused": None, "turns": n, "era": era,
-            "family": family, "floor": floor, "invocations": invocations,
-            "other_turns": len(other),
-            "other_usd": sum(turn_usd(ts[i]) for i in other),
-            "subs": len(subs), "linked": linked, "by_time": by_time,
-            "unattributed": unattributed, "parent_usd": row["parent_usd"],
-            "sub_usd": row["sub_usd"]}
+    other_subs = [r for r in sub_rows if seg["step"][r[0]] == "other"]
+    out = {"name": row["name"], "refused": None, "turns": n, "era": era,
+           "family": family, "floor": floor, "invocations": invocations,
+           "other_turns": len(other),
+           "other_usd": sum(turn_usd(ts[i]) for i in other),
+           "other_subs": len(other_subs),
+           "other_sub_usd": sum(r[2] for r in other_subs),
+           "subs": len(subs), "linked": linked, "by_time": by_time,
+           "unattributed": unattributed, "parent_usd": row["parent_usd"],
+           "sub_usd": row["sub_usd"]}
+    out["conservation"] = conservation(out)
+    return out
+
+
+def conservation(r):
+    """None when the rows add back up to the session's bill, else a DETECTOR
+    FAILURE naming what does not. Every turn and every dollar `price_session`
+    priced must land in exactly one row: a step, `other`, or (subagents only)
+    `unattributed`. This is the backstop for misattribution nobody has
+    enumerated."""
+    rows = [s for inv in r["invocations"] for s in inv["steps"]]
+    got_turns = sum(s["turns"] for s in rows) + r["other_turns"]
+    got_parent = sum(s["parent_usd"] for s in rows) + r["other_usd"]
+    got_sub = (sum(s["sub_usd"] for s in rows) + r["other_sub_usd"]
+               + sum(u for _, u in r["unattributed"]))
+    bad = []
+    if got_turns != r["turns"]:
+        bad.append("turns %d of %d" % (got_turns, r["turns"]))
+    if abs(got_parent - r["parent_usd"]) > 1e-6:
+        bad.append("parent $%.2f of $%.2f" % (got_parent, r["parent_usd"]))
+    if abs(got_sub - r["sub_usd"]) > 1e-6:
+        bad.append("subagent $%.2f of $%.2f" % (got_sub, r["sub_usd"]))
+    return "DETECTOR FAILURE (does not conserve: %s)" % "; ".join(bad) if bad else None
 
 
 def report_by_step(paths):
@@ -662,6 +739,8 @@ def report_by_step(paths):
             print("  DETECTOR FAILURE (no /dev-loop invocation detected)")
         for k, inv in enumerate(r["invocations"]):
             print(f"# invocation {k + 1}  turns {inv['lo'] + 1}-{inv['hi']}  engine: {inv['check']}")
+            for why in inv["failures"]:
+                print(f"#   DETECTOR FAILURE in this invocation -- {why}")
             print(f"  {'step':14} {'turns':>5} {'span':>9} {'subs':>4} {'sub turns':>9} "
                   f"{'parent $':>9} {'subagent $':>10} {'total $':>9} {'Σctx M':>8} "
                   f"{'share':>6} {'re-warm $':>9}  marker")
@@ -675,12 +754,14 @@ def report_by_step(paths):
                       f"{s['sub_turns']:9d} {s['parent_usd']:9.2f} {s['sub_usd']:10.2f} "
                       f"{s['parent_usd'] + s['sub_usd']:9.2f} {s['ctx'] / 1e6:8.2f} "
                       f"{s['share'] * 100:5.1f}% {rwc:>9}  {s['marker']}")
-        if r["other_turns"]:
+        if r["other_turns"] or r["other_subs"]:
             print(f"# other (before the first invocation): {r['other_turns']} turns, "
-                  f"${r['other_usd']:.2f}")
+                  f"${r['other_usd']:.2f}; {r['other_subs']} subagents launched there, "
+                  f"${r['other_sub_usd']:.2f}")
         un = sum(u for _, u in r["unattributed"])
         print(f"# subagents: {r['linked']} linked, {r['by_time']} by time (fallback), "
-              f"{len(r['unattributed'])} unattributed (${un:.2f}, in no step) of {r['subs']}")
+              f"{len(r['unattributed'])} unattributed (${un:.2f}, in no row) of {r['subs']}")
+        print(f"# conservation: {r['conservation'] or 'ok (every turn and dollar in one row)'}")
     return out
 
 
