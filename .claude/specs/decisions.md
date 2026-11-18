@@ -734,3 +734,50 @@ matrix in the design's §6:
 
 A routing mod and a `PreToolUse` hook are recorded there as the alternatives that add parent-thread
 reach and enforcement.
+
+
+---
+
+## D019 — 2026-11-18 — R2 phase isolation is designed, not adopted; #280's outcome routes it
+
+Ratified by the owner at PR #365's merge gate. The design and its reasoning are in
+`docs/research/r2-phase-isolation-design.md` (#279); the section references below are to that note.
+
+**Decision.** Adopt this note's design as the target R2 shape:
+- a controller holding `SKILL.md`, the Gate and Routing tables, steps 0–2, both human gates, step
+  5's diff, steps 6–7 and 11–12, and the post-return checks;
+- three forked phases (`planning`, `reviewing`, `accepting`), each loading the core spans it acts
+  on;
+- one contract for those phases: a closed return schema, a required record set per phase, a single
+  writer per record, and a SHA-bound verdict.
+
+**No payload change until #280 returns go.** The spike's treatment and fault-injection variants are
+pinned plugin directories outside the payload, and the payload freeze holds until R1 branches,
+regardless of this decision.
+
+**Routing** (owner decision, 2026-11-18): a go ⇒ design the next phase; a safety or quality no-go
+⇒ R2 stops until the failure is explained; no effect, inconclusive, sub-threshold, or a cost no-go
+⇒ the question returns to #271.
+
+**The shared-invariant rule (note §5) binds #35 only if #280 returns go.** On any other outcome, #35
+proceeds without waiting, choosing homes for a single-context engine, where "state it once, point
+elsewhere" is safe because the pointer resolves in loaded text.
+
+**Fork self-reports are accepted as stated residuals** (note §2.8), on the same trust model as the
+parent's own records today. A controller-side transcript check is promoted only if #280 observes a
+record diverging from its transcript.
+
+**Not decided here:**
+- the kernel's contents;
+- where the core spans live (note §2.9);
+- whether the `in-review` Resume changes from replay to continue (note §2.6);
+- the order of the review and accepting phases after the spike;
+- whether R2 lands before or after R1. #271 decides that on benchmark data, never on §6's SCOUTING
+  numbers.
+
+**D001** stands for what it decided. R2 is a new claim, argued on context and the re-warm (note §9).
+
+**Erratum proposed on D018:** its premise sentence, "a forked phase ignores both spawn parameters",
+is partly superseded. Per current Claude Code docs, skill frontmatter `model:`/`effort:` set a
+`context: fork` skill's model and effort (REPRODUCED). That no per-call parameter reaches a forked
+skill is INFERRED. D018's conclusion is unchanged (note §4, C7).
