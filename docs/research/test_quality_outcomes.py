@@ -253,6 +253,13 @@ class EscalationTests(unittest.TestCase):
         self.assertEqual(c["escalations"], 2)
         self.assertEqual(self.per[11]["escalations"], 0, "unclassified is not summed")
 
+    def test_scope_ruling_wins_over_a_routine_stop(self):
+        """A design-question stop at the plan gate is a scope ruling, not routine."""
+        j = ("## t — #5 plan gate → STOPPED (design-question finding)\n"
+             "- Plan-gate: n/a: architect skipped\n")
+        per, _ = q.escalations(j, "calibration", "always")
+        self.assertEqual((per[5]["scope-ruling"], per[5]["routine"]), (1, 0))
+
     def test_one_block_with_every_signal_adds_exactly_one(self):
         j = ("## t — #5 plan gate\n- Plan-gate: n/a: architect skipped\n\n"
              "## t — #5 code review round 1 → STOPPED (design-question finding)\n"
@@ -354,12 +361,14 @@ class FindingTests(unittest.TestCase):
                     "## F6\n**Attributed-to:** none (a pointer to the finding on owner/repo#5)"),
             comment("2026-12-02T00:00:00Z", "## F7\n**Attributed-to:** Unknown — maybe owner/repo#5."),
             comment("2026-12-02T00:00:00Z", "## F8\n**Attributed-to:** Unknown."),
+            # filed after adoption but BEFORE the merge: outside the window
+            comment("2026-11-25T00:00:00Z", "## F9\n**Attributed-to:** owner/repo#5"),
         ])
         now = self.MERGE + 60 * DAY
         self.assertEqual(q.fcount(found, "owner/repo", 5, self.MERGE, now), 2,
-                         "a ref inside a none(...) or unknown marker attributes nothing")
+                         "a ref inside a none(...) or unknown marker, or filed before the merge, counts nothing")
         self.assertEqual(q.fcount(found, "owner/repo", 7, self.MERGE, now), 1)
-        self.assertEqual([f[3] for f in found], [0, 0, 1, 0, 0, 0, 0, 0])
+        self.assertEqual([f[3] for f in found], [0, 0, 1, 0, 0, 0, 0, 0, 0])
 
 
 class MedianTests(unittest.TestCase):
