@@ -33,7 +33,8 @@ WHAT IT MEASURES, AND WHAT IT CANNOT.
      ATTRIBUTES are printed beside them and overlap them, so are never summed:
      plan-material (`- Plan-gate: material ... STOPPED`) and review-past-cap
      (code-review rounds past the cap of 2: the larger of any `code-review=N`
-     on any line of the issue's blocks, since Budget lines come in several
+     on any line of the issue's blocks (in an iteration-summary block, only its
+     `- Budget:`, `- Code-review:` and `- Plan-gate:` lines), since Budget lines come in several
      spellings, and the rounds named on the first line of each `- Code-review:`
      bullet; a Budget line written at the cap understates the rounds a human
      authorized after it, and prose matching misses phrasings it does not know
@@ -357,8 +358,9 @@ def epoch(iso):
 def findings(comments):
     """[(created epoch, [attributed 'owner/repo#N' in lower case], marked, malformed)].
 
-    Every `owner/repo#N` in a marker is taken (backticks stripped), so a marker
-    carrying two refs or trailing text still counts. A marker that is none of a
+    Every `owner/repo#N` in a ref-form marker is taken (backticks stripped), so
+    a marker carrying two refs or trailing text still counts; a `none (...)` or
+    `unknown` marker attributes nothing, even when its reason names a ref. A marker that is none of a
     ref, `none (...)` or `unknown` is MALFORMED and reported, never dropped.
 
     EVERY comment on #1 is read, not only those whose heading looks like an
