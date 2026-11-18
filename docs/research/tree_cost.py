@@ -68,6 +68,8 @@ DETECTOR FAILURE, never a zero cost (`by_step` lists them in full):
   * step entries out of pipeline order, or more than one iteration in one
     invocation;
   * rows that do not add back up to the session's bill.
+The compaction row is a lower bound: a re-read separated from the boundary by any
+unmarked turn is counted in the step that resumes (#364).
 One session is hand-checked, appendix D's, pinned by
 `test_appendix_d_phase_table_is_reproduced_within_the_stated_tolerance`. That is
 n=1, so do not cite its figures.
