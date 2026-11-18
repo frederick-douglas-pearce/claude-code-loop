@@ -1,7 +1,7 @@
 # R2 — phase isolation: a thin controller plus forked phases
 
-**Status:** design note (#279). Nothing here is engine text, and nothing ships. The proposed decision
-at the end is **unratified** until the owner says otherwise.
+**Status:** design note (#279). Nothing here is engine text, and nothing ships. The decision at the
+end (§11) was ratified by the owner as **D019** on 2026-11-18.
 **Opened:** 2026-11-18, engine 0.6.0 (payload unchanged in-tree since `44e0c69`; payload freeze in
 force until R1, #288, branches).
 **Reviewed:** by the `architect` agent on 2026-11-18 (#279 AC2), as a full review of the draft before
@@ -715,9 +715,9 @@ leaves R2 or #35 waiting:**
 waits longer than a cache TTL. **The re-warm is therefore modeled, never observed:** parent context
 at the stop × the cache-write rate. Appendix D is the only observed session (six re-warms; n=1 session, vote, 0.3.1).
 
-## 11. Proposed decision (unratified)
+## 11. Decision — ratified as D019 (2026-11-18)
 
-> **D0xx — R2 phase isolation is designed, not adopted; #280's outcome routes it (§10).**
+> **D019 — R2 phase isolation is designed, not adopted; #280's outcome routes it (§10).**
 >
 > **Decision.** Adopt this note's design as the target R2 shape:
 > - a controller holding `SKILL.md`, the Gate and Routing tables, steps 0–2, both human gates, step
@@ -758,8 +758,8 @@ at the stop × the cache-write rate. Appendix D is the only observed session (si
 > `context: fork` skill's model and effort (REPRODUCED). That no per-call parameter reaches a forked
 > skill is INFERRED. D018's conclusion is unchanged (§4, C7).
 
-If ratified, this text is appended to `.claude/specs/decisions.md` as the next D-number, in the PR
-that lands this note.
+Ratified by the owner on 2026-11-18 and recorded as **D019** in `.claude/specs/decisions.md`, in the PR
+that landed this note (#365).
 
 ## 12. Open questions, disputes and deviations
 
