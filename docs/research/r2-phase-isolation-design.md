@@ -82,8 +82,7 @@ is the loop's design already: state lives in the ledger so `/clear` survives. So
   source-changing fix and its three constraints, the Model tiers passage, and the gate's fail-safe
   half.
 
-#166 put them there deliberately, for partial-load safety in a single context. Concretely, core's
-step-8 span holds all of these, and none of them appears in `reviewing.md`:
+#166 put them there deliberately, for partial-load safety in a single context. Concretely, core's step-8 span is where these are stated. `reviewing.md` applies the first two (the lens and the BLOCKING floors) and points back to core for their fail-safe half; the last two it does not mention at all:
 - the `guard-efficacy` floor;
 - default-deny BLOCKING;
 - the 2-round cap;
@@ -99,14 +98,14 @@ would be a silent skip.**
 **The rule, therefore:**
 - A fork loads `loop.config.md`, its unit, **and every core span that unit relies on**, each in full
   under the engine-read protocol, plus whatever §5's rule requires.
-- For `reviewing`, that is core's step-8 and step-9 text and the Tool surface's isolation and staging
-  duties.
+- For `reviewing`, that is core's step-8 and step-9 text, the Fresh-re-check invariant, the Model
+  tiers passage, and the Tool surface's isolation and staging duties.
 - For `accepting`, it is step 10's text, the Fresh-re-check invariant with the mechanism blockquote,
   and the Model tiers passage.
 - For `planning`, it is steps 3–4, the plan template, and the freeze rule.
 
 **A fork that cannot confirm a complete load returns `load-failure`**, never a partial procedure.
-Where those spans *live* under R2 is disputed (§2.8). Which ones the fork must *load* is not.
+Where those spans *live* under R2 is disputed (§2.9). Which ones the fork must *load* is not.
 
 **The fork does not load `SKILL.md` as-is.** `SKILL.md` tells its reader to read the full
 `loop-engine.md` first, and its fail-safe list over-escalates when the engine is not loaded: every
@@ -119,7 +118,8 @@ fails. `SKILL.md` stays the controller's.
 A phase returns exactly one of four variants.
 
 **`verdict`** carries:
-- the gate's result (clean, findings, met or not-met);
+- the gate's result: `clean` or `findings` (reviewing), `met` or `not-met` (accepting), `planned`
+  (planning);
 - **the head SHA it certified**;
 - the paths of the records it wrote;
 - the evidence for the controller's `- Budget:` line (`subagent-runs`, the phase's `gate-rounds`, and
@@ -133,7 +133,8 @@ The controller then:
 - compares the SHA with the live head;
 - confirms the phase's **required record set** (§2.4) exists and is well-formed;
 - for `planning`, takes step 5's diff itself;
-- then advances the row.
+- then advances the row **only** on `clean`, `met` or `planned`. A `findings` or `not-met` result
+  stops, as the engine's step does today, and any other result value is a `gate-error`.
 
 **`stopped-for-human`** carries:
 - why: a design-question finding, the round cap reached, a contested finding, or a Class A source fix
@@ -186,8 +187,8 @@ evidence for:
 **The controller checks the records a phase owes, never the records a fork names.** A fork that names
 fewer records would otherwise pass. Each phase has a **required record set** that the controller
 holds, stated default-deny:
-- `planning`: the plan file, with verbatim ACs, value framing, and the frozen block whenever
-  `architect: ran`.
+- `planning`: the plan file, with verbatim ACs, value framing, and the frozen block unless the
+  verdict carries a well-formed `architect: skipped (<reason>)`.
 - `reviewing`: a `- Code-review:` element per round, an `- Editorial:` line, and the security
   outcome.
 - `accepting`: `- Restore:` and the Class A and Class B counts.
@@ -239,7 +240,7 @@ has them (engine Resume, the two write-once side effects).
 **replays** step 8, and step 11 **sums** the `- Editorial:` lines across replays. A review fork
 re-entering after `stopped-for-human` would instead **continue**: it reads the round's
 gate-decision block and acts on the human's answer. That needs engine text, and it is disputed
-(§2.8).
+(§2.9).
 
 **Whichever way that is decided, the cap cannot reset.** A resumed fork that cannot establish the
 round count from the ledger treats the cap as reached, and returns `stopped-for-human`. Unknown lands
@@ -254,17 +255,18 @@ today.
 - *Fail-safe half:* the freeze before `DESIGN_AGENT` (write-once); ACs copied verbatim; value
   framing; escalate rather than build when there is no credible user.
 - *Where it is:* steps 3–4 in core and the `plan-template` unit, both loaded by the fork.
-- *What the controller checks:* the required `architect:` field. On `ran` (or absent), the frozen
-  block must exist, and if it does not, the result is material ⇒ stop, as today. The controller takes
-  step 5's diff itself.
+- *What the controller checks:* the required `architect:` field. Unless its value is a well-formed
+  `skipped (<reason>)`, the frozen block must exist; if it does not, the result is material ⇒ stop,
+  as today. The controller takes step 5's diff itself. A *false* `skipped` is a residual (§2.8).
 
 **`reviewing`**
 - *Fail-safe half:* the `guard-efficacy` floor; BLOCKING by default-deny; the design-question stop
   **before any fix**; the 2-round cap; the fresh re-check; step 9's head check.
-- *Where it is:* **core's step-8 and step-9 text**, not `reviewing.md`. The fork loads both in full,
-  plus the unit (§2.2).
+- *Where it is:* **core's step-8 and step-9 text, the Fresh-re-check invariant and Model tiers**,
+  not only `reviewing.md`. The fork loads them in full, plus the unit (§2.2).
 - *What the controller checks:* the design-question stop and the cap surface as `stopped-for-human`;
-  the required records (§2.4) are checked; the head check and worktree check run on return.
+  the required records (§2.4) are checked; the head check and worktree check run on return. The
+  round count and the reviewed range are fork-authored records: residuals (§2.8).
 
 **`accepting`**
 - *Fail-safe half:* either class blocks; an unresolvable `$BASE` ⇒ escalate; the restore check; a
@@ -282,7 +284,27 @@ invariant, and the load protocol, not from the fail-safe halves as such. Under f
 - the return schema closes the one new gap, which is a fork's claim reaching the controller
   unverified.
 
-### 2.8 Disputed: where the core spans live under R2
+### 2.8 The threat model, and the residuals it accepts
+
+**The controller guards against a failed or partial load and a malformed return. It does not guard
+against a fork that is consistent but wrong.** Every check in §2.3–§2.7 reads something the fork
+wrote. Adding a check on another fork-written record does not leave that class; only a check the fork
+cannot author, such as its transcript compared with its return, would.
+
+**That is the same trust model the engine has today.** In a single context the parent writes its own
+round records and its own `- Plan-gate:` inputs, and nothing checks them against a transcript either.
+So a fork's records about itself are accepted on the same terms as the parent's own records. The
+accepted residuals are named, not enumerated as the safe set:
+- a false `architect: skipped` from a fork that did consult and lost the frozen block;
+- a cap overrun reported with well-formed round records;
+- a reviewed range that does not end at the SHA the verdict certifies;
+- a load confirmation the fork did not earn.
+
+**These are measured, not designed away.** #280 compares fork transcripts with returns (its committed
+script defines how). A controller-side transcript check is promoted into the design **only if #280
+observes a record diverging from its transcript.** Owner decision, 2026-11-18.
+
+### 2.9 Disputed: where the core spans live under R2
 
 This is for the owner to decide. It sets the size of every fork's cold load, and so most of §6's
 range.
@@ -338,12 +360,12 @@ so each row carries its check date.
 | # | constraint | status (2026-11-18) |
 |---|---|---|
 | C1 | **A skill with `context: fork` runs its body as a new subagent's prompt.** `agent:` picks the type (default `general-purpose`). The docs: "The subagent doesn't see your conversation history." The result "arrives in your conversation when it completes." | REPRODUCED |
-| C2 | **Nesting:** "up to three layers below the main conversation". Set by `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`: default 3, `1` disables nesting, needs v2.1.217+. | REPRODUCED |
+| C2 | **Nesting:** "up to three layers below the main conversation". Set by `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`: default 3 since v2.1.219 (it was 1 in v2.1.217–218); `1` disables nesting; the variable needs v2.1.217+. | REPRODUCED |
 | C3 | **The first filter removes these tools from every subagent, even when listed in its `tools` field:** `Workflow`, `AskUserQuestion`, `EndConversation`, `EnterPlanMode`, `ExitPlanMode` (outside plan mode), `ScheduleWakeup`, `WaitForMcpServers`, and `Agent` at the depth limit. So `Workflow` is controller-only, as recorded. | REPRODUCED |
 | C4 | **~~A backgrounded fork loses `Agent`~~ — corrected.** "Apart from `Agent` and `ExitPlanMode`, which follow the first filter's conditions wherever the subagent runs, a background subagent keeps … only these built-in tools: …" A background fork *keeps* `Agent`. It loses most other built-ins. | REPRODUCED; **the 10-26 claim is contradicted** |
 | C5 | **`background:` defaults to `true`.** `false` waits "for the forked subagent's result in the turn that invoked the skill". Phases still set `background: false`, now for a different reason than recorded: the controller must wait (§2.4's sequential-writer property depends on it), and a background fork's narrower tool set excludes tools a phase may need. | REPRODUCED (default and behavior); the reason is this note's |
 | C6 | **What a fork sees:** its skill body with `$ARGUMENTS` substituted, plus `CLAUDE.md` per its agent type's startup context. Never the parent conversation. Hence §2.1: everything is on disk. | REPRODUCED |
-| C7 | **Model and effort.** A skill's frontmatter `model:` and `effort:` are honored under `context: fork`: "the value sets the forked subagent's model instead", and the same for effort. The per-call `effort` on `Agent` is for "a non-fork subagent" only. A per-call `model` *on a fork* is not covered by the docs. Under `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`, a fork runs on the parent's model. | skill-field half REPRODUCED; the per-call model on a fork: docs silent |
+| C7 | **Model and effort.** A skill's frontmatter `model:` and `effort:` are honored under `context: fork`: "the value sets the forked subagent's model instead", and the same for effort. A `context: fork` skill is started by the Skill tool, not by an `Agent` call, so no per-call `model`/`effort` reaches it. The docs' "non-fork subagent" sentence and the `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` sentence about "a fork" concern *conversation* forks, which `skills.md` distinguishes: "Despite the name, a skill with `context: fork` doesn't run in a fork of the current conversation". | skill-field half REPRODUCED; "no per-call parameter reaches a forked skill" INFERRED |
 | C8 | **A fork cannot ask the human.** `AskUserQuestion` is in C3's removal list, so a phase that needs a human answer must return. That is why `stopped-for-human` exists (§2.3). | removal REPRODUCED; "must return" INFERRED |
 | C9 | **Cache TTL.** Main conversation: 1 hour on a subscription within plan usage; 5 minutes on an API key, usage credits, or a cloud provider. Subagents: 5 minutes by default. `promptCacheTtl` and `subagentPromptCacheTtl` (values `"5m"`/`"1h"`, v2.1.242+) and a per-agent `experimental.cacheTtl` (v2.1.248+) set them. A phase that can end in `stopped-for-human` gains nothing from a longer subagent TTL, because the fork has returned before the wait. The controller's `promptCacheTtl: 1h` is what the gate wait needs (R9). | REPRODUCED |
 | C10 | **`${CLAUDE_PLUGIN_ROOT}`** is "Substituted only in plugin skills", in the skill's markdown content. A fork's prompt *is* that content, so a phase skill can name its unit by plugin path. The `Skill` tool is available to subagents unless denied. | substitution REPRODUCED; "therefore available in the fork" INFERRED |
@@ -351,9 +373,9 @@ so each row carries its check date.
 
 **What C7 does to D018.** D018 (2026-11-12) says "a forked phase ignores both spawn parameters, so no
 fork can carry an `implement` role".
-- **The per-spawn half is not contradicted, but it is unverified for `model`.** `MODEL_TIERS`
-  resolves per spawn, from the consumer's config. A fork takes no per-call effort (REPRODUCED), and
-  the docs do not cover a per-call model on one.
+- **The per-spawn half is not contradicted.** `MODEL_TIERS` resolves per spawn, from the consumer's
+  config, and a `context: fork` skill is started by the Skill tool rather than an `Agent` call, so no
+  per-call `model`/`effort` reaches it (INFERRED; C7).
 - **D018's premise sentence is partly superseded.** It says "a forked phase ignores both spawn
   parameters", but C7 shows that skill frontmatter does set a fork's model and effort. This note
   proposes an erratum on D018 (§11). The conclusion stands; the sentence's reason does not, as
@@ -364,9 +386,7 @@ fork can carry an `implement` role".
 
 So D018's conclusion stands for `MODEL_TIERS`. A phase skill should leave `model:` and `effort:`
 unset (inherit), and **every role spawned *inside* a fork resolves through `MODEL_TIERS` as today.**
-Those spawns are ordinary `Agent` calls, and the per-call `model`/`effort` reach them (C7 is silent
-only on the fork itself). This needs the fork to load core's Model tiers passage, which §2.2 already
-requires for `accepting` and which `reviewing` needs for its re-checker. That last point is **INFERRED** and is the first thing #280 should observe:
+Those spawns are ordinary `Agent` calls, and the per-call `model`/`effort` reach them (INFERRED; C7 concerns the fork itself). This needs the fork to load core's Model tiers passage, which §2.2 requires for both `accepting` and `reviewing`. That last point is **INFERRED** and is the first thing #280 should observe:
 record the `models=` slot for spawns inside the fork. It agrees with D017 (step 6 in the parent) and
 with D018's reserved `implement` role: neither needs a fork.
 
@@ -390,7 +410,7 @@ homes satisfy the rule for an invariant several forks need:
   general invariants and missed the phase-specific fail-safe halves §2.2 found in core. The
   Gate-outcome, Fresh-re-check, Relay and Verdict-first invariants, the currency clause and the
   staging rule are *examples* of what the rule pulls in, not its extent. The phase-specific spans go
-  wherever §2.8 decides.
+  wherever §2.9 decides.
 - **Restatement inside each unit**, which is the multi-site drift #35 exists to reduce.
 
 *Deviation from the plan, recorded:* the plan's Approach said a fork-needed invariant could live "in
@@ -410,9 +430,11 @@ the controller's registry resolves to a skill that exists), never a truth check.
 ## 6. What it would save — re-modeled with the gate re-warm, SCOUTING
 
 **Every figure in this section is SCOUTING.** Source: `tree_cost.py --sessions … --by-step` (#273),
-whose docstring says n=1 and "do not cite its figures". There are three sessions, in two strata, and
-they are **never pooled**. Step dollars and Σctx are the tool's output (the #273 table was re-run by
-hand for this note and matches). Peak and gate-stop contexts come from a scratch pass over the same
+whose docstring says n=1 and "do not cite its figures". **This note departs from that instruction
+knowingly:** the figures are used only to rank phases and to size X, never as estimates, and #280's
+committed script replaces them. There are three sessions, in two strata, and
+they are **never pooled**. Step dollars and Σctx are the tool's output, produced for this note and not committed elsewhere (the
+`261e63c5` table was re-run by hand and matches). Peak and gate-stop contexts come from a scratch pass over the same
 transcripts, with the same `message.id` dedupe and turn counts matching the tool, so they are
 **INFERRED**, not tool output. Context is prompt tokens: input + cache read + cache write.
 
@@ -473,8 +495,8 @@ pushes a real but smaller effect into §10's sub-threshold outcome rather than i
 
 ### 6.3 The gate re-warm
 
-A re-warm re-writes the parent's whole context to cache after a wait longer than the cache TTL. The one observed instance:
-- Appendix D (`3f30a898`): **$7.60 to resume at 947k**, ≈ **$8.0 per M tokens** at the 1-hour TTL's write rate.
+A re-warm re-writes the parent's whole context to cache after a wait longer than the cache TTL. The one observed session:
+- Appendix D (`3f30a898`) has six whole-context re-warms; the largest is **$7.60 to resume at 947k**, ≈ **$8.0 per M tokens** at the 1-hour TTL's write rate.
 - That anchor is 0.3.1@high on one session, and R9 is the source for it.
 
 On an API key, the main-conversation TTL is 5 minutes (R9). Per token, a 5-minute cache write is
@@ -582,7 +604,7 @@ parent at all.** The 08-25 note made three corrections, and each needs an answer
    - Done: sharding has shipped (`accepting`, `reviewing` and the `reference` units).
 
 **R2 departs from the 08-25 note's framing, and it says so.** That note's sequencing ends with
-"controller-ification as a separate change, sold on convergence (Finding 2), **not on context**"
+"Controller-ification as a separate change, sold on convergence (Finding 2), not on context"
 (`context-architecture-refactor.md`, Sequencing item 4). R2 argues on context and on the gate
 re-warm. So it is not the change that item anticipated: it is a new claim, and it needs a new
 decision rather than a reading of the old one.
@@ -602,7 +624,7 @@ the same subagent roster.
   forked skill, and the controller is otherwise unchanged (§8).
 - **Pinning:** both arms, and the fault-injection variants below, are pinned plugin directories
   **outside the payload**. That is #274's mechanism, and it is why the payload freeze does not block
-  the spike. The fault variants are a **third and fourth pinned variant**, which #274's two-arm design
+  the spike. The fault runs below are **additional pinned variants**, which #274's two-arm design
   does not supply, and #280 adds them.
 
 **The primary measure is plan-gate parent context.** It is the prompt tokens (input + cache read +
@@ -616,18 +638,28 @@ cache write) of the **last parent turn before the plan-gate stop**, deduplicated
 **Fail-safe checklist, on every treatment fixture:**
 - ACs copied verbatim into the plan;
 - value framing present;
-- the frozen `## Approach as reviewed` block present whenever the verdict says `architect: ran`;
-- a `- Plan-gate:` line written by the controller;
+- the frozen `## Approach as reviewed` block present unless the verdict carries a well-formed
+  `architect: skipped (<reason>)`;
+- a `- Plan-gate:` line whose write call is in the **parent** transcript, not the fork's;
+- the fork transcript shows reads covering core's steps 3–4 and the freeze rule in full (what counts
+  as a full read is defined by #280's committed script);
 - the plan gate stopped, with the scripted approval recorded.
 
-**Two fault-injection runs,** treatment code only.
+**Fault-injection runs,** treatment code only. **The set is closed by a principle, not by this
+list: one run per controller-side check the planning phase runs (§2.3).** A proposed run outside
+that principle is a suggestion for #280, not part of this pre-registration. In every row, "the
+controller writes" means **the write call is in the parent transcript**.
 
 | run | what is injected | passes when |
 |---|---|---|
-| F1 | the fork's return is replaced with a malformed one | the controller writes a `- gate-error:` and stops |
-| F2 | the architect runs, and the frozen block is deleted before the return | the controller writes `- Plan-gate: material (pre-image absent, architect ran) → STOPPED` |
+| F1 | the fork's return is replaced, after the fork completes, by each of: (a) an unknown variant; (b) a `verdict` with an unrecognized result value; (c) an empty return | for each, the controller writes a `- gate-error:` and stops |
+| F2 | the architect runs, the return says `architect: ran`, and the frozen block is deleted before the return | the controller writes `- Plan-gate: material (pre-image absent, architect ran) → STOPPED` |
+| F2b | the architect runs, the `architect:` field is omitted from the return, and the frozen block is deleted | the same line: an absent field reads as `ran` |
+| F3 | the plan file's verbatim ACs are removed before the return | the controller writes a `- gate-error:` (missing required record) and stops |
+| F4 | the phase skill names a core-span path that does not exist | the fork returns `load-failure`, and the controller writes `- gate-error: planning — <unit> not loaded — …` and stops |
 
-Any other outcome of either run is a fail.
+Any other outcome of any run is a fail. Deferred to #280, by the 2026-11-18 scope ruling: F2c
+(`skipped`, no block ⇒ `n/a`), which probes only over-gating, the safe direction.
 
 **Statistics.** A **paired reduction** is control minus treatment on the same fixture.
 - *No reduction* means the median paired reduction is ≤ 0.
@@ -638,8 +670,10 @@ that holds.
 
 1. **No-go (safety).** Any of:
    - a fail-safe item missing on any treatment fixture;
-   - F1 or F2 failing;
-   - any fork return the controller accepted that should have escalated.
+   - any fault run (F1–F4) failing;
+   - any fork return the controller accepted that should have escalated, as decided by #280's
+     committed script, which defines the procedure before the first run. **If the script does not
+     define it, this condition cannot be excluded, and the outcome is not go.**
    
    This is a no-go **whatever the cost result**.
 2. **No-go (no effect).** The median paired reduction is ≤ 0.
@@ -652,19 +686,29 @@ that holds.
 6. **Go, or no-go on cost.** Treatment < control on every fixture, and the median paired reduction is
    ≥ X. The USD result then decides:
    - **Go** if median whole-tree USD did not rise;
-   - **Go** if USD rose but the modeled plan-gate re-warm saving (§6.3, context reduction ×
-     cache-write rate) exceeds the median USD increase **at both TTLs**;
+   - **Go** if USD rose, but the median paired reduction × $8.0 per M tokens (1h) **and** × $5.0
+     per M (5-min, 0.625 × the §6.3 anchor) each exceed the median whole-tree USD increase. Both
+     rates are fixed now, before any data;
    - **No-go (cost)** otherwise.
 
 **Turns are reported for both arms and gate nothing.**
 
+**What each outcome does** (owner decision, 2026-11-18). **Every outcome moves something; none
+leaves R2 or #35 waiting:**
+- **Go:** proceed to the next phase's design.
+- **No-go (safety) or no-go (quality):** R2 stops until the failure is explained. Both are attributable
+  to the mechanism on its simplest phase.
+- **No effect, inconclusive, sub-threshold, or no-go (cost):** the question returns to #271.
+- **#35:** §5's rule binds #35 only on a go. On any other outcome, #35 proceeds without waiting, with
+  homes chosen for a single-context engine.
+
 **A limit, stated in advance.** #274 answers the plan gate with a scripted approval, so no fixture
 waits longer than a cache TTL. **The re-warm is therefore modeled, never observed:** parent context
-at the stop × the cache-write rate. Appendix D is the one observed instance (n=1, vote, 0.3.1).
+at the stop × the cache-write rate. Appendix D is the only observed session (six re-warms; n=1 session, vote, 0.3.1).
 
 ## 11. Proposed decision (unratified)
 
-> **D0xx — R2 phase isolation is designed, not adopted; the #280 spike decides whether it proceeds.**
+> **D0xx — R2 phase isolation is designed, not adopted; #280's outcome routes it (§10).**
 >
 > **Decision.** Adopt this note's design as the target R2 shape:
 > - a controller holding `SKILL.md`, the Gate and Routing tables, steps 0–2, both human gates, step
@@ -678,14 +722,21 @@ at the stop × the cache-write rate. Appendix D is the one observed instance (n=
 > pinned plugin directories outside the payload, and the payload freeze holds until R1 branches,
 > regardless of this decision.
 >
-> **The shared-invariant rule (§5) binds #35 only if #280 returns go.** On a no-go, #35 chooses homes
-> for a single-context engine, where "state it once, point elsewhere" is safe because the pointer
-> resolves in loaded text.
+> **Routing** (owner decision, 2026-11-18): a go ⇒ design the next phase; a safety or quality no-go
+> ⇒ R2 stops until the failure is explained; no effect, inconclusive, sub-threshold, or a cost no-go
+> ⇒ the question returns to #271.
+>
+> **The shared-invariant rule (§5) binds #35 only if #280 returns go.** On any other outcome, #35
+> proceeds without waiting, choosing homes for a single-context engine, where "state it once, point
+> elsewhere" is safe because the pointer resolves in loaded text.
+>
+> **Fork self-reports are accepted as stated residuals** (§2.8), on the same trust model as the
+> parent's own records today. A controller-side transcript check is promoted only if #280 observes a
+> record diverging from its transcript.
 >
 > **Not decided here:**
-> - whether R2 proceeds;
 > - the kernel's contents;
-> - where the core spans live (§2.8);
+> - where the core spans live (§2.9);
 > - whether the `in-review` Resume changes from replay to continue (§2.6);
 > - the order of the review and accepting phases after the spike;
 > - whether R2 lands before or after R1. #271 decides that on benchmark data, never on §6's SCOUTING
@@ -695,8 +746,8 @@ at the stop × the cache-write rate. Appendix D is the one observed instance (n=
 >
 > **Erratum proposed on D018:** its premise sentence, "a forked phase ignores both spawn parameters",
 > is partly superseded. Per current Claude Code docs, skill frontmatter `model:`/`effort:` set a
-> fork's model and effort; only per-call parameters are unavailable to a fork. D018's conclusion is
-> unchanged (§4, C7).
+> `context: fork` skill's model and effort (REPRODUCED). That no per-call parameter reaches a forked
+> skill is INFERRED. D018's conclusion is unchanged (§4, C7).
 
 If ratified, this text is appended to `.claude/specs/decisions.md` as the next D-number, in the PR
 that lands this note.
@@ -704,18 +755,18 @@ that lands this note.
 ## 12. Open questions, disputes and deviations
 
 **Disputed, for the owner** (this note's AC2 escalations):
-1. **Where the core spans live under R2:** in the units, reversing #166, or in the kernel (§2.8).
+1. **Where the core spans live under R2:** in the units, reversing #166, or in the kernel (§2.9).
    Recommendation: the units.
 2. **Whether the `in-review` Resume changes from replay to continue** (§2.6).
    - Recommendation: continue, because a replay would re-run round 1 against a human's answer that was
      given to round 2's state.
    - Either way, the cap cannot reset.
-3. **Whether §11 binds #35 to the §5 rule before #280 reports.** Recommendation: no, conditional on
-   go, as §11 now reads.
+3. ~~Whether §11 binds #35 to the §5 rule before #280 reports.~~ **Decided by the owner,
+   2026-11-18: only on a go** (§10, *What each outcome does*).
 
 **Open questions:**
 1. **The shared kernel's size.** §5's rule decides what is in it, and nobody has drafted it. Its
-   size, plus §2.8's answer, sets every fork's cold-load cost and so most of §6's range.
+   size, plus §2.9's answer, sets every fork's cold-load cost and so most of §6's range.
 2. **Phase skills and the three-layer split.** A phase skill is a new artifact kind in the payload. It
    stays project-agnostic, because each fork reads `loop.config.md` by `CAPS` name, as the engine
    does. What would need to change:
@@ -735,7 +786,13 @@ that lands this note.
 5. **The `docs` route** (the 08-25 note's open question 5) may need no phases at all. It skips
    architect, security and mutation, so it could stay entirely in the controller.
 
-**Deviations from the issue's scope list, recorded:**
+**Deviations from the issues' scope, recorded:**
+- #279 says each phase "loads only its own unit". That is insufficient: a fork also loads the core
+  spans its unit relies on (§2.2).
+- #279 puts "the ledger writes" in the controller. The forks write their own gate-decision blocks,
+  and the controller writes the records it holds the evidence for (§2.4).
+- #280's step-3 spike is widened to steps 3–4 (§6.2, §10), because step 4's plan-informing architect
+  pass sits between step 3 and the controller's step 5.
 - The issue's constraint "a backgrounded fork loses `Agent`" is **contradicted** by current docs
   (§4, C4). `background: false` is kept, for a different reason (C5).
 - The issue's "set `subagentPromptCacheTtl: 1h` for phases that wait on a human" does not apply as
