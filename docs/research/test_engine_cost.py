@@ -944,5 +944,26 @@ class CliFloorTests(unittest.TestCase):
             os.unlink(fh.name)
 
 
+class TurnFilesTests(unittest.TestCase):
+    """#273: `profile` exposes each turn's ingestion per file, keyed by
+    `message.id`, so `tree_cost --by-step` can size one invocation's load. The
+    per-turn shares are the ones the per-file totals are built from."""
+
+    def test_per_turn_shares_sum_to_each_files_ingested_total(self):
+        f = "phases/accepting.md"
+        core, unit = full("0.3.1", CORE), full("0.3.1", f)
+        p = run_profile(transcript([(ENG31 % CORE, core // 2), (ENG31 % CORE, core - core // 2),
+                                    (ENG31 % f, unit)]))
+        for name in (CORE, f):
+            per_turn = sum(d.get(name, 0.0) for d in p["turn_files"].values())
+            self.assertAlmostEqual(per_turn, p["files"][name]["ingested"])
+
+    def test_a_read_is_credited_to_the_turn_it_arrives_at(self):
+        """A read at step k arrives at turn k + 1 (`transcript`): "m1", not "m0"."""
+        p = run_profile(transcript([(ENG31 % CORE, 5000), "idle"]))
+        self.assertEqual(set(p["turn_files"]), {"m1"})
+        self.assertAlmostEqual(p["turn_files"]["m1"][CORE], 5000)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

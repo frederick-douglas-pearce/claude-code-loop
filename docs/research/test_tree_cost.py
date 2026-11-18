@@ -546,5 +546,390 @@ class RewarmTests(unittest.TestCase):
         self.assertAlmostEqual(r["rewarm_usd"], 27.80, delta=0.05)
 
 
+# --- --by-step (#273) ---------------------------------------------------------
+
+#: Full plugin-cache paths: `engine_file`'s relative form would read this
+#: machine's real cache through `payload_files()` (#273 C9).
+ENG = "/home/u/.claude/plugins/cache/claude-code-loop/dev-loop/0.6.0/skills/dev-loop/%s"
+ENG_NO_ROWS = "/home/u/.claude/plugins/cache/claude-code-loop/dev-loop/0.0.9/skills/dev-loop/%s"
+#: Above 0.6.0's core floor (65,907 x 0.98), so a core read of this size clears it.
+CORE_LOAD = 70_000
+
+
+def read(path):
+    return ("Read", {"file_path": path})
+
+
+def sh(cmd):
+    return ("Bash", {"command": cmd})
+
+
+def skill(name):
+    return ("Skill", {"skill": name})
+
+
+class Builder:
+    """One synthetic parent transcript. Each `turn` is one API call issuing the
+    given tool_uses, answered by one tool_result record each; `grow` raises the
+    NEXT turn's context by that many tokens, which is what `engine_cost.profile`
+    measures as ingestion of this turn's reads."""
+
+    def __init__(self, timestamps=True):
+        self.recs, self.subs, self.ctx, self.k = [], {}, 1000, 0
+        self.timestamps = timestamps
+
+    def _stamp(self, r):
+        if self.timestamps:
+            r["timestamp"] = at(self.k * 10)
+        return r
+
+    def command(self):
+        self.recs.append(self._stamp({"type": "user", "message": {
+            "content": "<command-name>/dev-loop:dev-loop</command-name>"}}))
+
+    def turn(self, *tools, grow=0, agent_id=None):
+        k = self.k
+        content = [{"type": "tool_use", "id": "t%d_%d" % (k, j), "name": n, "input": i}
+                   for j, (n, i) in enumerate(tools)] or [{"type": "text", "text": "."}]
+        self.recs.append(self._stamp({
+            "type": "assistant", "effort": "high", "version": "2.1.280",
+            "message": {"id": "m%d" % k, "model": M55, "content": content, "usage": {
+                "input_tokens": self.ctx, "output_tokens": 5,
+                "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}}}))
+        for j, _ in enumerate(tools):
+            r = {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "t%d_%d" % (k, j), "content": "x"}]}}
+            if agent_id:
+                r["toolUseResult"] = {"agentId": agent_id}
+            self.recs.append(self._stamp(r))
+        self.ctx += 5 + grow
+        self.k += 1
+        return k
+
+    def agent(self, aid, linked=True, sub_timestamp=True):
+        k = self.turn(("Agent", {"prompt": "p"}), agent_id=aid if linked else None)
+        sub = rec(M55, usage=READ_ONLY)
+        if sub_timestamp:
+            sub["timestamp"] = at(k * 10 + 1)
+        self.subs[aid] = [sub]
+        return k
+
+    def compact(self):
+        self.recs.append(self._stamp({"type": "system", "subtype": "compact_boundary"}))
+        self.recs.append(self._stamp({"type": "user", "isCompactSummary": True,
+                                      "message": {"content": "summary"}}))
+
+    def write(self, root, stem="s"):
+        p = root / (stem + ".jsonl")
+        p.write_text("".join(json.dumps(r) + "\n" for r in self.recs))
+        d = root / stem / "subagents"
+        d.mkdir(parents=True)
+        for aid, recs in self.subs.items():
+            (d / ("agent-%s.jsonl" % aid)).write_text(
+                "".join(json.dumps(r) + "\n" for r in recs))
+        return p
+
+
+def full_run(b, *, core=True, security=True):
+    """One invocation through every primary marker; -> {step: entry turn}."""
+    b.command()
+    e = {"load": b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD if core else 0)}
+    e["plan"] = b.turn(read(ENG % "reference/plan-template.md"))
+    b.turn(("Write", {"file_path": "/r/.claude/loop/x/issue-1.plan.md", "content": "p"}))
+    e["implement"] = b.turn(sh("git switch -c chore/x"))
+    b.turn(("Edit", {"file_path": "/r/a.py", "old_string": "a", "new_string": "b"}))
+    b.turn(sh("gh pr create --title t --body b"))
+    e["review"] = b.turn(read(ENG % "phases/reviewing.md"))
+    b.agent("a1")
+    if security:
+        e["security"] = b.turn(skill("security-review"))
+    e["acceptance"] = b.turn(read(ENG % "phases/accepting.md"))
+    e["merge/journal"] = b.turn(sh("gh pr merge 9 --squash"))
+    b.turn()
+    return e
+
+
+class ByStepTests(unittest.TestCase):
+    def setUp(self):
+        self.root = pathlib.Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def steps(self, r, k=0):
+        return {s["step"]: s for s in r["invocations"][k]["steps"]}
+
+    def test_each_primary_marker_opens_its_step_on_the_turn_that_issues_it(self):
+        b = Builder()
+        e = full_run(b)
+        r = T.by_step(b.write(self.root))
+        self.assertIsNone(r["refused"])
+        got = self.steps(r)
+        for s, turn in e.items():
+            self.assertEqual(got[s]["first"], turn, s)
+            self.assertIsNone(got[s]["status"], s)
+            self.assertNotIn("fallback", got[s]["marker"], s)
+        self.assertEqual(got["plan"]["turns"], 2)          # template read + plan write
+        self.assertEqual(got["implement"]["turns"], 3)     # branch, edit, PR create
+        self.assertTrue(r["invocations"][0]["check"].startswith("ok"))
+
+    def test_a_subagent_is_linked_by_agent_id_to_its_launching_turn(self):
+        b = Builder()
+        full_run(b)
+        r = T.by_step(b.write(self.root))
+        self.assertEqual((r["linked"], r["by_time"], r["unattributed"]), (1, 0, []))
+        got = self.steps(r)
+        self.assertEqual(got["review"]["subs"], 1)
+        self.assertAlmostEqual(got["review"]["sub_usd"], T.bill(
+            self.root / "s" / "subagents" / "agent-a1.jsonl")[0].usd)
+
+    def test_an_unlinked_subagent_falls_back_to_time_and_is_labeled(self):
+        b = Builder()
+        b.command()
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
+        b.turn(read(ENG % "reference/plan-template.md"))
+        b.agent("zz", linked=False)
+        r = T.by_step(b.write(self.root))
+        self.assertEqual((r["linked"], r["by_time"]), (0, 1))
+        self.assertEqual(self.steps(r)["plan"]["subs"], 1)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            T.report_by_step([str(self.root / "s.jsonl")])
+        self.assertIn("0 linked, 1 by time (fallback)", buf.getvalue())
+
+    def test_an_unplaceable_subagent_is_unattributed_and_in_no_step(self):
+        b = Builder()
+        b.command()
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
+        b.agent("zz", linked=False, sub_timestamp=False)
+        r = T.by_step(b.write(self.root))
+        self.assertEqual([n for n, _ in r["unattributed"]], ["agent-zz.jsonl"])
+        self.assertEqual(sum(s["subs"] for s in r["invocations"][0]["steps"]), 0)
+
+    def test_a_fallback_is_used_only_when_no_primary_fires_in_the_invocation(self):
+        b = Builder()
+        b.command()
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
+        b.turn(sh("gh issue view 7"))                       # fallback kind, earlier
+        later = b.turn(read(ENG % "reference/plan-template.md"))
+        b.turn()
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertEqual(got["plan"]["first"], later)
+        self.assertEqual(got["plan"]["marker"], "unit:reference/plan-template.md")
+
+    def test_a_fallback_that_fires_is_named_as_one(self):
+        b = Builder()
+        b.command()
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
+        k = b.turn(sh("gh issue view 7"))
+        b.turn()
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertEqual(got["plan"]["first"], k)
+        self.assertEqual(got["plan"]["marker"], "gh issue view (fallback)")
+
+    def test_implement_falls_back_to_the_turn_after_the_plan_gate_question(self):
+        b = Builder()
+        b.command()
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
+        b.turn(read(ENG % "reference/plan-template.md"))
+        q = b.turn(("AskUserQuestion", {"questions": []}))
+        b.turn(("Edit", {"file_path": "/r/a.py"}))
+        b.turn(sh("gh pr create"))
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertEqual(got["implement"]["first"], q + 1)
+        self.assertEqual(got["plan"]["last"], q)
+        self.assertIn("(fallback)", got["implement"]["marker"])
+
+    def test_a_later_re_read_never_moves_a_step_backward(self):
+        b = Builder()
+        e = full_run(b)
+        b.turn(read(ENG % "phases/reviewing.md"))            # after merge
+        n = b.k
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertEqual(got["merge/journal"]["last"], n - 1)
+        self.assertEqual(got["review"]["last"], e["security"] - 1)
+
+    def test_a_heredoc_that_mentions_a_merge_is_not_a_merge(self):
+        b = Builder()
+        b.command()
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
+        b.turn(sh("cat >> progress.md <<'EOF'\n- next: gh pr merge 9\nEOF"))
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertEqual(got["merge/journal"]["status"], "not detected")
+
+    def test_a_unit_read_inside_compaction_moves_the_step_that_resumes(self):
+        """#273 C1: on appendix D's session the only acceptance marker of
+        invocation 2 is the accepting.md re-read after the compaction."""
+        b = Builder()
+        b.command()
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
+        b.turn(skill("security-review"))
+        b.compact()
+        c = b.turn(read(ENG % "phases/accepting.md"))
+        b.turn(read(ENG % "loop-engine.md"))
+        end = b.turn(read(ENG % "loop-engine.md"))
+        after = b.turn()
+        r = T.by_step(b.write(self.root))
+        got = self.steps(r)
+        self.assertEqual((got["compaction"]["first"], got["compaction"]["last"]), (c, end))
+        self.assertEqual(got["acceptance"]["first"], after)
+        self.assertEqual(got["security"]["turns"], 1)
+
+    def test_a_step_with_zero_turns_is_a_detector_failure_never_zero(self):
+        b = Builder()
+        b.command()
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
+        b.turn(skill("security-review"), read(ENG % "phases/accepting.md"))
+        b.turn()
+        r = T.by_step(b.write(self.root))
+        self.assertEqual(self.steps(r)["security"]["status"], "DETECTOR FAILURE (zero turns)")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            T.report_by_step([str(self.root / "s.jsonl")])
+        line = [ln for ln in buf.getvalue().splitlines() if ln.strip().startswith("security")][0]
+        self.assertIn("DETECTOR FAILURE (zero turns)", line)
+        self.assertNotIn("0.00", line)
+
+    def test_a_step_whose_marker_never_fired_is_not_detected_never_zero(self):
+        b = Builder()
+        full_run(b, security=False)
+        p = b.write(self.root)
+        self.assertEqual(self.steps(T.by_step(p))["security"]["status"], "not detected")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            T.report_by_step([str(p)])
+        line = [ln for ln in buf.getvalue().splitlines() if ln.strip().startswith("security")][0]
+        self.assertNotIn("0.00", line)
+
+    def test_ingestion_below_one_engine_copy_is_a_detector_failure(self):
+        b = Builder()
+        full_run(b, core=False)
+        r = T.by_step(b.write(self.root))
+        self.assertIn("DETECTOR FAILURE (ingestion", r["invocations"][0]["check"])
+
+    def test_no_load_row_for_the_era_is_a_detector_failure(self):
+        b = Builder()
+        b.command()
+        b.turn(read(ENG_NO_ROWS % "loop-engine.md"), grow=CORE_LOAD)
+        b.turn()
+        r = T.by_step(b.write(self.root))
+        self.assertIn("DETECTOR FAILURE (no load row for era 0.0.9",
+                      r["invocations"][0]["check"])
+
+    def test_an_inherited_engine_still_fails_and_names_the_invocation(self):
+        b = Builder()
+        full_run(b)
+        b.turn(skill("dev-loop"))                            # a second invocation, no /clear
+        b.turn(sh("gh issue view 8"))
+        b.turn()
+        r = T.by_step(b.write(self.root))
+        self.assertEqual(len(r["invocations"]), 2)
+        check = r["invocations"][1]["check"]
+        self.assertTrue(check.startswith("DETECTOR FAILURE (ingestion"), check)
+        self.assertIn("engine inherited from invocation 1, no /clear", check)
+
+    def test_a_second_command_record_splits_the_invocations(self):
+        b = Builder()
+        full_run(b)
+        split = b.k
+        full_run(b)
+        r = T.by_step(b.write(self.root))
+        self.assertEqual([(i["lo"], i["hi"]) for i in r["invocations"]],
+                         [(0, split), (split, b.k)])
+        self.assertTrue(all(i["check"].startswith("ok") for i in r["invocations"]))
+
+    def test_turns_before_the_first_invocation_are_other(self):
+        b = Builder()
+        b.turn(sh("gh pr merge 1"))
+        full_run(b)
+        r = T.by_step(b.write(self.root))
+        self.assertEqual(r["other_turns"], 1)
+        self.assertEqual(r["invocations"][0]["lo"], 1)
+
+    def run_main(self, argv):
+        buf, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
+            code = T.main(argv)
+        return code, buf.getvalue()
+
+    def test_by_step_is_accepted_anywhere_in_argv(self):
+        b = Builder()
+        full_run(b)
+        p = str(b.write(self.root))
+        for argv in (["--sessions", p, "--by-step"], ["--by-step", "--sessions", p],
+                     ["--sessions", "--by-step", p]):
+            code, out = self.run_main(argv)
+            self.assertEqual(code, 0, argv)
+            self.assertIn("=== by step: s", out, argv)
+
+    def test_by_step_without_sessions_is_a_usage_error(self):
+        b = Builder()
+        full_run(b)
+        code, out = self.run_main(["--by-step", str(b.write(self.root))])
+        self.assertEqual((code, out), (2, ""))
+
+    def test_without_the_flag_sessions_output_is_the_session_table(self):
+        b = Builder()
+        full_run(b)
+        p = str(b.write(self.root))
+        _, out = self.run_main(["--sessions", p])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            T.report_sessions([p])
+        self.assertEqual(out, buf.getvalue())
+        self.assertNotIn("by step", out)
+
+    def test_a_refused_session_prints_its_refusal_and_no_table(self):
+        big = {"input_tokens": T.MAX_CONTEXT + 1, "output_tokens": 0,
+               "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+        (self.root / "s.jsonl").write_text(json.dumps(rec(M55, usage=big)) + "\n")
+        _, out = self.run_main(["--sessions", str(self.root / "s.jsonl"), "--by-step"])
+        self.assertIn("REFUSED", out)
+        self.assertNotIn("=== by step", out)
+
+    #: Appendix D's phase ranges, 1-based inclusive, verbatim from `PHASES` in
+    #: cost-review-2026-10-26/handcheck/analysis2.py (recovered #273).
+    D_ENTRIES = {
+        0: {"plan": 4, "implement": 46, "review": 134, "security": 200,
+            "acceptance": 203, "merge/journal": 227},
+        1: {"load": 247, "implement": 262, "review": 308, "security": 341,
+            "compaction": 346, "acceptance": 352, "merge/journal": 405},
+    }
+    #: Appendix D's shares of SESSION Σ context, in percent, mapped onto these
+    #: steps: `load` folds into plan (appendix D leaves 1-3 unassigned and has no
+    #: load row in invocation 2), invocation 1's `security` into review (appendix D
+    #: shows it as "—").
+    D_SHARES = {
+        0: {("load", "plan"): 4, ("implement",): 17, ("review", "security"): 17,
+            ("acceptance",): 7, ("merge/journal",): 6},
+        1: {("load", "plan"): 5, ("implement",): 17, ("review",): 14,
+            ("acceptance",): 6, ("merge/journal",): 2},
+    }
+
+    @unittest.skipUnless(D_SESSION.is_file(), "appendix D's transcript is not on this machine")
+    def test_appendix_d_phase_table_is_reproduced_within_the_stated_tolerance(self):
+        """AC3. Tolerance (plan, approved 2026-11-17): invocation totals exact; each
+        step boundary within 5 turns of appendix D's range edge; each mapped share
+        within 3 percentage points of session Σ context. The band covers this
+        detector's error and appendix D's hand-drawn boundaries alike."""
+        r = T.by_step(D_SESSION)
+        self.assertIsNone(r["refused"])
+        self.assertEqual([i["hi"] - i["lo"] for i in r["invocations"]], [246, 177])
+        self.assertEqual(r["linked"], r["subs"])
+        for k, want in self.D_ENTRIES.items():
+            got = self.steps(r, k)
+            self.assertTrue(r["invocations"][k]["check"].startswith("ok"))
+            for s, turn in want.items():
+                self.assertIsNone(got[s]["status"], (k, s))
+                self.assertLessEqual(abs(got[s]["first"] + 1 - turn), 5, (k, s))
+            if k:
+                self.assertLessEqual(abs(got["compaction"]["last"] + 1 - 351), 5)
+        for k, want in self.D_SHARES.items():
+            got = self.steps(r, k)
+            for steps, pct in want.items():
+                share = sum(got[s]["share"] for s in steps) * 100
+                self.assertLessEqual(abs(share - pct), 3, (k, steps, share))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
