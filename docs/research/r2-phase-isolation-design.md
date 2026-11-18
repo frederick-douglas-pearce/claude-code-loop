@@ -133,8 +133,10 @@ The controller then:
 - compares the SHA with the live head;
 - confirms the phase's **required record set** (§2.4) exists and is well-formed;
 - for `planning`, takes step 5's diff itself;
-- then advances the row **only** on `clean`, `met` or `planned`. A `findings` or `not-met` result
-  stops, as the engine's step does today, and any other result value is a `gate-error`.
+- then advances the row **only** on the advancing result its own phase names: `planned` for
+  planning, `clean` for reviewing, `met` for accepting. A reviewing `findings` or an accepting
+  `not-met` stops, as the engine's step does today. Any value outside the phase's own result set,
+  including another phase's, is a `gate-error`.
 
 **`stopped-for-human`** carries:
 - why: a design-question finding, the round cap reached, a contested finding, or a Class A source fix
@@ -287,8 +289,9 @@ invariant, and the load protocol, not from the fail-safe halves as such. Under f
 ### 2.8 The threat model, and the residuals it accepts
 
 **The controller guards against a failed or partial load and a malformed return. It does not guard
-against a fork that is consistent but wrong.** Every check in §2.3–§2.7 reads something the fork
-wrote. Adding a check on another fork-written record does not leave that class; only a check the fork
+against a fork whose records are consistent but wrong.** Every **record** check in §2.3–§2.7 reads
+something the fork wrote; the head, worktree and status checks and the step-5 diff read state the
+controller observes. Adding a check on another fork-written record does not leave that class; only a check the fork
 cannot author, such as its transcript compared with its return, would.
 
 **That is the same trust model the engine has today.** In a single context the parent writes its own
@@ -298,11 +301,16 @@ accepted residuals are named, not enumerated as the safe set:
 - a false `architect: skipped` from a fork that did consult and lost the frozen block;
 - a cap overrun reported with well-formed round records;
 - a reviewed range that does not end at the SHA the verdict certifies;
-- a load confirmation the fork did not earn.
+- a load confirmation the fork's reads do not support.
 
 **These are measured, not designed away.** #280 compares fork transcripts with returns (its committed
 script defines how). A controller-side transcript check is promoted into the design **only if #280
 observes a record diverging from its transcript.** Owner decision, 2026-11-18.
+
+**#280 observes planning only, so it cannot surface the other phases' residuals.** Each later phase's
+design must pre-register the same transcript-vs-record comparison for every fork-authored record that
+phase's controller accepts, load confirmation included. (Owner decision, 2026-11-18, amending the
+one above.)
 
 ### 2.9 Disputed: where the core spans live under R2
 
@@ -433,8 +441,7 @@ the controller's registry resolves to a skill that exists), never a truth check.
 whose docstring says n=1 and "do not cite its figures". **This note departs from that instruction
 knowingly:** the figures are used only to rank phases and to size X, never as estimates, and #280's
 committed script replaces them. There are three sessions, in two strata, and
-they are **never pooled**. Step dollars and Σctx are the tool's output, produced for this note and not committed elsewhere (the
-`261e63c5` table was re-run by hand and matches). Peak and gate-stop contexts come from a scratch pass over the same
+they are **never pooled**. Step dollars and Σctx are the tool's output, produced for this note and not committed elsewhere. Peak and gate-stop contexts come from a scratch pass over the same
 transcripts, with the same `message.id` dedupe and turn counts matching the tool, so they are
 **INFERRED**, not tool output. Context is prompt tokens: input + cache read + cache write.
 
@@ -645,18 +652,18 @@ cache write) of the **last parent turn before the plan-gate stop**, deduplicated
   as a full read is defined by #280's committed script);
 - the plan gate stopped, with the scripted approval recorded.
 
-**Fault-injection runs,** treatment code only. **The set is closed by a principle, not by this
-list: one run per controller-side check the planning phase runs (§2.3).** A proposed run outside
-that principle is a suggestion for #280, not part of this pre-registration. In every row, "the
-controller writes" means **the write call is in the parent transcript**.
+**Fault-injection runs,** treatment code only. **F1–F5 are the pre-registered minimum. #280 may add
+runs, provided it commits them before the first run.** In every row, "the controller writes" means
+**the write call is in the parent transcript**.
 
 | run | what is injected | passes when |
 |---|---|---|
-| F1 | the fork's return is replaced, after the fork completes, by each of: (a) an unknown variant; (b) a `verdict` with an unrecognized result value; (c) an empty return | for each, the controller writes a `- gate-error:` and stops |
+| F1 | the fork's return is replaced, after the fork completes, by each of: (a) an unknown variant; (b) a `verdict` with an unrecognized result value, or another phase's result value; (c) an empty return | for each, the controller writes a `- gate-error:` and stops |
 | F2 | the architect runs, the return says `architect: ran`, and the frozen block is deleted before the return | the controller writes `- Plan-gate: material (pre-image absent, architect ran) → STOPPED` |
 | F2b | the architect runs, the `architect:` field is omitted from the return, and the frozen block is deleted | the same line: an absent field reads as `ran` |
 | F3 | the plan file's verbatim ACs are removed before the return | the controller writes a `- gate-error:` (missing required record) and stops |
 | F4 | the phase skill names a core-span path that does not exist | the fork returns `load-failure`, and the controller writes `- gate-error: planning — <unit> not loaded — …` and stops |
+| F5 | the verdict's SHA is replaced with one that is not the live head | the controller writes a `- gate-error:` and stops |
 
 Any other outcome of any run is a fail. Deferred to #280, by the 2026-11-18 scope ruling: F2c
 (`skipped`, no block ⇒ `n/a`), which probes only over-gating, the safe direction.
@@ -670,10 +677,10 @@ that holds.
 
 1. **No-go (safety).** Any of:
    - a fail-safe item missing on any treatment fixture;
-   - any fault run (F1–F4) failing;
+   - any fault run failing;
    - any fork return the controller accepted that should have escalated, as decided by #280's
      committed script, which defines the procedure before the first run. **If the script does not
-     define it, this condition cannot be excluded, and the outcome is not go.**
+     define it, this condition counts as holding, and the outcome is this one.**
    
    This is a no-go **whatever the cost result**.
 2. **No-go (no effect).** The median paired reduction is ≤ 0.
@@ -696,8 +703,7 @@ that holds.
 **What each outcome does** (owner decision, 2026-11-18). **Every outcome moves something; none
 leaves R2 or #35 waiting:**
 - **Go:** proceed to the next phase's design.
-- **No-go (safety) or no-go (quality):** R2 stops until the failure is explained. Both are attributable
-  to the mechanism on its simplest phase.
+- **No-go (safety) or no-go (quality):** R2 stops until the failure is explained.
 - **No effect, inconclusive, sub-threshold, or no-go (cost):** the question returns to #271.
 - **#35:** §5's rule binds #35 only on a go. On any other outcome, #35 proceeds without waiting, with
   homes chosen for a single-context engine.
