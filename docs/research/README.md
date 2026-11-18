@@ -40,6 +40,7 @@ All stdlib-only, all read Claude Code session transcripts from `~/.claude/projec
 | `handcheck_pricing.py` | Does `tree_cost.bill` price a file the way an independent reading of the spec does? Re-prices a seeded sample of transcript files with **no code shared with `stratum.py`** and compares file by file. The hand-check behind `tree_cost --sessions`' citability; re-run it after any change to the arithmetic or the dedupe. | none, deliberately: a test of the hand-check is a guard on a guard |
 | `stratum.py` | Which `(model, effort)` stratum a session ran on, plus its CLI version range — the **one** extractor every transcript script above imports, and the per-model `PRICING` table. Every per-session profile prints its `stratum` line; every aggregate groups by parent stratum and names what it excluded. An unpriced model refuses to price, never falls back. (#207) | `test_stratum.py` |
 | `replicate.py` | **Not a reader — a runner.** Runs one unattended dev-loop replicate on a frozen fixture issue (#208) and records it. **Containment:** every `claude` process runs under bubblewrap in its own user, mount, pid, network, ipc and uts namespaces with all capabilities dropped; its filesystem is an allowlist (`/usr`, `/etc` and the merged-usr links read-only, the pinned binary and `docs/research/` read-only, and only the replicate's own `home/`, `work/` and shim log writable), so the human's home, gh login, token files, SSH keys and X11/session sockets do not exist inside it; its network is slirp4netns with host loopback disabled; and its environment is an explicit allowlist whose only GitHub credential is a token owned by the sandbox org. Still reachable: outbound internet, host services on non-loopback interfaces and the LAN, and the shared kernel. The plugin is git-archived at a pinned commit, pushed to a private sandbox-org repo and installed from it over https into the replicate's own config, and the run refuses unless it landed as a git install of that commit in the cache (a local-directory marketplace would run the skill from its source dir, so `engine_cost.classify` would see no load); each replicate gets a throwaway sandbox-org repo with CI live; replies are scripted and keyed on the ledger row's Status. It writes `environment.json` (base SHA, plugin commit and cache sha256, CLI version, parent and per-agent `(model, effort)`, memory snapshot id, times, per-turn exit codes, any refusal or error), `result.json` (whole-tree USD and **turns summed across sessions**, via `tree_cost`, or a `refused` reason in place of the figures) and `audit.json` (gh calls, account events, MCP and credential-path mentions, engine loads, strata). The `gh` shim and the audit are a second line: they read tool inputs, not effects, and the replicate can write the shim log and its transcripts, so a clean audit is evidence, not proof. The only call made with the human's own gh login is a read-only GET of the account event feed, outside the sandbox. Tokens live in `~/.config/loop-sandbox/` and are never printed. Fixtures: `replicate-fixtures/<name>/`. It spends money and creates GitHub repos, so run it by hand only. | `test_replicate.py` |
+| `quality_outcomes.py` | **Not a transcript reader — reads git history, ledgers, and #1's comments.** Does a run's merged work hold up? Per merged loop PR: **fix-up commits** (first-parent commits within 14 days touching the PR's files — the issue's definition, so an upper bound) and **F-comments** attributed to it by the convention below; per **issue**: escalations from the journal (`gate-error`, `plan-material`, `review-past-cap` from structured lines, then a stop split into scope-ruling / human-option / unclassified, with the stops `plan-gate: always` and `mode: calibration` owe every issue counted apart as `routine`). Per-repo and per-run medians written `median (n_known/N)` with the nonzero share. Open windows print `pending(n)`; a PR it cannot locate, a journal without `- Plan-gate:` lines, and a PR merged before the convention print `unknown`, never 0. **Observational only:** on a #274 replicate only the escalation counter (`escalations()`, importable) applies. No network call: pass `--findings` (`gh api repos/frederick-douglas-pearce/claude-code-loop/issues/1/comments --paginate`) and optionally `--prs REPO=FILE` (`gh pr list --state merged --json number,mergeCommit,mergedAt`). (#272) | `test_quality_outcomes.py` |
 
 ```bash
 SLUG=~/.claude/projects/-home-fdpearce-Documents-Projects-git-us-presidential-vote-analysis
@@ -56,6 +57,30 @@ A before/after that does not name both engine versions is not interpretable. **N
 not name both strata:** a model or effort change is a treatment too (`cost-model-design.md` → *The run
 environment is a treatment*), so compare only within one parent `(model, effort)` stratum, as each
 script's `stratum` line reports it.
+
+## F-comment attribution convention
+
+**Every comment on #1 from 2026-11-18 on carries at least one `**Attributed-to:**` line** (#272),
+on a line of its own:
+
+- `**Attributed-to:** <owner>/<repo>#<PR>` — the **merged PR the finding is about**: the change
+  that introduced the defect or the gap, which is usually *not* where it surfaced. Name the repo
+  even for this one, because PR numbers collide across repos. Several lines are fine when a
+  finding is about several PRs.
+- `**Attributed-to:** none (<reason>)` — the comment is about no merged PR (bookkeeping, a
+  pointer, a finding about something that predates the loop).
+- `**Attributed-to:** unknown` — about a merged change, but you cannot tell which.
+
+`quality_outcomes.py` counts the first form per PR, within 14 days of its merge. A comment with no
+marker at all is reported as `unmarked=n`, so a forgotten marker shows up rather than reading as a
+zero. A PR merged before 2026-11-18 prints `unknown` (or `>=n`), because older comments carry no
+marker by construction.
+
+**This measures origin, not where a finding surfaced, and the two are different quantities.**
+#234's session IDs would attribute a finding to the run it surfaced in; that is a cost and process
+signal, not a quality outcome for the PR that caused it, so it does not replace this convention.
+Findings on #1 are about the plugin, so for a consumer repo's own PRs this outcome is close to
+structurally zero; the script says so instead of reporting a median of 0 as a result.
 
 ## The cost spec is canonical
 
