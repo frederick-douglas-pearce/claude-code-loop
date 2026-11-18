@@ -926,7 +926,9 @@ class ByStepTests(unittest.TestCase):
         """AC3. Tolerance, as amended by the owner on 2026-11-18 (comment on #273):
         invocation totals exact; each step's ENTRY within 5 turns of appendix D's
         range start, which also pins every interior exit (one turn before the next
-        entry); each mapped share within 3 percentage points of session Σ context.
+        entry) except where a compaction overlay separates two steps -- that span's
+        end is asserted on its own; each mapped share within 3 percentage points of
+        session Σ context.
         An invocation's FINAL exit is not asserted: invocation 2's merge/journal
         ends at 423 here and at 417 in appendix D, whose turns 418-423 are a "user
         follow-up". The band covers this detector's error and appendix D's
@@ -1092,6 +1094,48 @@ class ByStepRound2Tests(unittest.TestCase):
         records = list(T._records(b.write(self.root)))
         spans = T.segment(records, T.price_records(records))["compactions"]
         self.assertEqual(spans, [(c, c + 1)])
+
+    def test_unmarked_work_before_a_core_read_does_not_extend_the_overlay(self):
+        """#363 round 2, a6bf7e75's shape: edits, commits and pushes fire no
+        marker, so a bound keyed on the next marker would cover them."""
+        b = self.compacted()
+        c = b.turn()
+        for _ in range(5):
+            b.turn(("Edit", {"file_path": "/r/a.py"}))
+        b.turn(sh("git commit -m x && git push"))
+        b.turn(read(ENG % "loop-engine.md"))
+        b.turn()
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertEqual((got["compaction"]["first"], got["compaction"]["last"]), (c, c))
+
+    def test_engine_unit_reads_before_the_core_read_still_extend_the_overlay(self):
+        b = self.compacted()
+        c = b.turn()
+        b.turn(read(ENG % "phases/accepting.md"))
+        end = b.turn(read(ENG % "loop-engine.md"))
+        b.turn()
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertEqual((got["compaction"]["first"], got["compaction"]["last"]), (c, end))
+
+    def test_spans_never_merge_across_an_invocation_boundary(self):
+        """#363 round 2: a merged span crossing into the next invocation left
+        that invocation's compaction turns in no row."""
+        b = Builder()
+        b.command()
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
+        b.compact()
+        c1 = b.turn()
+        b.compact()
+        b.command()
+        c2 = b.turn()
+        b.turn()
+        records = list(T._records(b.write(self.root)))
+        seg = T.segment(records, T.price_records(records))
+        self.assertEqual(seg["invocations"], [(0, c2), (c2, c2 + 2)])
+        self.assertEqual(seg["compactions"], [(c1, c1), (c2, c2)])
+        r = T.by_step(self.root / "s.jsonl")
+        self.assertIsNone(r["conservation"])
+        self.assertEqual(self.steps(r, 1)["compaction"]["turns"], 1)
 
     def test_boundaries_separated_only_by_assistant_turns_are_two_compactions(self):
         b = self.compacted()

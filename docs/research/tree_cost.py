@@ -510,31 +510,32 @@ def segment(records, priced):
                     cur = s
             step[i] = cur
     # Compaction overlay, bounded: the first turn after a boundary, extended
-    # through the run of consecutive core reads that follows it ONLY if that run
-    # begins before any non-engine marker after the boundary (engine unit reads
-    # do not interrupt -- they are the re-read). Otherwise the span is that one
-    # turn. A boundary outside every invocation gets no overlay and stays
-    # `other`, and overlapping spans merge. Markers inside the span still move
-    # the underlying step, so the step that resumes is the one the re-read shows
-    # (#273 C1).
+    # through the run of consecutive core reads that follows it ONLY when every
+    # turn between the boundary's first turn and that run carries an engine unit
+    # read -- the re-read itself. Any other turn in between (an edit, a commit,
+    # a test run: most work fires no marker) leaves the span that one turn
+    # (#363 round 2). A boundary outside every invocation gets no overlay and
+    # stays `other`. Overlapping spans merge, but never across an invocation's
+    # end. Markers inside the span still move the underlying step, so the step
+    # that resumes is the one the re-read shows (#273 C1).
     core = {i for i, kind in events if kind == "unit:loop-engine.md"}
-    live = sorted({i for i, kind in events if not kind.startswith("unit:")})
+    units = {i for i, kind in events if kind.startswith("unit:")}
     spans = []
     for c in sorted(set(compact_at)):
         hi = next((h for lo, h in bounds if lo <= c < h), None)
         if hi is None:
             continue
         first = next((i for i in range(c, hi) if i in core), None)
-        stop = next((i for i in live if i >= c), hi)
         end = c
-        if first is not None and first <= stop:
+        if first is not None and all(i in units for i in range(c + 1, first)):
             end = first
             while end + 1 in core and end + 1 < hi:
                 end += 1
-        if spans and c <= spans[-1][1] + 1:
-            spans[-1] = (spans[-1][0], max(end, spans[-1][1]))
+        if spans and c <= spans[-1][1] + 1 and spans[-1][2] == hi:
+            spans[-1] = (spans[-1][0], max(end, spans[-1][1]), hi)
         else:
-            spans.append((c, end))
+            spans.append((c, end, hi))
+    spans = [(c, end) for c, end, _ in spans]
     for c, end in spans:
         for i in range(c, end + 1):
             step[i] = "compaction"
