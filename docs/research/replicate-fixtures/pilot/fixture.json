@@ -26,9 +26,12 @@
     },
     {
       "status": "in-review",
-      "expect": "(?i)(scope ruling|design question)",
+      "expect": "(?is)^(?=.*\\bdesign[- ]question)(?=.*\\bscope ruling)",
+      "halt_if": "(?i)\\bround[- ]?(2|two|[3-9])\\b|\\bsecond round\\b|\\bre-?check|\\bre-?verif|\\bstill dirty\\b|\\bcap\\b|\\bcontested\\b|gate-error|\\bno (usable )?ruling\\b",
+      "requires_design_spawn": "architect",
+      "halt_on_ledger_round2": true,
       "reply": "Follow the architect's scope ruling: apply its minimal fix set if it requires one, otherwise accept the finding as non-blocking, and continue.",
-      "why": "step 8's design-question stop. Policy chosen by the human 2026-11-17 after pilot m2. The regex matches ANY in-review stop naming a scope ruling or design question, a dirty round-2 escalation included; only an in-review message naming neither halts. Not exercised by the pilot. A default-deny discriminator is owed (#357) before any #274 fixture carries this reply."
+      "why": "step 8's design-question stop, and only that stop (#366). Policy chosen by the human 2026-11-17 after pilot m2. Replied only when the message names both a design question and a scope ruling, names no halt_if marker, this turn's stream shows an architect spawn, and the replicate's progress.md names no round >= 2 and no scope-ruling gate-error. Anything else halts, so a dirty round 2 never gets this reply; a design-question stop at round 2, or a round-1 message that mentions round 2 in passing, also halts (unknown => halt, about one replicate lost). Not exercised by the pilot (m3 and h1 never stopped at in-review), and the re-pilot may not exercise it either."
     },
     {
       "status": "in-acceptance",
@@ -50,5 +53,5 @@
   "model_tiers": "\u2014 (every role inherits), as bound in the fixture's loop.config.md",
   "settings": {},
   "builtin_agents_why": "Built-ins spawned with no model/effort run on the parent's stratum: confirmed 2026-11-17 by two sandboxed spikes on CLI 2.1.326 (claude-sonnet-5-5 at medium: Explore, general-purpose and Plan; at high: those three and claude), every record at the parent's (model, effort). Any other built-in (statusline-setup, or claude-code-guide, which runs on its own default) fails check_strata by default-deny.",
-  "ci_status_binding": "gh run list --workflow test.yml (Actions API), not the consumer-standard gh pr checks: the sandbox gh-token is a fine-grained PAT and cannot read checks (pilot m1, 2026-11-17). A fixed factor across arms only if every #274 fixture applies the same rewrite; not enforced."
+  "ci_status_binding": "The binding itself is read from repo/.claude/loop.config.md at load time and refused unless it is the Actions-API form (#366). gh run list --workflow test.yml (Actions API), not the consumer-standard gh pr checks: the sandbox gh-token is a fine-grained PAT and cannot read checks (pilot m1, 2026-11-17)."
 }

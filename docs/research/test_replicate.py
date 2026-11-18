@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -259,7 +260,8 @@ class LaunchTests(Tmp):
         """Every harness `gh` call passes an explicit env= (sandbox or harness
         token), except `account_events`, whose argv is exactly one GET."""
         self.assertEqual(R.account_events_argv("me"),
-                         [R.REAL_GH, "api", "-X", "GET", "users/me/events?per_page=100"])
+                         [R.REAL_GH, "api", "-X", "GET", "users/me/events?per_page=100&page=1"])
+        self.assertEqual(R.account_events_argv("me", 3)[-1], "users/me/events?per_page=100&page=3")
         tree = ast.parse(pathlib.Path(R.__file__).read_text())
         offenders = []
         for fn in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
@@ -353,16 +355,55 @@ class StopTests(Tmp):
                          ("reply", "merge"))
         self.assertEqual(R.classify_stop("done", "Merged. Run /clear.", self.STOPS)[0], "done")
 
-    def test_review_stop_follows_the_scope_ruling(self):
-        """Pilot m2: an in-review stop naming a scope ruling gets the fixed
-        follow-the-ruling reply; one naming neither phrase halts. It does NOT tell a
-        dirty round 2 that names a ruling apart (#357)."""
-        kind, reply = R.classify_stop(
-            "in-review", "Stopped at step 8. The architect's scope ruling: ...", self.STOPS)
+    DQ = ("Stopped at step 8: a BLOCKING finding raises a design question. "
+          "The architect's scope ruling recommends a minimal fix set.")
+
+    def review(self, text, spawn="architect", journal="- Code-review: round 1 (main...abc) - 2 findings\n"):
+        """classify_stop for an in-review stop, with this turn's stream showing a
+        spawn of `spawn` (None: no spawn) and the replicate's journal `journal`
+        (None: no progress.md)."""
+        stream = write_jsonl(self.tmp / "turn.jsonl", [
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "t", "name": "Agent",
+                 "input": {"subagent_type": spawn, "prompt": "rule"}}]}}] if spawn else [
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "x"}]}}])
+        progress = self.tmp / "progress.md"
+        if journal is not None:
+            progress.write_text(journal)
+        elif progress.exists():
+            progress.unlink()
+        return R.classify_stop("in-review", text, self.STOPS, stream=stream, progress=progress)
+
+    def test_design_question_stop_is_replied(self):
+        """#366 AC1: step 8's design-question stop, with the architect spawned and a
+        round-1 journal, gets the follow-the-ruling reply."""
+        kind, reply = self.review(self.DQ)
         self.assertEqual(kind, "reply")
         self.assertIn("scope ruling", reply)
-        self.assertEqual(R.classify_stop(
-            "in-review", "Round 2 is still dirty; escalating.", self.STOPS)[0], "halt")
+
+    def test_round_two_escalation_halts(self):
+        """A dirty round 2 halts, whether the message says so or only the ledger does."""
+        self.assertEqual(self.review(
+            self.DQ + " Round 2 is still dirty; escalating.")[0], "halt")
+        self.assertEqual(self.review(
+            self.DQ, journal="- Code-review: round 2 (abc..def) - 1 finding\n")[0], "halt")
+        self.assertEqual(self.review(
+            self.DQ, journal="- gate-error: scope-ruling - DESIGN_AGENT - no-stderr\n")[0], "halt")
+
+    def test_scope_ruling_alone_halts(self):
+        self.assertEqual(self.review("Stopped at step 8 with the architect's scope ruling.")[0],
+                         "halt")
+
+    def test_missing_structural_evidence_halts(self):
+        """No architect spawn this turn, another agent spawned, or no journal: halt."""
+        self.assertEqual(self.review(self.DQ, spawn=None)[0], "halt")
+        self.assertEqual(self.review(self.DQ, spawn="pm")[0], "halt")
+        self.assertEqual(self.review(self.DQ, journal=None)[0], "halt")
+        self.assertEqual(R.classify_stop("in-review", self.DQ, self.STOPS)[0], "halt")
+
+    def test_unclassifiable_review_message_halts(self):
+        self.assertEqual(self.review("Review found problems; please advise.")[0], "halt")
+        self.assertEqual(self.review("")[0], "halt")
 
     def test_pre_queue_stop_answers_the_backlog_question(self):
         """0.6.0 step 0.1 asks which BACKLOG_SOURCE before queue.md exists."""
@@ -440,12 +481,36 @@ class AuditTests(Tmp):
         self.assertEqual(len(problems), 4)
 
     def test_foreign_events(self):
+        """Only the sandbox repo itself is allowed; other in-org repos are foreign (#366)."""
         ev = [{"created_at": "2026-11-17T01:00:00Z", "type": "PushEvent", "repo": {"name": "me/real"}},
               {"created_at": "2026-11-17T01:00:00Z", "type": "PushEvent", "repo": {"name": "o/sb"}},
+              {"created_at": "2026-11-17T01:00:00Z", "type": "PushEvent", "repo": {"name": "o/other"}},
               {"created_at": "2026-11-16T01:00:00Z", "type": "PushEvent", "repo": {"name": "me/old"}}]
-        out = R.foreign_events(ev, "2026-11-17T00:00:00Z", "2026-11-17T02:00:00Z", "o")
-        self.assertEqual(len(out), 1)
+        out = R.foreign_events(ev, "2026-11-17T00:00:00Z", "2026-11-17T02:00:00Z", "o/sb")
+        self.assertEqual(len(out), 2)
         self.assertIn("me/real", out[0])
+        self.assertIn("o/other", out[1])
+
+    def test_plugin_repo_exemption_is_type_time_and_head_bound(self):
+        h = {"repo": "o/plug", "until": "2026-11-17T01:00:00+00:00", "head": "m" * 40}
+        def ev(t, typ, head=None):
+            e = {"created_at": t, "type": typ, "repo": {"name": "o/plug"}}
+            if head:
+                e["payload"] = {"head": head}
+            return e
+        allowed = [ev("2026-11-17T00:30:00Z", "CreateEvent"),
+                   ev("2026-11-17T00:31:00Z", "PushEvent", "m" * 40),
+                   ev("2026-11-17T01:00:00Z", "PushEvent")]
+        foreign = [ev("2026-11-17T00:32:00Z", "PushEvent", "x" * 40),      # another commit
+                   ev("2026-11-17T00:33:00Z", "IssuesEvent"),              # not a harness type
+                   ev("2026-11-17T01:00:01Z", "PushEvent", "m" * 40),      # after the delete
+                   {"created_at": "?", "type": "CreateEvent", "repo": {"name": "o/plug"}}]
+        start, end = "2026-11-17T00:00:00Z", "2026-11-17T02:00:00Z"
+        self.assertEqual(R.foreign_events(allowed, start, end, "o/sb", h), [])
+        self.assertEqual(len(R.foreign_events(foreign, start, end, "o/sb", h)), 4)
+        self.assertEqual(len(R.foreign_events(allowed, start, end, "o/sb")), 3)
+        self.assertEqual(len(R.foreign_events(allowed, start, end, "o/sb",
+                                              dict(h, until=None))), 3)
 
     def test_foreign_events_window_in_now_format(self):
         """`now()` writes +00:00 and the feed writes Z; an event in the run's last
@@ -453,7 +518,7 @@ class AuditTests(Tmp):
         end = "2026-11-17T02:00:00+00:00"
         ev = [{"created_at": "2026-11-17T02:00:00Z", "type": "PushEvent", "repo": {"name": "me/real"}},
               {"created_at": "2026-11-17T01:00:00Z", "type": "PushEvent", "repo": {"name": "o-other/x"}}]
-        out = R.foreign_events(ev, "2026-11-17T00:00:00+00:00", end, "o")
+        out = R.foreign_events(ev, "2026-11-17T00:00:00+00:00", end, "o/sb")
         self.assertEqual(len(out), 2)
 
     def test_engine_loads(self):
@@ -567,7 +632,8 @@ class VersionDirTests(Tmp):
     def test_accepts_only_xyz(self):
         self.assertEqual(R.version_dir_arg("0.6.0"), "0.6.0")
         self.assertEqual(R.version_dir_arg("10.20.300"), "10.20.300")
-        for bad in ("0.6", "v0.6.0", "0.6.0.1", "0.6.0\n", "0.6.0/..", "", "0.6.x"):
+        for bad in ("0.6", "v0.6.0", "0.6.0.1", "0.6.0\n", "0.6.0/..", "", "0.6.x",
+                    "\u0661.\u0662.\u0663", "0.6.\uff10"):
             with self.assertRaises(R.argparse.ArgumentTypeError, msg=repr(bad)):
                 R.version_dir_arg(bad)
 
@@ -616,6 +682,309 @@ class MeasureTests(Tmp):
         write_jsonl(pdir / "a.jsonl", [r])
         write_jsonl(pdir / "b.jsonl", [r, asst()])
         self.assertIn("more than one parent session", R.measure(pdir)["refused"])
+
+
+class CiBindingTests(Tmp):
+    """#366: a fixture whose CI_STATUS_CMD is not the Actions-API form is refused
+    at load time."""
+
+    def fixture_copy(self, row):
+        import shutil
+        dest = pathlib.Path(tempfile.mkdtemp(dir=self.tmp)) / "fx"
+        shutil.copytree(PILOT, dest)
+        cfg = dest / "repo" / ".claude" / "loop.config.md"
+        lines = [l for l in cfg.read_text().splitlines() if not l.startswith("| `CI_STATUS_CMD`")]
+        if row:
+            lines.append(row)
+        cfg.write_text("\n".join(lines) + "\n")
+        return dest
+
+    def test_pilot_binding_loads(self):
+        self.assertTrue(R.load_fixture(PILOT)["ci_status_cmd"].startswith("gh run list"))
+
+    def test_checks_form_refuses(self):
+        with self.assertRaisesRegex(R.Refused, "Actions-API"):
+            R.load_fixture(self.fixture_copy("| `CI_STATUS_CMD` | `gh pr checks <PR>` | x |"))
+
+    def test_missing_or_duplicate_row_refuses(self):
+        with self.assertRaisesRegex(R.Refused, "0 CI_STATUS_CMD rows"):
+            R.load_fixture(self.fixture_copy(None))
+        row = "| `CI_STATUS_CMD` | `gh run list --workflow t.yml` | x |"
+        with self.assertRaisesRegex(R.Refused, "2 CI_STATUS_CMD rows"):
+            R.load_fixture(self.fixture_copy(row + "\n" + row))
+
+    def test_missing_config_refuses(self):
+        dest = self.fixture_copy(None)
+        (dest / "repo" / ".claude" / "loop.config.md").unlink()
+        with self.assertRaisesRegex(R.Refused, "loop.config.md"):
+            R.load_fixture(dest)
+
+
+class BuildBaseTests(Tmp):
+    def test_user_default_excludes_do_not_drop_fixture_files(self):
+        """#366: git's default $XDG_CONFIG_HOME/git/ignore applies even with no
+        global config; a user ignore naming a fixture file must not move base_sha."""
+        xdg = self.tmp / "xdg"
+        (xdg / "git").mkdir(parents=True)
+        (xdg / "git" / "ignore").write_text("greet.py\n*.md\n")
+        with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(xdg)}):
+            sha = R.build_base(os.path.join(PILOT, "repo"), self.tmp / "b")
+        self.assertEqual(sha, R.load_fixture(PILOT)["base_sha"])
+
+
+def fake_proc(rc=0, out="", err=""):
+    return subprocess.CompletedProcess([], rc, out, err)
+
+
+class EventsFeedTests(unittest.TestCase):
+    START = "2026-11-17T00:00:00+00:00"
+
+    def feed(self, pages):
+        """Patch subprocess.run to serve `pages` (lists of hour offsets, or a
+        CompletedProcess) by page number."""
+        def run(argv, **kw):
+            page = int(argv[-1].rsplit("page=", 1)[1])
+            p = pages[page - 1] if page <= len(pages) else []
+            if isinstance(p, subprocess.CompletedProcess):
+                return p
+            return fake_proc(0, json.dumps([{"created_at": at(h * 3600) if isinstance(h, int) else h}
+                                            for h in p]))
+        return mock.patch.object(R.subprocess, "run", run)
+
+    def test_pages_until_the_oldest_event_is_before_the_start(self):
+        with self.feed([[5] * 100, [3] * 99 + [-1]]):
+            events, cap = R.account_events("me", until=self.START)
+        self.assertEqual((len(events), cap), (200, False))
+
+    def test_feed_that_ends_or_caps_before_the_start_refuses(self):
+        with self.feed([[5] * 100, [3] * 20]):
+            with self.assertRaisesRegex(R.Refused, "ended"):
+                R.account_events("me", until=self.START)
+        with self.feed([[5] * 100] * 3):
+            with self.assertRaisesRegex(R.Refused, "cap"):
+                R.account_events("me", until=self.START)
+
+    def test_unparseable_time_never_ends_paging(self):
+        with self.feed([["garbage"] * 100, [3] * 20]):
+            with self.assertRaises(R.Refused):
+                R.account_events("me", until=self.START)
+
+    def test_any_page_error_refuses(self):
+        for pages in ([fake_proc(1, err="HTTP 500")], [[5] * 100, fake_proc(1, err="boom")]):
+            with self.feed(pages):
+                with self.assertRaisesRegex(R.Refused, "cannot read"):
+                    R.account_events("me", until=self.START)
+            with self.feed(pages):
+                with self.assertRaises(R.Refused):
+                    R.account_events("me")
+
+    def test_whole_feed_count_is_real_and_cap_is_marked(self):
+        with self.feed([[5] * 100, [3] * 42]):
+            self.assertEqual(R.events_summary(*R.account_events("me")),
+                             {"count": 142, "hit_cap": False, "oldest_created_at": at(3 * 3600)})
+        with self.feed([[5] * 100] * 3):
+            self.assertEqual(R.events_summary(*R.account_events("me"))["hit_cap"], True)
+
+
+class CacheRecheckTests(Tmp):
+    def setUp(self):
+        super().setUp()
+        self.cache = self.tmp / "cache"
+        self.cache.mkdir()
+        (self.cache / "f").write_text("x")
+        self.rec = {"plugin_cache_dir": str(self.cache),
+                    "plugin_cache_sha256": R.tree_sha256(self.cache),
+                    "marketplace_url": "u", "marketplace_commit": "c"}
+        self.ok = lambda *a: []
+
+    def test_unchanged_cache_passes(self):
+        self.assertEqual(R.cache_problems(self.tmp, self.rec, self.ok), [])
+
+    def test_changed_missing_or_unrecorded_cache_fails(self):
+        (self.cache / "f").write_text("y")
+        self.assertIn("re-hashes", R.cache_problems(self.tmp, self.rec, self.ok)[0])
+        self.assertTrue(R.cache_problems(self.tmp, dict(self.rec, plugin_cache_sha256=None), self.ok))
+        self.assertTrue(R.cache_problems(self.tmp, dict(self.rec, plugin_cache_dir=str(self.tmp / "no")),
+                                         self.ok))
+
+    def test_install_record_drift_fails(self):
+        out = R.cache_problems(self.tmp, self.rec, lambda *a: ["installed commit d"])
+        self.assertEqual(out, ["at audit: installed commit d"])
+
+
+class FakeOps:
+    """Everything `_run` cannot do offline, recorded. `existing` is the set of
+    GitHub repos; `turn` decides what a `claude -p` turn does."""
+
+    def __init__(self, install_problems=(), turn="done", existing=(), fail_create=()):
+        self.calls, self.existing = [], set(existing)
+        self.install_problems, self.turn, self.fail_create = list(install_problems), turn, fail_create
+        self.install_checked = 0
+        self.t = 0
+
+    def now(self):
+        self.t += 1
+        return datetime.datetime.fromtimestamp(epoch(self.t), datetime.timezone.utc).isoformat()
+
+    def sh(self, cmd, env=None, cwd=None, check=True):
+        self.calls.append((self.now(), list(cmd)))
+        if cmd[0] != R.REAL_GH:
+            if cmd[-1] == "--version":
+                return fake_proc(0, "v1")
+            return fake_proc(0)                                     # git push
+        args = cmd[1:]
+        if args[:1] == ["api"]:
+            repo = args[1].split("/", 1)[1]
+            return fake_proc(0, "{}") if repo in self.existing else \
+                fake_proc(1, err="gh: Not Found (HTTP 404)")
+        if args[:2] == ["repo", "create"]:
+            if args[2] in self.fail_create:
+                raise R.Refused("create failed")
+            self.existing.add(args[2])
+        if args[:2] == ["repo", "delete"]:
+            self.existing.discard(args[2])
+        if args[:2] == ["issue", "create"]:
+            return fake_proc(0, "https://github.com/x/issues/1")
+        return fake_proc(0)
+
+    def sandboxed(self, rdir, claude_real, cwd, cmd, env, stdout=None, timeout=None):
+        if "install" in cmd:
+            cache = pathlib.Path(rdir) / "home" / ".claude" / "plugins" / "cache" / \
+                "claude-code-loop" / "dev-loop" / "0.6.0"
+            cache.mkdir(parents=True)
+            (cache / "SKILL.md").write_text("engine")
+        if "-p" not in cmd:
+            return 0, b""
+        if self.turn == "interrupt":
+            raise KeyboardInterrupt
+        ledger = pathlib.Path(cwd) / ".loop-ledger" / "fixture"
+        ledger.mkdir(parents=True, exist_ok=True)
+        (ledger / "queue.md").write_text("| # | Issue | Status |\n|---|---|---|\n| 1 | #1 x | done |\n")
+        stdout.write(json.dumps({"type": "result", "session_id": "s", "result": "Merged. Run /clear."}) + "\n")
+        return 0, None
+
+    def events(self, login, until=None):
+        return [], False
+
+    def check_install(self, home, url, commit, cache):
+        self.install_checked += 1
+        return list(self.install_problems)
+
+    def launch_env(self, rdir, sandbox):
+        return R.replicate_env(rdir, sandbox, "CLAUDE", "GH")
+
+    def harness_env(self, rdir):
+        return {"PATH": "/usr/bin:/bin"}
+
+    def creates(self):
+        return [(t, c[3]) for t, c in self.calls if c[0] == R.REAL_GH and c[1:3] == ["repo", "create"]]
+
+
+class RunTests(Tmp):
+    """#366 AC2/AC4/AC6: `_run` through an injected runner -- no network, no `claude`,
+    no `gh`. Local git (base, clone, archive, marketplace) runs for real."""
+
+    def setUp(self):
+        super().setUp()
+        src = self.tmp / "plugin-src"
+        pj = src / "plugins" / "dev-loop" / ".claude-plugin" / "plugin.json"
+        pj.parent.mkdir(parents=True)
+        pj.write_text(json.dumps({"name": "dev-loop", "version": "0.6.0"}) + "\n")
+        (src / "README.md").write_text("plugin\n")
+        R.build_base(src, self.tmp / "pin")
+        self.src = str(self.tmp / "pin")
+        self.pin = R.git_out(self.src, "rev-parse", "HEAD")
+        env = mock.patch.dict(os.environ)
+        env.start()
+        self.addCleanup(env.stop)
+        for v in R.EFFORT_ENV:
+            os.environ.pop(v, None)
+
+    def args(self, **kw):
+        a = dict(fixture=PILOT, replicate_id="r1", out=str(self.tmp / "out"), plugin_src=self.src,
+                 plugin_commit=self.pin, version_dir=None, claude_bin="/bin/true",
+                 claude_version="v1", model=S55, effort="medium", login="me",
+                 keep_sandbox=False, turn_timeout=60)
+        a.update(kw)
+        return R.argparse.Namespace(**a)
+
+    def run_it(self, ops, exc=None, **kw):
+        if exc:
+            with self.assertRaises(exc):
+                R.cmd_run(self.args(**kw), ops)
+        else:
+            R.cmd_run(self.args(**kw), ops)
+        return json.loads((self.tmp / "out" / "r1" / "environment.json").read_text())
+
+    PLUG, SB = "frederick-douglas-pearce-loop-sandbox/pilot-r1-plugin", \
+        "frederick-douglas-pearce-loop-sandbox/pilot-r1"
+
+    def test_clean_run_deletes_both_repos_and_records_the_binding(self):
+        ops = FakeOps()
+        env = self.run_it(ops)
+        self.assertEqual(env["outcome"], "done")
+        self.assertEqual(ops.install_checked, 2)          # at install and again at audit
+        self.assertEqual(ops.existing, set())
+        self.assertEqual(env["repos_planned"], [self.PLUG, self.SB])
+        self.assertEqual(env["repos_deleted"], [self.SB])  # the plugin repo went at install
+        self.assertEqual(env["repos_absent"], [self.PLUG])
+        self.assertTrue(env["plugin_repo_deleted"] < env["sandbox_created"])
+        self.assertTrue(env["ci_status_binding"]["value"].startswith("gh run list"))
+        self.assertIn("plugin_cache_dir", env)
+
+    def test_install_refusal_still_covers_the_run_and_tears_down(self):
+        ops = FakeOps(install_problems=["installed commit d is not c"])
+        env = self.run_it(ops, R.Refused)
+        self.assertIn("installed commit", env["refused"])
+        first_create = ops.creates()[0][0]
+        self.assertEqual(env["run_start"], env["wall_clock_start"])
+        self.assertTrue(env["run_start"] < first_create, (env["run_start"], first_create))
+        self.assertTrue(env["run_end"] > ops.creates()[-1][0])
+        self.assertEqual(env["repos_deleted"], [self.PLUG])
+        self.assertEqual(ops.existing, set())
+        self.assertNotIn(self.SB, env["repos_planned"])
+
+    def test_keyboard_interrupt_mid_drive_still_tears_down(self):
+        ops = FakeOps(turn="interrupt")
+        env = self.run_it(ops, KeyboardInterrupt)
+        self.assertEqual(env["interrupted"], "KeyboardInterrupt")
+        self.assertEqual(ops.existing, set())
+        self.assertEqual(env["repos_deleted"], [self.SB])
+
+    def test_pre_existing_repo_is_refused_and_never_deleted(self):
+        ops = FakeOps(existing={self.SB})
+        env = self.run_it(ops, R.Refused)
+        self.assertIn("exists before this run", env["refused"])
+        self.assertIn(self.SB, ops.existing)
+        self.assertNotIn(self.SB, env["repos_planned"])
+        self.assertNotIn(self.SB, env.get("repos_deleted", []))
+
+    def test_failed_create_is_recorded_and_not_deleted(self):
+        ops = FakeOps(fail_create={self.PLUG})
+        env = self.run_it(ops, R.Refused)
+        self.assertEqual(env["repos_planned"], [self.PLUG])
+        self.assertEqual(env["repos_absent"], [self.PLUG])
+        self.assertNotIn("repos_deleted", env)
+
+    def test_marketplace_tree_must_equal_the_pin(self):
+        """With no version override the marketplace commit's tree is the pin's; an
+        override changes plugin.json, so it is exempt."""
+        env = self.run_it(FakeOps(), version_dir="0.6.0")
+        self.assertEqual(env["outcome"], "done")
+        real = R.build_base
+
+        def drift(src, dest):
+            sha = real(src, dest)
+            if pathlib.Path(dest).name == "marketplace":
+                (pathlib.Path(dest) / "extra").write_text("x")
+                R.sh(["git", "add", "extra"], cwd=dest)
+                R.sh(["git", "-c", "commit.gpgsign=false", "-c", "user.name=x", "-c",
+                      "user.email=x@x", "commit", "-q", "-m", "drift"], cwd=dest)
+                return R.git_out(dest, "rev-parse", "HEAD")
+            return sha
+        with mock.patch.object(R, "build_base", side_effect=drift):
+            with self.assertRaisesRegex(R.Refused, "not the pin's tree"):
+                R.cmd_run(self.args(out=str(self.tmp / "o3")), FakeOps())
 
 
 if __name__ == "__main__":

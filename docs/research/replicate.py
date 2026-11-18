@@ -55,6 +55,7 @@ import re
 import select
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -98,20 +99,52 @@ def load_fixture(fixture_dir):
         if key not in spec:
             raise Refused("fixture.json lacks %r" % key)
     spec["dir"] = str(fixture_dir)
+    spec["ci_status_cmd"] = ci_status_binding(fixture_dir / "repo")
     return spec
+
+
+# The sandbox gh-token is a fine-grained PAT, which cannot read checks (pilot m1),
+# so a fixture's CI gate must read the Actions API. Any other form is refused.
+CI_ACTIONS_FORM = re.compile(r"^gh (run (list|view)\b|api \S*/actions/)")
+
+
+def ci_status_binding(repo_dir):
+    """-> the fixture repo's `CI_STATUS_CMD` value, refusing unless it is exactly
+    one row in `.claude/loop.config.md` and uses the Actions-API form."""
+    path = pathlib.Path(repo_dir) / ".claude" / "loop.config.md"
+    try:
+        lines = path.read_text().splitlines()
+    except OSError as exc:
+        raise Refused("cannot read the fixture's loop.config.md: %s" % exc)
+    values = []
+    for line in lines:
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if line.lstrip().startswith("|") and len(cells) >= 2 and cells[0] == "`CI_STATUS_CMD`":
+            values.append(cells[1].strip("`").strip())
+    if len(values) != 1:
+        raise Refused("fixture loop.config.md has %d CI_STATUS_CMD rows, expected 1" % len(values))
+    if not CI_ACTIONS_FORM.match(values[0]):
+        raise Refused("fixture CI_STATUS_CMD %r is not the Actions-API form "
+                      "(gh run list / gh api …/actions/)" % values[0])
+    return values[0]
 
 
 def build_base(repo_dir, dest):
     """Commit `repo_dir`'s files into a new repo at `dest` with a fixed identity and
-    date, so the base SHA is a pure function of the fixture's bytes. -> sha."""
+    date, so the base SHA is a pure function of the fixture's bytes. -> sha.
+
+    The user's git configuration never reaches it: no global or system config
+    (hooks, templates, excludes), and `core.excludesFile` is pinned to /dev/null,
+    since without a configured value git still reads `$XDG_CONFIG_HOME/git/ignore`."""
     dest = pathlib.Path(dest)
     shutil.copytree(repo_dir, dest)
     env = dict(os.environ, GIT_AUTHOR_NAME=FIXED_IDENTITY[0],
                GIT_AUTHOR_EMAIL=FIXED_IDENTITY[1], GIT_COMMITTER_NAME=FIXED_IDENTITY[0],
                GIT_COMMITTER_EMAIL=FIXED_IDENTITY[1], GIT_AUTHOR_DATE=FIXED_GIT_DATE,
-               GIT_COMMITTER_DATE=FIXED_GIT_DATE)
+               GIT_COMMITTER_DATE=FIXED_GIT_DATE, GIT_CONFIG_GLOBAL=os.devnull,
+               GIT_CONFIG_NOSYSTEM="1")
     for cmd in (["git", "init", "-q", "-b", "main"],
-                ["git", "add", "-A"],
+                ["git", "-c", "core.excludesFile=" + os.devnull, "add", "-A"],
                 ["git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "fixture base"]):
         subprocess.run(cmd, cwd=dest, env=env, check=True, stdout=subprocess.DEVNULL)
     return git_out(dest, "rev-parse", "HEAD")
@@ -480,9 +513,18 @@ def row_status(queue_md, issue):
     return None
 
 
-def classify_stop(status, final_text, stops):
+def classify_stop(status, final_text, stops, stream=None, progress=None):
     """-> ('reply', text) | ('done', None) | ('halt', reason). Keyed on the ledger
-    row's Status; the final message must agree with the stop it names (A8)."""
+    row's Status; the final message must agree with the stop it names (A8).
+
+    A stop may demand more than its `expect` match, and each demand is
+    default-deny -- evidence it cannot read halts:
+      `halt_if`                 a regex the final message must NOT match;
+      `requires_design_spawn`   an agent name this turn's `stream` must show spawned
+                                (a scope ruling was actually taken, #366);
+      `halt_on_ledger_round2`   the replicate's `progress.md` must show no review
+                                round >= 2 and no scope-ruling gate-error.
+    `halt_if` only adds halts; `expect` is what makes a stop safe to answer."""
     for stop in stops:
         want = stop["status"]
         if (status is None and want is None) or (
@@ -490,10 +532,59 @@ def classify_stop(status, final_text, stops):
             if not re.search(stop["expect"], final_text or ""):
                 return "halt", ("status %r but the final message does not match %r"
                                 % (status, stop["expect"]))
+            hit = stop.get("halt_if") and re.search(stop["halt_if"], final_text or "")
+            if hit:
+                return "halt", "status %r: the final message names %r" % (status, hit.group(0))
+            agent = stop.get("requires_design_spawn")
+            if agent and (design_spawned(stream, agent) if stream else None) is not True:
+                return "halt", "status %r: no %s spawn shown in this turn" % (status, agent)
+            if stop.get("halt_on_ledger_round2") and (
+                    ledger_round2(progress) if progress else None) is not False:
+                return "halt", ("status %r: progress.md shows a round >= 2 or a scope-ruling "
+                                "gate-error, or cannot be read" % (status,))
             if stop.get("final"):
                 return "done", None
             return "reply", stop["reply"]
     return "halt", "unrecognized stop: row status %r" % (status,)
+
+
+def design_spawned(stream, agent):
+    """-> True if the stream-json file shows an Agent/Task tool_use spawning
+    `agent`, False if it shows none, None if it cannot be read."""
+    try:
+        lines = pathlib.Path(stream).read_text().splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(ev, dict) or ev.get("type") != "assistant":
+            continue
+        for block in ((ev.get("message") or {}).get("content") or []):
+            if (isinstance(block, dict) and block.get("type") == "tool_use"
+                    and block.get("name") in ("Agent", "Task")
+                    and (block.get("input") or {}).get("subagent_type") == agent):
+                return True
+    return False
+
+
+ROUND_N = re.compile(r"\bround\s+(\d+)\b", re.I | re.ASCII)
+SCOPE_RULING_ERROR = re.compile(r"^\s*-\s*gate-error:\s*scope-ruling\b", re.M)
+
+
+def ledger_round2(progress):
+    """-> True if the journal names any round >= 2 or a scope-ruling gate-error,
+    False if it names neither, None if it cannot be read. Over-reads on purpose:
+    any "round 2" in it halts, prose included."""
+    try:
+        text = pathlib.Path(progress).read_text()
+    except OSError:
+        return None
+    if SCOPE_RULING_ERROR.search(text):
+        return True
+    return any(int(m.group(1)) >= 2 for m in ROUND_N.finditer(text))
 
 
 def read_stream(path):
@@ -703,31 +794,95 @@ def check_strata(observed, expected):
     return problems
 
 
-def account_events_argv(login):
+EVENTS_PER_PAGE = 100
+EVENTS_MAX_PAGES = 3      # the events API serves at most 300 events; page 4 is an error
+
+
+def account_events_argv(login, page=1):
     """The one call the harness makes with the human's own gh login: a GET."""
-    return [REAL_GH, "api", "-X", "GET", "users/%s/events?per_page=100" % login]
+    return [REAL_GH, "api", "-X", "GET",
+            "users/%s/events?per_page=%d&page=%d" % (login, EVENTS_PER_PAGE, page)]
 
 
-def account_events(login):
+def account_events(login, until=None):
     """The real account's public+private event feed, read with the human's own
-    login (read-only, harness side). -> [event]."""
-    r = subprocess.run(account_events_argv(login), capture_output=True, text=True)
-    if r.returncode:
-        raise Refused("cannot read the account event feed: %s" % r.stderr.strip()[:200])
-    return json.loads(r.stdout)
+    login (read-only, harness side). -> (events, hit_cap).
+
+    With `until` (an ISO time) it pages until the oldest parseable `created_at` is
+    earlier than `until`, and refuses if the feed ends or reaches the API's cap
+    first: fail closed, since the window would not be covered. An unparseable
+    time never ends the paging. With `until=None` it reads the whole feed the API
+    serves. Any error on any page refuses."""
+    since = None
+    if until is not None:
+        since = _epoch(until)
+        if since is None:
+            raise Refused("cannot read the audit window start %r" % (until,))
+    events = []
+    for page in range(1, EVENTS_MAX_PAGES + 1):
+        r = subprocess.run(account_events_argv(login, page), capture_output=True, text=True)
+        if r.returncode:
+            raise Refused("cannot read the account event feed (page %d): %s"
+                          % (page, r.stderr.strip()[:200]))
+        try:
+            batch = json.loads(r.stdout)
+        except ValueError:
+            batch = None
+        if not isinstance(batch, list):
+            raise Refused("account event feed page %d is not a JSON list" % page)
+        events += batch
+        if since is not None:
+            times = [t for t in (_epoch(e.get("created_at")) for e in events
+                                 if isinstance(e, dict)) if t is not None]
+            if times and min(times) < since:
+                return events, False
+        if len(batch) < EVENTS_PER_PAGE:
+            if since is not None:
+                raise Refused("account event feed ended (%d events) before reaching %s"
+                              % (len(events), until))
+            return events, False
+    if since is not None:
+        raise Refused("account event feed cap (%d events) reached before %s"
+                      % (len(events), until))
+    return events, True
 
 
-def foreign_events(events, start_iso, end_iso, org):
-    """Events in the run window whose repo is not in the sandbox org."""
+def events_summary(events, hit_cap):
+    """-> what `account_events_before` records: the count read, whether the API's
+    cap bounded it, and the oldest parseable time."""
+    times = [(t, e.get("created_at")) for e in events if isinstance(e, dict)
+             for t in [_epoch(e.get("created_at"))] if t is not None]
+    return {"count": len(events), "hit_cap": hit_cap,
+            "oldest_created_at": min(times)[1] if times else None}
+
+
+HARNESS_EVENT_TYPES = ("CreateEvent", "PushEvent")
+
+
+def foreign_events(events, start_iso, end_iso, sandbox, harness=None):
+    """Events in the run window on any repo but the sandbox repo itself -- other
+    in-org repos included. `harness` ({repo, until, head}) exempts the harness's own
+    Create/Push events on the plugin repo up to its deletion stamp, a push only when
+    its payload's `head` is absent or the marketplace commit. `until` is the local
+    clock: behind GitHub's, the harness's own events count (fails closed); ahead, the
+    exemption outlives a repo already deleted (harmless)."""
     out = []
     t0, t1 = _epoch(start_iso), _epoch(end_iso)
+    h_until = _epoch((harness or {}).get("until"))
     for ev in events:
         t = ev.get("created_at") or ""
         te = _epoch(t)
         repo = (ev.get("repo") or {}).get("name", "")
         in_window = te is None or (t0 <= te <= t1)        # unreadable time: count it
-        if in_window and not repo.lower().startswith(org.lower() + "/"):
-            out.append("%s %s %s" % (t, ev.get("type"), repo))
+        if not in_window or repo.lower() == sandbox.lower():
+            continue
+        if (harness and h_until is not None and te is not None and te <= h_until
+                and repo.lower() == harness["repo"].lower()
+                and ev.get("type") in HARNESS_EVENT_TYPES):
+            head = (ev.get("payload") or {}).get("head")
+            if ev.get("type") == "CreateEvent" or head is None or head == harness.get("head"):
+                continue
+        out.append("%s %s %s" % (t, ev.get("type"), repo))
     return out
 
 
@@ -793,26 +948,124 @@ def harness_env(rdir):
             "GIT_TERMINAL_PROMPT": "0"}
 
 
-def cmd_run(a):
+class Ops:
+    """Every side effect `_run`, `_drive`, the audit and the teardown make that
+    cannot run offline: GitHub (`gh`, `git push`), `claude`, the sandbox, the
+    events feed, the install records, the two token files, and the clock. Local
+    git runs for real. Tests pass a fake (#366)."""
+
+    def now(self):
+        return now()
+
+    def sh(self, cmd, env=None, cwd=None, check=True):
+        return sh(cmd, env=env, cwd=cwd, check=check)
+
+    def sandboxed(self, rdir, claude_real, cwd, cmd, env, stdout=subprocess.PIPE,
+                  timeout=None):
+        return run_sandboxed(rdir, claude_real, cwd, cmd, env, stdout=stdout, timeout=timeout)
+
+    def events(self, login, until=None):
+        return account_events(login, until)
+
+    def check_install(self, home, url, commit, cache):
+        return check_install(home, url, commit, cache)
+
+    def launch_env(self, rdir, sandbox):
+        return launch_env(rdir, sandbox, TOKEN_DIR)
+
+    def harness_env(self, rdir):
+        return harness_env(rdir)
+
+
+def cmd_run(a, ops=None):
+    ops = ops or Ops()
     spec = load_fixture(a.fixture)
     rid = a.replicate_id
     rdir = pathlib.Path(a.out).resolve() / rid
     if rdir.exists():
         raise Refused("replicate dir %s already exists" % rdir)
     rdir.mkdir(parents=True)
-    env_record = {"replicate": rid, "fixture": spec["name"], "wall_clock_start": now(),
+    env_record = {"replicate": rid, "fixture": spec["name"], "wall_clock_start": ops.now(),
                   "gate_latency": "0 (scripted)", "approval_channel": "--resume"}
     try:
-        _run(a, spec, rdir, env_record)
+        _run(a, spec, rdir, env_record, ops)
     except Exception as exc:
         env_record.setdefault("refused" if isinstance(exc, Refused) else "error", str(exc))
         raise
+    except BaseException as exc:                   # KeyboardInterrupt, SystemExit
+        env_record.setdefault("interrupted", type(exc).__name__)
+        raise
     finally:
-        env_record["wall_clock_end"] = now()
+        env_record["wall_clock_end"] = ops.now()
         (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
 
 
-def _run(a, spec, rdir, env_record):
+def repo_exists(ops, henv, repo):
+    """-> True | False | None (cannot tell). Keyed on the HTTP status: `gh api`
+    exits 1 for a 404 and for any other error alike. A 404 also means "exists but
+    this token cannot see it"; the harness token is an org admin, so it can."""
+    r = ops.sh([REAL_GH, "api", "repos/%s" % repo], env=henv, check=False)
+    if r.returncode == 0:
+        return True
+    if "(HTTP 404)" in (r.stderr or "") + (r.stdout or ""):
+        return False
+    return None
+
+
+def create_repo(ops, henv, repo, planned):
+    """Create `repo` only if it is absent, recording it in `planned` before the
+    create call: so a repo teardown finds is one this run created (#366)."""
+    state = repo_exists(ops, henv, repo)
+    if state is not False:
+        raise Refused("repo %s %s before this run created it; it will not be created or "
+                      "deleted" % (repo, "exists" if state else "cannot be probed"))
+    planned.append(repo)
+    ops.sh([REAL_GH, "repo", "create", repo, "--private"], env=henv)
+
+
+def teardown(ops, henv, planned, env_record, keep):
+    """Delete each planned repo that exists. SIGINT is ignored for the loop, and
+    each repo is handled on its own, so one failure or a second Ctrl-C does not
+    strand the rest. A repo whose existence cannot be told is recorded, never
+    deleted blind."""
+    if keep:
+        gone = env_record.get("plugin_repo") if env_record.get("plugin_repo_deleted") else None
+        env_record["sandbox_kept"] = [r for r in planned if r != gone]
+        return
+    if not planned:
+        return
+    try:
+        old = signal.signal(signal.SIGINT, signal.SIG_IGN)
+    except ValueError:                              # not the main thread
+        old = None
+    try:
+        for repo in planned:
+            try:
+                state = repo_exists(ops, henv, repo)
+                if state is False:
+                    env_record.setdefault("repos_absent", []).append(repo)
+                    continue
+                if state is None:
+                    env_record.setdefault("repo_delete_failed", []).append(
+                        "%s: existence unknown, not deleted" % repo)
+                    continue
+                r = ops.sh([REAL_GH, "repo", "delete", repo, "--yes"], env=henv, check=False)
+                if r.returncode == 0:
+                    env_record.setdefault("repos_deleted", []).append(repo)
+                else:
+                    env_record.setdefault("repo_delete_failed", []).append(
+                        "%s: %s" % (repo, (r.stderr or r.stdout).strip()[:300]))
+            except Exception as exc:
+                env_record.setdefault("repo_delete_failed", []).append("%s: %s" % (repo, exc))
+    finally:
+        if old is not None:
+            signal.signal(signal.SIGINT, old)
+
+
+def _run(a, spec, rdir, env_record, ops):
+    # The account-event window opens with the replicate, before any repo is
+    # created or any `claude` runs, so it covers the install (#366).
+    env_record["run_start"] = env_record["wall_clock_start"]
     login = a.login
     sandbox = "%s/%s-%s" % (spec["org"], spec["name"], a.replicate_id)
     # Base: built from the fixture's bytes, verified against the frozen SHA.
@@ -824,7 +1077,7 @@ def _run(a, spec, rdir, env_record):
     sh(["git", "clone", "-q", str(rdir / "base"), str(clone)])
     # Plugin: git-archived at the pin, optionally re-versioned in the copy only (A5).
     plugin_resolved = git_out(a.plugin_src, "rev-parse", a.plugin_commit + "^{commit}")
-    cli_actual = sh([a.claude_bin, "--version"]).stdout.strip()
+    cli_actual = ops.sh([a.claude_bin, "--version"]).stdout.strip()
     problems = preflight(clone, spec["base_sha"], spec["ledger_root"], a.plugin_commit,
                          plugin_resolved, a.claude_version, cli_actual, os.environ)
     env_record.update(base_sha=base, plugin_commit=plugin_resolved, cli_version=cli_actual,
@@ -852,9 +1105,14 @@ def _run(a, spec, rdir, env_record):
         pj.write_text(json.dumps(manifest, indent=2) + "\n")
     version_dir = manifest["version"]
     mk_sha = build_base(archive, rdir / "marketplace")
+    if not a.version_dir:
+        pin_tree = git_out(a.plugin_src, "rev-parse", plugin_resolved + "^{tree}")
+        mk_tree = git_out(rdir / "marketplace", "rev-parse", mk_sha + "^{tree}")
+        if mk_tree != pin_tree:
+            raise Refused("marketplace tree %s is not the pin's tree %s" % (mk_tree, pin_tree))
     plugin_repo = "%s/%s-%s-plugin" % (spec["org"], spec["name"], a.replicate_id)
     mk_url = "https://github.com/%s.git" % plugin_repo
-    env_record.update(marketplace_commit=mk_sha, plugin_repo=plugin_repo)
+    env_record.update(marketplace_commit=mk_sha, marketplace_url=mk_url, plugin_repo=plugin_repo)
     # Isolated home: roster, memory snapshot, settings. Nothing from the real one.
     home = rdir / "home" / ".claude"
     (home / "agents").mkdir(parents=True)
@@ -868,67 +1126,72 @@ def _run(a, spec, rdir, env_record):
     env_record.update(version_dir=version_dir, memory_snapshot=snapshot_id(mem),
                       roster=pins, expected_strata={k: list(v) for k, v in expected.items()},
                       model_tiers=spec.get("model_tiers", "— (every role inherits)"),
-                      ci_status_binding=spec.get("ci_status_binding"),
+                      ci_status_binding={"value": spec["ci_status_cmd"],
+                                         "note": spec.get("ci_status_binding")},
                       settings_sha256=hashlib.sha256((home / "settings.json").read_bytes()).hexdigest())
     write_shim(rdir / "bin")
     (rdir / "gh-calls.jsonl").touch()
-    env = launch_env(rdir, sandbox, TOKEN_DIR)
+    env = ops.launch_env(rdir, sandbox)
     claude_real = os.path.realpath(a.claude_bin)
     env_record["claude_real"] = claude_real
     # Git inside the replicate: sandbox token via gh's credential helper, fixed identity.
-    sh([REAL_GH, "auth", "setup-git"], env=env)
+    ops.sh([REAL_GH, "auth", "setup-git"], env=env)
     for k, v in (("user.name", FIXED_IDENTITY[0]), ("user.email", FIXED_IDENTITY[1])):
         sh(["git", "config", "--global", k, v], env=env)
-    # Repos (harness side, harness-token only). From the first create onward the
-    # audit, the cost read and the teardown run on every path, success or not.
-    henv = harness_env(rdir)
-    sh([REAL_GH, "auth", "setup-git"], env=henv)
-    env_record["account_events_before"] = len(account_events(login))
-    created = []
+    # Repos (harness side, harness-token only). Each is recorded before its create
+    # call; from then on the audit and the cost read run on every Exception path,
+    # and the teardown, in its own outer finally, on every path (#366).
+    henv = ops.harness_env(rdir)
+    ops.sh([REAL_GH, "auth", "setup-git"], env=henv)
     try:
-        sh([REAL_GH, "repo", "create", plugin_repo, "--private"], env=henv)
-        created.append(plugin_repo)
-        sh(["git", "push", "-q", mk_url, "main"], env=henv, cwd=rdir / "marketplace")
-        # Plugin install inside the isolated config (A5), sandboxed like every
-        # replicate `claude` process; refuse unless it landed as a git install of
-        # exactly the marketplace commit, in the cache.
-        for sub in (["marketplace", "add", mk_url], ["install", "dev-loop@claude-code-loop"]):
-            rc, out = run_sandboxed(rdir, claude_real, rdir / "home",
-                                    [claude_real, "plugin"] + sub, env, timeout=600)
-            if rc:
-                raise Refused("claude plugin %s exited %d: %s"
-                              % (sub[0], rc, (out or b"").decode(errors="replace").strip()[:300]))
-        cache = home / "plugins" / "cache" / "claude-code-loop" / "dev-loop" / version_dir
-        problems = check_install(home, mk_url, mk_sha, cache)
-        if problems:
-            raise Refused("; ".join(problems))
-        env_record["plugin_cache_sha256"] = tree_sha256(cache)
-        sh([REAL_GH, "repo", "create", sandbox, "--private"], env=henv)
-        created.append(sandbox)
-        env_record["sandbox_created"] = env_record["run_start"] = now()
-        _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv)
+        env_record["account_events_before"] = events_summary(*ops.events(login))
+    except Refused as exc:                         # recorded; nothing gates on the count
+        env_record["account_events_before"] = {"error": str(exc)}
+    planned = []
+    env_record["repos_planned"] = planned
+    try:
+        try:
+            create_repo(ops, henv, plugin_repo, planned)
+            ops.sh(["git", "push", "-q", mk_url, "main"], env=henv, cwd=rdir / "marketplace")
+            # Plugin install inside the isolated config (A5), sandboxed like every
+            # replicate `claude` process; refuse unless it landed as a git install of
+            # exactly the marketplace commit, in the cache.
+            for sub in (["marketplace", "add", mk_url], ["install", "dev-loop@claude-code-loop"]):
+                rc, out = ops.sandboxed(rdir, claude_real, rdir / "home",
+                                        [claude_real, "plugin"] + sub, env, timeout=600)
+                if rc:
+                    raise Refused("claude plugin %s exited %d: %s"
+                                  % (sub[0], rc, (out or b"").decode(errors="replace").strip()[:300]))
+            cache = home / "plugins" / "cache" / "claude-code-loop" / "dev-loop" / version_dir
+            env_record["plugin_cache_dir"] = str(cache)
+            problems = ops.check_install(home, mk_url, mk_sha, cache)
+            if problems:
+                raise Refused("; ".join(problems))
+            env_record["plugin_cache_sha256"] = tree_sha256(cache)
+            # The plugin repo is a write target only while it exists: delete it as
+            # soon as the install is verified (#366). Whether the CLI touches the
+            # marketplace at session start is the re-pilot's to confirm.
+            r = ops.sh([REAL_GH, "repo", "delete", plugin_repo, "--yes"], env=henv, check=False)
+            if r.returncode:
+                raise Refused("cannot delete the plugin repo after install: %s"
+                              % (r.stderr or r.stdout).strip()[:300])
+            env_record["plugin_repo_deleted"] = ops.now()
+            create_repo(ops, henv, sandbox, planned)
+            env_record["sandbox_created"] = ops.now()
+            _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, ops)
+        finally:
+            env_record.setdefault("run_end", ops.now())
+            (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
+            steps = (("audit", lambda: write_audit(rdir, env_record, spec, login, version_dir, ops)),
+                     ("measure", lambda: (rdir / "result.json").write_text(
+                         json.dumps(measure(project_dir(rdir)), indent=2))))
+            for name, step in steps:
+                try:
+                    step()
+                except Exception as exc:              # recorded, never swallowed silently
+                    env_record.setdefault("errors", []).append("%s: %s" % (name, exc))
     finally:
-        env_record.setdefault("run_start", now())
-        env_record.setdefault("run_end", now())
-        (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
-        steps = (("audit", lambda: write_audit(rdir, env_record, spec, login, version_dir)),
-                 ("measure", lambda: (rdir / "result.json").write_text(
-                     json.dumps(measure(project_dir(rdir)), indent=2))))
-        for name, step in steps:
-            try:
-                step()
-            except Exception as exc:                  # recorded, never swallowed silently
-                env_record.setdefault("errors", []).append("%s: %s" % (name, exc))
-        if a.keep_sandbox:
-            env_record["sandbox_kept"] = created
-        else:
-            for repo in created:
-                r = sh([REAL_GH, "repo", "delete", repo, "--yes"], env=henv, check=False)
-                if r.returncode == 0:
-                    env_record.setdefault("repos_deleted", []).append(repo)
-                else:
-                    env_record.setdefault("repo_delete_failed", []).append(
-                        "%s: %s" % (repo, (r.stderr or r.stdout).strip()[:300]))
+        teardown(ops, henv, planned, env_record, a.keep_sandbox)
 
 
 def check_install(home, url, commit, cache):
@@ -963,19 +1226,20 @@ def check_install(home, url, commit, cache):
     return out
 
 
-def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv):
+def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, ops):
     """Seed the sandbox repo, then drive the loop (A8): ledger-keyed stops answered
     with scripted replies, never improvised; every turn sandboxed and timed."""
     sh(["git", "remote", "set-url", "origin", "https://github.com/%s.git" % sandbox], cwd=clone)
-    sh(["git", "push", "-q", "origin", "main"], env=henv, cwd=clone)
-    sh([REAL_GH, "label", "create", spec["label"], "-R", sandbox], env=henv)
-    url = sh([REAL_GH, "issue", "create", "-R", sandbox, "-t", spec["issue"]["title"],
+    ops.sh(["git", "push", "-q", "origin", "main"], env=henv, cwd=clone)
+    ops.sh([REAL_GH, "label", "create", spec["label"], "-R", sandbox], env=henv)
+    url = ops.sh([REAL_GH, "issue", "create", "-R", sandbox, "-t", spec["issue"]["title"],
               "-b", spec["issue"]["body"], "--label", spec["label"]], env=henv).stdout.strip()
     if not url.endswith("/issues/1"):
         raise Refused("fixture issue is not #1: %s" % url)
     (rdir / "streams").mkdir()
     prompt, session, n, outcome = spec["first_prompt"], None, 0, None
     queue = clone / spec["ledger_root"] / spec["run_slug"] / "queue.md"
+    progress = queue.parent / "progress.md"
     turns = env_record.setdefault("turns", [])
     while outcome is None:
         n += 1
@@ -988,7 +1252,7 @@ def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv):
         stream = rdir / "streams" / ("turn-%02d.jsonl" % n)
         try:
             with open(stream, "w") as out:
-                rc, _ = run_sandboxed(rdir, claude_real, clone, cmd, env, stdout=out,
+                rc, _ = ops.sandboxed(rdir, claude_real, clone, cmd, env, stdout=out,
                                       timeout=a.turn_timeout)
         except subprocess.TimeoutExpired:
             turns.append({"turn": n, "returncode": None, "timeout_s": a.turn_timeout})
@@ -1001,29 +1265,60 @@ def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv):
             outcome = ("halt", "turn %d produced no result event" % n)
             break
         session = result.get("session_id") or session
-        kind, val = classify_stop(status, result.get("result"), spec["stops"])
+        kind, val = classify_stop(status, result.get("result"), spec["stops"],
+                                  stream=stream, progress=progress)
         if kind == "reply" and n >= spec["max_turns"]:
             kind, val = "halt", "max_turns %d reached" % spec["max_turns"]
         if kind == "reply":
             prompt = val
         else:
             outcome = (kind, val)
-    env_record.update(run_end=now(), invocations=n, unattended=outcome[0] == "done",
+    env_record.update(run_end=ops.now(), invocations=n, unattended=outcome[0] == "done",
                       outcome=outcome[1] or "done")
 
 
-def write_audit(rdir, env_record, spec, login, version_dir):
+def cache_problems(rdir, env_record, check=check_install):
+    """AC6b at audit time (#366): the cache still hashes to what was recorded at
+    install, and the install records still name the marketplace commit at that
+    path. Default-deny: a missing record, directory or hash fails."""
+    cache, want = env_record.get("plugin_cache_dir"), env_record.get("plugin_cache_sha256")
+    if not cache or not want:
+        return ["no recorded plugin cache dir or hash to re-check"]
+    if not pathlib.Path(cache).is_dir():
+        return ["plugin cache %s is gone at audit time" % cache]
+    out = []
+    got = tree_sha256(cache)
+    if got != want:
+        out.append("plugin cache re-hashes to %s, recorded %s at install" % (got, want))
+    home = pathlib.Path(rdir) / "home" / ".claude"
+    out += ["at audit: %s" % p for p in check(home, env_record.get("marketplace_url"),
+                                              env_record.get("marketplace_commit"), cache)]
+    return out
+
+
+def write_audit(rdir, env_record, spec, login, version_dir, ops=None):
+    ops = ops or Ops()
     pdir = project_dir(rdir)
     transcripts = all_transcripts(pdir)
     inits = [read_stream(p)[0] for p in sorted((rdir / "streams").glob("*.jsonl"))]
     sandbox = env_record["sandbox_repo"]
     gh_problems, gh_calls = audit_gh_calls(transcripts, rdir / "gh-calls.jsonl", sandbox)
     load_problems, loads = audit_engine_loads(transcripts, rdir, version_dir)
+    load_problems += cache_problems(rdir, env_record, ops.check_install)
+    harness = None
+    if env_record.get("plugin_repo"):
+        harness = {"repo": env_record["plugin_repo"], "until": env_record.get("plugin_repo_deleted"),
+                   "head": env_record.get("marketplace_commit")}
+    try:
+        events, _cap = ops.events(login, until=env_record["wall_clock_start"])
+        account = foreign_events(events, env_record["run_start"],
+                                 env_record.get("run_end") or ops.now(), sandbox, harness)
+    except Refused as exc:                          # the window is not covered: fail
+        account = ["account event feed: %s" % exc]
     expected = {k: tuple(v) for k, v in env_record["expected_strata"].items()}
     audit = {
         "a_tracker": gh_problems,
-        "a_account_events": foreign_events(account_events(login), env_record["run_start"],
-                                           env_record.get("run_end") or now(), spec["org"]),
+        "a_account_events": account,
         "a_tools": audit_tools(transcripts, inits, pathlib.Path.home(), rdir),
         "b_engine_loads": load_problems, "engine_loads": loads,
         "c_strata": check_strata(observed_strata(pdir), expected),
@@ -1039,7 +1334,7 @@ def write_audit(rdir, env_record, spec, login, version_dir):
 def version_dir_arg(s):
     """--version-dir must be an `x.y.z` era directory, checked at parse time: a
     typo otherwise surfaces only after a paid replicate has started (#357)."""
-    if not re.fullmatch(r"\d+\.\d+\.\d+", s):
+    if not re.fullmatch(r"\d+\.\d+\.\d+", s, re.ASCII):
         raise argparse.ArgumentTypeError("%r is not an x.y.z version directory" % s)
     return s
 
