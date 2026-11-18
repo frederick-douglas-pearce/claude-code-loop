@@ -4,6 +4,9 @@
 at the end is **unratified** until the owner says otherwise.
 **Opened:** 2026-11-18, engine 0.6.0 (payload unchanged in-tree since `44e0c69`; payload freeze in
 force until R1, #288, branches).
+**Reviewed:** by the `architect` agent on 2026-11-18 (#279 AC2), as a full review of the draft before
+PR #365, followed by two scope rulings at that PR's code-review gate. Its findings were applied, and
+the points it marked disputed are escalated in §12 or were decided by the owner (§2.8, §10, §11).
 **Question:** can the parent become a thin controller — with each phase between the human gates
 running in its own forked context, loading only what it needs, and returning a bounded result —
 **without any phase losing its fail-safe half**? And what would that save, once the gate re-warm is
