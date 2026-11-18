@@ -401,6 +401,28 @@ class StopTests(Tmp):
         self.assertEqual(self.review(self.DQ, journal=None)[0], "halt")
         self.assertEqual(R.classify_stop("in-review", self.DQ, self.STOPS)[0], "halt")
 
+    def test_any_round_but_round_one_in_the_journal_halts(self):
+        """#366 scope ruling: default-deny on the round token. The finder's repro
+        (`round-2` + "after the re-review") and every variant halt; `round 1`
+        alone and a journal with no round word reply."""
+        msg = ("Stopped at step 8 after the re-review: a BLOCKING finding raises a design "
+               "question; the architect's scope ruling is below.")
+        for j in ("- Code-review: round-2 (abc..def) - 1 finding\n", "Round two returned 1\n",
+                  "review round #2\n", "rounds 1-2\n", "round 10 (a..b)\n", "round 1, 2\n",
+                  "- r2.correctness.1 (x.py): y\n"):
+            self.assertEqual(self.review(msg, journal=j)[0], "halt", j)
+        self.assertEqual(self.review(self.DQ, journal="- Code-review: round 1 (main...abc)\n")[0],
+                         "reply")
+        self.assertEqual(self.review(self.DQ, journal="## open record\n- PR: #2\n")[0], "reply")
+        self.assertEqual(self.review(self.DQ, journal="- r1.correctness.1 (x.py): y\n")[0], "reply")
+
+    def test_unreadable_stream_halts_with_a_round_one_journal(self):
+        progress = self.tmp / "progress.md"
+        progress.write_text("- Code-review: round 1 (main...abc)\n")
+        self.assertEqual(R.classify_stop("in-review", self.DQ, self.STOPS,
+                                         stream=self.tmp / "missing.jsonl",
+                                         progress=progress)[0], "halt")
+
     def test_unclassifiable_review_message_halts(self):
         self.assertEqual(self.review("Review found problems; please advise.")[0], "halt")
         self.assertEqual(self.review("")[0], "halt")
@@ -491,26 +513,32 @@ class AuditTests(Tmp):
         self.assertIn("me/real", out[0])
         self.assertIn("o/other", out[1])
 
-    def test_plugin_repo_exemption_is_type_time_and_head_bound(self):
+    def test_plugin_repo_exemption_is_default_deny(self):
+        """#366 scope ruling: only a repository or `main` CreateEvent, or a push of
+        the marketplace commit, before the delete stamp; anything else is foreign."""
         h = {"repo": "o/plug", "until": "2026-11-17T01:00:00+00:00", "head": "m" * 40}
-        def ev(t, typ, head=None):
-            e = {"created_at": t, "type": typ, "repo": {"name": "o/plug"}}
-            if head:
-                e["payload"] = {"head": head}
-            return e
-        allowed = [ev("2026-11-17T00:30:00Z", "CreateEvent"),
-                   ev("2026-11-17T00:31:00Z", "PushEvent", "m" * 40),
-                   ev("2026-11-17T01:00:00Z", "PushEvent")]
-        foreign = [ev("2026-11-17T00:32:00Z", "PushEvent", "x" * 40),      # another commit
-                   ev("2026-11-17T00:33:00Z", "IssuesEvent"),              # not a harness type
-                   ev("2026-11-17T01:00:01Z", "PushEvent", "m" * 40),      # after the delete
-                   {"created_at": "?", "type": "CreateEvent", "repo": {"name": "o/plug"}}]
+        def ev(t, typ, **payload):
+            return {"created_at": t, "type": typ, "repo": {"name": "o/plug"}, "payload": payload}
+        allowed = [ev("2026-11-17T00:30:00Z", "CreateEvent", ref_type="repository"),
+                   ev("2026-11-17T00:30:30Z", "CreateEvent", ref_type="branch", ref="main"),
+                   ev("2026-11-17T00:31:00Z", "PushEvent", head="m" * 40),
+                   ev("2026-11-17T01:00:00Z", "PushEvent", head="m" * 40)]
+        foreign = [ev("2026-11-17T00:32:00Z", "PushEvent", head="x" * 40),   # another commit
+                   ev("2026-11-17T00:32:30Z", "PushEvent"),                   # no head
+                   ev("2026-11-17T00:33:00Z", "CreateEvent", ref_type="tag", ref="v1"),
+                   ev("2026-11-17T00:33:30Z", "CreateEvent", ref_type="branch", ref="x"),
+                   ev("2026-11-17T00:34:00Z", "IssuesEvent"),                 # not a harness type
+                   ev("2026-11-17T01:00:01Z", "PushEvent", head="m" * 40),    # after the delete
+                   {"created_at": "?", "type": "CreateEvent", "repo": {"name": "o/plug"},
+                    "payload": {"ref_type": "repository"}}]
         start, end = "2026-11-17T00:00:00Z", "2026-11-17T02:00:00Z"
         self.assertEqual(R.foreign_events(allowed, start, end, "o/sb", h), [])
-        self.assertEqual(len(R.foreign_events(foreign, start, end, "o/sb", h)), 4)
-        self.assertEqual(len(R.foreign_events(allowed, start, end, "o/sb")), 3)
+        self.assertEqual(len(R.foreign_events(foreign, start, end, "o/sb", h)), 7)
+        self.assertEqual(len(R.foreign_events(allowed, start, end, "o/sb")), 4)
         self.assertEqual(len(R.foreign_events(allowed, start, end, "o/sb",
-                                              dict(h, until=None))), 3)
+                                              dict(h, until=None))), 4)
+        self.assertEqual(len(R.foreign_events(allowed, start, end, "o/sb",
+                                              dict(h, head=None))), 2)
 
     def test_foreign_events_window_in_now_format(self):
         """`now()` writes +00:00 and the feed writes Z; an event in the run's last
@@ -706,6 +734,18 @@ class CiBindingTests(Tmp):
         with self.assertRaisesRegex(R.Refused, "Actions-API"):
             R.load_fixture(self.fixture_copy("| `CI_STATUS_CMD` | `gh pr checks <PR>` | x |"))
 
+    def test_compound_or_non_actions_values_refuse(self):
+        for v in ("gh run list --workflow t.yml || gh pr checks 7",
+                  "gh run list --workflow t.yml; gh pr checks 7",
+                  "gh run list $(gh pr checks 7)",
+                  "gh api repos/o/r/commits/HEAD/check-runs?x=/actions/",
+                  "gh run list --workflow t.yml \\| gh pr checks"):
+            with self.assertRaises(R.Refused, msg=v):
+                R.load_fixture(self.fixture_copy("| `CI_STATUS_CMD` | `%s` | x |" % v))
+        ok = R.load_fixture(self.fixture_copy(
+            "| `CI_STATUS_CMD` | `gh api repos/o/r/actions/runs?branch=<branch>` | x |"))
+        self.assertEqual(ok["ci_status_cmd"], "gh api repos/o/r/actions/runs?branch=<branch>")
+
     def test_missing_or_duplicate_row_refuses(self):
         with self.assertRaisesRegex(R.Refused, "0 CI_STATUS_CMD rows"):
             R.load_fixture(self.fixture_copy(None))
@@ -728,6 +768,20 @@ class BuildBaseTests(Tmp):
         (xdg / "git").mkdir(parents=True)
         (xdg / "git" / "ignore").write_text("greet.py\n*.md\n")
         with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(xdg)}):
+            sha = R.build_base(os.path.join(PILOT, "repo"), self.tmp / "b")
+        self.assertEqual(sha, R.load_fixture(PILOT)["base_sha"])
+
+    def test_injected_git_config_does_not_reach_it(self):
+        """#366 scope ruling: build_base's git runs in an allowlisted env, so
+        GIT_CONFIG_COUNT (and HOME's global config) cannot inject excludes."""
+        ign = self.tmp / "ignore"
+        ign.write_text("greet.py\n")
+        home = self.tmp / "home"
+        home.mkdir()
+        (home / ".gitconfig").write_text("[core]\n\texcludesFile = %s\n" % ign)
+        with mock.patch.dict(os.environ, {"GIT_CONFIG_COUNT": "1",
+                                          "GIT_CONFIG_KEY_0": "core.excludesFile",
+                                          "GIT_CONFIG_VALUE_0": str(ign), "HOME": str(home)}):
             sha = R.build_base(os.path.join(PILOT, "repo"), self.tmp / "b")
         self.assertEqual(sha, R.load_fixture(PILOT)["base_sha"])
 
@@ -816,8 +870,10 @@ class FakeOps:
     """Everything `_run` cannot do offline, recorded. `existing` is the set of
     GitHub repos; `turn` decides what a `claude -p` turn does."""
 
-    def __init__(self, install_problems=(), turn="done", existing=(), fail_create=()):
+    def __init__(self, install_problems=(), turn="done", existing=(), fail_create=(),
+                 audit_events="ok", mutate_cache=False):
         self.calls, self.existing = [], set(existing)
+        self.audit_events, self.mutate_cache, self.untils = audit_events, mutate_cache, []
         self.install_problems, self.turn, self.fail_create = list(install_problems), turn, fail_create
         self.install_checked = 0
         self.t = 0
@@ -857,6 +913,12 @@ class FakeOps:
             return 0, b""
         if self.turn == "interrupt":
             raise KeyboardInterrupt
+        # A parent transcript, so the audit gets past project_dir to its checks.
+        write_jsonl(pathlib.Path(rdir) / "home" / ".claude" / "projects" /
+                    R.project_slug(cwd) / "s.jsonl", [asst()])
+        if self.mutate_cache:
+            (pathlib.Path(rdir) / "home" / ".claude" / "plugins" / "cache" / "claude-code-loop" /
+             "dev-loop" / "0.6.0" / "SKILL.md").write_text("tampered")
         ledger = pathlib.Path(cwd) / ".loop-ledger" / "fixture"
         ledger.mkdir(parents=True, exist_ok=True)
         (ledger / "queue.md").write_text("| # | Issue | Status |\n|---|---|---|\n| 1 | #1 x | done |\n")
@@ -864,6 +926,11 @@ class FakeOps:
         return 0, None
 
     def events(self, login, until=None):
+        self.untils.append(until)
+        if until is not None and self.audit_events == "refused":
+            raise R.Refused("feed ended before reaching the start")
+        if until is not None and self.audit_events == "interrupt":
+            raise KeyboardInterrupt
         return [], False
 
     def check_install(self, home, url, commit, cache):
@@ -946,6 +1013,40 @@ class RunTests(Tmp):
 
     def test_keyboard_interrupt_mid_drive_still_tears_down(self):
         ops = FakeOps(turn="interrupt")
+        env = self.run_it(ops, KeyboardInterrupt)
+        self.assertEqual(env["interrupted"], "KeyboardInterrupt")
+        self.assertEqual(ops.existing, set())
+        self.assertEqual(env["repos_deleted"], [self.SB])
+
+    def audit(self):
+        return json.loads((self.tmp / "out" / "r1" / "audit.json").read_text())
+
+    def test_audit_reads_the_feed_from_wall_clock_start_and_fails_closed(self):
+        """#366 AC3 through the audit: the feed is read back to wall_clock_start,
+        and a feed that cannot get there fails criterion (a)."""
+        ops = FakeOps(audit_events="refused")
+        env = self.run_it(ops)
+        self.assertEqual(ops.untils, [None, env["wall_clock_start"]])
+        self.assertEqual(env["account_events_before"],
+                         {"count": 0, "hit_cap": False, "oldest_created_at": None})
+        audit = self.audit()
+        self.assertIn("account event feed", " ".join(audit["a_account_events"]))
+        self.assertFalse(audit["pass"])
+        self.assertNotIn("errors", env)
+
+    def test_cache_changed_after_install_fails_b(self):
+        """#366 AC5 through the audit: a cache that changed since install is a
+        criterion (b) problem."""
+        self.run_it(FakeOps(mutate_cache=True))
+        audit = self.audit()
+        self.assertIn("re-hashes", " ".join(audit["b_engine_loads"]))
+        self.assertFalse(audit["pass"])
+
+    def test_interrupt_inside_the_audit_still_tears_down(self):
+        """#366 AC6: teardown no longer sits behind the audit, whose steps catch
+        only Exception -- a KeyboardInterrupt raised from inside it still deletes
+        every repo that exists."""
+        ops = FakeOps(audit_events="interrupt")
         env = self.run_it(ops, KeyboardInterrupt)
         self.assertEqual(env["interrupted"], "KeyboardInterrupt")
         self.assertEqual(ops.existing, set())

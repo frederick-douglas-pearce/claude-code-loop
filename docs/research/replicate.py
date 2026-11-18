@@ -58,6 +58,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -105,49 +106,66 @@ def load_fixture(fixture_dir):
 
 # The sandbox gh-token is a fine-grained PAT, which cannot read checks (pilot m1),
 # so a fixture's CI gate must read the Actions API. Any other form is refused.
-CI_ACTIONS_FORM = re.compile(r"^gh (run (list|view)\b|api \S*/actions/)")
+CI_ROW_START = re.compile(r"^\s*\|\s*`CI_STATUS_CMD`")
+CI_ROW = re.compile(r"^\s*\|\s*`CI_STATUS_CMD`\s*\|\s*`([^`]*)`\s*\|")
+CI_ACTIONS_FORM = re.compile(
+    r"gh run (list|view)(\s.*)?|gh api /?repos/[^/\s?]+/[^/\s?]+/actions/\S*(\s.*)?")
+CI_PLACEHOLDER = re.compile(r"<[A-Za-z][\w-]*>")       # `<branch>`, `<PR>`: filled by the loop
+SHELL_META = re.compile(r"[;&|$`()<>\\\n]")
 
 
 def ci_status_binding(repo_dir):
     """-> the fixture repo's `CI_STATUS_CMD` value, refusing unless it is exactly
-    one row in `.claude/loop.config.md` and uses the Actions-API form."""
+    one row in `.claude/loop.config.md`, a single backtick span, free of shell
+    metacharacters (placeholders aside), and the Actions-API form in full."""
     path = pathlib.Path(repo_dir) / ".claude" / "loop.config.md"
     try:
         lines = path.read_text().splitlines()
     except OSError as exc:
         raise Refused("cannot read the fixture's loop.config.md: %s" % exc)
-    values = []
-    for line in lines:
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if line.lstrip().startswith("|") and len(cells) >= 2 and cells[0] == "`CI_STATUS_CMD`":
-            values.append(cells[1].strip("`").strip())
-    if len(values) != 1:
-        raise Refused("fixture loop.config.md has %d CI_STATUS_CMD rows, expected 1" % len(values))
-    if not CI_ACTIONS_FORM.match(values[0]):
+    rows = [l for l in lines if CI_ROW_START.match(l)]
+    if len(rows) != 1:
+        raise Refused("fixture loop.config.md has %d CI_STATUS_CMD rows, expected 1" % len(rows))
+    m = CI_ROW.match(rows[0])
+    if not m:
+        raise Refused("fixture CI_STATUS_CMD value is not a single backtick span: %r" % rows[0])
+    value = m.group(1).strip()
+    if SHELL_META.search(CI_PLACEHOLDER.sub("", value)):
+        raise Refused("fixture CI_STATUS_CMD %r carries a shell metacharacter" % value)
+    if not CI_ACTIONS_FORM.fullmatch(value):
         raise Refused("fixture CI_STATUS_CMD %r is not the Actions-API form "
-                      "(gh run list / gh api …/actions/)" % values[0])
-    return values[0]
+                      "(gh run list / gh api repos/<o>/<r>/actions/…)" % value)
+    return value
 
 
 def build_base(repo_dir, dest):
     """Commit `repo_dir`'s files into a new repo at `dest` with a fixed identity and
     date, so the base SHA is a pure function of the fixture's bytes. -> sha.
 
-    The user's git configuration never reaches it: no global or system config
-    (hooks, templates, excludes), and `core.excludesFile` is pinned to /dev/null,
-    since without a configured value git still reads `$XDG_CONFIG_HOME/git/ignore`."""
+    Git runs in an allowlisted environment, not the caller's: `PATH`, a fresh
+    empty `HOME` and `XDG_CONFIG_HOME`, no global or system config, and the
+    fixed identity and date (#366). Excludes and attributes files are pinned to
+    /dev/null as well."""
     dest = pathlib.Path(dest)
     shutil.copytree(repo_dir, dest)
-    env = dict(os.environ, GIT_AUTHOR_NAME=FIXED_IDENTITY[0],
-               GIT_AUTHOR_EMAIL=FIXED_IDENTITY[1], GIT_COMMITTER_NAME=FIXED_IDENTITY[0],
-               GIT_COMMITTER_EMAIL=FIXED_IDENTITY[1], GIT_AUTHOR_DATE=FIXED_GIT_DATE,
-               GIT_COMMITTER_DATE=FIXED_GIT_DATE, GIT_CONFIG_GLOBAL=os.devnull,
-               GIT_CONFIG_NOSYSTEM="1")
-    for cmd in (["git", "init", "-q", "-b", "main"],
-                ["git", "-c", "core.excludesFile=" + os.devnull, "add", "-A"],
-                ["git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "fixture base"]):
-        subprocess.run(cmd, cwd=dest, env=env, check=True, stdout=subprocess.DEVNULL)
-    return git_out(dest, "rev-parse", "HEAD")
+    cfg = pathlib.Path(tempfile.mkdtemp(prefix="build-base-"))
+    env = {"PATH": os.environ.get("PATH") or "/usr/bin:/bin", "HOME": str(cfg),
+           "XDG_CONFIG_HOME": str(cfg / ".config"), "LANG": "C",
+           "GIT_AUTHOR_NAME": FIXED_IDENTITY[0], "GIT_AUTHOR_EMAIL": FIXED_IDENTITY[1],
+           "GIT_COMMITTER_NAME": FIXED_IDENTITY[0], "GIT_COMMITTER_EMAIL": FIXED_IDENTITY[1],
+           "GIT_AUTHOR_DATE": FIXED_GIT_DATE, "GIT_COMMITTER_DATE": FIXED_GIT_DATE,
+           "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    pin = ["-c", "core.excludesFile=" + os.devnull, "-c", "core.attributesFile=" + os.devnull]
+    try:
+        for cmd in (["git", "init", "-q", "-b", "main"],
+                    ["git"] + pin + ["add", "-A"],
+                    ["git"] + pin + ["-c", "commit.gpgsign=false", "commit", "-q", "-m",
+                                     "fixture base"]):
+            subprocess.run(cmd, cwd=dest, env=env, check=True, stdout=subprocess.DEVNULL)
+        return subprocess.run(["git", "rev-parse", "HEAD"], cwd=dest, env=env, check=True,
+                              capture_output=True, text=True).stdout.strip()
+    finally:
+        shutil.rmtree(cfg, ignore_errors=True)
 
 
 def git_out(cwd, *args):
@@ -522,8 +540,9 @@ def classify_stop(status, final_text, stops, stream=None, progress=None):
       `halt_if`                 a regex the final message must NOT match;
       `requires_design_spawn`   an agent name this turn's `stream` must show spawned
                                 (a scope ruling was actually taken, #366);
-      `halt_on_ledger_round2`   the replicate's `progress.md` must show no review
-                                round >= 2 and no scope-ruling gate-error.
+      `halt_on_ledger_round2`   the replicate's `progress.md` must name no round but
+                                round 1 and no scope-ruling gate-error
+                                (`ledger_round2`).
     `halt_if` only adds halts; `expect` is what makes a stop safe to answer."""
     for stop in stops:
         want = stop["status"]
@@ -540,8 +559,8 @@ def classify_stop(status, final_text, stops, stream=None, progress=None):
                 return "halt", "status %r: no %s spawn shown in this turn" % (status, agent)
             if stop.get("halt_on_ledger_round2") and (
                     ledger_round2(progress) if progress else None) is not False:
-                return "halt", ("status %r: progress.md shows a round >= 2 or a scope-ruling "
-                                "gate-error, or cannot be read" % (status,))
+                return "halt", ("status %r: progress.md names a round other than 1 or a "
+                                "scope-ruling gate-error, or cannot be read" % (status,))
             if stop.get("final"):
                 return "done", None
             return "reply", stop["reply"]
@@ -570,21 +589,28 @@ def design_spawned(stream, agent):
     return False
 
 
-ROUND_N = re.compile(r"\bround\s+(\d+)\b", re.I | re.ASCII)
+ROUND_TOKEN = re.compile(r"\bround", re.I)
+ROUND_ONE = re.compile(r"round\s+1(?![\d\-\u2013/]|\s*,\s*\d)", re.I)
+FINDING_ID = re.compile(r"\br(\d+)\.[\w-]+\.\d+\b", re.ASCII)
 SCOPE_RULING_ERROR = re.compile(r"^\s*-\s*gate-error:\s*scope-ruling\b", re.M)
 
 
 def ledger_round2(progress):
-    """-> True if the journal names any round >= 2 or a scope-ruling gate-error,
-    False if it names neither, None if it cannot be read. Over-reads on purpose:
-    any "round 2" in it halts, prose included."""
+    """-> False only if every `round` in the journal reads exactly `round 1`, no
+    finding ID names another round, and there is no scope-ruling gate-error;
+    True otherwise; None if it cannot be read. Default-deny on the round token:
+    any other continuation (`round-2`, `Round two`, `rounds 1-2`, `round 10`)
+    counts as a later round. A journal with no `round` at all passes, since round
+    1 may not have resolved when step 8 stops (#366 scope ruling)."""
     try:
         text = pathlib.Path(progress).read_text()
     except OSError:
         return None
     if SCOPE_RULING_ERROR.search(text):
         return True
-    return any(int(m.group(1)) >= 2 for m in ROUND_N.finditer(text))
+    if any(not ROUND_ONE.match(text, m.start()) for m in ROUND_TOKEN.finditer(text)):
+        return True
+    return any(int(m.group(1)) != 1 for m in FINDING_ID.finditer(text))
 
 
 def read_stream(path):
@@ -862,8 +888,9 @@ HARNESS_EVENT_TYPES = ("CreateEvent", "PushEvent")
 def foreign_events(events, start_iso, end_iso, sandbox, harness=None):
     """Events in the run window on any repo but the sandbox repo itself -- other
     in-org repos included. `harness` ({repo, until, head}) exempts the harness's own
-    Create/Push events on the plugin repo up to its deletion stamp, a push only when
-    its payload's `head` is absent or the marketplace commit. `until` is the local
+    events on the plugin repo up to its deletion stamp: a CreateEvent of the
+    repository or of branch `main`, and a PushEvent whose payload `head` is the
+    marketplace commit. Anything else there is foreign. `until` is the local
     clock: behind GitHub's, the harness's own events count (fails closed); ahead, the
     exemption outlives a repo already deleted (harmless)."""
     out = []
@@ -879,8 +906,12 @@ def foreign_events(events, start_iso, end_iso, sandbox, harness=None):
         if (harness and h_until is not None and te is not None and te <= h_until
                 and repo.lower() == harness["repo"].lower()
                 and ev.get("type") in HARNESS_EVENT_TYPES):
-            head = (ev.get("payload") or {}).get("head")
-            if ev.get("type") == "CreateEvent" or head is None or head == harness.get("head"):
+            payload = ev.get("payload") or {}
+            if ev.get("type") == "CreateEvent":
+                if payload.get("ref_type") == "repository" or (
+                        payload.get("ref_type") == "branch" and payload.get("ref") == "main"):
+                    continue
+            elif harness.get("head") and payload.get("head") == harness["head"]:
                 continue
         out.append("%s %s %s" % (t, ev.get("type"), repo))
     return out
@@ -951,7 +982,7 @@ def harness_env(rdir):
 class Ops:
     """Every side effect `_run`, `_drive`, the audit and the teardown make that
     cannot run offline: GitHub (`gh`, `git push`), `claude`, the sandbox, the
-    events feed, the install records, the two token files, and the clock. Local
+    events feed, the install records, the token files, and the clock. Local
     git runs for real. Tests pass a fake (#366)."""
 
     def now(self):
@@ -1014,7 +1045,7 @@ def repo_exists(ops, henv, repo):
 
 def create_repo(ops, henv, repo, planned):
     """Create `repo` only if it is absent, recording it in `planned` before the
-    create call: so a repo teardown finds is one this run created (#366)."""
+    create call (#366)."""
     state = repo_exists(ops, henv, repo)
     if state is not False:
         raise Refused("repo %s %s before this run created it; it will not be created or "
@@ -1140,7 +1171,8 @@ def _run(a, spec, rdir, env_record, ops):
         sh(["git", "config", "--global", k, v], env=env)
     # Repos (harness side, harness-token only). Each is recorded before its create
     # call; from then on the audit and the cost read run on every Exception path,
-    # and the teardown, in its own outer finally, on every path (#366).
+    # and the teardown, in its own outer finally, on every exception path,
+    # KeyboardInterrupt included (#366).
     henv = ops.harness_env(rdir)
     ops.sh([REAL_GH, "auth", "setup-git"], env=henv)
     try:
