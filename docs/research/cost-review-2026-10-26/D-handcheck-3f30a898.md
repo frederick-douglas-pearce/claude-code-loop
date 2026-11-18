@@ -2,6 +2,8 @@
 
 The most expensive session in the corpus ($128.52 whole-tree, $87.90 parent, 423 parent turns, peak context 959,671). `engine_cost.py` refuses it as "unattributable engine read"; the refusal is correct for a different reason (below). Parsed by script from the transcript on 2026-10-26; the scripts and their outputs (`timeline.py`, `phases.py`, `ledger.py`, `subagents.py`, `cache_writes_out.txt`, …) were left in the session scratchpad and are not committed. Nothing in the repo was edited.
 
+_Update 2026-11-17 (#273): the scripts were recovered from the session transcript and are committed in [`handcheck/`](handcheck/README.md). `analysis2.py`'s `PHASES` holds the exact turn ranges behind the phase table below._
+
 ## What it was
 
 One session, **two `/dev-loop` invocations with no `/clear` between them**: #386 (turns 1–246, PR #396) and #389 (turns 247–423, PR #398), plus three user side-requests. Neither invocation resumed a row. Split at the stratum's pricing weights (which reproduce $87.90 to the cent): invocation 1 ≈ $51, invocation 2 ≈ $37. **Active API time 4.5h of a 29h span; 24.6h was the human waiting at gates.**

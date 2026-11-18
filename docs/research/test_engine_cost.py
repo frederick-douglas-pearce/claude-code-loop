@@ -944,5 +944,52 @@ class CliFloorTests(unittest.TestCase):
             os.unlink(fh.name)
 
 
+class TurnFilesTests(unittest.TestCase):
+    """#273: `profile` exposes each turn's ingestion per file, keyed by
+    `message.id`, so `tree_cost --by-step` can size one invocation's load. The
+    per-turn shares are the ones the per-file totals are built from."""
+
+    def test_per_turn_shares_sum_to_each_files_ingested_total(self):
+        f = "phases/accepting.md"
+        core, unit = full("0.3.1", CORE), full("0.3.1", f)
+        p = run_profile(transcript([(ENG31 % CORE, core // 2), (ENG31 % CORE, core - core // 2),
+                                    (ENG31 % f, unit)]))
+        for name in (CORE, f):
+            per_turn = sum(d.get(name, 0.0) for d in p["turn_files"].values())
+            self.assertAlmostEqual(per_turn, p["files"][name]["ingested"])
+
+    def test_a_turn_reading_two_files_splits_its_ingestion_by_result_size(self):
+        """Two engine reads issued in one call arrive together. Each file gets
+        `added * its result size / all results' size`, never the whole delta --
+        crediting the core the whole of it would clear its floor falsely."""
+        f = "phases/accepting.md"
+        usage = lambda ctx: {"input_tokens": ctx, "output_tokens": 5,
+                             "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+        big, small = "c" * 2998, "u" * 998          # json.dumps adds 2 quotes: 3000 vs 1000
+        recs = [
+            {"type": "assistant", "effort": "high", "message": {
+                "id": "m0", "model": "claude-opus-5-5", "usage": usage(10), "content": [
+                    {"type": "tool_use", "id": "a", "name": "Read",
+                     "input": {"file_path": ENG31 % CORE}},
+                    {"type": "tool_use", "id": "b", "name": "Read",
+                     "input": {"file_path": ENG31 % f}}]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "a", "content": big},
+                {"type": "tool_result", "tool_use_id": "b", "content": small}]}},
+            {"type": "assistant", "effort": "high", "message": {
+                "id": "m1", "model": "claude-opus-5-5", "usage": usage(10 + 5 + 8000),
+                "content": [{"type": "text", "text": "."}]}},
+        ]
+        p = run_profile(recs)
+        self.assertAlmostEqual(p["turn_files"]["m1"][CORE], 6000)
+        self.assertAlmostEqual(p["turn_files"]["m1"][f], 2000)
+
+    def test_a_read_is_credited_to_the_turn_it_arrives_at(self):
+        """A read at step k arrives at turn k + 1 (`transcript`): "m1", not "m0"."""
+        p = run_profile(transcript([(ENG31 % CORE, 5000), "idle"]))
+        self.assertEqual(set(p["turn_files"]), {"m1"})
+        self.assertAlmostEqual(p["turn_files"]["m1"][CORE], 5000)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

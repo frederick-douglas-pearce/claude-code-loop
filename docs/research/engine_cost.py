@@ -596,6 +596,9 @@ def profile(path, floor=None):
 
     reads, by_tool, per_turn, calib = 0, {}, {}, []
     file_reads, file_tokens, file_weight = {}, {}, {}
+    # Per turn, keyed by the turn's `message.id` (#273): the same shares that sum
+    # into `file_tokens`, so a caller can attribute ingestion to a span of turns.
+    turn_files = {}
     for i, mid in enumerate(order):
         calls = arrivals.get(mid, [])
         eng = [(nm, sz, f) for nm, sz, e, k, f in calls if e]
@@ -613,6 +616,8 @@ def profile(path, floor=None):
                 share = added * sz / total
                 file_tokens[f] = file_tokens.get(f, 0.0) + share
                 file_weight[f] = file_weight.get(f, 0.0) + share * i
+                tf = turn_files.setdefault(mid, {})
+                tf[f] = tf.get(f, 0.0) + share
         if len(calls) == len(eng) and added > 0:
             calib.append((added, sum(sz for _, sz, _ in eng)))
 
@@ -691,6 +696,7 @@ def profile(path, floor=None):
         "family": family, "no_rows": no_rows, "parent_models": parent_models,
         "admissible": not incomplete and not unattributed and not no_rows,
         "files": files, "incomplete": incomplete, "unattributed": unattributed,
+        "turn_files": turn_files,
         "subagents": subagent_count(path),
         "reads": reads, "by_tool": by_tool, "kind_counts": kind_counts,
         "ingested": ingested, "calib": calib, "spills": len(spills),
