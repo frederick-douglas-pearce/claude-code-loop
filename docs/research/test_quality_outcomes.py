@@ -25,6 +25,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import quality_outcomes as q  # noqa: E402
@@ -84,6 +85,15 @@ class LocateTests(GitCase):
     def test_squash_subject_is_found(self):
         sha = self.repo.commit("chore: thing (#12)", ["a.py"], T0)
         self.assertEqual(self.hist().locate(12), (sha, T0))
+
+    def test_an_inherited_git_dir_does_not_redirect_the_read(self):
+        """Inside a git hook GIT_DIR names the hook's repo; the script must read REPO."""
+        sha = self.repo.commit("chore: thing (#12)", ["a.py"], T0)
+        other = tempfile.TemporaryDirectory()
+        self.addCleanup(other.cleanup)
+        Repo(other.name).commit("elsewhere (#99)", ["z.py"], T0)
+        with mock.patch.dict(os.environ, {"GIT_DIR": os.path.join(other.name, ".git")}):
+            self.assertEqual(self.hist().locate(12), (sha, T0))
 
     def test_merge_commit_subject_is_found(self):
         self.repo.git("checkout", "-q", "-b", "feat")
@@ -268,16 +278,19 @@ class EscalationTests(unittest.TestCase):
         self.assertEqual(per[7]["review-past-cap"], 3)
 
     def test_rounds_from_prose_shaped_like_113(self):
-        """No Budget count: "N rounds" counts, "no round 3" does not, case is ignored."""
+        """No Budget count: "N rounds" counts, "no round 3" does not, and case is ignored."""
         j = ("## t — #8 plan gate\n- Plan-gate: n/a: x\n\n"
              "## t — #8 code review\n- Code-review: 2 rounds, cap reached, no round 3 opened\n"
              "- Code-review: RESOLVED after 4 rounds\n\n"
              "## t — #9 plan gate\n- Plan-gate: n/a: x\n\n"
-             "## t — #9 code review\n- Code-review: Round 3 human-authorized; rounds 1-5 total\n"
-             "- Awaiting human: fix (round 7) or decline\n")
+             "## t — #9 code review\n- Code-review: rounds 1-5 total\n"
+             "- Awaiting human: fix (round 7) or decline\n\n"
+             "## t — #6 plan gate\n- Plan-gate: n/a: x\n\n"
+             "## t — #6 code review\n- Code-review: Round 4 human-authorized\n")
         per, _ = q.escalations(j, "calibration", "always")
         self.assertEqual(per[8]["review-past-cap"], 2)
         self.assertEqual(per[9]["review-past-cap"], 3, "a hypothetical round outside the Code-review line does not count")
+        self.assertEqual(per[6]["review-past-cap"], 2, "a capitalized 'Round 4' is the only evidence here")
         only_negated = j.split("- Code-review: RESOLVED")[0]
         per, _ = q.escalations(only_negated, "calibration", "always")
         self.assertEqual(per[8]["review-past-cap"], 0, "'no round 3' is not round 3")
@@ -337,11 +350,16 @@ class FindingTests(unittest.TestCase):
             comment("2026-12-02T00:00:00Z", "## F3\n**Attributed-to:** PR 5 in repo"),
             comment("2026-12-02T00:00:00Z", "## F4\n**Attributed-to:** unknown"),
             comment("2026-12-02T00:00:00Z", "## F5\n**Attributed-to:** owner/repo#50"),
+            comment("2026-12-02T00:00:00Z",
+                    "## F6\n**Attributed-to:** none (a pointer to the finding on owner/repo#5)"),
+            comment("2026-12-02T00:00:00Z", "## F7\n**Attributed-to:** Unknown — maybe owner/repo#5."),
+            comment("2026-12-02T00:00:00Z", "## F8\n**Attributed-to:** Unknown."),
         ])
         now = self.MERGE + 60 * DAY
-        self.assertEqual(q.fcount(found, "owner/repo", 5, self.MERGE, now), 2)
+        self.assertEqual(q.fcount(found, "owner/repo", 5, self.MERGE, now), 2,
+                         "a ref inside a none(...) or unknown marker attributes nothing")
         self.assertEqual(q.fcount(found, "owner/repo", 7, self.MERGE, now), 1)
-        self.assertEqual([f[3] for f in found], [0, 0, 1, 0, 0])
+        self.assertEqual([f[3] for f in found], [0, 0, 1, 0, 0, 0, 0, 0])
 
 
 class MedianTests(unittest.TestCase):

@@ -32,10 +32,12 @@ WHAT IT MEASURES, AND WHAT IT CANNOT.
      is gate-error + scope-ruling + human-option, the issue's definition. Two
      ATTRIBUTES are printed beside them and overlap them, so are never summed:
      plan-material (`- Plan-gate: material ... STOPPED`) and review-past-cap
-     (code-review rounds past the cap of 2: the larger of any `- Budget:`
-     line's `code-review=N` and the rounds its `- Code-review:` lines name, since a
-     Budget line written at the cap understates the rounds a human authorized
-     after it; prose matching misses phrasings it does not know). A run with no `plan-gate:`
+     (code-review rounds past the cap of 2: the larger of any `code-review=N`
+     on any line of the issue's blocks, since Budget lines come in several
+     spellings, and the rounds named on the first line of each `- Code-review:`
+     bullet; a Budget line written at the cap understates the rounds a human
+     authorized after it, and prose matching misses phrasings it does not know
+     and wrapped continuation lines). A run with no `plan-gate:`
      header, or an issue with no `- Plan-gate:` line, prints `unknown`: older
      journals cannot be read on these terms, and absence is not zero.
   3. F-comments on #1, per PR, by the `**Attributed-to:**` convention in
@@ -122,9 +124,11 @@ def done_rows(queue_text):
 # --- git -------------------------------------------------------------------
 
 def git(repo, *args):
-    # log.showSignature would put gpg text on stdout and corrupt every parse.
+    # log.showSignature would put gpg text on stdout and corrupt every parse,
+    # and an inherited GIT_DIR (inside a git hook, say) would read another repo.
+    clean = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     return subprocess.run(["git", "-c", "log.showSignature=false", "-C", repo, *args],
-                          capture_output=True,
+                          capture_output=True, env=clean,
                           text=True, check=True).stdout
 
 
@@ -224,7 +228,7 @@ PARTITION = ("gate-error", "scope-ruling", "routine", "human-option", "unclassif
 # pre-registration to decide.
 ESCALATING = ("gate-error", "scope-ruling", "human-option")
 # Attributes, not stops: they OVERLAP the partition (a material plan stop is
-# also a routine or human-option stop; a past-cap round is also a stop), so
+# also one of the partition's stops; a past-cap round is also a stop), so
 # they are printed apart and never summed with it.
 ATTRIBUTES = ("plan-material", "review-past-cap")
 COLUMNS = PARTITION + ("escalations",) + ATTRIBUTES
@@ -368,9 +372,13 @@ def findings(comments):
         marks = [m.replace("`", "").strip() for m in MARKER.findall(body)]
         refs, malformed = [], 0
         for m in marks:
+            # The form is decided first: a `none (...)` or `unknown` marker
+            # attributes to nothing, even when its reason names a ref.
+            if re.match(r"(none|unknown)\b", m, re.I):
+                continue
             found = REF.findall(m)
             refs += [r.lower() for r in found]
-            if not found and not re.match(r"(none\b|unknown$)", m, re.I):
+            if not found:
                 malformed += 1
         out.append((epoch(c["created_at"]), refs, bool(marks), malformed))
     return out
