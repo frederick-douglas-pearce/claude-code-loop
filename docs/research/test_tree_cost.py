@@ -717,6 +717,10 @@ class ByStepTests(unittest.TestCase):
         r = T.by_step(b.write(self.root))
         self.assertEqual([n for n, _ in r["unattributed"]], ["agent-zz.jsonl"])
         self.assertEqual(sum(s["subs"] for s in r["invocations"][0]["steps"]), 0)
+        # Its dollars are in the session bill and in no row, so conservation must
+        # count `unattributed` (mutation survivor `conservation-drops-unattributed`).
+        self.assertGreater(r["unattributed"][0][1], 1e-6)
+        self.assertIsNone(r["conservation"])
 
     def test_a_fallback_is_used_only_when_no_primary_fires_in_the_invocation(self):
         b = Builder()
@@ -1004,6 +1008,22 @@ class ByStepRound2Tests(unittest.TestCase):
         b.turn(sh("cat > /r/.claude/loop/x/issue-1.plan.md <<'EOF'\nx\nEOF"))
         self.assertEqual(T.by_step(b.write(self.root))["invocations"][0]["failures"], [])
 
+    def test_a_question_on_the_plan_entry_turn_is_the_plan_gate(self):
+        """The bound is `i >= plan`: a question issued in the same turn as the
+        plan marker still counts (mutation survivor `plan-gate-question-at-plan-
+        excluded`)."""
+        b = Builder()
+        b.command()
+        b.turn(read(ENG % "loop-engine.md"), grow=CORE_LOAD)
+        plan = b.turn(read(ENG % "reference/plan-template.md"),
+                      ("AskUserQuestion", {"questions": []}))
+        b.turn(("Edit", {"file_path": "/r/a.py"}))
+        b.turn(sh("gh pr create"))
+        got = self.steps(T.by_step(b.write(self.root)))
+        self.assertEqual(got["implement"]["first"], plan + 1)
+        self.assertEqual(got["implement"]["marker"],
+                         "turn after the plan-gate question (fallback)")
+
     def test_the_plan_gate_question_is_the_last_one_before_the_pr(self):
         b = Builder()
         b.command()
@@ -1168,10 +1188,12 @@ class ByStepRound2Tests(unittest.TestCase):
         r = T.by_step(b.write(self.root))
         self.assertIsNone(T.conservation(r))
         r["other_sub_usd"] -= 1.0
+        r["other_usd"] -= 1.0
         r["invocations"][0]["steps"][0]["turns"] += 1
         self.assertEqual(T.conservation(r), "DETECTOR FAILURE (does not conserve: "
-                         "turns %d of %d; subagent $%.2f of $%.2f)"
-                         % (r["turns"] + 1, r["turns"], r["sub_usd"] - 1, r["sub_usd"]))
+                         "turns %d of %d; parent $%.2f of $%.2f; subagent $%.2f of $%.2f)"
+                         % (r["turns"] + 1, r["turns"], r["parent_usd"] - 1, r["parent_usd"],
+                            r["sub_usd"] - 1, r["sub_usd"]))
 
     def test_a_link_wins_over_a_timestamp_in_another_step(self):
         b = Builder()
