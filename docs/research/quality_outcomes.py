@@ -24,12 +24,18 @@ WHAT IT MEASURES, AND WHAT IT CANNOT.
      it is an UPPER BOUND: a later feature PR touching the same file counts, and
      one later commit counts for every earlier PR whose files it touches. A
      window that has not closed yet prints `pending(<n so far>)`, never a count.
-  2. Escalations, per ISSUE (never repeated on each of an issue's PR rows): the
-     engine's structured journal lines first (`- gate-error:`,
-     `- Plan-gate: material ... STOPPED`, code-review rounds past the cap of 2),
-     then a heading/body split of stop blocks into scope-ruling / human-option /
-     unclassified, with the stops every issue owes under `plan-gate: always` and
-     `mode: calibration` counted apart as `routine`. A run with no `plan-gate:`
+  2. Escalations, per ISSUE (never repeated on each of an issue's PR rows).
+     Each journal block is at most one stop, in the first class that matches:
+     gate-error (the block has a `- gate-error:` line), scope-ruling, routine
+     (the stops `plan-gate: always` and `mode: calibration` owe every issue),
+     human-option, unclassified. Those columns are disjoint, and `escalations`
+     is gate-error + scope-ruling + human-option, the issue's definition. Two
+     ATTRIBUTES are printed beside them and overlap them, so are never summed:
+     plan-material (`- Plan-gate: material ... STOPPED`) and review-past-cap
+     (code-review rounds past the cap of 2: the larger of any `- Budget:`
+     line's `code-review=N` and the rounds its `- Code-review:` lines name, since a
+     Budget line written at the cap understates the rounds a human authorized
+     after it; prose matching misses phrasings it does not know). A run with no `plan-gate:`
      header, or an issue with no `- Plan-gate:` line, prints `unknown`: older
      journals cannot be read on these terms, and absence is not zero.
   3. F-comments on #1, per PR, by the `**Attributed-to:**` convention in
@@ -59,8 +65,8 @@ import sys
 
 WINDOW_DAYS = 14
 REVIEW_CAP = 2
-# The day the F-comment convention took effect (#272's merge). A PR whose
-# window opens before this date has no complete F-comment count.
+# The F-comment convention's adoption date (docs/research/README.md states the
+# same date). A PR whose window opens before it has no complete F-comment count.
 ADOPTION = "2026-11-18"
 
 # --- queue.md --------------------------------------------------------------
@@ -116,7 +122,9 @@ def done_rows(queue_text):
 # --- git -------------------------------------------------------------------
 
 def git(repo, *args):
-    return subprocess.run(["git", "-C", repo, *args], capture_output=True,
+    # log.showSignature would put gpg text on stdout and corrupt every parse.
+    return subprocess.run(["git", "-c", "log.showSignature=false", "-C", repo, *args],
+                          capture_output=True,
                           text=True, check=True).stdout
 
 
@@ -208,8 +216,23 @@ MERGE_STOP = re.compile(r"merge[- ]gate|\bmerge (held|stop)", re.I)
 GATE_WORD = re.compile(r"review|round|acceptance|security|\bCI\b|\bcap\b|gate|pilot"
                        r"|size guard|too-large|split",
                        re.I)
-COLUMNS = ("gate-error", "plan-material", "review-past-cap", "scope-ruling",
-           "human-option", "unclassified", "routine")
+# The stop PARTITION: each attributed block is at most one stop, assigned to the
+# first class that matches, in this order, so the columns are disjoint.
+PARTITION = ("gate-error", "scope-ruling", "routine", "human-option", "unclassified")
+# The issue's "escalations per issue": gate-error + scope-ruling + human-option.
+# `unclassified` is printed beside it and left out; whether it belongs is #288's
+# pre-registration to decide.
+ESCALATING = ("gate-error", "scope-ruling", "human-option")
+# Attributes, not stops: they OVERLAP the partition (a material plan stop is
+# also a routine or human-option stop; a past-cap round is also a stop), so
+# they are printed apart and never summed with it.
+ATTRIBUTES = ("plan-material", "review-past-cap")
+COLUMNS = PARTITION + ("escalations",) + ATTRIBUTES
+# Review rounds named in `- Code-review:` lines only: other prose names
+# hypothetical rounds ("fix (round 5) or decline").
+# Known remaining error: a phrasing none of these match.
+ROUND_PROSE = re.compile(
+    r"(?<!no )\bround (\d+)|\b(\d+) rounds\b|\brounds \d+\s*[-\u2013]\s*(\d+)", re.I)
 
 
 def blocks(text):
@@ -257,11 +280,14 @@ def escalations(text, mode, plan_gate):
     """Per-issue escalation counts for one journal under one run's posture.
 
     Returns ({issue: {column: int} or None}, unattributed_block_count).
+    The PARTITION columns are disjoint (one stop per block, first match wins),
+    `escalations` is their escalating sum, and ATTRIBUTES overlap them.
     `None` means unknown: the run's header carries no `plan-gate:` field, or
     the issue has no `- Plan-gate:` line, so this journal cannot be read on
     these terms. Importable so #274 can cross-check a replicate's harness log.
     """
     per, seen_plan_gate, unattributed = {}, set(), 0
+    budget_rounds, prose_rounds = {}, {}
     for title, body in blocks(text):
         if RUN_LEVEL.search(title):
             continue
@@ -271,25 +297,26 @@ def escalations(text, mode, plan_gate):
             continue
         issue = int(m.group(1))
         c = per.setdefault(issue, dict.fromkeys(COLUMNS, 0))
-        c.setdefault("_rounds", 0)
         summary = bool(SUMMARY.search(title))
+        block_gate_error = False
         for line in body.splitlines():
             s = line.strip()
             if summary and not s.startswith(("- Code-review:", "- Budget:", "- Plan-gate:")):
                 continue
             if s.startswith("- gate-error:"):
-                c["gate-error"] += 1
+                block_gate_error = True
             if s.startswith("- Plan-gate:"):
                 seen_plan_gate.add(issue)
                 if s.startswith("- Plan-gate: material") and "STOPPED" in s \
                         and not summary:
                     c["plan-material"] += 1
-            if s.startswith("- Code-review:") or s.startswith("- Budget:"):
-                rounds = [int(r) for r in re.findall(r"round (\d+)", s)]
-                rounds += [int(r) for r in re.findall(r"code-review=(\d+)", s)]
-                if rounds:
-                    c["_rounds"] = max(c["_rounds"], *rounds)
-        kind = stop_kind(title, body, mode, plan_gate)
+            for r in re.findall(r"code-review=(\d+)", s):
+                budget_rounds[issue] = max(budget_rounds.get(issue, 0), int(r))
+            if s.startswith("- Code-review:"):
+                for groups in ROUND_PROSE.findall(s):
+                    r = int(next(g for g in groups if g))
+                    prose_rounds[issue] = max(prose_rounds.get(issue, 0), r)
+        kind = "gate-error" if block_gate_error else stop_kind(title, body, mode, plan_gate)
         if kind:
             c[kind] += 1
     result = {}
@@ -297,12 +324,17 @@ def escalations(text, mode, plan_gate):
         if plan_gate is None or issue not in seen_plan_gate:
             result[issue] = None
             continue
-        c["review-past-cap"] = max(0, c.pop("_rounds") - REVIEW_CAP)
+        # The larger of the two: a `- Budget:` line can be written mid-iteration
+        # (at the cap, before human-authorized rounds), so it can understate.
+        rounds = max(budget_rounds.get(issue, 0), prose_rounds.get(issue, 0))
+        c["review-past-cap"] = max(0, rounds - REVIEW_CAP)
+        c["escalations"] = sum(c[k] for k in ESCALATING)
         result[issue] = c
     return result, unattributed
 
 # --- F-comments ------------------------------------------------------------
 
+REF = re.compile(r"[\w.-]+/[\w.-]+#\d+\b")
 MARKER = re.compile(r"^\s*\*\*Attributed-to:\*\*\s*(.+?)\s*$", re.M)
 
 
@@ -319,7 +351,11 @@ def epoch(iso):
 
 
 def findings(comments):
-    """[(created epoch, [attributed 'owner/repo#N' in lower case], marked)].
+    """[(created epoch, [attributed 'owner/repo#N' in lower case], marked, malformed)].
+
+    Every `owner/repo#N` in a marker is taken (backticks stripped), so a marker
+    carrying two refs or trailing text still counts. A marker that is none of a
+    ref, `none (...)` or `unknown` is MALFORMED and reported, never dropped.
 
     EVERY comment on #1 is read, not only those whose heading looks like an
     F-number: headings were never uniform, and a finding filed under an odd
@@ -329,16 +365,21 @@ def findings(comments):
     out = []
     for c in comments:
         body = c.get("body") or ""
-        marks = MARKER.findall(body)
-        refs = [m.lower() for m in marks if re.fullmatch(r"[\w.-]+/[\w.-]+#\d+", m)]
-        out.append((epoch(c["created_at"]), refs, bool(marks)))
+        marks = [m.replace("`", "").strip() for m in MARKER.findall(body)]
+        refs, malformed = [], 0
+        for m in marks:
+            found = REF.findall(m)
+            refs += [r.lower() for r in found]
+            if not found and not re.match(r"(none\b|unknown$)", m, re.I):
+                malformed += 1
+        out.append((epoch(c["created_at"]), refs, bool(marks), malformed))
     return out
 
 
 def fcount(found, slug, pr, t0, now):
     """F-comment cell for one PR: an int, 'pending(n)', 'unknown' or '>=n'."""
     end, key = t0 + WINDOW_DAYS * 86400, f"{slug}#{pr}".lower()
-    n = sum(1 for ct, refs, _ in found if t0 < ct <= end and key in refs)
+    n = sum(1 for ct, refs, *_ in found if t0 < ct <= end and key in refs)
     if t0 < epoch(ADOPTION):
         return f">={n}" if n else "unknown"
     return f"pending({n})" if end > now else n
@@ -375,7 +416,8 @@ def fmt(v):
     return v
 
 
-def report(repo, ref, now, found, prs_json, out=sys.stdout):
+def report(repo, ref, now, found, prs_json, out=None):
+    out = out or sys.stdout
     slug = slug_of(repo)
     hist = History(repo, ref)
     tip = hist.tip_time()
@@ -398,7 +440,8 @@ def report(repo, ref, now, found, prs_json, out=sys.stdout):
         except OSError:
             continue
         mode, plan_gate = posture(qtext)
-        for issue, prs, shas in done_rows(qtext):
+        rows = done_rows(qtext)
+        for issue, prs, shas in rows:
             for pr in prs:
                 if pr in seen:
                     continue
@@ -415,6 +458,10 @@ def report(repo, ref, now, found, prs_json, out=sys.stdout):
         try:
             ptext = read(os.path.join(run_dir, "progress.md"))
         except OSError:
+            # No readable journal: its done issues are unknown, never dropped
+            # from the denominators.
+            for issue in sorted({i for i, _, _ in rows if i is not None}):
+                issue_rows.append((run, issue, None))
             continue
         per, un = escalations(ptext, mode, plan_gate)
         unattributed += un
@@ -422,10 +469,18 @@ def report(repo, ref, now, found, prs_json, out=sys.stdout):
             issue_rows.append((run, issue, c))
 
     w(f"\n### Per merged PR ({len(pr_rows)})\n")
+    missing = sum(1 for r in pr_rows if r[3] == "unknown")
+    if missing:
+        w(f"{missing} of {len(pr_rows)} PRs not located; pass --prs REPO=FILE "
+          "(gh pr list --state merged --limit 1000 --json number,mergeCommit,mergedAt). "
+          "Unlocated PRs are not missing at random.\n")
     w("run | PR | issue | merged | fix-ups (14d) | F-comments (14d)\n")
     for r in pr_rows:
         w(" | ".join(str(x) for x in r) + "\n")
     w(f"\n### Escalations per issue ({len(issue_rows)})\n")
+    w("Columns up to `escalations` are a partition (one stop per journal block); "
+      "`escalations` = " + " + ".join(ESCALATING) + "; the last two are attributes "
+      "that overlap the partition and are never summed with it.\n")
     w("run | issue | " + " | ".join(COLUMNS) + "\n")
     for run, issue, c in issue_rows:
         cells = [str(c[k]) for k in COLUMNS] if c else ["unknown"] * len(COLUMNS)
@@ -468,17 +523,25 @@ def main(argv=None):
         with open(a.findings, encoding="utf-8") as f:
             data = json.load(f)
         found = findings(data)
-        unmarked = sum(1 for ct, _, marked in found if ct >= epoch(ADOPTION) and not marked)
-        print(f"#1 comments read: {len(found)}; since adoption {ADOPTION} with no "
-              f"Attributed-to marker: unmarked={unmarked}")
+        since = [f for f in found if f[0] >= epoch(ADOPTION)]
+        unmarked = sum(1 for f in since if not f[2])
+        malformed = sum(f[3] for f in since)
+        print(f"#1 comments read: {len(found)}; since adoption {ADOPTION}: "
+              f"unmarked={unmarked} malformed={malformed}")
+    targets = {os.path.realpath(r) for r in a.repos}
     prs_by_repo = {}
     for spec in a.prs:
         repo, _, path = spec.partition("=")
+        key = os.path.realpath(repo)
+        if key not in targets:
+            print(f"--prs key {repo!r} matches no REPO argument", file=sys.stderr)
+            return 2
         with open(path, encoding="utf-8") as f:
-            prs_by_repo[os.path.abspath(repo)] = json.load(f)
+            prs_by_repo[key] = json.load(f)
     for repo in a.repos:
-        report(repo, a.ref, now, found, prs_by_repo.get(os.path.abspath(repo)))
+        report(repo, a.ref, now, found, prs_by_repo.get(os.path.realpath(repo)))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

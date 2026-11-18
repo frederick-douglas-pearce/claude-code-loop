@@ -5,19 +5,21 @@ NOT part of the shipped suite -- lives under `docs/research/`, not `tests/`, so
 `python3 -m unittest discover -s tests` does not pick it up; `TEST_CMD`'s second
 half runs it, and CI does not (#286).
 
-The cases pin MECHANISM, not today's numbers: that a window boundary is
-exclusive at the merge and inclusive at day 14, that an open window never reads
-as a count, that a merge commit's files come from its first parent, that a
-stop's answer is not a second stop, that an unreadable journal is `unknown`
-rather than zero, and that a comment's marker is matched on repo AND PR.
+The cases pin MECHANISM, not today's numbers: that a fix-up window is exclusive
+at the merge and inclusive at day 14, that an open window never reads as a
+count, that a stop's answer is not a second stop, that the escalation partition
+gives one stop per block, that a journal with no `- Plan-gate:` line, a run
+with no `plan-gate:` header, or a run with no journal is `unknown` rather than
+zero, and that `fcount` matches a marker on repo AND PR.
 
-The git fixtures are hermetic: a temporary HOME, no system config, and fixed
-author/committer identities and dates, so the result does not depend on the
-machine's git configuration.
+The fixture commits do not depend on the machine's git config files or on
+inherited `GIT_*` variables: a temporary HOME, no system or global config, and
+fixed identities and dates.
 
     python3 docs/research/test_quality_outcomes.py
 """
 import io
+import json
 import os
 import subprocess
 import sys
@@ -36,7 +38,8 @@ class Repo:
 
     def __init__(self, path):
         self.path = path
-        self.env = dict(os.environ, HOME=path, GIT_CONFIG_NOSYSTEM="1",
+        base = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        self.env = dict(base, HOME=path, GIT_CONFIG_NOSYSTEM="1",
                         GIT_CONFIG_GLOBAL=os.devnull,
                         GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.com",
                         GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.com")
@@ -191,7 +194,7 @@ JOURNAL = """# Progress journal: r
 - fix applied
 
 ## 2026-01-01T05:00:00Z — #10 PR #20 code review, round 3 (human-authorized) → STOPPED
-- Code-review: round 3 (a..b) — 1 finding, claims=0
+- Code-review: round 1 (a..b) — 1 finding, claims=0
 - gate-error: security — /security-review — fatal: ambiguous argument
 
 ## 2026-01-01T05:30:00Z — #10 acceptance gate
@@ -220,23 +223,64 @@ class EscalationTests(unittest.TestCase):
     def setUp(self):
         self.per, self.unattributed = q.escalations(JOURNAL, "calibration", "always")
 
-    def test_structured_columns(self):
+    def test_attributes(self):
         c = self.per[10]
-        self.assertEqual(c["gate-error"], 1, "the summary's restatement is not a second error")
         self.assertEqual(c["plan-material"], 1, "the summary's restatement is not a second stop")
-        self.assertEqual(c["review-past-cap"], 1, "round 3 is one round past the cap of 2")
+        self.assertEqual(c["review-past-cap"], 1, "the Budget line's code-review=3 is one past 2")
 
-    def test_stop_split(self):
+    def test_partition_gives_one_stop_per_block(self):
         c = self.per[10]
+        # round 3's block carries a gate-error line AND a stop word: gate-error only
+        self.assertEqual(c["gate-error"], 1, "per block; the summary's restatement is not a second")
+        self.assertEqual(c["human-option"], 0, "round 3 went to gate-error, not here as well")
         self.assertEqual(c["scope-ruling"], 1)
-        self.assertEqual(c["human-option"], 1, "round 3; answers and summaries are not stops")
         self.assertEqual(c["routine"], 2, "the plan-gate stop and the calibration merge stop")
         self.assertEqual(self.per[11]["unclassified"], 1)
+
+    def test_escalations_total_is_the_issues_definition(self):
+        c = self.per[10]
+        self.assertEqual(c["escalations"], c["gate-error"] + c["scope-ruling"] + c["human-option"])
+        self.assertEqual(c["escalations"], 2)
+        self.assertEqual(self.per[11]["escalations"], 0, "unclassified is not summed")
+
+    def test_one_block_with_every_signal_adds_exactly_one(self):
+        j = ("## t — #5 plan gate\n- Plan-gate: n/a: architect skipped\n\n"
+             "## t — #5 code review round 1 → STOPPED (design-question finding)\n"
+             "- gate-error: x — y — z\n- Plan-gate: material (a) → STOPPED\n")
+        per, _ = q.escalations(j, "calibration", "always")
+        self.assertEqual(per[5]["escalations"], 1)
+        self.assertEqual(per[5]["gate-error"], 1)
+        self.assertEqual(per[5]["scope-ruling"], 0)
 
     def test_routine_needs_the_posture_that_owes_it(self):
         per, _ = q.escalations(JOURNAL, "escalation-only", "conditional")
         self.assertEqual(per[10]["routine"], 0)
-        self.assertEqual(per[10]["human-option"], 3)
+        self.assertEqual(per[10]["human-option"], 2, "the plan and merge stops move here")
+
+    def test_rounds_take_the_larger_of_budget_and_prose(self):
+        """A Budget line alone counts; one written at the cap does not cap the count."""
+        j = ("## t — #7 plan gate\n- Plan-gate: n/a: x\n\n"
+             "## t — #7 (code) — iteration complete\n- Budget: gate-rounds=code-review=4 · x\n")
+        per, _ = q.escalations(j, "calibration", "always")
+        self.assertEqual(per[7]["review-past-cap"], 2)
+        j += "\n## t — #7 code review resolved\n- Code-review: RESOLVED after 5 rounds\n"
+        per, _ = q.escalations(j, "calibration", "always")
+        self.assertEqual(per[7]["review-past-cap"], 3)
+
+    def test_rounds_from_prose_shaped_like_113(self):
+        """No Budget count: "N rounds" counts, "no round 3" does not, case is ignored."""
+        j = ("## t — #8 plan gate\n- Plan-gate: n/a: x\n\n"
+             "## t — #8 code review\n- Code-review: 2 rounds, cap reached, no round 3 opened\n"
+             "- Code-review: RESOLVED after 4 rounds\n\n"
+             "## t — #9 plan gate\n- Plan-gate: n/a: x\n\n"
+             "## t — #9 code review\n- Code-review: Round 3 human-authorized; rounds 1-5 total\n"
+             "- Awaiting human: fix (round 7) or decline\n")
+        per, _ = q.escalations(j, "calibration", "always")
+        self.assertEqual(per[8]["review-past-cap"], 2)
+        self.assertEqual(per[9]["review-past-cap"], 3, "a hypothetical round outside the Code-review line does not count")
+        only_negated = j.split("- Code-review: RESOLVED")[0]
+        per, _ = q.escalations(only_negated, "calibration", "always")
+        self.assertEqual(per[8]["review-past-cap"], 0, "'no round 3' is not round 3")
 
     def test_issue_without_a_plan_gate_line_is_unknown(self):
         self.assertIsNone(self.per[12])
@@ -283,8 +327,21 @@ class FindingTests(unittest.TestCase):
         self.assertEqual(q.fcount(late_hit, "owner/repo", 5, early, now=early + 60 * DAY), ">=1")
 
     def test_unmarked_comments_are_visible(self):
-        marked = [m for _, _, m in self.found()]
+        marked = [f[2] for f in self.found()]
         self.assertEqual(marked, [True, True, True, True, False, True])
+
+    def test_every_ref_in_a_marker_counts_and_malformed_is_reported(self):
+        found = q.findings([
+            comment("2026-12-02T00:00:00Z", "## F1\n**Attributed-to:** `owner/repo#5` (review gate)"),
+            comment("2026-12-02T00:00:00Z", "## F2\n**Attributed-to:** owner/repo#7, owner/repo#5"),
+            comment("2026-12-02T00:00:00Z", "## F3\n**Attributed-to:** PR 5 in repo"),
+            comment("2026-12-02T00:00:00Z", "## F4\n**Attributed-to:** unknown"),
+            comment("2026-12-02T00:00:00Z", "## F5\n**Attributed-to:** owner/repo#50"),
+        ])
+        now = self.MERGE + 60 * DAY
+        self.assertEqual(q.fcount(found, "owner/repo", 5, self.MERGE, now), 2)
+        self.assertEqual(q.fcount(found, "owner/repo", 7, self.MERGE, now), 1)
+        self.assertEqual([f[3] for f in found], [0, 0, 1, 0, 0])
 
 
 class MedianTests(unittest.TestCase):
@@ -313,7 +370,67 @@ class ReportTests(GitCase):
         self.assertIn("r | 21 | 12 | unknown | unknown | unknown", text)
         self.assertIn("r | #12 | " + " | ".join(["unknown"] * len(q.COLUMNS)), text)
         self.assertIn("every F-comment cell is unknown", text)
+        self.assertIn("3 of 4 PRs not located; pass --prs", text)
         self.assertTrue(sha)
+
+    def test_a_run_without_a_journal_reports_its_issues_unknown(self):
+        run = os.path.join(self.tmp.name, ".claude", "loop", "r")
+        os.makedirs(run)
+        with open(os.path.join(run, "queue.md"), "w") as f:
+            f.write(QUEUE)
+        out = io.StringIO()
+        q.report(self.tmp.name, "main", T0, None, None, out=out)
+        for issue in (10, 12):
+            self.assertIn(f"r | #{issue} | " + " | ".join(["unknown"] * len(q.COLUMNS)),
+                          out.getvalue())
+
+
+class MainTests(GitCase):
+    def run_main(self, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        old = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = out, err
+        try:
+            code = q.main(list(argv))
+        finally:
+            sys.stdout, sys.stderr = old
+        return code, out.getvalue(), err.getvalue()
+
+    def test_unmatched_prs_key_fails_loudly(self):
+        path = os.path.join(self.tmp.name, "prs.json")
+        with open(path, "w") as f:
+            f.write("[]")
+        code, _, err = self.run_main(self.tmp.name, "--prs", "/no/such/repo=" + path)
+        self.assertEqual(code, 2)
+        self.assertIn("matches no REPO", err)
+
+    def test_prs_key_matches_through_a_symlink(self):
+        sha = self.repo.commit("unrelated subject", ["a.py"], T0)
+        run = os.path.join(self.tmp.name, ".claude", "loop", "r")
+        os.makedirs(run)
+        with open(os.path.join(run, "queue.md"), "w") as f:
+            f.write(QUEUE)
+        path = os.path.join(self.tmp.name, "prs.json")
+        with open(path, "w") as f:
+            f.write('[{"number": 20, "mergeCommit": {"oid": "%s"}}]' % sha)
+        link = self.tmp.name + "-link"
+        os.symlink(self.tmp.name, link)
+        self.addCleanup(os.remove, link)
+        code, out, _ = self.run_main(self.tmp.name, "--prs", link + "=" + path,
+                                     "--now", "2026-07-30")
+        self.assertEqual(code, 0)
+        self.assertIn("r | 20 | 10 | 2026-06-01 |", out)
+
+    def test_unmarked_and_malformed_count_only_since_adoption(self):
+        before = q.utc(q.epoch(q.ADOPTION) - DAY).isoformat()
+        after = q.utc(q.epoch(q.ADOPTION) + DAY).isoformat()
+        path = os.path.join(self.tmp.name, "f.json")
+        with open(path, "w") as f:
+            json.dump([comment(before, "## F1 none"), comment(after, "## F2 none"),
+                       comment(after, "## F3\n**Attributed-to:** garbage")], f)
+        code, out, _ = self.run_main(self.tmp.name, "--findings", path)
+        self.assertEqual(code, 0)
+        self.assertIn("unmarked=1 malformed=1", out)
 
 
 if __name__ == "__main__":
