@@ -409,10 +409,17 @@ class StopTests(Tmp):
                "question; the architect's scope ruling is below.")
         for j in ("- Code-review: round-2 (abc..def) - 1 finding\n", "Round two returned 1\n",
                   "review round #2\n", "rounds 1-2\n", "round 10 (a..b)\n", "round 1, 2\n",
-                  "- r2.correctness.1 (x.py): y\n"):
+                  "- r2.correctness.1 (x.py): y\n", "- R2.correctness.1 (x.py): y\n",
+                  "round 1\u20142 (main...abc)\n", "round 1 and 2\n", "round 1 & 2\n",
+                  "round 1+2\n", "round 1 to 2\n", "round 1..2\n", "round 1 \u2192 2\n",
+                  "round 1.5\n", "round 1 returned 2 findings\n"):
             self.assertEqual(self.review(msg, journal=j)[0], "halt", j)
         self.assertEqual(self.review(self.DQ, journal="- Code-review: round 1 (main...abc)\n")[0],
                          "reply")
+        # The engine's exact element form (loop-engine Ledger format, `- Code-review:`).
+        self.assertEqual(self.review(self.DQ, journal=(
+            "- Code-review: round 1 (main...9f3c1ab) \u2014 3 findings, claims=1\n"))[0], "reply")
+        self.assertEqual(self.review(self.DQ, journal="Code review round 1:\n- x\n")[0], "reply")
         self.assertEqual(self.review(self.DQ, journal="## open record\n- PR: #2\n")[0], "reply")
         self.assertEqual(self.review(self.DQ, journal="- r1.correctness.1 (x.py): y\n")[0], "reply")
 
@@ -772,16 +779,13 @@ class BuildBaseTests(Tmp):
         self.assertEqual(sha, R.load_fixture(PILOT)["base_sha"])
 
     def test_injected_git_config_does_not_reach_it(self):
-        """#366 scope ruling: build_base's git runs in an allowlisted env, so
-        GIT_CONFIG_COUNT (and HOME's global config) cannot inject excludes."""
-        ign = self.tmp / "ignore"
-        ign.write_text("greet.py\n")
-        home = self.tmp / "home"
-        home.mkdir()
-        (home / ".gitconfig").write_text("[core]\n\texcludesFile = %s\n" % ign)
+        """#366 scope rulings: build_base's git runs in an allowlisted env, so a
+        GIT_CONFIG_COUNT injection cannot reach it. `i18n.commitEncoding` changes
+        the commit, and no `-c` pin overrides it, so only the env allowlist keeps
+        the base SHA fixed."""
         with mock.patch.dict(os.environ, {"GIT_CONFIG_COUNT": "1",
-                                          "GIT_CONFIG_KEY_0": "core.excludesFile",
-                                          "GIT_CONFIG_VALUE_0": str(ign), "HOME": str(home)}):
+                                          "GIT_CONFIG_KEY_0": "i18n.commitEncoding",
+                                          "GIT_CONFIG_VALUE_0": "ISO-8859-1"}):
             sha = R.build_base(os.path.join(PILOT, "repo"), self.tmp / "b")
         self.assertEqual(sha, R.load_fixture(PILOT)["base_sha"])
 

@@ -540,8 +540,8 @@ def classify_stop(status, final_text, stops, stream=None, progress=None):
       `halt_if`                 a regex the final message must NOT match;
       `requires_design_spawn`   an agent name this turn's `stream` must show spawned
                                 (a scope ruling was actually taken, #366);
-      `halt_on_ledger_round2`   the replicate's `progress.md` must name no round but
-                                round 1 and no scope-ruling gate-error
+      `halt_on_ledger_round2`   the replicate's `progress.md` must confirm round 1
+                                and carry no scope-ruling gate-error
                                 (`ledger_round2`).
     `halt_if` only adds halts; `expect` is what makes a stop safe to answer."""
     for stop in stops:
@@ -559,8 +559,8 @@ def classify_stop(status, final_text, stops, stream=None, progress=None):
                 return "halt", "status %r: no %s spawn shown in this turn" % (status, agent)
             if stop.get("halt_on_ledger_round2") and (
                     ledger_round2(progress) if progress else None) is not False:
-                return "halt", ("status %r: progress.md names a round other than 1 or a "
-                                "scope-ruling gate-error, or cannot be read" % (status,))
+                return "halt", ("status %r: progress.md cannot confirm round 1 (or "
+                                "carries a scope-ruling gate-error)" % (status,))
             if stop.get("final"):
                 return "done", None
             return "reply", stop["reply"]
@@ -590,18 +590,18 @@ def design_spawned(stream, agent):
 
 
 ROUND_TOKEN = re.compile(r"\bround", re.I)
-ROUND_ONE = re.compile(r"round\s+1(?![\d\-\u2013/]|\s*,\s*\d)", re.I)
-FINDING_ID = re.compile(r"\br(\d+)\.[\w-]+\.\d+\b", re.ASCII)
+ROUND_ONE = re.compile(r"round[ \t]+1(?=[ \t]*(?:\(|:|$))", re.I | re.M)
+FINDING_ID = re.compile(r"\br(\d+)\.[\w-]+\.\d+\b", re.I | re.ASCII)
 SCOPE_RULING_ERROR = re.compile(r"^\s*-\s*gate-error:\s*scope-ruling\b", re.M)
 
 
 def ledger_round2(progress):
-    """-> False only if every `round` in the journal reads exactly `round 1`, no
-    finding ID names another round, and there is no scope-ruling gate-error;
-    True otherwise; None if it cannot be read. Default-deny on the round token:
-    any other continuation (`round-2`, `Round two`, `rounds 1-2`, `round 10`)
-    counts as a later round. A journal with no `round` at all passes, since round
-    1 may not have resolved when step 8 stops (#366 scope ruling)."""
+    """-> False only if the journal confirms round 1: every `round` in it is
+    `round 1` followed by `(`, `:` or the end of the line, every finding ID is
+    `r1.…`, and there is no scope-ruling gate-error. True otherwise, prose
+    included; None if it cannot be read. A journal with no `round` at all passes,
+    since round 1 may not have resolved when step 8 stops (#366 scope rulings).
+    Limit: text inside an accepted `round 1 (` parenthesis is not read."""
     try:
         text = pathlib.Path(progress).read_text()
     except OSError:
