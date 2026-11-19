@@ -383,15 +383,21 @@ def check_gh_token(gh_token, tokdir):
     which a spike verified from the outside. That holds only for the token the
     spike checked, so the run refuses unless `gh-token` hashes to the sha256 the
     human recorded in `gh-token.sha256` after that spike (#369). A missing or
-    unreadable record refuses."""
+    unreadable record refuses.
+
+    The fingerprint is of the token as `read_token` returns it, whitespace
+    stripped: record it with `tr -d '[:space:]' < gh-token | sha256sum >
+    gh-token.sha256`. `sha256sum gh-token` also hashes the file's newline and
+    will not match."""
     p = pathlib.Path(tokdir) / "gh-token.sha256"
     try:
         want = p.read_text().split()[0].lower()
-    except (OSError, IndexError):
+    except (OSError, ValueError, IndexError):
         raise Refused("no recorded gh-token fingerprint at %s: record its sha256 after "
                       "the token-scope spike" % p)
     if hashlib.sha256(gh_token.encode()).hexdigest() != want:
-        raise Refused("gh-token does not match the spike-verified fingerprint in %s" % p)
+        raise Refused("gh-token does not match the spike-verified fingerprint in %s (the "
+                      "sha256 of the stripped token, not of the file: see check_gh_token)" % p)
 
 
 def expected_strata(roster_pins, model, effort, builtins):
@@ -853,6 +859,11 @@ def account_events_argv(login, page=1):
             "users/%s/events?per_page=%d&page=%d" % (login, EVENTS_PER_PAGE, page)]
 
 
+def account_user_argv():
+    """Which user `gh` is signed in as: the second, and only other, human-login GET."""
+    return [REAL_GH, "api", "-X", "GET", "user", "--jq", ".login"]
+
+
 def account_events(login):
     """The real account's public+private event feed, read with the human's own
     login (read-only, harness side). -> (events, hit_cap).
@@ -860,7 +871,13 @@ def account_events(login):
     It reads every page the API serves, up to its cap, and assumes nothing about
     order: the feed is not served newest-first, by `created_at` or by `id`, so no
     stop rule keyed on the oldest event read is sound (#369). Any error on any page
-    refuses."""
+    refuses, and so does a `gh` signed in as anyone but `login`: the API would then
+    serve only `login`'s public events, and the read would look complete."""
+    r = subprocess.run(account_user_argv(), capture_output=True, text=True)
+    who = r.stdout.strip() if not r.returncode else None
+    if not who or who.lower() != login.lower():
+        raise Refused("gh is signed in as %r, not %r: the feed read would miss private events"
+                      % (who, login))
     events = []
     for page in range(1, EVENTS_MAX_PAGES + 1):
         r = subprocess.run(account_events_argv(login, page), capture_output=True, text=True)
@@ -1103,7 +1120,7 @@ def _run(a, spec, rdir, env_record, ops):
     # The account-event window opens with the replicate, before any repo is
     # created or any `claude` runs, so it covers the install (#366).
     env_record["run_start"] = env_record["wall_clock_start"]
-    login = a.login
+    login = env_record["login"] = a.login           # every later feed read must match it
     sandbox = "%s/%s-%s" % (spec["org"], spec["name"], a.replicate_id)
     # Base: built from the fixture's bytes, verified against the frozen SHA.
     base = build_base(pathlib.Path(spec["dir"]) / "repo", rdir / "base")
@@ -1169,6 +1186,8 @@ def _run(a, spec, rdir, env_record, ops):
     write_shim(rdir / "bin")
     (rdir / "gh-calls.jsonl").touch()
     env = ops.launch_env(rdir, sandbox)
+    # Which spike-verified token ran this replicate: (a) rests on it (#369).
+    env_record["gh_token_sha256"] = hashlib.sha256(env["GH_TOKEN"].encode()).hexdigest()
     claude_real = os.path.realpath(a.claude_bin)
     env_record["claude_real"] = claude_real
     # Git inside the replicate: sandbox token via gh's credential helper, fixed identity.
@@ -1345,33 +1364,56 @@ def account_reads(rdir, env_record, login, sandbox, harness, ops):
     `audit.json` recorded, then one made now. A later read can lose an event an
     earlier one saw (the feed is capped), so reads accumulate and are never
     replaced. An earlier `audit.json` that cannot be read refuses rather than
-    dropping its reads."""
+    dropping its reads, and so does a `login` other than the run's: a read of
+    another account's feed is no detection for this one."""
     prior = []
     path = pathlib.Path(rdir) / "audit.json"
     if path.exists():
         try:
-            prior = json.loads(path.read_text())["account_feed"]["reads"]
-            if not isinstance(prior, list):
-                raise TypeError("reads is not a list")
-        except (OSError, ValueError, KeyError, TypeError) as exc:
+            data = json.loads(path.read_text())
+        except (OSError, ValueError) as exc:
             raise Refused("cannot read the earlier account-feed reads in %s: %r" % (path, exc))
-    read = {"read_at": ops.now()}
+        if isinstance(data, dict) and "account_feed" not in data:
+            raise Refused("cannot read the earlier account-feed reads in %s: it predates #369 "
+                          "and records none" % path)
+        try:
+            prior = data["account_feed"]["reads"]
+            if not isinstance(prior, list) or not all(isinstance(r, dict) for r in prior):
+                raise TypeError("reads is not a list of reads")
+        except (KeyError, TypeError) as exc:
+            raise Refused("cannot read the earlier account-feed reads in %s: %r" % (path, exc))
+    others = {x for x in [env_record.get("login")] + [r.get("login") for r in prior]
+              if x and x.lower() != login.lower()}
+    if others:
+        raise Refused("--login %s is not the login this replicate's feed was read as (%s)"
+                      % (login, ", ".join(sorted(others))))
+    read = {"read_at": ops.now(), "login": login}
     try:
         events, cap = ops.events(login)
         read.update(events_summary(events, cap))
         read["foreign"] = foreign_events(events, env_record["run_start"],
                                          env_record.get("run_end") or read["read_at"],
                                          sandbox, harness)
-    except Refused as exc:
-        read["error"] = str(exc)
+    except Exception as exc:                         # recorded as a failed read, never empty
+        read["error"] = str(exc) if isinstance(exc, Refused) else "%s: %s" % (
+            type(exc).__name__, exc)
     return prior + [read]
 
 
 def account_foreign(reads):
     """AC6(a)'s feed half: every foreign event any read saw. Detection only, so
     an empty list is no evidence of absence; but with no successful read at all
-    there is no detection either, and that fails."""
-    seen = sorted({e for r in reads for e in (r.get("foreign") or [])}, reverse=True)
+    there is no detection either, and that fails. An event is its rendered line:
+    a line one read saw n times counts n times, and across reads the largest
+    count stands, so re-reading an event does not count it twice."""
+    most = {}
+    for r in reads:
+        counts = {}
+        for e in r.get("foreign") or []:
+            counts[e] = counts.get(e, 0) + 1
+        for e, n in counts.items():
+            most[e] = max(most.get(e, 0), n)
+    seen = sorted([e for e, n in most.items() for _ in range(n)], reverse=True)
     if not any("foreign" in r for r in reads):
         seen.append("account event feed: no read succeeded")
     return seen
@@ -1400,22 +1442,31 @@ def write_audit(rdir, env_record, spec, login, version_dir, ops=None):
     if env_record.get("plugin_repo"):
         harness = {"repo": env_record["plugin_repo"], "until": env_record.get("plugin_repo_deleted"),
                    "head": env_record.get("marketplace_commit")}
-    reads = account_reads(rdir, env_record, login, sandbox, harness, ops)
     expected = {k: tuple(v) for k, v in env_record["expected_strata"].items()}
+    tools = audit_tools(transcripts, inits, pathlib.Path.home(), rdir)
+    strata = check_strata(observed_strata(pdir), expected)
+    # The feed is read last, so no later check can raise and discard the read.
+    reads = account_reads(rdir, env_record, login, sandbox, harness, ops)
     audit = {
         "a_tracker": gh_problems,
         "a_account_events": account_foreign(reads),
         "account_feed": {"role": FEED_ROLE, "delayed_read": delayed_read(reads, env_record),
                          "reads": reads},
-        "a_tools": audit_tools(transcripts, inits, pathlib.Path.home(), rdir),
+        "a_tools": tools,
         "b_engine_loads": load_problems, "engine_loads": loads,
-        "c_strata": check_strata(observed_strata(pdir), expected),
+        "c_strata": strata,
         "gh_calls": gh_calls,
         "unattended": env_record.get("unattended"),
     }
+    # The delayed re-audit is owed, not optional: until a successful read lands at
+    # least FEED_LATENCY_S after run_end, the audit is incomplete and does not pass.
     audit["pass"] = not any(audit[k] for k in ("a_tracker", "a_account_events", "a_tools",
-                                               "b_engine_loads", "c_strata")) and bool(audit["unattended"])
-    (rdir / "audit.json").write_text(json.dumps(audit, indent=2))
+                                               "b_engine_loads", "c_strata")) and \
+        bool(audit["unattended"]) and audit["account_feed"]["delayed_read"]
+    # audit.json is the only store of the accumulated reads: replace it whole or not at all.
+    tmp = pathlib.Path(rdir) / "audit.json.tmp"
+    tmp.write_text(json.dumps(audit, indent=2))
+    os.replace(tmp, pathlib.Path(rdir) / "audit.json")
     return audit
 
 

@@ -277,9 +277,12 @@ class LaunchTests(Tmp):
 
     def test_human_login_is_used_only_for_the_events_get(self):
         """Every harness `gh` call passes an explicit env= (sandbox or harness
-        token), except `account_events`, whose argv is exactly one GET."""
+        token), except `account_events`, whose argvs are two GETs: the signed-in
+        user, then the feed."""
         self.assertEqual(R.account_events_argv("me"),
                          [R.REAL_GH, "api", "-X", "GET", "users/me/events?per_page=100&page=1"])
+        self.assertEqual(R.account_user_argv(),
+                         [R.REAL_GH, "api", "-X", "GET", "user", "--jq", ".login"])
         self.assertEqual(R.account_events_argv("me", 3)[-1], "users/me/events?per_page=100&page=3")
         tree = ast.parse(pathlib.Path(R.__file__).read_text())
         offenders = []
@@ -292,10 +295,10 @@ class LaunchTests(Tmp):
                 names_gh = isinstance(first, ast.List) and first.elts and \
                     getattr(first.elts[0], "id", None) == "REAL_GH"
                 via_argv = isinstance(first, ast.Call) and \
-                    getattr(first.func, "id", None) == "account_events_argv"
+                    getattr(first.func, "id", None) in ("account_events_argv", "account_user_argv")
                 if (names_gh or via_argv) and not any(k.arg == "env" for k in call.keywords):
                     offenders.append(fn.name)
-        self.assertEqual(offenders, ["account_events"])
+        self.assertEqual(offenders, ["account_events", "account_events"])
 
 
 class ShimPolicyTests(unittest.TestCase):
@@ -850,10 +853,12 @@ def fake_proc(rc=0, out="", err=""):
 class EventsFeedTests(unittest.TestCase):
     START = "2026-11-17T00:00:00+00:00"
 
-    def feed(self, pages):
+    def feed(self, pages, user="me"):
         """Patch subprocess.run to serve `pages` (lists of hour offsets, or a
-        CompletedProcess) by page number."""
+        CompletedProcess) by page number, signed in as `user`."""
         def run(argv, **kw):
+            if argv == R.account_user_argv():
+                return fake_proc(0, user + "\n") if user else fake_proc(1, err="HTTP 401")
             page = int(argv[-1].rsplit("page=", 1)[1])
             p = pages[page - 1] if page <= len(pages) else []
             if isinstance(p, subprocess.CompletedProcess):
@@ -861,6 +866,16 @@ class EventsFeedTests(unittest.TestCase):
             return fake_proc(0, json.dumps([{"created_at": at(h * 3600) if isinstance(h, int) else h}
                                             for h in p]))
         return mock.patch.object(R.subprocess, "run", run)
+
+    def test_a_gh_signed_in_as_another_user_refuses(self):
+        """Signed in as anyone else, the API serves only `login`'s public events,
+        and the read would look complete."""
+        for user in ("someone-else", ""):
+            with self.feed([[1] * 10], user=user):
+                with self.assertRaisesRegex(R.Refused, "signed in as"):
+                    R.account_events("me")
+        with self.feed([[1] * 10], user="ME"):
+            self.assertEqual(len(R.account_events("me")[0]), 10)
 
     def test_unordered_feed_is_read_whole(self):
         """#369: the real feed is not newest-first. Page 1 holds only events before
@@ -1096,7 +1111,10 @@ class RunTests(Tmp):
         self.assertEqual(audit["a_account_events"], [])
         self.assertIn("detection only", audit["account_feed"]["role"])
         self.assertFalse(audit["account_feed"]["delayed_read"])
-        self.assertNotIn("covered", json.dumps(audit["account_feed"]["reads"]))
+        self.assertEqual(set(audit["account_feed"]["reads"][0]),
+                         {"read_at", "login", "count", "hit_cap", "oldest_created_at", "foreign"})
+        self.assertEqual((env["login"], env["gh_token_sha256"]),
+                         ("me", hashlib.sha256(b"GH").hexdigest()))
         start = env["run_start"]
         ev = [{"created_at": start, "type": "IssuesEvent", "repo": {"name": "me/real"}}]
         shutil.rmtree(self.tmp / "out")
@@ -1124,9 +1142,38 @@ class RunTests(Tmp):
         self.assertEqual(len(audit["account_feed"]["reads"]), 3)
         self.assertEqual(len(audit["a_account_events"]), 1)
         self.assertTrue(audit["account_feed"]["delayed_read"])
+        with self.assertRaisesRegex(R.Refused, "not the login"):
+            R.write_audit(rdir, env, spec, "someone-else", env["version_dir"], late)
+        self.assertEqual(len(json.loads((rdir / "audit.json").read_text())
+                             ["account_feed"]["reads"]), 3)
+        self.assertFalse((rdir / "audit.json.tmp").exists())
         (rdir / "audit.json").write_text("{}")
+        with self.assertRaisesRegex(R.Refused, "earlier account-feed reads.*predates"):
+            R.write_audit(rdir, env, spec, "me", env["version_dir"], late)
+        (rdir / "audit.json").write_text('{"account_feed": {"reads": ["foreign"]}}')
         with self.assertRaisesRegex(R.Refused, "earlier account-feed reads"):
             R.write_audit(rdir, env, spec, "me", env["version_dir"], late)
+
+    def test_account_foreign_keeps_multiplicity_but_not_rereads(self):
+        """Two distinct events can render to one line; a re-read of the same
+        event must not count it twice."""
+        line = "2026-11-17T00:00:01Z PushEvent me/real"
+        self.assertEqual(R.account_foreign([{"foreign": [line, line]}, {"foreign": [line]}]),
+                         [line, line])
+        self.assertEqual(R.account_foreign([{"error": "x"}]),
+                         ["account event feed: no read succeeded"])
+
+    def test_a_read_that_crashes_is_recorded_as_a_failed_read(self):
+        """A non-Refused failure (no `gh` binary, a malformed event) is a failed
+        read, recorded with its error -- never an empty feed, never a lost audit."""
+        env = self.run_it(FakeOps())
+        rdir = self.tmp / "out" / "r1"
+        ops = FakeOps(audit_events=["not-an-event"])
+        ops.feed_reads = 1
+        audit = R.write_audit(rdir, env, R.load_fixture(env["fixture_dir"]), "me",
+                              env["version_dir"], ops)
+        self.assertIn("AttributeError", audit["account_feed"]["reads"][-1]["error"])
+        self.assertNotIn("foreign", audit["account_feed"]["reads"][-1])
 
     def test_audit_flags_an_in_window_event_behind_an_older_page(self):
         """#369 through the audit's real read: page 1 is all older than the run,
@@ -1138,6 +1185,8 @@ class RunTests(Tmp):
         pages = [[old] * 100, [old] * 50 + [new]]
 
         def run(argv, **kw):
+            if argv == R.account_user_argv():
+                return fake_proc(0, "me\n")
             page = int(argv[-1].rsplit("page=", 1)[1])
             return fake_proc(0, json.dumps(pages[page - 1] if page <= len(pages) else []))
 
@@ -1150,6 +1199,25 @@ class RunTests(Tmp):
         self.assertEqual(audit["account_feed"]["reads"][-1]["count"], 151)
         self.assertEqual(len(audit["a_account_events"]), 1)
         self.assertFalse(audit["pass"])
+
+    def test_pass_waits_for_the_delayed_read(self):
+        """The re-audit is owed: an otherwise clean audit at run end does not pass,
+        and passes once a successful read lands FEED_LATENCY_S after run_end. A
+        late read that fails leaves it failing."""
+        with mock.patch.object(R, "audit_engine_loads", lambda *a, **k: ([], ["load"])):
+            env = self.run_it(FakeOps())
+            audit = self.audit()
+            self.assertEqual([k for k in ("a_tracker", "a_account_events", "a_tools",
+                                          "b_engine_loads", "c_strata") if audit[k]], [])
+            self.assertFalse(audit["account_feed"]["delayed_read"])
+            self.assertFalse(audit["pass"])
+            rdir, spec = self.tmp / "out" / "r1", R.load_fixture(env["fixture_dir"])
+            late = FakeOps(audit_events="refused")
+            late.feed_reads, late.t = 1, 7 * 3600
+            self.assertFalse(R.write_audit(rdir, env, spec, "me", env["version_dir"], late)["pass"])
+            late = FakeOps()
+            late.feed_reads, late.t = 1, 7 * 3600
+            self.assertTrue(R.write_audit(rdir, env, spec, "me", env["version_dir"], late)["pass"])
 
     def test_delayed_read_needs_a_successful_read_past_the_latency(self):
         end = "2026-11-17T00:00:00+00:00"
