@@ -144,8 +144,7 @@ def build_base(repo_dir, dest):
 
     Git runs in an allowlisted environment, not the caller's: `PATH`, a fresh
     empty `HOME` and `XDG_CONFIG_HOME`, no global or system config, and the
-    fixed identity and date (#366). Excludes and attributes files are pinned to
-    /dev/null as well."""
+    fixed identity and date (#366)."""
     dest = pathlib.Path(dest)
     shutil.copytree(repo_dir, dest)
     cfg = pathlib.Path(tempfile.mkdtemp(prefix="build-base-"))
@@ -155,11 +154,10 @@ def build_base(repo_dir, dest):
            "GIT_COMMITTER_NAME": FIXED_IDENTITY[0], "GIT_COMMITTER_EMAIL": FIXED_IDENTITY[1],
            "GIT_AUTHOR_DATE": FIXED_GIT_DATE, "GIT_COMMITTER_DATE": FIXED_GIT_DATE,
            "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
-    pin = ["-c", "core.excludesFile=" + os.devnull, "-c", "core.attributesFile=" + os.devnull]
     try:
         for cmd in (["git", "init", "-q", "-b", "main"],
-                    ["git"] + pin + ["add", "-A"],
-                    ["git"] + pin + ["-c", "commit.gpgsign=false", "commit", "-q", "-m",
+                    ["git", "add", "-A"],
+                    ["git", "-c", "commit.gpgsign=false", "commit", "-q", "-m",
                                      "fixture base"]):
             subprocess.run(cmd, cwd=dest, env=env, check=True, stdout=subprocess.DEVNULL)
         return subprocess.run(["git", "rev-parse", "HEAD"], cwd=dest, env=env, check=True,

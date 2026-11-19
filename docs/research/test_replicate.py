@@ -390,6 +390,24 @@ class StopTests(Tmp):
         self.assertEqual(self.review(
             self.DQ, journal="- gate-error: scope-ruling - DESIGN_AGENT - no-stderr\n")[0], "halt")
 
+    def test_only_a_spawn_tool_counts_as_a_spawn(self):
+        """A non-spawn tool carrying `subagent_type: architect` is not a ruling."""
+        stream = write_jsonl(self.tmp / "bash.jsonl", [
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "t", "name": "Bash",
+                 "input": {"subagent_type": "architect", "command": "true"}}]}}])
+        self.assertIs(R.design_spawned(stream, "architect"), False)
+        progress = self.tmp / "progress.md"
+        progress.write_text("- Code-review: round 1 (main...abc1234)\n")
+        self.assertEqual(R.classify_stop("in-review", self.DQ, self.STOPS, stream=stream,
+                                         progress=progress)[0], "halt")
+
+    def test_halt_if_names_a_later_round(self):
+        """The fixture's `halt_if` itself halts a message that names round 2, with no
+        other marker and a round-1 journal."""
+        self.assertEqual(self.review(self.DQ + " This is round 2.")[0], "halt")
+        self.assertEqual(self.review(self.DQ)[0], "reply")
+
     def test_scope_ruling_alone_halts(self):
         self.assertEqual(self.review("Stopped at step 8 with the architect's scope ruling.")[0],
                          "halt")
@@ -764,6 +782,11 @@ class CiBindingTests(Tmp):
             "| `CI_STATUS_CMD` | `gh api repos/o/r/actions/runs?branch=<branch>` | x |"))
         self.assertEqual(ok["ci_status_cmd"], "gh api repos/o/r/actions/runs?branch=<branch>")
 
+    def test_verb_with_trailing_characters_refuses(self):
+        for v in ("gh run listx --workflow t.yml", "gh run view7"):
+            with self.assertRaises(R.Refused, msg=v):
+                R.load_fixture(self.fixture_copy("| `CI_STATUS_CMD` | `%s` | x |" % v))
+
     def test_missing_or_duplicate_row_refuses(self):
         with self.assertRaisesRegex(R.Refused, "0 CI_STATUS_CMD rows"):
             R.load_fixture(self.fixture_copy(None))
@@ -886,7 +909,8 @@ class FakeOps:
     GitHub repos; `turn` decides what a `claude -p` turn does."""
 
     def __init__(self, install_problems=(), turn="done", existing=(), fail_create=(),
-                 audit_events="ok", mutate_cache=False):
+                 audit_events="ok", mutate_cache=False, probe_error=()):
+        self.probe_error = set(probe_error)
         self.calls, self.existing = [], set(existing)
         self.audit_events, self.mutate_cache, self.untils = audit_events, mutate_cache, []
         self.install_problems, self.turn, self.fail_create = list(install_problems), turn, fail_create
@@ -906,6 +930,8 @@ class FakeOps:
         args = cmd[1:]
         if args[:1] == ["api"]:
             repo = args[1].split("/", 1)[1]
+            if repo in self.probe_error:
+                return fake_proc(1, err="gh: Server Error (HTTP 500)")
             return fake_proc(0, "{}") if repo in self.existing else \
                 fake_proc(1, err="gh: Not Found (HTTP 404)")
         if args[:2] == ["repo", "create"]:
@@ -1074,6 +1100,30 @@ class RunTests(Tmp):
         self.assertIn(self.SB, ops.existing)
         self.assertNotIn(self.SB, env["repos_planned"])
         self.assertNotIn(self.SB, env.get("repos_deleted", []))
+
+    def test_unprobeable_repo_is_refused_and_never_created(self):
+        """A repo whose existence cannot be told (a non-404 error) is never
+        created, never planned, and never deleted."""
+        ops = FakeOps(probe_error={self.PLUG})
+        env = self.run_it(ops, R.Refused)
+        self.assertIn("cannot be probed", env["refused"])
+        self.assertEqual(ops.creates(), [])
+        self.assertEqual(env["repos_planned"], [])
+
+    def test_repo_exists_reads_only_a_404_as_absent(self):
+        ops = FakeOps(existing={"o/here"}, probe_error={"o/err"})
+        self.assertIs(R.repo_exists(ops, {}, "o/here"), True)
+        self.assertIs(R.repo_exists(ops, {}, "o/gone"), False)
+        self.assertIsNone(R.repo_exists(ops, {}, "o/err"))
+
+    def test_teardown_never_deletes_a_repo_it_cannot_probe(self):
+        ops = FakeOps(existing={"o/err", "o/here"}, probe_error={"o/err"})
+        rec = {}
+        R.teardown(ops, {}, ["o/err", "o/here"], rec, False)
+        self.assertIn("o/err", ops.existing)
+        self.assertNotIn("o/here", ops.existing)
+        self.assertEqual(rec["repos_deleted"], ["o/here"])
+        self.assertIn("existence unknown", rec["repo_delete_failed"][0])
 
     def test_failed_create_is_recorded_and_not_deleted(self):
         ops = FakeOps(fail_create={self.PLUG})
