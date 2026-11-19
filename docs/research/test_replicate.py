@@ -358,7 +358,7 @@ class StopTests(Tmp):
     DQ = ("Stopped at step 8: a BLOCKING finding raises a design question. "
           "The architect's scope ruling recommends a minimal fix set.")
 
-    def review(self, text, spawn="architect", journal="- Code-review: round 1 (main...abc) - 2 findings\n"):
+    def review(self, text, spawn="architect", journal="- Code-review: round 1 (main...abc1234) - 2 findings\n"):
         """classify_stop for an in-review stop, with this turn's stream showing a
         spawn of `spawn` (None: no spawn) and the replicate's journal `journal`
         (None: no progress.md)."""
@@ -412,20 +412,27 @@ class StopTests(Tmp):
                   "- r2.correctness.1 (x.py): y\n", "- R2.correctness.1 (x.py): y\n",
                   "round 1\u20142 (main...abc)\n", "round 1 and 2\n", "round 1 & 2\n",
                   "round 1+2\n", "round 1 to 2\n", "round 1..2\n", "round 1 \u2192 2\n",
-                  "round 1.5\n", "round 1 returned 2 findings\n"):
+                  "round 1.5\n", "round 1 returned 2 findings\n",
+                  # round 3 (B1): accepted by the follower allowlist, refused by the literal form
+                  "round 1: and 2\n", "round 1:2\n", "- Code-review: round 1\n  and 2 (abc..def)\n",
+                  "Code review round 1:\n- x\n", "- Code-review: round 1 (main...abc)\n",
+                  "- Code-review: round 1 (abc1234..def5678)\n",
+                  "- code-review: round 1 (main...abc1234)\n",
+                  "- Code-review: round 1 (main...abc1234) then round 2 (abc1234..def5678)\n"):
             self.assertEqual(self.review(msg, journal=j)[0], "halt", j)
-        self.assertEqual(self.review(self.DQ, journal="- Code-review: round 1 (main...abc)\n")[0],
+        self.assertEqual(self.review(self.DQ, journal="- Code-review: round 1 (main...abc1234)\n")[0],
                          "reply")
         # The engine's exact element form (loop-engine Ledger format, `- Code-review:`).
         self.assertEqual(self.review(self.DQ, journal=(
             "- Code-review: round 1 (main...9f3c1ab) \u2014 3 findings, claims=1\n"))[0], "reply")
-        self.assertEqual(self.review(self.DQ, journal="Code review round 1:\n- x\n")[0], "reply")
+        self.assertEqual(self.review(self.DQ, journal="- Code-review: round 1 (main...abc1234)\n"
+                                                      "- r1.correctness.1 (x.py): y\n")[0], "reply")
         self.assertEqual(self.review(self.DQ, journal="## open record\n- PR: #2\n")[0], "reply")
         self.assertEqual(self.review(self.DQ, journal="- r1.correctness.1 (x.py): y\n")[0], "reply")
 
     def test_unreadable_stream_halts_with_a_round_one_journal(self):
         progress = self.tmp / "progress.md"
-        progress.write_text("- Code-review: round 1 (main...abc)\n")
+        progress.write_text("- Code-review: round 1 (main...abc1234)\n")
         self.assertEqual(R.classify_stop("in-review", self.DQ, self.STOPS,
                                          stream=self.tmp / "missing.jsonl",
                                          progress=progress)[0], "halt")

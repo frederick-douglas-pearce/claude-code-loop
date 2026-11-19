@@ -590,25 +590,29 @@ def design_spawned(stream, agent):
 
 
 ROUND_TOKEN = re.compile(r"\bround", re.I)
-ROUND_ONE = re.compile(r"round[ \t]+1(?=[ \t]*(?:\(|:|$))", re.I | re.M)
+# The engine's round-1 element, literally (loop-engine Ledger format, `- Code-review:`).
+ENGINE_ROUND_ONE = re.compile(r"^[ \t]*- Code-review: (round) 1 \(main\.\.\.[0-9a-f]{7,40}\)", re.M)
 FINDING_ID = re.compile(r"\br(\d+)\.[\w-]+\.\d+\b", re.I | re.ASCII)
 SCOPE_RULING_ERROR = re.compile(r"^\s*-\s*gate-error:\s*scope-ruling\b", re.M)
 
 
 def ledger_round2(progress):
-    """-> False only if the journal confirms round 1: every `round` in it is
-    `round 1` followed by `(`, `:` or the end of the line, every finding ID is
-    `r1.…`, and there is no scope-ruling gate-error. True otherwise, prose
-    included; None if it cannot be read. A journal with no `round` at all passes,
-    since round 1 may not have resolved when step 8 stops (#366 scope rulings).
-    Limit: text inside an accepted `round 1 (` parenthesis is not read."""
+    """-> False only if the journal confirms round 1: every `round` in it is the
+    one in an engine round-1 element, `- Code-review: round 1 (main...<sha>)`, at
+    the start of a line; every finding ID is `r1.…`; and there is no
+    scope-ruling gate-error. True otherwise, prose included; None if it cannot
+    be read. A journal with no `round` at all passes, since round 1 may not have
+    resolved when step 8 stops (#366 scope rulings). Limit: after that element,
+    only further `round` tokens and finding IDs are read, so a later round
+    written without either (`… (main...abc1234) — and 2`) passes."""
     try:
         text = pathlib.Path(progress).read_text()
     except OSError:
         return None
     if SCOPE_RULING_ERROR.search(text):
         return True
-    if any(not ROUND_ONE.match(text, m.start()) for m in ROUND_TOKEN.finditer(text)):
+    allowed = {m.start(1) for m in ENGINE_ROUND_ONE.finditer(text)}
+    if any(m.start() not in allowed for m in ROUND_TOKEN.finditer(text)):
         return True
     return any(int(m.group(1)) != 1 for m in FINDING_ID.finditer(text))
 
