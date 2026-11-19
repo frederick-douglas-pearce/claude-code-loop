@@ -657,20 +657,44 @@ def round_one_sha(progress):
     return shas.pop() if len(shas) == 1 else None
 
 
+def git_sandbox_argv(clone, links=None):
+    """The bubblewrap prefix for the harness's reads of a replicate's work clone.
+    The replicate can write that clone, its `.git/config` and `.gitattributes`
+    included, so git there can run commands it planted (an fsmonitor hook, a clean
+    filter driver): it never runs on the host (#371 security review). Default-deny
+    like `sandbox_argv`, and narrower: no network at all, `/usr` and `/etc`
+    read-only, and the clone read-only; nothing else of the host exists inside."""
+    argv = [BWRAP, "--unshare-all", "--unshare-user", "--cap-drop", "ALL",
+            "--die-with-parent", "--new-session"]
+    for d in ROOT_DIRS:
+        argv += ["--ro-bind", d, d]
+    for kind, src, dest in root_entries(ROOT_LINKS if links is None else links):
+        argv += [kind, src, dest]
+    argv += ["--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp",
+             "--ro-bind", str(clone), str(clone), "--chdir", str(clone)]
+    return argv
+
+
 def clone_state(clone):
     """-> {head, refs, worktrees, dirty} for the replicate's work clone, or None if
-    any git call fails. Git runs in an allowlisted environment, so a `GIT_DIR` or
-    `GIT_CONFIG_*` in the harness's own cannot point it elsewhere (#371)."""
-    cfg = pathlib.Path(tempfile.mkdtemp(prefix="clone-state-"))
-    env = {"PATH": os.environ.get("PATH") or "/usr/bin:/bin", "HOME": str(cfg),
-           "XDG_CONFIG_HOME": str(cfg / ".config"), "LANG": "C",
-           "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    any git call fails. Every git call runs inside `git_sandbox_argv`, with an
+    allowlisted environment, so neither the clone's own config nor a `GIT_DIR` or
+    `GIT_CONFIG_*` in the harness's environment can run anything on the host or
+    point git elsewhere. The replicate could still make the clone lie about its
+    state; the guard is against the engine's behavior, not an adversary's."""
+    clone = os.path.realpath(clone)
+    env = {"PATH": "/usr/bin:/bin", "HOME": "/tmp", "XDG_CONFIG_HOME": "/tmp/.config",
+           "LANG": "C", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
+           "GIT_OPTIONAL_LOCKS": "0"}
+    prefix = git_sandbox_argv(clone)
 
     def git(*args):
-        return subprocess.run(["git", *args], cwd=clone, env=env, check=True,
-                              capture_output=True, text=True,
-                              stdin=subprocess.DEVNULL).stdout
+        return subprocess.run(prefix + ["git", *args], env=env, check=True,
+                              capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                              timeout=60).stdout
     try:
+        if not os.path.isdir(clone):
+            return None
         head = git("rev-parse", "HEAD").strip()
         refs = dict(reversed(line.split(" ", 1)) for line in
                     git("for-each-ref", "--format=%(objectname) %(refname)").splitlines())
@@ -678,10 +702,8 @@ def clone_state(clone):
                      git("worktree", "list", "--porcelain").splitlines()
                      if line.startswith("HEAD ")]
         dirty = bool(git("status", "--porcelain", "--untracked-files=all").strip())
-    except (OSError, ValueError, subprocess.CalledProcessError):
+    except (OSError, ValueError, subprocess.SubprocessError):
         return None
-    finally:
-        shutil.rmtree(cfg, ignore_errors=True)
     return {"head": head, "refs": refs, "worktrees": worktrees, "dirty": dirty}
 
 

@@ -577,6 +577,32 @@ class StopTests(Tmp):
         self.assertEqual(self.rp_h1(progress=self.RP_H1_PROGRESS.replace(
             "- Code-review:", "- Review:"))[0], "halt")
 
+    @unittest.skipUnless(os.path.exists(R.BWRAP), "needs bubblewrap")
+    def test_clone_state_never_runs_the_clones_own_commands_on_the_host(self):
+        """#371 security review: the replicate can write the clone's config. An
+        fsmonitor hook and a clean filter planted there run, if at all, inside the
+        git sandbox, where the host path they write to does not exist."""
+        repo = self.tmp / "repo"
+        repo.mkdir()
+        (repo / "a").write_text("a\n")
+        clone = self.tmp / "clone"
+        R.build_base(repo, clone)
+        canary = self.tmp / "escaped"
+        hook = self.tmp / "hook.sh"
+        hook.write_text("#!/bin/sh\ntouch %s\n" % canary)
+        hook.chmod(0o755)
+        with open(clone / ".git" / "config", "a") as f:
+            f.write("[core]\n\tfsmonitor = %s\n[filter \"x\"]\n\tclean = %s\n" % (hook, hook))
+        (clone / ".gitattributes").write_text("* filter=x\n")
+        os.utime(clone / "a", (0, 0))                     # stat-dirty: status runs the filter
+        R.clone_state(clone)
+        self.assertFalse(canary.exists())
+        argv = R.git_sandbox_argv(clone)
+        self.assertIn("--unshare-all", argv)
+        self.assertNotIn("--bind", argv)                  # nothing writable from the host
+        self.assertEqual(argv[argv.index(str(clone)) - 1], "--ro-bind")
+
+    @unittest.skipUnless(os.path.exists(R.BWRAP), "needs bubblewrap")
     def test_clone_state_reads_a_real_repo_whatever_the_git_environment(self):
         """#371 AC3 and the env allowlist: a real clone, read with GIT_DIR pointed at
         another repo in the harness environment; a git failure is None."""
