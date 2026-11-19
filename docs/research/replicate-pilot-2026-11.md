@@ -101,6 +101,8 @@ h1 45 turns, $1.48 — and the unknown-model refusal above.
   answer a dirty round 2 with *accept as non-blocking*. The human ruled that only the design-question
   stop gets a scripted reply, with a discriminator that halts when unsure; that is #357's, before any
   #274 fixture carries an `in-review` reply.
+  **Removed by #371.** No guard on it survived review: the engine can run round 2 on an unchanged
+  commit, so `in-review` now always halts and no fixture may script a reply there.
 - **m1's audit flagged a `printf`** whose string contained "gh pr checks" as an unshimmed call.
   A false positive, adjudicated by hand; narrowing the pattern is #357's.
 - Two replicates are a pilot, not a sample: no figure here estimates anything.

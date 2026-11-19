@@ -25,15 +25,6 @@
       "reply": "approve"
     },
     {
-      "status": "in-review",
-      "expect": "(?is)^(?=.*\\bdesign[- ]question)(?=.*\\bscope ruling)",
-      "halt_if": "(?i)\\bround[- ]?(2|two|[3-9])\\b|\\bsecond round\\b|\\bre-?check|\\bre-?verif|\\bstill dirty\\b|\\bcap\\b|\\bcontested\\b|gate-error|\\bno (usable )?ruling\\b",
-      "requires_design_spawn": "architect",
-      "halt_on_ledger_round2": true,
-      "reply": "Follow the architect's scope ruling: apply its minimal fix set if it requires one, otherwise accept the finding as non-blocking, and continue.",
-      "why": "step 8's design-question stop, and only that stop (#366). Policy chosen by the human 2026-11-17 after pilot m2. Replied only when the message names both a design question and a scope ruling, names no halt_if marker, this turn's stream shows an architect spawn, and the replicate's progress.md confirms round 1 per ledger_round2 and carries no scope-ruling gate-error. Anything else halts, so a dirty round 2 never gets this reply; a design-question stop at round 2, or a round-1 message that mentions round 2 in passing, also halts (unknown => halt, about one replicate lost). Not exercised by the pilot (m3 and h1 never stopped at in-review), and the re-pilot may not exercise it either."
-    },
-    {
       "status": "in-acceptance",
       "expect": "(?i)merge",
       "reply": "merge"

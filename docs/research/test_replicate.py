@@ -377,113 +377,69 @@ class StopTests(Tmp):
                          ("reply", "merge"))
         self.assertEqual(R.classify_stop("done", "Merged. Run /clear.", self.STOPS)[0], "done")
 
-    DQ = ("Stopped at step 8: a BLOCKING finding raises a design question. "
-          "The architect's scope ruling recommends a minimal fix set.")
+    def test_in_review_always_halts(self):
+        """#371: no scripted reply at in-review, by policy. Re-pilot replicate
+        rp-h1's round-1 design-question stop, and the shape of one after a
+        same-commit round 2, both halt, and say why."""
+        for msg in ("Code review (step 8) stopped after round 1, and I need a decision from "
+                    "you. ... **Architect's ruling:** ... I spawned no round 2.",
+                    "Code review round 2 (full; the delta was empty) raises a design "
+                    "question. The architect's scope ruling is below."):
+            kind, why = R.classify_stop("in-review", msg, self.STOPS)
+            self.assertEqual(kind, "halt")
+            self.assertIn("by policy (#371)", why)
 
-    def review(self, text, spawn="architect", journal="- Code-review: round 1 (main...abc1234) - 2 findings\n"):
-        """classify_stop for an in-review stop, with this turn's stream showing a
-        spawn of `spawn` (None: no spawn) and the replicate's journal `journal`
-        (None: no progress.md)."""
-        stream = write_jsonl(self.tmp / "turn.jsonl", [
-            {"type": "assistant", "message": {"content": [
-                {"type": "tool_use", "id": "t", "name": "Agent",
-                 "input": {"subagent_type": spawn, "prompt": "rule"}}]}}] if spawn else [
-            {"type": "assistant", "message": {"content": [{"type": "text", "text": "x"}]}}])
-        progress = self.tmp / "progress.md"
-        if journal is not None:
-            progress.write_text(journal)
-        elif progress.exists():
-            progress.unlink()
-        return R.classify_stop("in-review", text, self.STOPS, stream=stream, progress=progress)
+    def test_any_status_outside_the_allowlist_halts(self):
+        """Default-deny: an unknown status halts by policy, even if a stop names it."""
+        stops = [{"status": "hold", "expect": ".", "reply": "continue"}]
+        for status in ("hold", "blocked", "park", "in-pr", "made-up", R.ROW_UNREADABLE):
+            self.assertEqual(R.classify_stop(status, "continue?", stops)[0], "halt", status)
 
-    def test_design_question_stop_is_replied(self):
-        """#366 AC1: step 8's design-question stop, with the architect spawned and a
-        round-1 journal, gets the follow-the-ruling reply."""
-        kind, reply = self.review(self.DQ)
-        self.assertEqual(kind, "reply")
-        self.assertIn("scope ruling", reply)
-
-    def test_round_two_escalation_halts(self):
-        """A dirty round 2 halts, whether the message says so or only the ledger does."""
-        self.assertEqual(self.review(
-            self.DQ + " Round 2 is still dirty; escalating.")[0], "halt")
-        self.assertEqual(self.review(
-            self.DQ, journal="- Code-review: round 2 (abc..def) - 1 finding\n")[0], "halt")
-        self.assertEqual(self.review(
-            self.DQ, journal="- gate-error: scope-ruling - DESIGN_AGENT - no-stderr\n")[0], "halt")
-
-    def test_only_a_spawn_tool_counts_as_a_spawn(self):
-        """A non-spawn tool carrying `subagent_type: architect` is not a ruling."""
-        stream = write_jsonl(self.tmp / "bash.jsonl", [
-            {"type": "assistant", "message": {"content": [
-                {"type": "tool_use", "id": "t", "name": "Bash",
-                 "input": {"subagent_type": "architect", "command": "true"}}]}}])
-        self.assertIs(R.design_spawned(stream, "architect"), False)
-        progress = self.tmp / "progress.md"
-        progress.write_text("- Code-review: round 1 (main...abc1234)\n")
-        self.assertEqual(R.classify_stop("in-review", self.DQ, self.STOPS, stream=stream,
-                                         progress=progress)[0], "halt")
-
-    def test_halt_if_names_a_later_round(self):
-        """The fixture's `halt_if` itself halts a message that names round 2, with no
-        other marker and a round-1 journal."""
-        self.assertEqual(self.review(self.DQ + " This is round 2.")[0], "halt")
-        self.assertEqual(self.review(self.DQ)[0], "reply")
-
-    def test_scope_ruling_alone_halts(self):
-        self.assertEqual(self.review("Stopped at step 8 with the architect's scope ruling.")[0],
+    def test_unreadable_queue_row_halts_and_never_reaches_the_pre_queue_stop(self):
+        """Only an absent queue.md is status None; a present queue.md whose row
+        cannot be read halts, even on a message the pre-queue stop would answer."""
+        q = self.tmp / "queue.md"
+        q.write_text("| # | Issue | Route | Status | Depends on | PR | Notes |\n"
+                     "|---|---|---|---|---|---|---|\n"
+                     "| 1 | #1 Add | code | in-review | \u2014 | #2 | r1 \\| see progress.md |\n")
+        status = R.row_status(q, 1)
+        self.assertEqual(status, R.ROW_UNREADABLE)
+        self.assertEqual(R.classify_stop(status, "defer Y to a backlog issue", self.STOPS)[0],
                          "halt")
+        self.assertIsNone(R.row_status(self.tmp / "absent.md", 1))
 
-    def test_missing_structural_evidence_halts(self):
-        """No architect spawn this turn, another agent spawned, or no journal: halt."""
-        self.assertEqual(self.review(self.DQ, spawn=None)[0], "halt")
-        self.assertEqual(self.review(self.DQ, spawn="pm")[0], "halt")
-        self.assertEqual(self.review(self.DQ, journal=None)[0], "halt")
-        self.assertEqual(R.classify_stop("in-review", self.DQ, self.STOPS)[0], "halt")
+    def test_check_stops_refuses_what_would_pass_silently(self):
+        """#371: the in-review reply cannot come back by a fixture edit, and a stop
+        that could be skipped or crash mid-run is refused before anything is spent."""
+        spec = json.loads(pathlib.Path(PILOT, "fixture.json").read_text())
+        R.check_stops(spec)
+        ok = {"status": "planning", "expect": "x", "reply": "y"}
+        for i, (stops, why) in enumerate((
+                ([{"status": "In-Review", "expect": "x", "reply": "y"}], "no scripted reply"),
+                ([{"status": "hold", "expect": "x", "reply": "y"}], "no scripted reply"),
+                ([dict(ok, halt_on_ledger_round2=True)], "unknown keys"),
+                ([dict(ok, require_round_one=True)], "unknown keys"),
+                (["planning"], "not an object"),
+                ([{"expect": "x", "reply": "y"}], "needs a status"),
+                ([{"status": "planning", "reply": "y"}], "needs a status"),
+                ([{"status": "planning", "expect": "(", "reply": "y"}], "does not compile"),
+                ([{"status": "planning", "expect": "x"}], "exactly one"),
+                ([dict(ok, final=True)], "exactly one"),
+                ([ok, dict(ok, status="Planning")], "twice"),
+                ([], "not an object"))):
+            with self.assertRaisesRegex(R.Refused, why, msg=str(i)):
+                R.check_stops(dict(spec, stops=stops))
 
-    def test_any_round_but_round_one_in_the_journal_halts(self):
-        """#366 scope rulings: a `round` counts only as the engine's round-1
-        element at the start of a line. The finder's repro (`round-2` + "after
-        the re-review") and every other mention of a round halt; the engine's
-        round-1 element, alone or with `r1.` IDs, replies."""
-        msg = ("Stopped at step 8 after the re-review: a BLOCKING finding raises a design "
-               "question; the architect's scope ruling is below.")
-        for j in ("- Code-review: round-2 (abc..def) - 1 finding\n", "Round two returned 1\n",
-                  "review round #2\n", "rounds 1-2\n", "round 10 (a..b)\n", "round 1, 2\n",
-                  "- r2.correctness.1 (x.py): y\n", "- R2.correctness.1 (x.py): y\n",
-                  "round 1\u20142 (main...abc)\n", "round 1 and 2\n", "round 1 & 2\n",
-                  "round 1+2\n", "round 1 to 2\n", "round 1..2\n", "round 1 \u2192 2\n",
-                  "round 1.5\n", "round 1 returned 2 findings\n",
-                  # accepted by the round-3 follower allowlist, refused by the literal form
-                  "round 1: and 2\n", "round 1:2\n", "- Code-review: round 1\n  and 2 (abc..def)\n",
-                  "Code review round 1:\n- x\n", "- Code-review: round 1 (main...abc)\n",
-                  "- Code-review: round 1 (abc1234..def5678)\n",
-                  "- code-review: round 1 (main...abc1234)\n",
-                  # the element must start its line
-                  "see - Code-review: round 1 (main...abc1234)\n",
-                  # only the element's own `round` is allowed, not every `round` on its line
-                  "- Code-review: round 1 (main...abc1234) then round 2 (abc1234..def5678)\n"):
-            self.assertEqual(self.review(msg, journal=j)[0], "halt", j)
-        self.assertEqual(self.review(self.DQ, journal="- Code-review: round 1 (main...abc1234)\n")[0],
-                         "reply")
-        # The engine's exact element form (loop-engine Ledger format, `- Code-review:`).
-        self.assertEqual(self.review(self.DQ, journal=(
-            "- Code-review: round 1 (main...9f3c1ab) \u2014 3 findings, claims=1\n"))[0], "reply")
-        self.assertEqual(self.review(self.DQ, journal="- Code-review: round 1 (main...abc1234)\n"
-                                                      "- r1.correctness.1 (x.py): y\n")[0], "reply")
-        self.assertEqual(self.review(self.DQ, journal="## open record\n- PR: #2\n")[0], "reply")
-        self.assertEqual(self.review(self.DQ, journal="- r1.correctness.1 (x.py): y\n")[0], "reply")
-
-    def test_unreadable_stream_halts_with_a_round_one_journal(self):
-        progress = self.tmp / "progress.md"
-        progress.write_text("- Code-review: round 1 (main...abc1234)\n")
-        self.assertEqual(R.classify_stop("in-review", self.DQ, self.STOPS,
-                                         stream=self.tmp / "missing.jsonl",
-                                         progress=progress)[0], "halt")
-
-    def test_unclassifiable_review_message_halts(self):
-        self.assertEqual(self.review("Review found problems; please advise.")[0], "halt")
-        self.assertEqual(self.review("")[0], "halt")
+    def test_audit_path_loads_a_fixture_without_checking_stops(self):
+        """`audit` never reads stops, so an older fixture still loads for the owed
+        delayed re-audit."""
+        d = self.tmp / "old-fixture"
+        shutil.copytree(PILOT, d)
+        spec = json.loads((d / "fixture.json").read_text())
+        spec["stops"].append({"status": "in-review", "expect": "x", "reply": "y",
+                              "halt_on_ledger_round2": True})
+        (d / "fixture.json").write_text(json.dumps(spec))
+        self.assertEqual(R.load_fixture(d)["name"], "pilot")
 
     def test_pre_queue_stop_answers_the_backlog_question(self):
         """0.6.0 step 0.1 asks which BACKLOG_SOURCE before queue.md exists."""

@@ -104,6 +104,55 @@ def load_fixture(fixture_dir):
     return spec
 
 
+STOP_KEYS = {"status", "expect", "reply", "final", "why"}
+# The only row statuses a fixture may answer; every other status halts, an unknown
+# one included (default-deny). `in-review` is not among them: no guard tells step
+# 8's round-1 design-question stop from one after a round 2 that read the same
+# commit (the engine's empty-delta full round), so that stop always halts (#371,
+# pre-committed stopping rule, honored 2026-11-19).
+REPLY_STATUSES = {None, "planning", "in-acceptance", "done"}
+# `row_status` when queue.md exists but the issue's row cannot be read: a status no
+# stop names, so it halts rather than reaching the pre-queue (None) stop.
+ROW_UNREADABLE = "<row unreadable>"
+
+
+def _status_key(status):
+    return status.lower() if isinstance(status, str) else status
+
+
+def check_stops(spec):
+    """Refuse a fixture whose stops could pass a bad reply silently: each stop a
+    dict of known keys, with `status` and a compiling `expect`, exactly one of a
+    `reply` or a true `final`, a status in REPLY_STATUSES, and no status twice.
+    Run before anything is spent; `audit` never reads stops, so it does not."""
+    seen = set()
+    for stop in spec.get("stops") or [None]:
+        if not isinstance(stop, dict):
+            raise Refused("fixture stop %r is not an object" % (stop,))
+        unknown = sorted(set(stop) - STOP_KEYS)
+        if unknown:
+            raise Refused("fixture stop %r has unknown keys %s: an unread guard key "
+                          "would pass silently" % (stop.get("status"), unknown))
+        if "status" not in stop or not isinstance(stop.get("expect"), str):
+            raise Refused("fixture stop %r needs a status and an expect" % (stop,))
+        try:
+            re.compile(stop["expect"])
+        except re.error as exc:
+            raise Refused("fixture stop %r: expect does not compile: %s"
+                          % (stop["status"], exc))
+        if bool(stop.get("final")) == ("reply" in stop):
+            raise Refused("fixture stop %r needs exactly one of reply or final"
+                          % (stop["status"],))
+        key = _status_key(stop["status"])
+        if key not in REPLY_STATUSES:
+            raise Refused("fixture stop %r: no scripted reply is allowed at this status "
+                          "(#371)" % (stop["status"],))
+        if key in seen:
+            raise Refused("fixture names status %r twice: the second is never read"
+                          % (stop["status"],))
+        seen.add(key)
+
+
 # The sandbox gh-token is a fine-grained PAT, which cannot read checks (pilot m1),
 # so a fixture's CI gate must read the Actions API. Any other form is refused.
 CI_ROW_START = re.compile(r"^\s*\|\s*`CI_STATUS_CMD`")
@@ -537,11 +586,14 @@ def write_shim(bindir):
 # ------------------------------------------------------------------------ driving
 
 def row_status(queue_md, issue):
-    """-> the Status cell of the queue row for `#issue`, or None."""
+    """-> the Status cell of the queue row for `#issue`; None only when queue.md
+    does not exist yet; ROW_UNREADABLE when it exists but the row cannot be read."""
     try:
         lines = pathlib.Path(queue_md).read_text().splitlines()
-    except OSError:
+    except FileNotFoundError:
         return None
+    except (OSError, ValueError):
+        return ROW_UNREADABLE
     header = None
     for line in lines:
         if not line.startswith("|"):
@@ -553,22 +605,16 @@ def row_status(queue_md, issue):
         if header and len(cells) == len(header) and re.search(
                 r"#%d\b" % issue, cells[header.index("Issue")]):
             return cells[header.index("Status")]
-    return None
+    return ROW_UNREADABLE
 
 
-def classify_stop(status, final_text, stops, stream=None, progress=None):
+def classify_stop(status, final_text, stops):
     """-> ('reply', text) | ('done', None) | ('halt', reason). Keyed on the ledger
-    row's Status; the final message must agree with the stop it names (A8).
-
-    A stop may demand more than its `expect` match, and each demand is
-    default-deny -- evidence it cannot read halts:
-      `halt_if`                 a regex the final message must NOT match;
-      `requires_design_spawn`   an agent name this turn's `stream` must show spawned
-                                (a scope ruling was actually taken, #366);
-      `halt_on_ledger_round2`   the replicate's `progress.md` must confirm round 1
-                                and carry no scope-ruling gate-error
-                                (`ledger_round2`).
-    `halt_if` only adds halts; `expect` is what makes a stop safe to answer."""
+    row's Status; the final message must agree with the stop it names (A8). A
+    status outside REPLY_STATUSES halts by policy, `in-review` included (#371), and
+    a status no stop names halts."""
+    if _status_key(status) not in REPLY_STATUSES:
+        return "halt", "status %r: no scripted reply at this status, by policy (#371)" % (status,)
     for stop in stops:
         want = stop["status"]
         if (status is None and want is None) or (
@@ -576,70 +622,10 @@ def classify_stop(status, final_text, stops, stream=None, progress=None):
             if not re.search(stop["expect"], final_text or ""):
                 return "halt", ("status %r but the final message does not match %r"
                                 % (status, stop["expect"]))
-            hit = stop.get("halt_if") and re.search(stop["halt_if"], final_text or "")
-            if hit:
-                return "halt", "status %r: the final message names %r" % (status, hit.group(0))
-            agent = stop.get("requires_design_spawn")
-            if agent and (design_spawned(stream, agent) if stream else None) is not True:
-                return "halt", "status %r: no %s spawn shown in this turn" % (status, agent)
-            if stop.get("halt_on_ledger_round2") and (
-                    ledger_round2(progress) if progress else None) is not False:
-                return "halt", ("status %r: progress.md cannot confirm round 1 (or "
-                                "carries a scope-ruling gate-error)" % (status,))
             if stop.get("final"):
                 return "done", None
             return "reply", stop["reply"]
     return "halt", "unrecognized stop: row status %r" % (status,)
-
-
-def design_spawned(stream, agent):
-    """-> True if the stream-json file shows an Agent/Task tool_use spawning
-    `agent`, False if it shows none, None if it cannot be read."""
-    try:
-        lines = pathlib.Path(stream).read_text().splitlines()
-    except OSError:
-        return None
-    for line in lines:
-        try:
-            ev = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(ev, dict) or ev.get("type") != "assistant":
-            continue
-        for block in ((ev.get("message") or {}).get("content") or []):
-            if (isinstance(block, dict) and block.get("type") == "tool_use"
-                    and block.get("name") in ("Agent", "Task")
-                    and (block.get("input") or {}).get("subagent_type") == agent):
-                return True
-    return False
-
-
-ROUND_TOKEN = re.compile(r"\bround", re.I)
-# The engine's round-1 element, literally (loop-engine Ledger format, `- Code-review:`).
-ENGINE_ROUND_ONE = re.compile(r"^[ \t]*- Code-review: (round) 1 \(main\.\.\.[0-9a-f]{7,40}\)", re.M)
-FINDING_ID = re.compile(r"\br(\d+)\.[\w-]+\.\d+\b", re.I | re.ASCII)
-SCOPE_RULING_ERROR = re.compile(r"^\s*-\s*gate-error:\s*scope-ruling\b", re.M)
-
-
-def ledger_round2(progress):
-    """-> False only if the journal confirms round 1: every `round` in it is the
-    one in an engine round-1 element, `- Code-review: round 1 (main...<sha>)`, at
-    the start of a line; no finding ID names another round; and there is no
-    scope-ruling gate-error. True otherwise, prose included; None if it cannot
-    be read. A journal with no `round` at all passes, since round 1 may not have
-    resolved when step 8 stops (#366 scope rulings). Limit: a later round is
-    detected only through `round` tokens and finding IDs, so one written without either
-    (`… (main...abc1234) — and 2`) passes."""
-    try:
-        text = pathlib.Path(progress).read_text()
-    except OSError:
-        return None
-    if SCOPE_RULING_ERROR.search(text):
-        return True
-    allowed = {m.start(1) for m in ENGINE_ROUND_ONE.finditer(text)}
-    if any(m.start() not in allowed for m in ROUND_TOKEN.finditer(text)):
-        return True
-    return any(int(m.group(1)) != 1 for m in FINDING_ID.finditer(text))
 
 
 def read_stream(path):
@@ -1034,6 +1020,7 @@ class Ops:
 def cmd_run(a, ops=None):
     ops = ops or Ops()
     spec = load_fixture(a.fixture)
+    check_stops(spec)
     rid = a.replicate_id
     rdir = pathlib.Path(a.out).resolve() / rid
     if rdir.exists():
@@ -1296,7 +1283,6 @@ def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, op
     (rdir / "streams").mkdir()
     prompt, session, n, outcome = spec["first_prompt"], None, 0, None
     queue = clone / spec["ledger_root"] / spec["run_slug"] / "queue.md"
-    progress = queue.parent / "progress.md"
     turns = env_record.setdefault("turns", [])
     while outcome is None:
         n += 1
@@ -1322,8 +1308,7 @@ def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, op
             outcome = ("halt", "turn %d produced no result event" % n)
             break
         session = result.get("session_id") or session
-        kind, val = classify_stop(status, result.get("result"), spec["stops"],
-                                  stream=stream, progress=progress)
+        kind, val = classify_stop(status, result.get("result"), spec["stops"])
         if kind == "reply" and n >= spec["max_turns"]:
             kind, val = "halt", "max_turns %d reached" % spec["max_turns"]
         if kind == "reply":
