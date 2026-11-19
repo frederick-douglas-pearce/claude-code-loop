@@ -99,25 +99,58 @@ def load_fixture(fixture_dir):
                 "run_slug", "first_prompt", "base_sha"):
         if key not in spec:
             raise Refused("fixture.json lacks %r" % key)
-    for stop in spec["stops"]:
-        unknown = sorted(set(stop) - STOP_KEYS)
-        if unknown:
-            raise Refused("fixture stop %r has unknown keys %s: an unread guard key "
-                          "would pass silently" % (stop.get("status"), unknown))
-        if str(stop.get("status")).lower() in NO_REPLY_STATUSES:
-            raise Refused("fixture stop %r: no scripted reply is allowed at this status "
-                          "(#371)" % stop.get("status"))
     spec["dir"] = str(fixture_dir)
     spec["ci_status_cmd"] = ci_status_binding(fixture_dir / "repo")
     return spec
 
 
 STOP_KEYS = {"status", "expect", "reply", "final", "why"}
-# Statuses a fixture may never answer. `in-review`: no guard tells step 8's round-1
-# design-question stop from one after a round 2 that read the same commit (the
-# engine's empty-delta full round), so that stop always halts (#371, pre-committed
-# stopping rule, honored 2026-11-19).
-NO_REPLY_STATUSES = {"in-review"}
+# The only row statuses a fixture may answer; every other status halts, an unknown
+# one included (default-deny). `in-review` is not among them: no guard tells step
+# 8's round-1 design-question stop from one after a round 2 that read the same
+# commit (the engine's empty-delta full round), so that stop always halts (#371,
+# pre-committed stopping rule, honored 2026-11-19).
+REPLY_STATUSES = {None, "planning", "in-acceptance", "done"}
+# `row_status` when queue.md exists but the issue's row cannot be read: a status no
+# stop names, so it halts rather than reaching the pre-queue (None) stop.
+ROW_UNREADABLE = "<row unreadable>"
+
+
+def _status_key(status):
+    return status.lower() if isinstance(status, str) else status
+
+
+def check_stops(spec):
+    """Refuse a fixture whose stops could pass a bad reply silently: each stop a
+    dict of known keys, with `status` and a compiling `expect`, exactly one of a
+    `reply` or a true `final`, a status in REPLY_STATUSES, and no status twice.
+    Run before anything is spent; `audit` never reads stops, so it does not."""
+    seen = set()
+    for stop in spec.get("stops") or [None]:
+        if not isinstance(stop, dict):
+            raise Refused("fixture stop %r is not an object" % (stop,))
+        unknown = sorted(set(stop) - STOP_KEYS)
+        if unknown:
+            raise Refused("fixture stop %r has unknown keys %s: an unread guard key "
+                          "would pass silently" % (stop.get("status"), unknown))
+        if "status" not in stop or not isinstance(stop.get("expect"), str):
+            raise Refused("fixture stop %r needs a status and an expect" % (stop,))
+        try:
+            re.compile(stop["expect"])
+        except re.error as exc:
+            raise Refused("fixture stop %r: expect does not compile: %s"
+                          % (stop["status"], exc))
+        if bool(stop.get("final")) == ("reply" in stop):
+            raise Refused("fixture stop %r needs exactly one of reply or final"
+                          % (stop["status"],))
+        key = _status_key(stop["status"])
+        if key not in REPLY_STATUSES:
+            raise Refused("fixture stop %r: no scripted reply is allowed at this status "
+                          "(#371)" % (stop["status"],))
+        if key in seen:
+            raise Refused("fixture names status %r twice: the second is never read"
+                          % (stop["status"],))
+        seen.add(key)
 
 
 # The sandbox gh-token is a fine-grained PAT, which cannot read checks (pilot m1),
@@ -553,11 +586,14 @@ def write_shim(bindir):
 # ------------------------------------------------------------------------ driving
 
 def row_status(queue_md, issue):
-    """-> the Status cell of the queue row for `#issue`, or None."""
+    """-> the Status cell of the queue row for `#issue`; None only when queue.md
+    does not exist yet; ROW_UNREADABLE when it exists but the row cannot be read."""
     try:
         lines = pathlib.Path(queue_md).read_text().splitlines()
-    except OSError:
+    except FileNotFoundError:
         return None
+    except (OSError, ValueError):
+        return ROW_UNREADABLE
     header = None
     for line in lines:
         if not line.startswith("|"):
@@ -569,14 +605,16 @@ def row_status(queue_md, issue):
         if header and len(cells) == len(header) and re.search(
                 r"#%d\b" % issue, cells[header.index("Issue")]):
             return cells[header.index("Status")]
-    return None
+    return ROW_UNREADABLE
 
 
 def classify_stop(status, final_text, stops):
     """-> ('reply', text) | ('done', None) | ('halt', reason). Keyed on the ledger
     row's Status; the final message must agree with the stop it names (A8). A
-    status no stop names halts, and `load_fixture` refuses a stop at any status in
-    `NO_REPLY_STATUSES`, so `in-review` always halts (#371)."""
+    status outside REPLY_STATUSES halts by policy, `in-review` included (#371), and
+    a status no stop names halts."""
+    if _status_key(status) not in REPLY_STATUSES:
+        return "halt", "status %r: no scripted reply at this status, by policy (#371)" % (status,)
     for stop in stops:
         want = stop["status"]
         if (status is None and want is None) or (
@@ -982,6 +1020,7 @@ class Ops:
 def cmd_run(a, ops=None):
     ops = ops or Ops()
     spec = load_fixture(a.fixture)
+    check_stops(spec)
     rid = a.replicate_id
     rdir = pathlib.Path(a.out).resolve() / rid
     if rdir.exists():

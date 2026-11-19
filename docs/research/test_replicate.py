@@ -378,32 +378,68 @@ class StopTests(Tmp):
         self.assertEqual(R.classify_stop("done", "Merged. Run /clear.", self.STOPS)[0], "done")
 
     def test_in_review_always_halts(self):
-        """#371: no scripted reply at in-review. Re-pilot replicate rp-h1's round-1
-        design-question stop, and the shape of one after a same-commit round 2,
-        both halt."""
+        """#371: no scripted reply at in-review, by policy. Re-pilot replicate
+        rp-h1's round-1 design-question stop, and the shape of one after a
+        same-commit round 2, both halt, and say why."""
         for msg in ("Code review (step 8) stopped after round 1, and I need a decision from "
                     "you. ... **Architect's ruling:** ... I spawned no round 2.",
                     "Code review round 2 (full; the delta was empty) raises a design "
                     "question. The architect's scope ruling is below."):
             kind, why = R.classify_stop("in-review", msg, self.STOPS)
             self.assertEqual(kind, "halt")
-            self.assertIn("unrecognized stop", why)
+            self.assertIn("by policy (#371)", why)
 
-    def test_fixture_refuses_an_in_review_reply_and_unknown_stop_keys(self):
-        """#371: the reply cannot come back by a fixture edit, and a retired or
-        misspelled guard key is refused rather than silently unread."""
+    def test_any_status_outside_the_allowlist_halts(self):
+        """Default-deny: an unknown status halts by policy, even if a stop names it."""
+        stops = [{"status": "hold", "expect": ".", "reply": "continue"}]
+        for status in ("hold", "blocked", "park", "in-pr", "made-up", R.ROW_UNREADABLE):
+            self.assertEqual(R.classify_stop(status, "continue?", stops)[0], "halt", status)
+
+    def test_unreadable_queue_row_halts_and_never_reaches_the_pre_queue_stop(self):
+        """Only an absent queue.md is status None; a present queue.md whose row
+        cannot be read halts, even on a message the pre-queue stop would answer."""
+        q = self.tmp / "queue.md"
+        q.write_text("| # | Issue | Route | Status | Depends on | PR | Notes |\n"
+                     "|---|---|---|---|---|---|---|\n"
+                     "| 1 | #1 Add | code | in-review | \u2014 | #2 | r1 \\| see progress.md |\n")
+        status = R.row_status(q, 1)
+        self.assertEqual(status, R.ROW_UNREADABLE)
+        self.assertEqual(R.classify_stop(status, "defer Y to a backlog issue", self.STOPS)[0],
+                         "halt")
+        self.assertIsNone(R.row_status(self.tmp / "absent.md", 1))
+
+    def test_check_stops_refuses_what_would_pass_silently(self):
+        """#371: the in-review reply cannot come back by a fixture edit, and a stop
+        that could be skipped or crash mid-run is refused before anything is spent."""
         spec = json.loads(pathlib.Path(PILOT, "fixture.json").read_text())
-        for stop, why in (({"status": "In-Review", "expect": "x", "reply": "y"}, "no scripted reply"),
-                          ({"status": "planning", "expect": "x", "reply": "y",
-                            "halt_on_ledger_round2": True}, "unknown keys"),
-                          ({"status": "planning", "expect": "x", "reply": "y",
-                            "require_round_one": True}, "unknown keys")):
-            d = self.tmp / ("fx-%d" % len(why))
-            shutil.copytree(PILOT, d, dirs_exist_ok=True)
-            (d / "fixture.json").write_text(json.dumps(dict(spec, stops=spec["stops"] + [stop])))
-            with self.assertRaisesRegex(R.Refused, why):
-                R.load_fixture(d)
-        self.assertEqual(R.load_fixture(PILOT)["name"], "pilot")
+        R.check_stops(spec)
+        ok = {"status": "planning", "expect": "x", "reply": "y"}
+        for i, (stops, why) in enumerate((
+                ([{"status": "In-Review", "expect": "x", "reply": "y"}], "no scripted reply"),
+                ([{"status": "hold", "expect": "x", "reply": "y"}], "no scripted reply"),
+                ([dict(ok, halt_on_ledger_round2=True)], "unknown keys"),
+                ([dict(ok, require_round_one=True)], "unknown keys"),
+                (["planning"], "not an object"),
+                ([{"expect": "x", "reply": "y"}], "needs a status"),
+                ([{"status": "planning", "reply": "y"}], "needs a status"),
+                ([{"status": "planning", "expect": "(", "reply": "y"}], "does not compile"),
+                ([{"status": "planning", "expect": "x"}], "exactly one"),
+                ([dict(ok, final=True)], "exactly one"),
+                ([ok, dict(ok, status="Planning")], "twice"),
+                ([], "not an object"))):
+            with self.assertRaisesRegex(R.Refused, why, msg=str(i)):
+                R.check_stops(dict(spec, stops=stops))
+
+    def test_audit_path_loads_a_fixture_without_checking_stops(self):
+        """`audit` never reads stops, so an older fixture still loads for the owed
+        delayed re-audit."""
+        d = self.tmp / "old-fixture"
+        shutil.copytree(PILOT, d)
+        spec = json.loads((d / "fixture.json").read_text())
+        spec["stops"].append({"status": "in-review", "expect": "x", "reply": "y",
+                              "halt_on_ledger_round2": True})
+        (d / "fixture.json").write_text(json.dumps(spec))
+        self.assertEqual(R.load_fixture(d)["name"], "pilot")
 
     def test_pre_queue_stop_answers_the_backlog_question(self):
         """0.6.0 step 0.1 asks which BACKLOG_SOURCE before queue.md exists."""
