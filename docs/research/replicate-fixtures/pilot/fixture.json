@@ -25,15 +25,6 @@
       "reply": "approve"
     },
     {
-      "status": "in-review",
-      "expect": "(?is)^(?=.*\\bdesign[- ]question)(?=.*\\bruling\\b)",
-      "halt_if": "(?i)\\bre-?check|\\bre-?verif|\\bstill dirty\\b|\\bcap\\b|\\bcontested\\b|gate-error|\\bno (usable )?ruling\\b",
-      "requires_design_spawn": "architect",
-      "requires_round_one": true,
-      "reply": "Follow the architect's scope ruling: apply its minimal fix set if it requires one, otherwise accept the finding as non-blocking, and continue.",
-      "why": "step 8's design-question stop, and only that stop (#366). Policy chosen by the human 2026-11-17 after pilot m2. Replied only when the message names a design question and a ruling and no halt_if marker, this turn's stream shows an architect spawn, progress.md's code-review elements are all the round-1 element of one commit (round_one_sha), and the work clone still sits on that commit with every ref at it or at base_sha and a clean tree (at_round_one). Any later round reads a later commit, so it halts. No guard reads prose about rounds: the engine writes \"no round 2\" and \"a fresh round 2\" at this very stop, which halted re-pilot replicate rp-h1 under #366's guards (#371). Unknown => halt. Limit: a push from outside the clone is not seen."
-    },
-    {
       "status": "in-acceptance",
       "expect": "(?i)merge",
       "reply": "merge"

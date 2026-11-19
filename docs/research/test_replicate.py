@@ -377,268 +377,33 @@ class StopTests(Tmp):
                          ("reply", "merge"))
         self.assertEqual(R.classify_stop("done", "Merged. Run /clear.", self.STOPS)[0], "done")
 
-    DQ = ("Stopped at step 8: a BLOCKING finding raises a design question. "
-          "The architect's scope ruling recommends a minimal fix set.")
+    def test_in_review_always_halts(self):
+        """#371: no scripted reply at in-review. Re-pilot replicate rp-h1's round-1
+        design-question stop, and the shape of one after a same-commit round 2,
+        both halt."""
+        for msg in ("Code review (step 8) stopped after round 1, and I need a decision from "
+                    "you. ... **Architect's ruling:** ... I spawned no round 2.",
+                    "Code review round 2 (full; the delta was empty) raises a design "
+                    "question. The architect's scope ruling is below."):
+            kind, why = R.classify_stop("in-review", msg, self.STOPS)
+            self.assertEqual(kind, "halt")
+            self.assertIn("unrecognized stop", why)
 
-    SHA = "abc1234" + "0" * 33
-    BASE = "b" * 40
-
-    def at_r1(self, **kw):
-        """A clone left where round 1 reviewed `SHA`; `kw` overrides a field."""
-        state = {"head": self.SHA, "dirty": False, "worktrees": [self.SHA],
-                 "refs": {"refs/heads/main": self.BASE, "refs/heads/feat/x": self.SHA,
-                          "refs/remotes/origin/feat/x": self.SHA}}
-        state.update(kw)
-        return state
-
-    def review(self, text, spawn="architect", journal="- Code-review: round 1 (main...abc1234) - 2 findings\n",
-               state="r1"):
-        """classify_stop for an in-review stop, with this turn's stream showing a
-        spawn of `spawn` (None: no spawn), the replicate's journal `journal`
-        (None: no progress.md), and the clone's `state` as `clone_state` would
-        read it ("r1": `at_r1()`; None: unreadable)."""
-        state = self.at_r1() if state == "r1" else state
-        stream = write_jsonl(self.tmp / "turn.jsonl", [
-            {"type": "assistant", "message": {"content": [
-                {"type": "tool_use", "id": "t", "name": "Agent",
-                 "input": {"subagent_type": spawn, "prompt": "rule"}}]}}] if spawn else [
-            {"type": "assistant", "message": {"content": [{"type": "text", "text": "x"}]}}])
-        progress = self.tmp / "progress.md"
-        if journal is not None:
-            progress.write_text(journal)
-        elif progress.exists():
-            progress.unlink()
-        with mock.patch.object(R, "clone_state", lambda clone: state):
-            return R.classify_stop("in-review", text, self.STOPS, stream=stream,
-                                   progress=progress, clone=self.tmp, base=self.BASE)
-
-    def test_design_question_stop_is_replied(self):
-        """#366 AC1: step 8's design-question stop, with the architect spawned and a
-        round-1 journal, gets the follow-the-ruling reply."""
-        kind, reply = self.review(self.DQ)
-        self.assertEqual(kind, "reply")
-        self.assertIn("scope ruling", reply)
-
-    def test_round_two_escalation_halts(self):
-        """A dirty round 2 halts, whether the message says so or only the ledger does."""
-        self.assertEqual(self.review(
-            self.DQ + " Round 2 is still dirty; escalating.")[0], "halt")
-        self.assertEqual(self.review(
-            self.DQ, journal="- Code-review: round 2 (abc..def) - 1 finding\n")[0], "halt")
-        self.assertEqual(self.review(
-            self.DQ, journal="- gate-error: scope-ruling - DESIGN_AGENT - no-stderr\n")[0], "halt")
-
-    def test_only_a_spawn_tool_counts_as_a_spawn(self):
-        """A non-spawn tool carrying `subagent_type: architect` is not a ruling."""
-        stream = write_jsonl(self.tmp / "bash.jsonl", [
-            {"type": "assistant", "message": {"content": [
-                {"type": "tool_use", "id": "t", "name": "Bash",
-                 "input": {"subagent_type": "architect", "command": "true"}}]}}])
-        self.assertIs(R.design_spawned(stream, "architect"), False)
-        progress = self.tmp / "progress.md"
-        progress.write_text("- Code-review: round 1 (main...abc1234)\n")
-        with mock.patch.object(R, "clone_state", lambda clone: self.at_r1()):
-            self.assertEqual(R.classify_stop("in-review", self.DQ, self.STOPS, stream=stream,
-                                             progress=progress, clone=self.tmp,
-                                             base=self.BASE)[0], "halt")
-
-    def test_prose_about_round_two_is_not_read(self):
-        """#371: the message's words about rounds decide nothing, either way. "No
-        round 2" at a round-1 stop replies; a real round 2 halts on structure."""
-        self.assertEqual(self.review(self.DQ + " I spawned no round 2.")[0], "reply")
-        self.assertEqual(self.review(self.DQ + " This is round 2.",
-                                     state=self.at_r1(head="d" * 40))[0], "halt")
-
-    def test_remaining_halt_if_markers_halt(self):
-        for extra in (" Re-check pending.", " Round 1 is still dirty.", " The cap is reached.",
-                      " The ruling is contested.", " gate-error: x", " There is no ruling."):
-            self.assertEqual(self.review(self.DQ + extra)[0], "halt", extra)
-
-    def test_scope_ruling_alone_halts(self):
-        self.assertEqual(self.review("Stopped at step 8 with the architect's scope ruling.")[0],
-                         "halt")
-
-    def test_missing_structural_evidence_halts(self):
-        """No architect spawn this turn, another agent spawned, or no journal: halt."""
-        self.assertEqual(self.review(self.DQ, spawn=None)[0], "halt")
-        self.assertEqual(self.review(self.DQ, spawn="pm")[0], "halt")
-        self.assertEqual(self.review(self.DQ, journal=None)[0], "halt")
-        self.assertEqual(self.review(self.DQ, state=None)[0], "halt")
-        self.assertEqual(R.classify_stop("in-review", self.DQ, self.STOPS)[0], "halt")
-
-    def test_journal_must_be_round_one_elements_of_one_commit(self):
-        """#371: only the journal's structure is read. With no engine round-1
-        element, any other `code-review:` key, two commits, a later finding ID or a
-        scope-ruling gate-error, it halts; prose about rounds without a
-        conforming element halts for want of the element."""
-        msg = ("Stopped at step 8 after the re-review: a BLOCKING finding raises a design "
-               "question; the architect's scope ruling is below.")
-        for j in ("- Code-review: round-2 (abc..def) - 1 finding\n", "Round two returned 1\n",
-                  "review round #2\n", "rounds 1-2\n", "round 10 (a..b)\n", "round 1, 2\n",
-                  "- r2.correctness.1 (x.py): y\n", "- R2.correctness.1 (x.py): y\n",
-                  "round 1\u20142 (main...abc)\n", "round 1 and 2\n", "round 1 & 2\n",
-                  "round 1+2\n", "round 1 to 2\n", "round 1..2\n", "round 1 \u2192 2\n",
-                  "round 1.5\n", "round 1 returned 2 findings\n",
-                  # accepted by the round-3 follower allowlist, refused by the literal form
-                  "round 1: and 2\n", "round 1:2\n", "- Code-review: round 1\n  and 2 (abc..def)\n",
-                  "Code review round 1:\n- x\n", "- Code-review: round 1 (main...abc)\n",
-                  "- Code-review: round 1 (abc1234..def5678)\n",
-                  "- code-review: round 1 (main...abc1234)\n",
-                  "  - Code-review: round 1 (main...abc1234)\n",
-                  # the element must start its line
-                  "see - Code-review: round 1 (main...abc1234)\n",
-                  # every code-review key must be the element, of one commit
-                  "- Code-review: round 1 (main...abc1234)\n- Code-review: round 2 (abc1234..def5678)\n",
-                  "- Code-review: round 1 (main...abc1234)\ncode review: done\n",
-                  "- Code-review: round 1 (main...abc1234)\n- Code-review: round 1 (main...def5678)\n",
-                  "- Code-review: round 1 (main...abc1234)\n- gate-error: scope-ruling - x\n",
-                  "- Code-review: round 1 (main...abc1234)\n- r2.recheck.1 (x.py): y\n",
-                  # no element at all
-                  "## open record\n- PR: #2\n", "- r1.correctness.1 (x.py): y\n", ""):
-            self.assertEqual(self.review(msg, journal=j)[0], "halt", j)
-        self.assertEqual(self.review(self.DQ, journal="- Code-review: round 1 (main...abc1234)\n")[0],
-                         "reply")
-        # The engine's exact element form (loop-engine Ledger format, `- Code-review:`).
-        self.assertEqual(self.review(self.DQ, journal=(
-            "- Code-review: round 1 (main...9f3c1ab) \u2014 3 findings, claims=1\n"),
-            state=self.at_r1(head="9f3c1ab" + "0" * 33, worktrees=["9f3c1ab" + "0" * 33],
-                             refs={"refs/heads/main": self.BASE}))[0], "reply")
-        self.assertEqual(self.review(self.DQ, journal="- Code-review: round 1 (main...abc1234)\n"
-                                                      "- r1.correctness.1 (x.py): y\n")[0], "reply")
-        # Text after the element is not read (#371); a real later round moves the clone.
-        tail = "- Code-review: round 1 (main...abc1234) then round 2 (abc1234..def5678)\n"
-        self.assertEqual(self.review(self.DQ, journal=tail)[0], "reply")
-        self.assertEqual(self.review(self.DQ, journal=tail, state=self.at_r1(head="d" * 40))[0],
-                         "halt")
-
-    def test_unreadable_stream_halts_with_a_round_one_journal(self):
-        progress = self.tmp / "progress.md"
-        progress.write_text("- Code-review: round 1 (main...abc1234)\n")
-        self.assertEqual(R.classify_stop("in-review", self.DQ, self.STOPS,
-                                         stream=self.tmp / "missing.jsonl",
-                                         progress=progress)[0], "halt")
-
-    RP_H1_MESSAGE = 'Code review (step 8) stopped after round 1, and I need a decision from you before any fix is applied. PR #2 is open, CI is green on `4f0c9c0`, and the row is `in-review`. I made no fix commit and spawned no round 2.\n\n**What review found.** The `correctness` lens found nothing. All three ACs hold, and edge inputs behave sensibly. The mandatory `guard-efficacy` lens returned three findings, all marked BLOCKING:\n\n1. **Dot-free test inputs.** `"Ada"` and `"grace"` contain no `.`, so a version that replaces every `.` with `!`, or one that uses `rstrip(".")`, would still pass the test.\n2. **Delegation to `greet()` unobserved.** `"HELLO, %s!" % name.upper()` also passes. This was the least certain finding.\n3. **AC 2 coverage.** The lens said it "cannot tell" whether `greet()` being unchanged is guarded beyond the existing one-input test.\n\n**Why it stopped.** Findings 2 and 3 ask whether a fix belongs in this change at all. When I can\'t rule that out, the engine treats it as a design question that must stop for you. I consulted the architect, whose ruling is advisory and can\'t clear the gate.\n\n**Architect\'s ruling:**\n- **Finding 1: real and in scope.** The minimal fix is one test-only line: `self.assertEqual(greet.shout("Dr."), "HELLO, DR.!")`. The architect said the finder\'s suggested `"Dr. Who"` catches only the replace-all version, and I confirmed that by evaluating the three versions by hand. `"Dr."` catches both.\n- **Finding 2: recommend deferring.** It is a near-equivalent variant, since every string input gives the same output. Only a mock could catch it, and that would test the implementation rather than behaviour. The architect noted that the AC wording "returns the greeting from `greet(name)`" could be read as requiring delegation.\n- **Finding 3: recommend no action.** The diff only adds lines after `greet()`, and the existing test still covers it.\n- Deferred: `shout` assumes `greet()` ends in exactly one `.`. This is non-blocking and true today.\n\n**Please decide:**\n1. Approve adding the `"Dr."` assertion? It goes beyond the plan you approved, though it is test-only.\n2. Defer finding 2 (leave delegation unpinned), or require a delegation test?\n3. Confirm finding 3 needs no action?\n\nEverything is recorded in `.loop-ledger/fixture/progress.md`. After your answer I\'ll apply the agreed fix, push it, and run a fresh round 2 on only the new commit. Then I\'ll sweep any editorial findings and move on to step 9 (security: not applicable here) and the acceptance gate. Don\'t `/clear` yet, since I\'m still mid-iteration on this issue.'
-    RP_H1_PROGRESS = '# Progress journal: fixture\n\n## 2026-11-19T09:33:53Z — init\n- Run initialized from BACKLOG_SOURCE: GitHub label fixture (1 open issue: #1).\n- mode: calibration · plan-gate: always · caps: none (no prior route graduation found).\n- #1 routed: code (touches greet.py package source).\n\n## 2026-11-19T09:34:16Z — #1 plan gate\n- Plan-gate: n/a: architect skipped (code route; no ARCHITECT_TRIGGERS fired — new function, no public signature changed)\n- Human gate: plan-gate is always — STOPPED for human plan approval (value story + approach presented). Not approved yet.\n\n## 2026-11-19T09:34:27Z — #1 plan approved\n- Human gate: plan approved by the human ("approve") under plan-gate: always; slice approach (not rstrip) stands.\n\n## 2026-11-19T09:34:43Z — #1 (code) — iteration open\n- Issue: #1 — Add a shout() helper\n- Route: code\n- Branch: feat/add-shout-helper\n- PR: #2\n- Status: in-pr\n\n## 2026-11-19T09:36:59Z — #1 code-review round 1 — STOPPED for human (design-question finding)\n- Code-review: round 1 (main...4f0c9c0) — 3 findings (all BLOCKING, from guard-efficacy), claims=0\n- roster: correctness (wrong runtime output / edge-case inputs of shout(); greet() unchanged) — 0 findings; guard-efficacy (do the test\'s assertions pin the mechanism, or only an outcome a broken shout() would also produce) — 3 findings\n- r1.guard-efficacy.1 BLOCKING: test inputs "Ada"/"grace" contain no "."; .replace(".","!") and .rstrip(".")+"!" mutants pass. Remedy suggested: add dotted name.\n- r1.guard-efficacy.2 BLOCKING: delegation to greet() unobserved ("HELLO, %s!" % name.upper() passes). Remedy suggested: mock greet.greet.\n- r1.guard-efficacy.3 BLOCKING (finder: "cannot tell"): AC2 covered only by existing one-input test_greet.\n- Design-question trigger: findings 2 and 3 ask whether a fix belongs in this change at all; default-deny treats the set as a design question. DESIGN_AGENT consulted for a scope ruling; NO fix applied, NO commit, NO round 2 spawned.\n- Scope ruling (architect, advisory, certifies nothing): F1 real and in scope — minimal fix is ONE test-only assertion shout("Dr.") == "HELLO, DR.!" (kills both mutants; the finder\'s "Dr. Who" suggestion kills only replace — I reproduced this by evaluating the three implementations by hand-run, not via the test suite). F2 recommended DEFERRED (near-equivalent mutant; a mock couples the test to the implementation) — caveat: AC wording "returns the greeting from greet(name)" could be read as mandating delegation. F3 recommended no action (diff does not touch greet(); verified: diff adds lines only after greet()). The ruling did not and cannot conclude that no human decision is needed.\n- Declines/deferrals PROPOSED by the ruling, NOT yet decided by the human, so not recorded as declined: F2 (deferred by ruling: near-equivalent mutant, disproportionate for a one-line helper), F3 (no action: nothing touches greet()). Also deferred: shout() relies on greet() ending in exactly one "." (correctness lens note, non-blocking).\n- Status: row stays in-review. Needs human decision before any fix is applied.\n'
-    RP_H1_HEAD = "4f0c9c0e9de92811733b1a39377fdbabdf31f74d"
-    RP_H1_BASE = "7c311b7cfe3b594c54c7c6279977e764163c2439"
-
-    def rp_h1(self, progress=None, **state):
-        """#371 AC1: re-pilot replicate rp-h1's real stop (harness dd517ab),
-        message and journal verbatim, with its recorded clone state."""
-        st = {"head": self.RP_H1_HEAD, "dirty": False, "worktrees": [self.RP_H1_HEAD],
-              "refs": {"refs/heads/feat/add-shout-helper": self.RP_H1_HEAD,
-                       "refs/heads/main": self.RP_H1_BASE,
-                       "refs/remotes/origin/HEAD": self.RP_H1_BASE,
-                       "refs/remotes/origin/feat/add-shout-helper": self.RP_H1_HEAD,
-                       "refs/remotes/origin/main": self.RP_H1_BASE}}
-        st.update(state)
-        stream = write_jsonl(self.tmp / "turn.jsonl", [
-            {"type": "assistant", "message": {"content": [
-                {"type": "tool_use", "id": "t", "name": "Agent",
-                 "input": {"subagent_type": "architect", "prompt": "rule"}}]}}])
-        prog = self.tmp / "progress.md"
-        prog.write_text(self.RP_H1_PROGRESS if progress is None else progress)
-        with mock.patch.object(R, "clone_state", lambda clone: st):
-            return R.classify_stop("in-review", self.RP_H1_MESSAGE, self.STOPS, stream=stream,
-                                   progress=prog, clone=self.tmp, base=self.RP_H1_BASE)
-
-    def test_rp_h1_round_one_design_question_stop_is_replied(self):
-        kind, reply = self.rp_h1()
-        self.assertEqual(kind, "reply")
-        self.assertIn("scope ruling", reply)
-
-    def test_rp_h1_with_any_sign_of_a_later_round_halts(self):
-        """#371 AC2: one change each to rp-h1's evidence."""
-        later = "d" * 40
-        cases = {
-            "head moved": dict(head=later),
-            "stash": dict(refs={"refs/heads/main": self.RP_H1_BASE,
-                                "refs/heads/feat/add-shout-helper": self.RP_H1_HEAD,
-                                "refs/stash": later}),
-            "branch elsewhere": dict(refs={"refs/heads/main": self.RP_H1_BASE,
-                                           "refs/heads/feat/add-shout-helper": self.RP_H1_HEAD,
-                                           "refs/heads/fix": later}),
-            "pushed fix": dict(refs={"refs/heads/main": self.RP_H1_BASE,
-                                     "refs/remotes/origin/feat/add-shout-helper": later}),
-            "worktree elsewhere": dict(worktrees=[self.RP_H1_HEAD, later]),
-            "dirty tree": dict(dirty=True),
-            "no worktrees read": dict(worktrees=[]),
-        }
-        for name, st in cases.items():
-            self.assertEqual(self.rp_h1(**st)[0], "halt", name)
-        for name, extra in (("round 2 element", "- Code-review: round 2 (4f0c9c0..abc1234) - 1\n"),
-                            ("other commit", "- Code-review: round 1 (main...abc1234)\n"),
-                            ("lowercase key", "- code-review: round 1 (main...4f0c9c0)\n"),
-                            ("indented key", "  - Code-review: round 1 (main...4f0c9c0)\n"),
-                            ("round-2 finding", "- r2.recheck.1 (greet.py): x\n"),
-                            ("gate-error", "- gate-error: scope-ruling - DESIGN_AGENT - x\n")):
-            self.assertEqual(self.rp_h1(progress=self.RP_H1_PROGRESS + extra)[0], "halt", name)
-        self.assertEqual(self.rp_h1(progress=self.RP_H1_PROGRESS.replace(
-            "- Code-review:", "- Review:"))[0], "halt")
-
-    @unittest.skipUnless(os.path.exists(R.BWRAP), "needs bubblewrap")
-    def test_clone_state_never_runs_the_clones_own_commands_on_the_host(self):
-        """#371 security review: the replicate can write the clone's config. An
-        fsmonitor hook and a clean filter planted there run, if at all, inside the
-        git sandbox, where the host path they write to does not exist."""
-        repo = self.tmp / "repo"
-        repo.mkdir()
-        (repo / "a").write_text("a\n")
-        clone = self.tmp / "clone"
-        R.build_base(repo, clone)
-        canary = self.tmp / "escaped"
-        hook = self.tmp / "hook.sh"
-        hook.write_text("#!/bin/sh\ntouch %s\n" % canary)
-        hook.chmod(0o755)
-        with open(clone / ".git" / "config", "a") as f:
-            f.write("[core]\n\tfsmonitor = %s\n[filter \"x\"]\n\tclean = %s\n" % (hook, hook))
-        (clone / ".gitattributes").write_text("* filter=x\n")
-        os.utime(clone / "a", (0, 0))                     # stat-dirty: status runs the filter
-        R.clone_state(clone)
-        self.assertFalse(canary.exists())
-        argv = R.git_sandbox_argv(clone)
-        self.assertIn("--unshare-all", argv)
-        self.assertNotIn("--bind", argv)                  # nothing writable from the host
-        self.assertEqual(argv[argv.index(str(clone)) - 1], "--ro-bind")
-
-    @unittest.skipUnless(os.path.exists(R.BWRAP), "needs bubblewrap")
-    def test_clone_state_reads_a_real_repo_whatever_the_git_environment(self):
-        """#371 AC3 and the env allowlist: a real clone, read with GIT_DIR pointed at
-        another repo in the harness environment; a git failure is None."""
-        repo = self.tmp / "repo"
-        repo.mkdir()
-        (repo / "a").write_text("a\n")
-        base = R.build_base(repo, self.tmp / "clone")
-        other = self.tmp / "other"
-        R.build_base(repo, other)
-        with mock.patch.dict(os.environ, {"GIT_DIR": str(other / ".git"),
-                                          "GIT_CONFIG_COUNT": "1",
-                                          "GIT_CONFIG_KEY_0": "core.bare",
-                                          "GIT_CONFIG_VALUE_0": "true"}):
-            st = R.clone_state(self.tmp / "clone")
-        self.assertEqual(st["head"], base)
-        self.assertEqual(st["refs"], {"refs/heads/main": base})
-        self.assertEqual(st["worktrees"], [base])
-        self.assertIs(st["dirty"], False)
-        self.assertTrue(R.at_round_one(st, base[:7], "f" * 40))
-        (self.tmp / "clone" / "b").write_text("untracked\n")
-        self.assertIs(R.clone_state(self.tmp / "clone")["dirty"], True)
-        self.assertIsNone(R.clone_state(self.tmp / "missing"))
-        self.assertIsNone(R.clone_state(self.tmp))                # not a repo
-
-    def test_at_round_one_is_default_deny(self):
-        st = {"head": "a" * 40, "refs": {"r": "a" * 40}, "worktrees": ["a" * 40], "dirty": False}
-        self.assertTrue(R.at_round_one(st, "aaaaaaa", "b" * 40))
-        for bad in (None, {}, dict(st, dirty=None), dict(st, head=None), dict(st, refs=None),
-                    dict(st, worktrees=None), dict(st, refs={"r": None})):
-            self.assertFalse(R.at_round_one(bad, "aaaaaaa", "b" * 40), bad)
-        self.assertFalse(R.at_round_one(st, None, "b" * 40))
-        self.assertFalse(R.at_round_one(st, "aaaaaaa", None))
-
-    def test_unclassifiable_review_message_halts(self):
-        self.assertEqual(self.review("Review found problems; please advise.")[0], "halt")
-        self.assertEqual(self.review("")[0], "halt")
+    def test_fixture_refuses_an_in_review_reply_and_unknown_stop_keys(self):
+        """#371: the reply cannot come back by a fixture edit, and a retired or
+        misspelled guard key is refused rather than silently unread."""
+        spec = json.loads(pathlib.Path(PILOT, "fixture.json").read_text())
+        for stop, why in (({"status": "In-Review", "expect": "x", "reply": "y"}, "no scripted reply"),
+                          ({"status": "planning", "expect": "x", "reply": "y",
+                            "halt_on_ledger_round2": True}, "unknown keys"),
+                          ({"status": "planning", "expect": "x", "reply": "y",
+                            "require_round_one": True}, "unknown keys")):
+            d = self.tmp / ("fx-%d" % len(why))
+            shutil.copytree(PILOT, d, dirs_exist_ok=True)
+            (d / "fixture.json").write_text(json.dumps(dict(spec, stops=spec["stops"] + [stop])))
+            with self.assertRaisesRegex(R.Refused, why):
+                R.load_fixture(d)
+        self.assertEqual(R.load_fixture(PILOT)["name"], "pilot")
 
     def test_pre_queue_stop_answers_the_backlog_question(self):
         """0.6.0 step 0.1 asks which BACKLOG_SOURCE before queue.md exists."""

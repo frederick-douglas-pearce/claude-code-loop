@@ -99,9 +99,25 @@ def load_fixture(fixture_dir):
                 "run_slug", "first_prompt", "base_sha"):
         if key not in spec:
             raise Refused("fixture.json lacks %r" % key)
+    for stop in spec["stops"]:
+        unknown = sorted(set(stop) - STOP_KEYS)
+        if unknown:
+            raise Refused("fixture stop %r has unknown keys %s: an unread guard key "
+                          "would pass silently" % (stop.get("status"), unknown))
+        if str(stop.get("status")).lower() in NO_REPLY_STATUSES:
+            raise Refused("fixture stop %r: no scripted reply is allowed at this status "
+                          "(#371)" % stop.get("status"))
     spec["dir"] = str(fixture_dir)
     spec["ci_status_cmd"] = ci_status_binding(fixture_dir / "repo")
     return spec
+
+
+STOP_KEYS = {"status", "expect", "reply", "final", "why"}
+# Statuses a fixture may never answer. `in-review`: no guard tells step 8's round-1
+# design-question stop from one after a round 2 that read the same commit (the
+# engine's empty-delta full round), so that stop always halts (#371, pre-committed
+# stopping rule, honored 2026-11-19).
+NO_REPLY_STATUSES = {"in-review"}
 
 
 # The sandbox gh-token is a fine-grained PAT, which cannot read checks (pilot m1),
@@ -556,23 +572,11 @@ def row_status(queue_md, issue):
     return None
 
 
-def classify_stop(status, final_text, stops, stream=None, progress=None, clone=None,
-                  base=None):
+def classify_stop(status, final_text, stops):
     """-> ('reply', text) | ('done', None) | ('halt', reason). Keyed on the ledger
-    row's Status; the final message must agree with the stop it names (A8).
-
-    A stop may demand more than its `expect` match, and each demand is
-    default-deny -- evidence it cannot read halts:
-      `halt_if`                 a regex the final message must NOT match;
-      `requires_design_spawn`   an agent name this turn's `stream` must show spawned
-                                (a scope ruling was actually taken, #366);
-      `requires_round_one`      the replicate's `progress.md` must name exactly one
-                                reviewed commit in round-1 elements and nothing
-                                else under `code-review:` (`round_one_sha`), and
-                                the `clone` must still sit on that commit, with
-                                every ref at it or at `base` and a clean tree
-                                (`at_round_one`, #371).
-    `halt_if` only adds halts; `expect` is what makes a stop safe to answer."""
+    row's Status; the final message must agree with the stop it names (A8). A
+    status no stop names halts, and `load_fixture` refuses a stop at any status in
+    `NO_REPLY_STATUSES`, so `in-review` always halts (#371)."""
     for stop in stops:
         want = stop["status"]
         if (status is None and want is None) or (
@@ -580,150 +584,10 @@ def classify_stop(status, final_text, stops, stream=None, progress=None, clone=N
             if not re.search(stop["expect"], final_text or ""):
                 return "halt", ("status %r but the final message does not match %r"
                                 % (status, stop["expect"]))
-            hit = stop.get("halt_if") and re.search(stop["halt_if"], final_text or "")
-            if hit:
-                return "halt", "status %r: the final message names %r" % (status, hit.group(0))
-            agent = stop.get("requires_design_spawn")
-            if agent and (design_spawned(stream, agent) if stream else None) is not True:
-                return "halt", "status %r: no %s spawn shown in this turn" % (status, agent)
-            if stop.get("requires_round_one"):
-                sha = round_one_sha(progress) if progress else None
-                if sha is None:
-                    return "halt", ("status %r: progress.md does not confirm a round-1 review "
-                                    "of one commit" % (status,))
-                if not at_round_one(clone_state(clone) if clone else None, sha, base):
-                    return "halt", ("status %r: the clone has moved past the round-1 commit "
-                                    "%s, or cannot be read" % (status, sha))
             if stop.get("final"):
                 return "done", None
             return "reply", stop["reply"]
     return "halt", "unrecognized stop: row status %r" % (status,)
-
-
-def design_spawned(stream, agent):
-    """-> True if the stream-json file shows an Agent/Task tool_use spawning
-    `agent`, False if it shows none, None if it cannot be read."""
-    try:
-        lines = pathlib.Path(stream).read_text().splitlines()
-    except OSError:
-        return None
-    for line in lines:
-        try:
-            ev = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(ev, dict) or ev.get("type") != "assistant":
-            continue
-        for block in ((ev.get("message") or {}).get("content") or []):
-            if (isinstance(block, dict) and block.get("type") == "tool_use"
-                    and block.get("name") in ("Agent", "Task")
-                    and (block.get("input") or {}).get("subagent_type") == agent):
-                return True
-    return False
-
-
-# The engine's round-1 element, literally (loop-engine Ledger format, `- Code-review:`),
-# capturing the reviewed commit; and any `code-review:` key, in any spelling or case.
-ENGINE_ROUND_ONE = re.compile(r"^- Code-review: round 1 \(main\.\.\.([0-9a-f]{7,40})\)", re.M)
-CODE_REVIEW_KEY = re.compile(r"code[- ]?review\s*:", re.I)
-FINDING_ID = re.compile(r"\br(\d+)\.[\w-]+\.\d+\b", re.I | re.ASCII)
-SCOPE_RULING_ERROR = re.compile(r"^\s*-\s*gate-error:\s*scope-ruling\b", re.M)
-
-
-def round_one_sha(progress):
-    """-> the commit the journal's round-1 review read, or None (halt). Structural
-    only: it never reads prose about rounds, since telling a negated or future
-    "round 2" from a real one is the enumeration #367 deleted (#371). None unless
-    the journal holds at least one engine round-1 element; every `code-review:`
-    in it, in any spelling or case, begins such an element at the start of a
-    line; all of them name one commit; no finding ID names a round other than 1;
-    and there is no scope-ruling gate-error. Unreadable: None.
-
-    A round in flight has no element yet (the engine writes one when its round
-    resolves), and text after an element is not read; both are left to
-    `at_round_one`, since any later round reads a later commit."""
-    try:
-        text = pathlib.Path(progress).read_text()
-    except (OSError, ValueError):
-        return None
-    if SCOPE_RULING_ERROR.search(text):
-        return None
-    if any(int(m.group(1)) != 1 for m in FINDING_ID.finditer(text)):
-        return None
-    elements = {m.start() + 2: m.group(1) for m in ENGINE_ROUND_ONE.finditer(text)}
-    if not elements or any(m.start() not in elements for m in CODE_REVIEW_KEY.finditer(text)):
-        return None
-    shas = set(elements.values())
-    return shas.pop() if len(shas) == 1 else None
-
-
-def git_sandbox_argv(clone, links=None):
-    """The bubblewrap prefix for the harness's reads of a replicate's work clone.
-    The replicate can write that clone, its `.git/config` and `.gitattributes`
-    included, so git there can run commands it planted (an fsmonitor hook, a clean
-    filter driver): it never runs on the host (#371 security review). Default-deny
-    like `sandbox_argv`, and narrower: no network at all, `/usr` and `/etc`
-    read-only, and the clone read-only; nothing else of the host exists inside."""
-    argv = [BWRAP, "--unshare-all", "--unshare-user", "--cap-drop", "ALL",
-            "--die-with-parent", "--new-session"]
-    for d in ROOT_DIRS:
-        argv += ["--ro-bind", d, d]
-    for kind, src, dest in root_entries(ROOT_LINKS if links is None else links):
-        argv += [kind, src, dest]
-    argv += ["--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp",
-             "--ro-bind", str(clone), str(clone), "--chdir", str(clone)]
-    return argv
-
-
-def clone_state(clone):
-    """-> {head, refs, worktrees, dirty} for the replicate's work clone, or None if
-    any git call fails. Every git call runs inside `git_sandbox_argv`, with an
-    allowlisted environment, so neither the clone's own config nor a `GIT_DIR` or
-    `GIT_CONFIG_*` in the harness's environment can run anything on the host or
-    point git elsewhere. The replicate could still make the clone lie about its
-    state; the guard is against the engine's behavior, not an adversary's."""
-    clone = os.path.realpath(clone)
-    env = {"PATH": "/usr/bin:/bin", "HOME": "/tmp", "XDG_CONFIG_HOME": "/tmp/.config",
-           "LANG": "C", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
-           "GIT_OPTIONAL_LOCKS": "0"}
-    prefix = git_sandbox_argv(clone)
-
-    def git(*args):
-        return subprocess.run(prefix + ["git", *args], env=env, check=True,
-                              capture_output=True, text=True, stdin=subprocess.DEVNULL,
-                              timeout=60).stdout
-    try:
-        if not os.path.isdir(clone):
-            return None
-        head = git("rev-parse", "HEAD").strip()
-        refs = dict(reversed(line.split(" ", 1)) for line in
-                    git("for-each-ref", "--format=%(objectname) %(refname)").splitlines())
-        worktrees = [line.split(" ", 1)[1] for line in
-                     git("worktree", "list", "--porcelain").splitlines()
-                     if line.startswith("HEAD ")]
-        dirty = bool(git("status", "--porcelain", "--untracked-files=all").strip())
-    except (OSError, ValueError, subprocess.SubprocessError):
-        return None
-    return {"head": head, "refs": refs, "worktrees": worktrees, "dirty": dirty}
-
-
-def at_round_one(state, sha, base):
-    """True only if the clone still sits where round 1 left it: HEAD is the
-    reviewed commit `sha`, every ref and worktree HEAD is that commit or the
-    fixture's `base`, and the tree is clean. A later round reads a later commit
-    (a fix, an amend, a stash or a branch elsewhere), so any of those halts.
-    Missing evidence: False. Limit: a push from outside the clone is not seen."""
-    if not state or not sha or not base:
-        return False
-
-    def ok(full):
-        return isinstance(full, str) and (full == base or full.startswith(sha))
-    return (state.get("dirty") is False and isinstance(state.get("head"), str)
-            and state["head"].startswith(sha)
-            and isinstance(state.get("refs"), dict)
-            and isinstance(state.get("worktrees"), list) and bool(state["worktrees"])
-            and all(ok(v) for v in state["refs"].values())
-            and all(ok(v) for v in state["worktrees"]))
 
 
 def read_stream(path):
@@ -1380,7 +1244,6 @@ def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, op
     (rdir / "streams").mkdir()
     prompt, session, n, outcome = spec["first_prompt"], None, 0, None
     queue = clone / spec["ledger_root"] / spec["run_slug"] / "queue.md"
-    progress = queue.parent / "progress.md"
     turns = env_record.setdefault("turns", [])
     while outcome is None:
         n += 1
@@ -1406,9 +1269,7 @@ def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, op
             outcome = ("halt", "turn %d produced no result event" % n)
             break
         session = result.get("session_id") or session
-        kind, val = classify_stop(status, result.get("result"), spec["stops"],
-                                  stream=stream, progress=progress, clone=clone,
-                                  base=spec["base_sha"])
+        kind, val = classify_stop(status, result.get("result"), spec["stops"])
         if kind == "reply" and n >= spec["max_turns"]:
             kind, val = "halt", "max_turns %d reached" % spec["max_turns"]
         if kind == "reply":
