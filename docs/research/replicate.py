@@ -599,11 +599,11 @@ SCOPE_RULING_ERROR = re.compile(r"^\s*-\s*gate-error:\s*scope-ruling\b", re.M)
 def ledger_round2(progress):
     """-> False only if the journal confirms round 1: every `round` in it is the
     one in an engine round-1 element, `- Code-review: round 1 (main...<sha>)`, at
-    the start of a line; every finding ID is `r1.…`; and there is no
+    the start of a line; no finding ID names another round; and there is no
     scope-ruling gate-error. True otherwise, prose included; None if it cannot
     be read. A journal with no `round` at all passes, since round 1 may not have
-    resolved when step 8 stops (#366 scope rulings). Limit: only `round` tokens
-    and finding IDs are read, so a later round written without either
+    resolved when step 8 stops (#366 scope rulings). Limit: a later round is
+    detected only through `round` tokens and finding IDs, so one written without either
     (`… (main...abc1234) — and 2`) passes."""
     try:
         text = pathlib.Path(progress).read_text()
