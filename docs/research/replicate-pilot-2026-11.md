@@ -78,6 +78,9 @@ h1 45 turns, $1.48 — and the unknown-model refusal above.
   the human's own included, which is what m3 shows. A clean (a) needs either a quiet account during
   the run or a hand adjudication like m3's. It reads the public+private events feed, which can lag,
   and only its first page (100 events).
+  **Superseded for any later harness by #369.** The feed is not served in time order, so no page
+  limit or stop rule covers a window. From #369 on, every read is detection only, and (a) rests on the
+  `gh-token` boundary.
 - **The account-event window starts late.** `run_start` is stamped when the sandbox repo is created,
   after the plugin repo is created and pushed and after both sandboxed `claude plugin` runs (m3
   13:29:23 → 13:29:36, h1 13:33:27 → 13:33:42), so the audit does not cover the install.
