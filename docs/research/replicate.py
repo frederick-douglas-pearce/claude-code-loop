@@ -602,9 +602,9 @@ def ledger_round2(progress):
     the start of a line; every finding ID is `r1.…`; and there is no
     scope-ruling gate-error. True otherwise, prose included; None if it cannot
     be read. A journal with no `round` at all passes, since round 1 may not have
-    resolved when step 8 stops (#366 scope rulings). Limit: after that element,
-    only further `round` tokens and finding IDs are read, so a later round
-    written without either (`… (main...abc1234) — and 2`) passes."""
+    resolved when step 8 stops (#366 scope rulings). Limit: only `round` tokens
+    and finding IDs are read, so a later round written without either
+    (`… (main...abc1234) — and 2`) passes."""
     try:
         text = pathlib.Path(progress).read_text()
     except OSError:

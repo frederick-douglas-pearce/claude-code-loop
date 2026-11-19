@@ -402,9 +402,10 @@ class StopTests(Tmp):
         self.assertEqual(R.classify_stop("in-review", self.DQ, self.STOPS)[0], "halt")
 
     def test_any_round_but_round_one_in_the_journal_halts(self):
-        """#366 scope ruling: default-deny on the round token. The finder's repro
-        (`round-2` + "after the re-review") and every variant halt; `round 1`
-        alone and a journal with no round word reply."""
+        """#366 scope rulings: a `round` counts only as the engine's round-1
+        element at the start of a line. The finder's repro (`round-2` + "after
+        the re-review") and every other mention of a round halt; the engine's
+        round-1 element, alone or with `r1.` IDs, replies."""
         msg = ("Stopped at step 8 after the re-review: a BLOCKING finding raises a design "
                "question; the architect's scope ruling is below.")
         for j in ("- Code-review: round-2 (abc..def) - 1 finding\n", "Round two returned 1\n",
@@ -413,11 +414,14 @@ class StopTests(Tmp):
                   "round 1\u20142 (main...abc)\n", "round 1 and 2\n", "round 1 & 2\n",
                   "round 1+2\n", "round 1 to 2\n", "round 1..2\n", "round 1 \u2192 2\n",
                   "round 1.5\n", "round 1 returned 2 findings\n",
-                  # round 3 (B1): accepted by the follower allowlist, refused by the literal form
+                  # accepted by the round-3 follower allowlist, refused by the literal form
                   "round 1: and 2\n", "round 1:2\n", "- Code-review: round 1\n  and 2 (abc..def)\n",
                   "Code review round 1:\n- x\n", "- Code-review: round 1 (main...abc)\n",
                   "- Code-review: round 1 (abc1234..def5678)\n",
                   "- code-review: round 1 (main...abc1234)\n",
+                  # the element must start its line
+                  "see - Code-review: round 1 (main...abc1234)\n",
+                  # only the element's own `round` is allowed, not every `round` on its line
                   "- Code-review: round 1 (main...abc1234) then round 2 (abc1234..def5678)\n"):
             self.assertEqual(self.review(msg, journal=j)[0], "halt", j)
         self.assertEqual(self.review(self.DQ, journal="- Code-review: round 1 (main...abc1234)\n")[0],
