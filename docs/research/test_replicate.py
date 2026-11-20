@@ -943,13 +943,55 @@ class CacheRecheckTests(Tmp):
         self.assertEqual(out, ["at audit: installed commit d"])
 
 
+_REAL_POPEN = subprocess.Popen   # bound at import, so a test can bar host processes
+
+
+def _REAL_RUN(cmd, check=False, capture_output=False, text=False, **kw):
+    """subprocess.run over the Popen bound at import: FakeOps' sandbox still runs
+    git when a test bars every host process."""
+    if capture_output:
+        kw.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    with _REAL_POPEN(cmd, universal_newlines=text, **kw) as p:
+        out, err = p.communicate()
+    if check and p.returncode:
+        raise subprocess.CalledProcessError(p.returncode, cmd, out, err)
+    return subprocess.CompletedProcess(cmd, p.returncode, out, err)
+GIT_ENV = {"PATH": "/usr/bin:/bin", "HOME": "/nonexistent", "LANG": "C",
+           "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+
+
+def git(cwd, *args):
+    return _REAL_RUN(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c",
+                      "commit.gpgsign=false"] + list(args), cwd=str(cwd), env=GIT_ENV,
+                     check=True, capture_output=True, text=True).stdout.strip()
+
+
+def do_work(clone, status="in-acceptance"):
+    """What a turn leaves in the clone: a committed change, an uncommitted one, an
+    untracked file, and a ledger whose row is at `status`."""
+    clone = pathlib.Path(clone)
+    if not (clone / "work.txt").exists():
+        (clone / "work.txt").write_text("committed line\n")
+        git(clone, "add", "work.txt")
+        git(clone, "commit", "-q", "-m", "work")
+        (clone / "work.txt").write_text("committed line\nuncommitted line\n")
+        (clone / "stray.txt").write_text("stray\n")
+    ledger = clone / ".loop-ledger" / "fixture"
+    ledger.mkdir(parents=True, exist_ok=True)
+    (ledger / "queue.md").write_text(
+        "| # | Issue | Status |\n|---|---|---|\n| 1 | #1 x | %s |\n" % status)
+
+
 class FakeOps:
     """Everything `_run` cannot do offline, recorded. `existing` is the set of
     GitHub repos; `turn` decides what a `claude -p` turn does."""
 
     def __init__(self, install_problems=(), turn="done", existing=(), fail_create=(),
-                 audit_events="ok", mutate_cache=False, probe_error=()):
+                 audit_events="ok", mutate_cache=False, probe_error=(), status="in-acceptance",
+                 git_noise=False, git_timeout=False):
         self.probe_error = set(probe_error)
+        self.status, self.git_noise, self.git_timeout = status, git_noise, git_timeout
+        self.git_calls = []
         self.calls, self.existing = [], set(existing)
         self.audit_events, self.mutate_cache, self.feed_reads = audit_events, mutate_cache, 0
         self.install_problems, self.turn, self.fail_create = list(install_problems), turn, fail_create
@@ -983,7 +1025,20 @@ class FakeOps:
             return fake_proc(0, "https://github.com/x/issues/1")
         return fake_proc(0)
 
-    def sandboxed(self, rdir, claude_real, cwd, cmd, env, stdout=None, timeout=None):
+    def sandboxed(self, rdir, claude_real, cwd, cmd, env, stdout=None,
+                  stderr=subprocess.STDOUT, timeout=None):
+        if cmd[0] == "git":
+            # The stop capture's git, run for real on the clone, and logged with
+            # its environment, so a test can tell it came through the sandbox.
+            self.calls.append((self.now(), ["sandboxed"] + list(cmd)))
+            self.git_calls.append({"cmd": list(cmd), "env": dict(env), "timeout": timeout})
+            if self.git_timeout:
+                raise subprocess.TimeoutExpired(cmd, timeout)
+            if self.git_noise:      # run_sandboxed merges stderr into stdout by default
+                (stdout if stderr == subprocess.STDOUT else stderr).write(b"warning: noise\n")
+            r = _REAL_RUN(cmd, cwd=str(cwd), env=env, stdout=stdout,
+                          stderr=stdout if stderr == subprocess.STDOUT else stderr)
+            return r.returncode, None
         if "install" in cmd:
             cache = pathlib.Path(rdir) / "home" / ".claude" / "plugins" / "cache" / \
                 "claude-code-loop" / "dev-loop" / "0.6.0"
@@ -991,6 +1046,7 @@ class FakeOps:
             (cache / "SKILL.md").write_text("engine")
         if "-p" not in cmd:
             return 0, b""
+        do_work(cwd, self.status)
         if self.turn == "interrupt":
             raise KeyboardInterrupt
         # A parent transcript, so the audit gets past project_dir to its checks.
@@ -999,9 +1055,6 @@ class FakeOps:
         if self.mutate_cache:
             (pathlib.Path(rdir) / "home" / ".claude" / "plugins" / "cache" / "claude-code-loop" /
              "dev-loop" / "0.6.0" / "SKILL.md").write_text("tampered")
-        ledger = pathlib.Path(cwd) / ".loop-ledger" / "fixture"
-        ledger.mkdir(parents=True, exist_ok=True)
-        (ledger / "queue.md").write_text("| # | Issue | Status |\n|---|---|---|\n| 1 | #1 x | in-acceptance |\n")
         stdout.write(json.dumps({"type": "result", "session_id": "s", "result": "Ready to merge #2?"}) + "\n")
         return 0, None
 
@@ -1235,7 +1288,8 @@ class RunTests(Tmp):
             env = self.run_it(FakeOps())
             audit = self.audit()
             self.assertEqual([k for k in ("a_tracker", "a_account_events", "a_tools",
-                                          "b_engine_loads", "c_strata") if audit[k]], [])
+                                          "b_engine_loads", "c_strata", "d_stop_capture")
+                              if audit[k]], [])
             self.assertFalse(audit["account_feed"]["delayed_read"])
             self.assertFalse(audit["pass"])
             rdir, spec = self.tmp / "out" / "r1", R.load_fixture(env["fixture_dir"])
@@ -1276,6 +1330,121 @@ class RunTests(Tmp):
         self.assertEqual(env["interrupted"], "KeyboardInterrupt")
         self.assertEqual(ops.existing, set())
         self.assertEqual(env["repos_deleted"], [self.SB])
+
+    # ------------------------------------------------------------ stop capture (#380)
+
+    def stop_ok(self, env, rdir):
+        rec = env["stop_capture"]
+        self.assertEqual(rec["errors"], [])
+        self.assertEqual(rec["files"], R.STOP_FILES)
+        self.assertEqual(R.stop_capture_problems(rdir, env), [])
+        return rec
+
+    def test_capture_runs_on_every_way_a_replicate_ends(self):
+        """#380 AC2: the final in-acceptance stop, an in-review halt, a
+        gate-error-shaped halt (a row left at a pipeline status no stop names),
+        and an external halt each leave a complete capture, named in
+        environment.json, of the clone as the run left it."""
+        cases = (("in-acceptance", "done", None, "done"),
+                 ("in-review", "done", None, "in-review"),
+                 ("in-pr", "done", None, "in-pr"),
+                 ("in-acceptance", "interrupt", KeyboardInterrupt, None))
+        for i, (status, turn, exc, outcome) in enumerate(cases):
+            with self.subTest(status=status, turn=turn):
+                out = self.tmp / ("o%d" % i)
+                a = self.args(out=str(out))
+                ops = FakeOps(status=status, turn=turn)
+                if exc:
+                    with self.assertRaises(exc):
+                        R.cmd_run(a, ops)
+                else:
+                    R.cmd_run(a, ops)
+                rdir = out / "r1"
+                env = json.loads((rdir / "environment.json").read_text())
+                if outcome:
+                    self.assertIn(outcome, env["outcome"])
+                rec = self.stop_ok(env, rdir)
+                clone = rdir / "work" / "r1"
+                self.assertEqual(rec["head_sha"], git(clone, "rev-parse", "HEAD"))
+                self.assertIn(b"+committed line", (rdir / "stop" / "diff.patch").read_bytes())
+                self.assertIn("| %s |" % status,
+                              (rdir / "stop" / "ledger" / "fixture" / "queue.md").read_text())
+
+    def test_capture_runs_in_the_sandbox_before_the_sandbox_repo_is_deleted(self):
+        """#380: every capture git call went through ops.sandboxed, carrying no
+        token and a timeout, and all of them precede the delete of the sandbox
+        repo (the plugin repo goes at install, before any turn)."""
+        ops = FakeOps()
+        self.run_it(ops)
+        self.assertEqual(sorted(c["cmd"][5] for c in ops.git_calls),
+                         ["diff", "diff", "rev-parse", "status", "symbolic-ref"])
+        for c in ops.git_calls:
+            self.assertEqual(c["cmd"][:5], R.CAPTURE_GIT)
+            self.assertEqual(c["timeout"], R.CAPTURE_TIMEOUT)
+            self.assertFalse({"CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN", "GH_REPO"} & set(c["env"]))
+        git_times = [t for t, c in ops.calls if c[0] == "sandboxed"]
+        delete = [t for t, c in ops.calls if c[0] == R.REAL_GH and c[1:3] == ["repo", "delete"]
+                  and c[3] == self.SB]
+        self.assertEqual(len(delete), 1)
+        self.assertTrue(git_times and max(git_times) < delete[0], (git_times, delete))
+
+    def test_a_capture_that_raises_is_recorded_and_fails_the_audit(self):
+        """#380 AC2 at the call site: an exception from the capture never reaches
+        over the audit; it is recorded, and the audit fails on it."""
+        with mock.patch.object(R, "capture_stop", side_effect=RuntimeError("boom")):
+            env = self.run_it(FakeOps())
+        errors = env["stop_capture"]["errors"]
+        self.assertIn("capture did not complete", errors)
+        self.assertTrue(any("boom" in e for e in errors), errors)
+        audit = self.audit()
+        self.assertTrue(audit["d_stop_capture"])
+        self.assertFalse(audit["pass"])
+
+    def test_a_bad_capture_turns_a_passing_audit_into_a_fail(self):
+        """#380 AC2: from the one setup whose audit passes, change only the
+        capture; each change fails d_stop_capture and with it pass."""
+        with mock.patch.object(R, "audit_engine_loads", lambda *a, **k: ([], ["load"])):
+            env = self.run_it(FakeOps())
+            rdir, spec = self.tmp / "out" / "r1", R.load_fixture(env["fixture_dir"])
+
+            def audit(e):
+                late = FakeOps()
+                late.feed_reads, late.t = 1, 7 * 3600
+                return R.write_audit(rdir, e, spec, "me", e["version_dir"], late)
+            self.assertTrue(audit(env)["pass"])
+            rec = env["stop_capture"]
+            variants = {
+                "absent": {k: v for k, v in env.items() if k != "stop_capture"},
+                "errors": dict(env, stop_capture=dict(rec, errors=["status: boom"])),
+                "missing part": dict(env, stop_capture=dict(
+                    rec, files={k: v for k, v in rec["files"].items() if k != "status"})),
+                "renamed part": dict(env, stop_capture=dict(
+                    rec, files=dict(rec["files"], diff="stop/other.patch"))),
+                "no hash": dict(env, stop_capture={k: v for k, v in rec.items() if k != "sha256"}),
+            }
+            for name, e in variants.items():
+                with self.subTest(name):
+                    got = audit(e)
+                    self.assertTrue(got["d_stop_capture"])
+                    self.assertFalse(got["pass"])
+            patch = rdir / "stop" / "diff.patch"
+            original = patch.read_bytes()
+            for name, change, undo in (
+                    ("tampered", lambda: patch.write_bytes(original + b"x"),
+                     lambda: patch.write_bytes(original)),
+                    ("gone", lambda: patch.rename(rdir / "diff.patch"),
+                     lambda: (rdir / "diff.patch").rename(patch))):
+                with self.subTest(name):
+                    change()
+                    got = audit(env)
+                    self.assertTrue(got["d_stop_capture"])
+                    self.assertFalse(got["pass"])
+                    undo()
+            self.assertTrue(audit(env)["pass"])
+
+    def test_audit_of_a_pre_380_replicate_says_why_it_fails(self):
+        self.assertEqual(R.stop_capture_problems(self.tmp, {}),
+                         ["no stop capture recorded (pre-#380 harness?)"])
 
     def test_pre_existing_repo_is_refused_and_never_deleted(self):
         ops = FakeOps(existing={self.SB})
@@ -1337,8 +1506,145 @@ class RunTests(Tmp):
                 R.cmd_run(self.args(out=str(self.tmp / "o3")), FakeOps())
 
 
-if __name__ == "__main__":
-    unittest.main()
+class CaptureTests(Tmp):
+    """#380 AC1: `capture_stop` on a real clone, through FakeOps' sandbox."""
+
+    def setUp(self):
+        super().setUp()
+        src = self.tmp / "src"
+        src.mkdir()
+        (src / "README.md").write_text("base\n")
+        self.base = R.build_base(src, self.tmp / "clone")
+        self.clone = self.tmp / "clone"
+        do_work(self.clone)
+        os.symlink("queue.md", self.clone / ".loop-ledger" / "fixture" / "link.md")
+        self.rdir = self.tmp / "r"
+        self.rdir.mkdir()
+
+    def capture(self, ops=None, base=None, ledger_root=".loop-ledger"):
+        return R.capture_stop(self.rdir, self.clone, base or self.base, ledger_root,
+                              "/bin/true", ops or FakeOps())
+
+    def read(self, key):
+        return (self.rdir / R.STOP_FILES[key]).read_bytes()
+
+    def test_writes_each_part_of_the_stop_state(self):
+        rec = self.capture()
+        self.assertEqual(rec["errors"], [])
+        self.assertEqual(rec["files"], R.STOP_FILES)
+        diff, unc = self.read("diff"), self.read("uncommitted")
+        self.assertIn(b"+committed line", diff)
+        self.assertNotIn(b"uncommitted line", diff)       # committed work only
+        self.assertIn(b"+uncommitted line", unc)
+        self.assertNotIn(b"+committed line", unc)
+        self.assertTrue(diff.startswith(b"diff --git a/work.txt b/work.txt"))
+        head = git(self.clone, "rev-parse", "HEAD")
+        self.assertEqual(self.read("head").strip().decode(), head)
+        self.assertEqual(rec["head_sha"], head)
+        self.assertEqual(self.read("branch").strip(), b"refs/heads/main")
+        status = self.read("status").decode()
+        self.assertIn("?? stray.txt", status)
+        self.assertIn(" M work.txt", status)
+        ledger = self.rdir / R.STOP_FILES["ledger"] / "fixture"
+        self.assertIn("in-acceptance", (ledger / "queue.md").read_text())
+        self.assertTrue((ledger / "link.md").is_symlink())
+        self.assertEqual(os.readlink(ledger / "link.md"), "queue.md")
+        self.assertEqual(rec["sha256"], R.stop_sha256(self.rdir / "stop"))
+        self.assertEqual(R.stop_capture_problems(self.rdir, {"stop_capture": rec}), [])
+
+    def test_no_host_process_touches_the_clone(self):
+        """#380 Q1: the capture's git goes through the sandbox only. With every
+        host subprocess barred, the capture still completes."""
+        def barred(*a, **k):
+            raise AssertionError("host process during capture: %r" % (a[:1],))
+        with mock.patch.object(R.subprocess, "run", barred), \
+                mock.patch.object(R.subprocess, "Popen", barred):
+            rec = self.capture()
+        self.assertEqual(rec["errors"], [])
+
+    def test_git_stderr_stays_out_of_the_captured_files(self):
+        rec = self.capture(FakeOps(git_noise=True))
+        self.assertEqual(rec["errors"], [])
+        for key in ("diff", "uncommitted", "head", "branch", "status"):
+            self.assertNotIn(b"warning: noise", self.read(key), key)
+
+    def test_detached_head_is_not_an_error(self):
+        git(self.clone, "checkout", "-q", "--detach")
+        rec = self.capture()
+        self.assertEqual(rec["errors"], [])
+        self.assertEqual(self.read("branch"), b"")
+
+    def test_a_failing_git_is_recorded_and_the_rest_still_run(self):
+        rec = self.capture(base="0" * 40)
+        self.assertEqual(len(rec["errors"]), 1)
+        self.assertTrue(rec["errors"][0].startswith("diff: git diff exited"), rec["errors"])
+        self.assertNotIn("diff", rec["files"])
+        self.assertEqual(set(rec["files"]), set(R.STOP_FILES) - {"diff"})
+        self.assertTrue(R.stop_capture_problems(self.rdir, {"stop_capture": rec}))
+
+    def test_a_timeout_is_recorded(self):
+        rec = self.capture(FakeOps(git_timeout=True))
+        self.assertEqual(sorted(e.split(":")[0] for e in rec["errors"]),
+                         ["branch", "diff", "head", "status", "uncommitted"])
+        self.assertIn("exceeded %ds" % R.CAPTURE_TIMEOUT, rec["errors"][0])
+        self.assertEqual(set(rec["files"]), {"ledger"})
+
+    def test_a_missing_ledger_is_an_error(self):
+        shutil.rmtree(self.clone / ".loop-ledger")
+        rec = self.capture()
+        self.assertEqual(rec["errors"], ["ledger: ledger .loop-ledger does not exist at the stop"])
+        self.assertEqual(set(rec["files"]), set(R.STOP_FILES) - {"ledger"})
+
+    def test_a_symlinked_ledger_path_is_refused_and_nothing_copied(self):
+        """#380 B2: a link anywhere from the clone down to the ledger root would
+        resolve on the host; the copy refuses rather than follow it."""
+        secret = self.tmp / "secret"
+        secret.mkdir()
+        (secret / "harness-token").write_text("token")
+        cases = ((".loop-ledger", None), ("outer/.loop-ledger", "outer"))
+        for ledger_root, linked in cases:
+            with self.subTest(ledger_root):
+                rdir = self.tmp / ("r-" + ledger_root.replace("/", "-"))
+                rdir.mkdir()
+                target = self.clone / (linked or ledger_root)
+                if target.exists() and not target.is_symlink():
+                    shutil.rmtree(target)
+                os.symlink(secret if linked is None else self.tmp, target)
+                if linked:
+                    (self.tmp / ".loop-ledger").mkdir(exist_ok=True)
+                rec = R.capture_stop(rdir, self.clone, self.base, ledger_root, "/bin/true", FakeOps())
+                self.assertEqual(len(rec["errors"]), 1, rec["errors"])
+                self.assertIn("is a symlink", rec["errors"][0])
+                self.assertFalse(os.path.lexists(rdir / R.STOP_FILES["ledger"]))
+                self.assertNotIn("ledger", rec["files"])
+                os.unlink(target)
+
+    def test_a_symlinked_clone_is_refused(self):
+        link = self.tmp / "clone-link"
+        os.symlink(self.clone, link)
+        self.assertIn("is a symlink", R._copy_ledger(link, ".loop-ledger", self.tmp / "d"))
+        self.assertFalse((self.tmp / "d").exists())
+
+    def test_ledger_root_must_stay_inside_the_clone(self):
+        for bad in ("/etc", "../x", ""):
+            with self.subTest(bad):
+                self.assertIn("not a relative path", R._copy_ledger(self.clone, bad, self.tmp / "d"))
+
+    def test_stop_hash_follows_no_link_and_sees_every_change(self):
+        d = self.tmp / "h"
+        d.mkdir()
+        (d / "f").write_text("a")
+        os.symlink(str(self.tmp / "outside"), d / "l")
+        (self.tmp / "outside").write_text("1")
+        h = R.stop_sha256(d)
+        (self.tmp / "outside").write_text("2")             # the link's target is not hashed
+        self.assertEqual(R.stop_sha256(d), h)
+        os.unlink(d / "l")
+        os.symlink(str(self.tmp / "elsewhere"), d / "l")   # its target string is
+        self.assertNotEqual(R.stop_sha256(d), h)
+        h = R.stop_sha256(d)
+        (d / "f").write_text("b")
+        self.assertNotEqual(R.stop_sha256(d), h)
 
 
 class ProvenanceTests(Tmp):
@@ -1401,3 +1707,7 @@ class ProvenanceTests(Tmp):
                          hashlib.sha256((d / "fixture.json").read_bytes()).hexdigest())
         (d / "fixture.json").write_bytes((d / "fixture.json").read_bytes() + b"\n")
         self.assertNotEqual(R.load_fixture(d)["fixture_sha256"], spec["fixture_sha256"])
+
+
+if __name__ == "__main__":
+    unittest.main()

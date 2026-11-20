@@ -12,9 +12,20 @@ directory that holds everything the run can touch:
       marketplace/     that archive committed with a fixed identity; pushed to a
                        private sandbox-org repo and installed from it over https
       streams/         one stream-json file per `claude -p` turn
+      stop/            the state at the stop, frozen before teardown (#380): the
+                       committed diff against base_sha, the uncommitted diff, HEAD,
+                       the branch, `git status`, and a copy of the ledger root
       environment.json, result.json, audit.json, gh-calls.jsonl
 
-Containment has two layers. (1) Every `claude` process of a replicate runs
+The stop capture runs on every way a replicate ends once its repos are being
+made: the final `in-acceptance` stop, every halt, an external halt, and an
+install refusal. A refusal before that (base mismatch, preflight, the launch
+environment) spends nothing and reaches neither the capture nor the audit, so
+no `pass` exists for it. `environment.json`'s `stop_capture` names each file,
+and the audit fails a replicate whose capture is missing, errored, or changed.
+
+Containment has two layers. (1) Every `claude` process of a replicate, and the
+stop capture's `git`, runs
 under bubblewrap (`sandbox_argv`, `run_sandboxed`) in new user, mount, pid,
 network, ipc and uts namespaces with every capability dropped. Its filesystem is
 an allowlist: `/usr`, `/etc` and the merged-usr links, read-only, then the pinned
@@ -56,6 +67,7 @@ import select
 import shlex
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -663,6 +675,171 @@ def classify_stop(status, final_text, stops):
     return "halt", "unrecognized stop: row status %r" % (status,)
 
 
+# --------------------------------------------------------------------- stop capture
+
+# What the blind evaluator and the stop-type judgment read (#380): the state at
+# the stop, frozen into `stop/` before teardown. These names are an interface;
+# `stop_capture.files` maps each key to its path, relative to the replicate dir.
+STOP_DIR = "stop"
+STOP_FILES = {"diff": "stop/diff.patch",              # base_sha..HEAD: what the PR would merge
+              "uncommitted": "stop/uncommitted.patch",  # HEAD vs the worktree: leftovers
+              "head": "stop/head.txt",                # git rev-parse HEAD
+              "branch": "stop/branch.txt",            # git symbolic-ref -q HEAD (empty: detached)
+              "status": "stop/status.txt",            # git status --porcelain --untracked-files=all
+              "ledger": "stop/ledger"}                # a copy of the clone's ledger root
+CAPTURE_TIMEOUT = 120
+# The capture's git runs in the sandbox, because the clone's `.git/config` and
+# `.gitattributes` are the replicate's to write: run on the host, a filter driver
+# or fsmonitor hook there would execute outside bwrap. The environment and these
+# options keep the replicate's config from steering what is reported, as far as
+# options reach; the repo's own config is still read, so the capture is evidence,
+# not proof. No token is in this environment.
+CAPTURE_ENV = {"PATH": "/usr/bin:/bin", "HOME": "/tmp", "LANG": "C",
+               "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",
+               "GIT_NO_REPLACE_OBJECTS": "1", "GIT_OPTIONAL_LOCKS": "0",
+               "GIT_TERMINAL_PROMPT": "0"}
+CAPTURE_GIT = ["git", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"]
+CAPTURE_DIFF = ["diff", "--binary", "--no-color", "--no-ext-diff", "--no-textconv",
+                "--src-prefix=a/", "--dst-prefix=b/"]
+
+
+def _capture_git(ops, rdir, claude_real, clone, args, dest, ok=(0,)):
+    """Run one git command in the sandbox, its stdout straight to `dest` as raw
+    bytes and its stderr kept apart. -> None, or why it failed."""
+    try:
+        with open(dest, "wb") as out, tempfile.TemporaryFile() as err:
+            rc, _ = ops.sandboxed(rdir, claude_real, clone, CAPTURE_GIT + list(args),
+                                  dict(CAPTURE_ENV), stdout=out, stderr=err,
+                                  timeout=CAPTURE_TIMEOUT)
+            if rc not in ok:
+                err.seek(0)
+                return "git %s exited %s: %s" % (args[0], rc, err.read().decode(
+                    errors="replace").strip()[:300])
+    except subprocess.TimeoutExpired:
+        return "git %s exceeded %ds" % (args[0], CAPTURE_TIMEOUT)
+    except Exception as exc:
+        return "git %s: %s" % (args[0], exc)
+    return None
+
+
+def _copy_ledger(clone, ledger_root, dest):
+    """Copy the clone's ledger root to `dest`. -> None, or why nothing was copied.
+    No path component from the clone down may be a symlink: the replicate can
+    write `work/`, and a link that points nowhere inside the sandbox resolves on
+    the host, where the harness's own tokens live. Links inside the ledger are
+    copied as links, never followed."""
+    rel = pathlib.PurePosixPath(ledger_root)
+    if rel.is_absolute() or ".." in rel.parts or not rel.parts:
+        return "ledger_root %r is not a relative path inside the clone" % ledger_root
+    path, st = pathlib.Path(clone), None
+    for part in (None,) + rel.parts:
+        if part is not None:
+            path = path / part
+        try:
+            st = os.lstat(path)
+        except FileNotFoundError:
+            return "ledger %s does not exist at the stop" % ledger_root
+        if stat.S_ISLNK(st.st_mode):
+            return "%s is a symlink; the ledger was not copied" % path
+        if not stat.S_ISDIR(st.st_mode):
+            return "%s is not a directory; the ledger was not copied" % path
+    if os.path.realpath(path) != os.path.join(os.path.realpath(clone), *rel.parts):
+        return "ledger %s resolves outside the clone; not copied" % ledger_root
+    try:
+        shutil.copytree(path, dest, symlinks=True)
+    except Exception as exc:                        # shutil.Error lists every file that failed
+        return "ledger copy: %s" % str(exc)[:300]
+    return None
+
+
+def stop_sha256(directory):
+    """sha256 over `directory`'s sorted relative paths and contents, following no
+    link: a symlink is hashed by its target, never by what it points at."""
+    root = str(directory)
+    entries = []
+    for d, dirs, files in os.walk(root):            # followlinks=False
+        entries += [os.path.join(d, n) for n in dirs + files]
+    h = hashlib.sha256()
+    for p in sorted(entries):
+        rel, st = os.fsencode(os.path.relpath(p, root)), os.lstat(p)
+        if stat.S_ISLNK(st.st_mode):
+            h.update(b"L" + rel + b"\0" + os.fsencode(os.readlink(p)) + b"\0")
+        elif stat.S_ISREG(st.st_mode):
+            h.update(b"F" + rel + b"\0" + pathlib.Path(p).read_bytes() + b"\0")
+        else:
+            h.update((b"D" if stat.S_ISDIR(st.st_mode) else b"?") + rel + b"\0")
+    return h.hexdigest()
+
+
+def capture_stop(rdir, clone, base_sha, ledger_root, claude_real, ops):
+    """Freeze the state at the stop into `rdir/stop/` (#380). -> the record kept as
+    `stop_capture` in environment.json. Each part is attempted on its own; a part
+    that fails is named in `errors` and left out of `files`, and the rest still
+    run. The audit fails the replicate on any error or missing part."""
+    rdir = pathlib.Path(rdir)
+    rec = {"dir": STOP_DIR, "files": {}, "errors": [], "taken_at": ops.now()}
+    (rdir / STOP_DIR).mkdir()
+    for key, args, ok in (("diff", CAPTURE_DIFF + [base_sha, "HEAD", "--"], (0,)),
+                          ("uncommitted", CAPTURE_DIFF + ["HEAD", "--"], (0,)),
+                          ("head", ["rev-parse", "--verify", "HEAD"], (0,)),
+                          ("branch", ["symbolic-ref", "-q", "HEAD"], (0, 1)),
+                          ("status", ["status", "--porcelain", "--untracked-files=all"], (0,))):
+        err = _capture_git(ops, rdir, claude_real, clone, args, rdir / STOP_FILES[key], ok)
+        if err:
+            rec["errors"].append("%s: %s" % (key, err))
+        else:
+            rec["files"][key] = STOP_FILES[key]
+    err = _copy_ledger(clone, ledger_root, rdir / STOP_FILES["ledger"])
+    if err:
+        rec["errors"].append("ledger: %s" % err)
+    else:
+        rec["files"]["ledger"] = STOP_FILES["ledger"]
+    if "head" in rec["files"]:
+        rec["head_sha"] = (rdir / STOP_FILES["head"]).read_text(errors="replace").strip()
+    rec["sha256"] = stop_sha256(rdir / STOP_DIR)
+    return rec
+
+
+def stop_capture_problems(rdir, env_record):
+    """-> [problems]; empty only when every part in STOP_FILES was captured without
+    error, is still where it was written, and `stop/` hashes as it did at capture.
+    Default-deny: a missing record, part or hash is a problem."""
+    rec = env_record.get("stop_capture")
+    if not isinstance(rec, dict):
+        return ["no stop capture recorded (pre-#380 harness?)"]
+    out = []
+    errors = rec.get("errors")
+    if not isinstance(errors, list):
+        out.append("stop capture errors are unreadable: %r" % (errors,))
+    else:
+        out += ["stop capture: %s" % e for e in errors]
+    files = rec.get("files") if isinstance(rec.get("files"), dict) else {}
+    for key, want in STOP_FILES.items():
+        got = files.get(key)
+        if got is None:
+            out.append("stop capture has no %s" % key)
+        elif got != want:
+            out.append("stop capture names %s as %r, expected %r" % (key, got, want))
+        else:
+            try:
+                st = os.lstat(pathlib.Path(rdir) / want)
+                kind = stat.S_ISDIR if key == "ledger" else stat.S_ISREG
+                if not kind(st.st_mode):
+                    out.append("stop capture %s is not what was written: %s" % (key, want))
+            except OSError:
+                out.append("stop capture %s is gone: %s" % (key, want))
+    stop = pathlib.Path(rdir) / STOP_DIR
+    if not rec.get("sha256"):
+        out.append("stop capture recorded no hash")
+    elif not stop.is_dir() or stop.is_symlink():
+        out.append("%s/ is gone" % STOP_DIR)
+    else:
+        got = stop_sha256(stop)
+        if got != rec["sha256"]:
+            out.append("%s/ re-hashes to %s, recorded %s at capture" % (STOP_DIR, got, rec["sha256"]))
+    return out
+
+
 def read_stream(path):
     """-> (init event or None, result event or None) from one stream-json file."""
     init = result = None
@@ -1036,8 +1213,9 @@ class Ops:
         return sh(cmd, env=env, cwd=cwd, check=check)
 
     def sandboxed(self, rdir, claude_real, cwd, cmd, env, stdout=subprocess.PIPE,
-                  timeout=None):
-        return run_sandboxed(rdir, claude_real, cwd, cmd, env, stdout=stdout, timeout=timeout)
+                  stderr=subprocess.STDOUT, timeout=None):
+        return run_sandboxed(rdir, claude_real, cwd, cmd, env, stdout=stdout, stderr=stderr,
+                             timeout=timeout)
 
     def events(self, login):
         return account_events(login)
@@ -1263,6 +1441,15 @@ def _run(a, spec, rdir, env_record, ops):
             _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, ops)
         finally:
             env_record.setdefault("run_end", ops.now())
+            # The stop capture (#380) runs first, before the audit reads it and
+            # before the outer finally's teardown. The placeholder stands if a
+            # second interrupt cuts it short; the audit fails on either.
+            env_record["stop_capture"] = {"errors": ["capture did not complete"]}
+            try:
+                env_record["stop_capture"] = capture_stop(rdir, clone, spec["base_sha"],
+                                                          spec["ledger_root"], claude_real, ops)
+            except Exception as exc:                  # recorded; the audit fails on it
+                env_record["stop_capture"]["errors"].append("capture raised: %s" % exc)
             (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
             steps = (("audit", lambda: write_audit(rdir, env_record, spec, login, version_dir, ops)),
                      ("measure", lambda: (rdir / "result.json").write_text(
@@ -1478,13 +1665,15 @@ def write_audit(rdir, env_record, spec, login, version_dir, ops=None):
         "a_tools": tools,
         "b_engine_loads": load_problems, "engine_loads": loads,
         "c_strata": strata,
+        "d_stop_capture": stop_capture_problems(rdir, env_record),
         "gh_calls": gh_calls,
         "unattended": env_record.get("unattended"),
     }
     # The delayed re-audit is owed, not optional: until a successful read lands at
     # least FEED_LATENCY_S after run_end, the audit is incomplete and does not pass.
     audit["pass"] = not any(audit[k] for k in ("a_tracker", "a_account_events", "a_tools",
-                                               "b_engine_loads", "c_strata")) and \
+                                               "b_engine_loads", "c_strata",
+                                               "d_stop_capture")) and \
         bool(audit["unattended"]) and audit["account_feed"]["delayed_read"]
     # audit.json is the only store of the accumulated reads: replace it whole or not at all.
     tmp = pathlib.Path(rdir) / "audit.json.tmp"
