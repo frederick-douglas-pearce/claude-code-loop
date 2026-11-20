@@ -93,13 +93,17 @@ def now():
 # --------------------------------------------------------------------------- fixture
 
 def load_fixture(fixture_dir):
-    fixture_dir = pathlib.Path(fixture_dir)
-    spec = json.loads((fixture_dir / "fixture.json").read_text())
+    """-> the fixture spec, with `dir` absolute (so `audit` works from any cwd) and
+    `fixture_sha256` the hash of the exact `fixture.json` bytes it was read from (#374)."""
+    fixture_dir = pathlib.Path(fixture_dir).resolve()
+    raw = (fixture_dir / "fixture.json").read_bytes()
+    spec = json.loads(raw.decode())
     for key in ("name", "org", "label", "issue", "stops", "max_turns", "ledger_root",
                 "run_slug", "first_prompt", "base_sha"):
         if key not in spec:
             raise Refused("fixture.json lacks %r" % key)
     spec["dir"] = str(fixture_dir)
+    spec["fixture_sha256"] = hashlib.sha256(raw).hexdigest()
     spec["ci_status_cmd"] = ci_status_binding(fixture_dir / "repo")
     return spec
 
@@ -230,6 +234,20 @@ def build_base(repo_dir, dest):
 def git_out(cwd, *args):
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True,
                           text=True).stdout.strip()
+
+
+def harness_provenance(repo_dir=RESEARCH_DIR):
+    """-> {harness_commit, harness_tree_clean} for the checkout the harness runs
+    from (#374). Clean means `git status --porcelain` lists nothing under
+    `docs/research/`, the harness's own tree (its modules and fixtures). Refuses
+    when the commit cannot be read: a replicate that cannot name its harness
+    cannot be certified by one."""
+    try:
+        commit = git_out(repo_dir, "rev-parse", "HEAD")
+        dirty = git_out(repo_dir, "status", "--porcelain", "--untracked-files=all", "--", ".")
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise Refused("cannot read the harness commit in %s: %s" % (repo_dir, exc))
+    return {"harness_commit": commit, "harness_tree_clean": dirty == ""}
 
 
 # ------------------------------------------------------------------------- preflight
@@ -1038,13 +1056,16 @@ def cmd_run(a, ops=None):
     ops = ops or Ops()
     spec = load_fixture(a.fixture)
     check_stops(spec)
+    provenance = harness_provenance()           # refuses before anything is created
     rid = a.replicate_id
     rdir = pathlib.Path(a.out).resolve() / rid
     if rdir.exists():
         raise Refused("replicate dir %s already exists" % rdir)
     rdir.mkdir(parents=True)
     env_record = {"replicate": rid, "fixture": spec["name"], "wall_clock_start": ops.now(),
-                  "gate_latency": "0 (scripted)", "approval_channel": "--resume"}
+                  "gate_latency": "0 (scripted)", "approval_channel": "--resume",
+                  "fixture_dir": spec["dir"], "fixture_sha256": spec["fixture_sha256"]}
+    env_record.update(provenance)
     try:
         _run(a, spec, rdir, env_record, ops)
     except Exception as exc:
@@ -1176,7 +1197,7 @@ def _run(a, spec, rdir, env_record, ops):
     (home / "agents").mkdir(parents=True)
     pins = render_roster(pathlib.Path(spec["dir"]) / "roster", home / "agents", a.model, a.effort)
     slug = project_slug(clone)
-    env_record.update(project_slug=slug, org=spec["org"], fixture_dir=spec["dir"])
+    env_record.update(project_slug=slug, org=spec["org"])
     mem = home / "projects" / slug / "memory"
     shutil.copytree(pathlib.Path(spec["dir"]) / "memory", mem)
     (home / "settings.json").write_text(json.dumps(spec.get("settings", {}), indent=2) + "\n")
