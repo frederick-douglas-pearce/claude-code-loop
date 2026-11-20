@@ -3,7 +3,7 @@
 The re-pilot #366 owed: throwaway replicates on the `pilot` fixture, **no comparison drawn**. It
 certifies harness **`da8b717`** (#372's merge). The pilot record, `replicate-pilot-2026-11.md`,
 certified `90eeb48`; #366, #370 and #372 changed the harness since. Merging this record unblocked
-#274 until #373 changed the harness; see the #373 bound below.
+#274 until #373 changed the harness. **The addendum at the end certifies harness `f868f97`** (#376 and #377), and with it #274 is unblocked.
 
 Two defects surfaced on the way and were fixed before the certifying replicates ran:
 - **#369, fixed by #370.** The account event feed is not served in time order.
@@ -85,7 +85,39 @@ No event arrived late. Unlike the pilot's m3 and h1, every flag the delayed read
 
 - **The account check is detection only** (#369). The feed is unordered, capped at 300 events and up to 6 h late. Criterion (a) rests on the `gh-token` boundary, which a spike verified and its fingerprint pins.
 - **`in-review` always halts** (#372). A replicate halted there is a **censored observation**. 1 of the 3 @high replicates on this fixture reached it (`rp-h1`); none @medium did. #274's admissibility rules must account for it.
-- **The `in-acceptance` reply can answer a step-10 escalation with `merge`** (#373). This bug predates the re-pilot and has been reproduced. Both certifying replicates' `in-acceptance` stops were the routine merge gate; their final messages were checked. **Resolved by removing the reply** (#373, after this record): the harness never answers the merge gate, and every replicate now ends at its first `in-acceptance` stop. The merged outcomes above were produced under the old reply. That change ends this record's certification of `da8b717`; one throwaway replicate @medium on the `pilot` fixture, recorded as an addendum here, is owed before #274 spends a replicate.
+- **The `in-acceptance` reply can answer a step-10 escalation with `merge`** (#373). This bug predates the re-pilot and has been reproduced. Both certifying replicates' `in-acceptance` stops were the routine merge gate; their final messages were checked. **Resolved by removing the reply** (#373, after this record): the harness never answers the merge gate, and every replicate now ends at its first `in-acceptance` stop. The merged outcomes above were produced under the old reply. That change ends this record's certification of `da8b717`. The addendum below certifies `f868f97` in its place.
 - **A replicate's record does not name its fixture version or harness commit** (#374). This file names them for these five. #374, after this record, adds both to `environment.json`.
 - **`CI_STATUS_CMD` is the Actions-API form,** as in the pilot. The confound is unchanged.
 - Five replicates are a pilot, not a sample: no figure here estimates anything.
+
+## Addendum, 2026-11-20: harness `f868f97` (#373, #374)
+
+One throwaway replicate on the `pilot` fixture, **no comparison drawn**. It certifies harness
+**`f868f97`** (#377's merge). That commit holds two harness changes made after `da8b717`:
+- **#376 (#373):** the `in-acceptance` reply is gone. Every replicate ends, unmerged, at its first `in-acceptance` stop, and the harness sends nothing there.
+- **#377 (#374):** `environment.json` records the fixture hash and the harness commit.
+
+| Factor | Value |
+|---|---|
+| Harness | **`f868f97`**, `harness_tree_clean: true`, both as recorded by the replicate itself (#374) |
+| Fixture | `pilot`, `fixture_sha256` `e42ae2b03999…`: the fixture as #376 left it, with no `in-acceptance` reply and no `done` stop |
+| Plugin, marketplace, cache | `44e0c690d0dd`, `1401f4314c8a`, `2f742197f6dc…`: all the same as above |
+| CLI | `2.1.326 (Claude Code)` |
+| Base / memory / settings | `7c311b7cfe3b` / `1dff0d1844d4…` / `ca3d163bab05…`: all the same as above |
+| `gh-token` | Fingerprint `346945…`, the same as above |
+| Stratum | `claude-sonnet-5-5` @`medium`; `MODEL_TIERS` every role inherits |
+
+| Replicate | Outcome | Turns | Cost |
+|---|---|---|---|
+| **`rp3-m1`** @medium | **Ended at `in-acceptance`, unattended**, in 2 invocations: plan approval, then the final stop | 32 | $1.25 |
+
+**Checks:**
+- **The final stop was the routine merge gate.** I checked the final message by hand. It came after review round 1 (two findings, both declined, no fix), Class A 3/3, and Class B with 3/3 real mutations killed and the control surviving. The message asked the human to approve, hold or change. **Nothing merged.** `gh-calls.jsonl` holds 7 calls and none is `pr merge`, and no Bash command in either stream runs a merge. The harness would have ended the replicate at this stop whatever the message said; the hand check only confirms which kind of stop this one was.
+- **`pass: true` after the delayed read.** The run ended at 02:54:52Z, and the delayed read came at 09:05:02Z (6.2 h later). Both reads succeeded: 300 events, cap hit. Neither saw a foreign event. The tracker (a), tools (a), engine loads and cache (b), and strata (c) checks were all empty.
+- **Plugin repo.** It was deleted 16 s after `wall_clock_start` and 4 s before the sandbox repo was created. The audit's `check_install` re-check found no problems.
+- **Side observation, not a harness defect.** The first acceptance attempt's isolated copy branched from the base commit, not the PR head, so it lacked the change. The engine recorded no verdict, used no gate round, re-made the copy at the head (`808d574`) and re-ran with a fresh agent. That cost one extra subagent. Both arms run on the same harness, so this adds noise to the cost figures without biasing either arm.
+
+**What #274 inherits:**
+- The bounds above still hold, except that the `in-acceptance` reply no longer exists.
+- The endpoint and the censoring rules that follow from removing it are on #274.
+- One replicate is a smoke test, not a sample; this run estimates nothing.
