@@ -1083,6 +1083,17 @@ class RunTests(Tmp):
         self.assertTrue(env["ci_status_binding"]["value"].startswith("gh run list"))
         self.assertIn("plugin_cache_dir", env)
 
+    def test_records_the_fixture_hash_and_harness_commit(self):
+        """#374: two protocols on one fixture name are told apart by the hash, and
+        the record names the harness commit and whether its tree was clean."""
+        env = self.run_it(FakeOps())
+        raw = pathlib.Path(PILOT, "fixture.json").read_bytes()
+        self.assertEqual(env["fixture_sha256"], hashlib.sha256(raw).hexdigest())
+        self.assertTrue(os.path.isabs(env["fixture_dir"]))
+        self.assertEqual(env["fixture_dir"], os.path.realpath(PILOT))
+        self.assertRegex(env["harness_commit"], r"^[0-9a-f]{40}$")
+        self.assertIsInstance(env["harness_tree_clean"], bool)
+
     def test_install_refusal_still_covers_the_run_and_tears_down(self):
         ops = FakeOps(install_problems=["installed commit d is not c"])
         env = self.run_it(ops, R.Refused)
@@ -1328,3 +1339,65 @@ class RunTests(Tmp):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProvenanceTests(Tmp):
+    """#374: fixture identity and harness commit."""
+
+    def git(self, *args):
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                       cwd=self.repo, check=True, capture_output=True)
+
+    def setUp(self):
+        super().setUp()
+        self.repo = self.tmp / "repo"
+        (self.repo / "docs" / "research").mkdir(parents=True)
+        self.git("init", "-q")
+        (self.repo / "docs" / "research" / "replicate.py").write_text("x\n")
+        (self.repo / "other.txt").write_text("o\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "c")
+        self.research = self.repo / "docs" / "research"
+
+    def test_clean_tree_names_its_commit(self):
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.repo, check=True,
+                              capture_output=True, text=True).stdout.strip()
+        self.assertEqual(R.harness_provenance(self.research),
+                         {"harness_commit": head, "harness_tree_clean": True})
+
+    def test_a_modified_or_untracked_harness_file_is_not_clean(self):
+        (self.research / "replicate.py").write_text("y\n")
+        self.assertFalse(R.harness_provenance(self.research)["harness_tree_clean"])
+        self.git("checkout", "--", ".")
+        self.assertTrue(R.harness_provenance(self.research)["harness_tree_clean"])
+        (self.research / "sub").mkdir()
+        (self.research / "sub" / "new.json").write_text("{}")
+        self.assertFalse(R.harness_provenance(self.research)["harness_tree_clean"])
+
+    def test_a_change_outside_the_harness_tree_does_not_count(self):
+        (self.repo / "other.txt").write_text("changed\n")
+        self.assertTrue(R.harness_provenance(self.research)["harness_tree_clean"])
+
+    def test_no_commit_refuses(self):
+        bare = self.tmp / "not-a-repo"
+        bare.mkdir()
+        with self.assertRaisesRegex(R.Refused, "cannot read the harness commit"):
+            R.harness_provenance(bare)
+
+    def test_load_fixture_from_another_cwd_is_absolute_and_hashed(self):
+        """`audit` resolves `fixture_dir` from the record, so it must not depend on
+        the cwd the run happened in."""
+        d = self.tmp / "fx"
+        shutil.copytree(PILOT, d)
+        old = os.getcwd()
+        os.chdir(self.tmp)
+        try:
+            spec = R.load_fixture("fx")
+        finally:
+            os.chdir(old)
+        self.assertEqual(spec["dir"], str(d.resolve()))
+        self.assertEqual(R.load_fixture(spec["dir"])["dir"], spec["dir"])
+        self.assertEqual(spec["fixture_sha256"],
+                         hashlib.sha256((d / "fixture.json").read_bytes()).hexdigest())
+        (d / "fixture.json").write_bytes((d / "fixture.json").read_bytes() + b"\n")
+        self.assertNotEqual(R.load_fixture(d)["fixture_sha256"], spec["fixture_sha256"])
