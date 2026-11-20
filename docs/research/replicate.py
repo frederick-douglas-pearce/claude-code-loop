@@ -110,7 +110,14 @@ STOP_KEYS = {"status", "expect", "reply", "final", "why"}
 # 8's round-1 design-question stop from one after a round 2 that read the same
 # commit (the engine's empty-delta full round), so that stop always halts (#371,
 # pre-committed stopping rule, honored 2026-11-19).
-REPLY_STATUSES = {None, "planning", "in-acceptance", "done"}
+REPLY_STATUSES = {None, "planning"}
+# The only row statuses a fixture may end a replicate at, and nothing is ever sent
+# there. `in-acceptance` brackets step 10 and step 11's merge gate, and no
+# element the 0.6.0 engine writes, nor git state, tells the routine merge-gate
+# stop from a step-10 escalation, so a `merge` reply could merge unreviewed work
+# (#373). Every replicate therefore ends unmerged at its first `in-acceptance`
+# stop; which kind of stop it was is judged afterwards, never by the harness.
+FINAL_STATUSES = {"in-acceptance"}
 # `row_status` when queue.md exists but the issue's row cannot be read: a status no
 # stop names, so it halts rather than reaching the pre-queue (None) stop.
 ROW_UNREADABLE = "<row unreadable>"
@@ -123,7 +130,8 @@ def _status_key(status):
 def check_stops(spec):
     """Refuse a fixture whose stops could pass a bad reply silently: each stop a
     dict of known keys, with `status` and a compiling `expect`, exactly one of a
-    `reply` or a true `final`, a status in REPLY_STATUSES, and no status twice.
+    `reply` or a true `final`, a reply only at a status in REPLY_STATUSES and a
+    final only at one in FINAL_STATUSES, and no status twice.
     Run before anything is spent; `audit` never reads stops, so it does not."""
     seen = set()
     for stop in spec.get("stops") or [None]:
@@ -144,9 +152,13 @@ def check_stops(spec):
             raise Refused("fixture stop %r needs exactly one of reply or final"
                           % (stop["status"],))
         key = _status_key(stop["status"])
-        if key not in REPLY_STATUSES:
+        if stop.get("final"):
+            if key not in FINAL_STATUSES:
+                raise Refused("fixture stop %r: a replicate may end only at %s (#373)"
+                              % (stop["status"], sorted(FINAL_STATUSES)))
+        elif key not in REPLY_STATUSES:
             raise Refused("fixture stop %r: no scripted reply is allowed at this status "
-                          "(#371)" % (stop["status"],))
+                          "(#371, #373)" % (stop["status"],))
         if key in seen:
             raise Refused("fixture names status %r twice: the second is never read"
                           % (stop["status"],))
@@ -611,10 +623,13 @@ def row_status(queue_md, issue):
 def classify_stop(status, final_text, stops):
     """-> ('reply', text) | ('done', None) | ('halt', reason). Keyed on the ledger
     row's Status; the final message must agree with the stop it names (A8). A
-    status outside REPLY_STATUSES halts by policy, `in-review` included (#371), and
-    a status no stop names halts."""
-    if _status_key(status) not in REPLY_STATUSES:
-        return "halt", "status %r: no scripted reply at this status, by policy (#371)" % (status,)
+    status outside REPLY_STATUSES and FINAL_STATUSES halts by policy, `in-review`
+    (#371) and `done` (#373: reaching it means something merged) included, and a
+    status no stop names halts. A reply is never sent at a FINAL_STATUSES status,
+    and a final is never taken at a REPLY_STATUSES one, whatever the stops say."""
+    key = _status_key(status)
+    if key not in REPLY_STATUSES | FINAL_STATUSES:
+        return "halt", "status %r: no scripted reply at this status, by policy (#371, #373)" % (status,)
     for stop in stops:
         want = stop["status"]
         if (status is None and want is None) or (
@@ -622,9 +637,11 @@ def classify_stop(status, final_text, stops):
             if not re.search(stop["expect"], final_text or ""):
                 return "halt", ("status %r but the final message does not match %r"
                                 % (status, stop["expect"]))
-            if stop.get("final"):
+            if key in FINAL_STATUSES and stop.get("final"):
                 return "done", None
-            return "reply", stop["reply"]
+            if key in REPLY_STATUSES and not stop.get("final"):
+                return "reply", stop["reply"]
+            return "halt", "status %r: stop is not allowed here (#373)" % (status,)
     return "halt", "unrecognized stop: row status %r" % (status,)
 
 

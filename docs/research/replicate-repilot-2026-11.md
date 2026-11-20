@@ -2,8 +2,8 @@
 
 The re-pilot #366 owed: throwaway replicates on the `pilot` fixture, **no comparison drawn**. It
 certifies harness **`da8b717`** (#372's merge). The pilot record, `replicate-pilot-2026-11.md`,
-certified `90eeb48`; #366, #370 and #372 changed the harness since. Merging this record unblocks
-#274.
+certified `90eeb48`; #366, #370 and #372 changed the harness since. Merging this record unblocked
+#274 until #373 changed the harness; see the #373 bound below.
 
 Two defects surfaced on the way and were fixed before the certifying replicates ran:
 - **#369, fixed by #370.** The account event feed is not served in time order.
@@ -85,7 +85,7 @@ No event arrived late. Unlike the pilot's m3 and h1, every flag the delayed read
 
 - **The account check is detection only** (#369). The feed is unordered, capped at 300 events and up to 6 h late. Criterion (a) rests on the `gh-token` boundary, which a spike verified and its fingerprint pins.
 - **`in-review` always halts** (#372). A replicate halted there is a **censored observation**. 1 of the 3 @high replicates on this fixture reached it (`rp-h1`); none @medium did. #274's admissibility rules must account for it.
-- **The `in-acceptance` reply can answer a step-10 escalation with `merge`** (#373). This bug predates the re-pilot and has been reproduced. Both certifying replicates' `in-acceptance` stops were the routine merge gate; their final messages were checked. Whether #373 blocks #274 is a triage call.
+- **The `in-acceptance` reply can answer a step-10 escalation with `merge`** (#373). This bug predates the re-pilot and has been reproduced. Both certifying replicates' `in-acceptance` stops were the routine merge gate; their final messages were checked. **Resolved by removing the reply** (#373, after this record): no replicate merges, and every replicate now ends at its first `in-acceptance` stop. The merged outcomes above were produced under the old reply. That change ends this record's certification of `da8b717`; one throwaway replicate @medium on the `pilot` fixture, recorded as an addendum here, is owed before #274 spends a replicate.
 - **A replicate's record does not name its fixture version or harness commit** (#374). This file names them for these five.
 - **`CI_STATUS_CMD` is the Actions-API form,** as in the pilot. The confound is unchanged.
 - Five replicates are a pilot, not a sample: no figure here estimates anything.
