@@ -418,9 +418,13 @@ class StopTests(Tmp):
         """A fixture that skipped check_stops still cannot reply `merge` there."""
         stops = [{"status": "in-acceptance", "expect": "(?i)merge", "reply": "merge"}]
         for msg in self.IN_ACCEPTANCE_ESCALATIONS:
-            self.assertEqual(R.classify_stop("in-acceptance", msg, stops)[0], "halt", msg)
+            kind, why = R.classify_stop("in-acceptance", msg, stops)
+            self.assertEqual(kind, "halt", msg)
+            self.assertIn("not allowed here (#373)", why, msg)
         stops = [{"status": "planning", "expect": ".", "final": True}]
-        self.assertEqual(R.classify_stop("planning", "approve?", stops)[0], "halt")
+        kind, why = R.classify_stop("planning", "approve?", stops)
+        self.assertEqual(kind, "halt")
+        self.assertIn("not allowed here (#373)", why)
 
     def test_done_halts(self):
         """#373: no reply ever merges, so a `done` row means something merged."""

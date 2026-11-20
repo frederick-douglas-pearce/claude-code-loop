@@ -1,6 +1,6 @@
 {
   "name": "pilot",
-  "why": "Throwaway pilot fixture for #208's AC6: one trivial code-route issue, so a replicate exercises plan gate, implement, PR, CI, review, acceptance and merge at the lowest cost. Not a reference issue; no comparison is drawn from it.",
+  "why": "Throwaway pilot fixture for #208's AC6: one trivial code-route issue, so a replicate exercises plan gate, implement, PR, CI, review and acceptance at the lowest cost, ending unmerged at the merge gate (#373). Not a reference issue; no comparison is drawn from it.",
   "org": "frederick-douglas-pearce-loop-sandbox",
   "label": "fixture",
   "base_sha": "7c311b7cfe3b594c54c7c6279977e764163c2439",
