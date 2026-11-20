@@ -1,6 +1,6 @@
 {
   "name": "pilot",
-  "why": "Throwaway pilot fixture for #208's AC6: one trivial code-route issue, so a replicate exercises plan gate, implement, PR, CI, review, acceptance and merge at the lowest cost. Not a reference issue; no comparison is drawn from it.",
+  "why": "Throwaway pilot fixture for #208's AC6: one trivial code-route issue, so a replicate exercises plan gate, implement, PR, CI, review and acceptance at the lowest cost, ending unmerged at the merge gate (#373). Not a reference issue; no comparison is drawn from it.",
   "org": "frederick-douglas-pearce-loop-sandbox",
   "label": "fixture",
   "base_sha": "7c311b7cfe3b594c54c7c6279977e764163c2439",
@@ -26,13 +26,9 @@
     },
     {
       "status": "in-acceptance",
-      "expect": "(?i)merge",
-      "reply": "merge"
-    },
-    {
-      "status": "done",
-      "expect": "(?i)(merged|done|/clear)",
-      "final": true
+      "expect": "",
+      "final": true,
+      "why": "#373: the replicate ends unmerged at its first in-acceptance stop. The 0.6.0 engine writes nothing that tells step 11's routine merge-gate stop from a step-10 escalation, so no reply is sent and the final message is not classified; the stop's kind is judged afterwards from the stream."
     }
   ],
   "builtin_agents": {

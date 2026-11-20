@@ -374,8 +374,63 @@ class StopTests(Tmp):
         self.assertEqual(R.classify_stop("planning", "Approve the plan?", self.STOPS),
                          ("reply", "approve"))
         self.assertEqual(R.classify_stop("in-acceptance", "Ready to merge #2?", self.STOPS),
-                         ("reply", "merge"))
-        self.assertEqual(R.classify_stop("done", "Merged. Run /clear.", self.STOPS)[0], "done")
+                         ("done", None))
+
+    # Each in-acceptance escalation the 0.6.0 engine documents, worded as a stop
+    # message would naturally word it: every one names merging (#373).
+    IN_ACCEPTANCE_ESCALATIONS = (
+        # #373's reproduction: a dirty round-2 re-verify after an unreviewed fix.
+        "AC2 re-verify came back dirty after a source-changing fix nobody reviewed; "
+        "escalating before step 11. Do not merge yet.",
+        # accepting.md step 10: the round-2 re-verify came back dirty.
+        "Acceptance round 2 is dirty: AC3 is still unmet. Escalating; ready to merge "
+        "only once you decide.",
+        # loop-engine.md step 10: a source-changing fix, committed and re-verified clean.
+        "I fixed AC1 in source and the re-verify is clean, but no review saw that fix. "
+        "Merge or send it back to review?",
+        # loop-engine.md step 10: the accepting unit did not load.
+        "- gate-error: acceptance - phases/accepting.md not loaded - no-stderr. "
+        "Escalating; do not merge.",
+        # accepting.md AC-verifier: an empty or unrelated $BASE.
+        "- gate-error: acceptance - git merge-base returned nothing. Merge is blocked.",
+        # accepting.md Part 2: no isolated copy, so the in-tree rung is the human's call.
+        "The mutation pass cannot get an isolated copy. Authorize the in-tree rung, "
+        "or merge without Class B?",
+        # loop-engine.md step 11: an unknown editorial count escalates at the merge gate.
+        "No `- Editorial:` line for this iteration, so the count is unknown. "
+        "Escalating instead of asking to merge.",
+        # accepting.md / step 11: an unresolved Class B survivor always escalates.
+        "Class B: 1 mutation survivor unresolved. That always escalates; ready to merge "
+        "if you accept it.",
+        # loop-engine.md step 11: the head check failed.
+        "Head check failed: 1 unpushed commit. STOP before merge.",
+    )
+
+    def test_no_in_acceptance_stop_is_ever_answered(self):
+        """#373: no 0.6.0 element tells step 11's routine stop from a step-10 (or
+        step-11) escalation, so every in-acceptance stop ends the replicate with
+        nothing sent, the routine one included."""
+        for msg in self.IN_ACCEPTANCE_ESCALATIONS + ("Ready to merge #2?", "", None):
+            self.assertEqual(R.classify_stop("in-acceptance", msg, self.STOPS),
+                             ("done", None), msg)
+
+    def test_a_reply_at_in_acceptance_is_never_sent_even_past_check_stops(self):
+        """A fixture that skipped check_stops still cannot reply `merge` there."""
+        stops = [{"status": "in-acceptance", "expect": "(?i)merge", "reply": "merge"}]
+        for msg in self.IN_ACCEPTANCE_ESCALATIONS:
+            kind, why = R.classify_stop("in-acceptance", msg, stops)
+            self.assertEqual(kind, "halt", msg)
+            self.assertIn("not allowed here (#373)", why, msg)
+        stops = [{"status": "planning", "expect": ".", "final": True}]
+        kind, why = R.classify_stop("planning", "approve?", stops)
+        self.assertEqual(kind, "halt")
+        self.assertIn("not allowed here (#373)", why)
+
+    def test_done_halts(self):
+        """#373: no reply ever merges, so a `done` row means something merged."""
+        kind, why = R.classify_stop("done", "Merged. Run /clear.", self.STOPS)
+        self.assertEqual(kind, "halt")
+        self.assertIn("by policy", why)
 
     def test_in_review_always_halts(self):
         """#371: no scripted reply at in-review, by policy. Re-pilot replicate
@@ -387,7 +442,7 @@ class StopTests(Tmp):
                     "question. The architect's scope ruling is below."):
             kind, why = R.classify_stop("in-review", msg, self.STOPS)
             self.assertEqual(kind, "halt")
-            self.assertIn("by policy (#371)", why)
+            self.assertIn("by policy (#371", why)
 
     def test_any_status_outside_the_allowlist_halts(self):
         """Default-deny: an unknown status halts by policy, even if a stop names it."""
@@ -417,6 +472,11 @@ class StopTests(Tmp):
         for i, (stops, why) in enumerate((
                 ([{"status": "In-Review", "expect": "x", "reply": "y"}], "no scripted reply"),
                 ([{"status": "hold", "expect": "x", "reply": "y"}], "no scripted reply"),
+                ([{"status": "in-acceptance", "expect": "(?i)merge", "reply": "merge"}],
+                 "no scripted reply"),
+                ([{"status": "done", "expect": "x", "reply": "y"}], "no scripted reply"),
+                ([{"status": "done", "expect": "x", "final": True}], "may end only at"),
+                ([{"status": "planning", "expect": "x", "final": True}], "may end only at"),
                 ([dict(ok, halt_on_ledger_round2=True)], "unknown keys"),
                 ([dict(ok, require_round_one=True)], "unknown keys"),
                 (["planning"], "not an object"),
@@ -941,8 +1001,8 @@ class FakeOps:
              "dev-loop" / "0.6.0" / "SKILL.md").write_text("tampered")
         ledger = pathlib.Path(cwd) / ".loop-ledger" / "fixture"
         ledger.mkdir(parents=True, exist_ok=True)
-        (ledger / "queue.md").write_text("| # | Issue | Status |\n|---|---|---|\n| 1 | #1 x | done |\n")
-        stdout.write(json.dumps({"type": "result", "session_id": "s", "result": "Merged. Run /clear."}) + "\n")
+        (ledger / "queue.md").write_text("| # | Issue | Status |\n|---|---|---|\n| 1 | #1 x | in-acceptance |\n")
+        stdout.write(json.dumps({"type": "result", "session_id": "s", "result": "Ready to merge #2?"}) + "\n")
         return 0, None
 
     def events(self, login):
