@@ -1908,6 +1908,16 @@ class CaptureTests(Tmp):
         (d / "b").write_bytes(b"11")
         self.assertNotEqual(R.stop_sha256(d), h)
 
+    def test_stop_hash_sees_a_renamed_file(self):
+        """A file's path is part of the hash: a file renamed inside stop/ (in the
+        ledger copy, which no per-part check covers) changes it."""
+        d = self.tmp / "rn"
+        (d / "ledger").mkdir(parents=True)
+        (d / "ledger" / "progress.md").write_text("journal\n")
+        h = R.stop_sha256(d)
+        (d / "ledger" / "progress.md").rename(d / "ledger" / "queue.md")
+        self.assertNotEqual(R.stop_sha256(d), h)
+
     def test_stop_hash_does_not_descend_a_directory_link(self):
         d, outside = self.tmp / "dl", self.tmp / "outside-dir"
         d.mkdir()
