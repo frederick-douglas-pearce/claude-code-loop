@@ -250,8 +250,8 @@ settle a pick, it says "not established".
   so `e2e.yml` (Playwright, path-filtered) runs on the PR; `prettier.yml` runs on every PR;
   `humanizer-guard.yml` and `og-card-guard.yml` are path-filtered and not triggered.
 - **Config:** frozen with named rebinds; `HERMETIC_TEST_CMD` as vote #172, with the same bubblewrap
-  question. `CODE_REVIEW` binds the `/code-review` skill. The issue body defers a glossary wording
-  decision to the `ba` agent, which the fixture must supply.
+  question. `CODE_REVIEW` binds the `/code-review` skill. Two of the issue's acceptance criteria defer
+  wording to the `ba` agent, which the fixture must supply.
 - **Auto-loaded at base:** root `CLAUDE.md`, 19,626 bytes; `dashboard/CLAUDE.md`, 92,416 bytes,
   loads as soon as the diff's page module is opened. Five more nested `CLAUDE.md` files load only
   if their directories are opened. `.claude/settings.json` enables the dev-loop plugin only.
