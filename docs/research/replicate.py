@@ -1331,7 +1331,7 @@ def cmd_run(a, ops=None):
 # takes the same path as Ctrl-C (#380): Python's default for these signals ends
 # the process without running a `finally`, which would skip the stop capture,
 # environment.json, the audit and the teardown, and leak the repos.
-# What this leaves unprotected: a second signal arriving in the few bytecodes
+# What this leaves unprotected: a signal arriving in the few bytecodes
 # between the start of a `finally` and its `ignore_signals` still raises there.
 # At teardown's entry that can strand the repos (recorded: `repos_planned`
 # without `repos_deleted`); after teardown it loses the final environment.json
