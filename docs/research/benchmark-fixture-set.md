@@ -3,7 +3,8 @@
 Seven closed issues, from the three repos that run the loop, for R1's paired benchmark (#288) to
 replay. Each pick records its repo, source base SHA, route, historical rounds, the reason it was
 chosen, and three feasibility fields: how likely a replay is to halt at `in-review`, what its CI
-row must be rebound to, and whether its config can be frozen. One pick, **vote #82**, is named for
+row must be rebound to, and whether its config can be frozen; and which of its acceptance criteria
+the replay's sandbox can discharge. One pick, **vote #82**, is named for
 #274's control replay.
 
 This note is the selection and its reasons. It builds no fixture: #274 builds the control-replay
@@ -22,23 +23,40 @@ be re-derived it says "not established".
 |---|---|---|---|
 | vote | `frederick-douglas-pearce/us-presidential-vote-analysis` | merge commit | `merge-base(M^1, M^2)` |
 | esg | `frederick-douglas-pearce/sportswear-esg-news-classifier` | squash | `S^` |
-| loop | `frederick-douglas-pearce/claude-code-loop` (this repo) | merge commit | `merge-base(M^1, M^2)` |
+| loop | `frederick-douglas-pearce/claude-code-loop` (this repo) | merge commit until #346, squash since | `merge-base(M^1, M^2)` for a merge commit, `S^` for a squash |
 
 "Source base SHA" below is the commit in the source repo. A built fixture's `base_sha` is a
 different SHA, because `replicate.py`'s `build_base` re-commits the copied tree with a fixed
 identity and date.
 
+**The derived base is a proxy for the base the historical run worked on, and it is checked.** Where
+a run journaled its base (`$BASE`, or the base it named), the two are compared; where it did not,
+the branch must root on the derived base with no merge from main in between. Six picks pass. esg
+#93 does not: its run planned and reviewed on `a8ca32c`, and its derived base `504810a` differs from
+that only in `.claude/loop.config.md` (its section says what follows).
+
 ## The selection rule
 
 Applied in this order.
 
-1. **Closed as COMPLETED, one merged PR, replayable from the repo alone.** The acceptance criteria
-   must be dischargeable with what is tracked at the base commit: no production database, no paid
-   API call, no deployed service, no corpus outside the repo, no secret, and no human ruling
-   mid-run.
+1. **Closed as COMPLETED, one merged PR, and replayable in the sandbox.** This rule is about what
+   a replicate can do, not about how the historical run checked its own work. (Read the second way
+   it would exclude every ≥ 5-round pick, since each of those runs had a human release the review
+   cap mid-run.) It has two parts:
+   - **Hard part.** Everything before step 10 — planning, `TEST_CMD` and `HERMETIC_TEST_CMD`, and
+     code review — must be able to run in the replicate's sandbox from what is tracked at the base
+     plus what the fixture supplies. A pick that fails this is out.
+   - **Disclosure part.** Any acceptance criterion that step 10 cannot discharge in the sandbox —
+     because it needs a database, a corpus or service outside the repo, a paid API call, or a
+     secret — is named in the pick's section, with its consequence. **If you cannot tell, it is
+     named.**
+
+   An undischargeable criterion does not move where a replicate halts in review. It fixes the kind
+   of step-10 stop the pick reaches, the same in both arms, and raises step-10 cost. Whether such a
+   pick counts toward an outcome defined on stop kind or step-10 cost is #382's to decide.
 2. **No reason to read the dev-loop engine inside the fixture repo.** `replicate.py`'s
    `audit_engine_loads` records a problem for any engine read that `engine_cost.classify` calls
-   `'tree'` (a copy of the engine outside the replicate's plugin cache), and the audit's `pass`
+   `'tree'` (an engine file read at a path with no `/.claude/plugins/cache/` segment), and the audit's `pass`
    requires `b_engine_loads` to be empty. So a pick whose diff, tests or acceptance criteria need
    the repo's own `skills/dev-loop/` copy is out, and **if you cannot tell, it is out**. This
    removes every loop-repo issue that edits or guards the engine.
@@ -76,7 +94,7 @@ iteration's close-record `- Budget:` line (for #199, the corrected line that fol
 record).
 
 The set meets appendix A §4's mix: #172 and #74 took five code-review rounds each, and #82 was
-clean in two. Seven picks leaves three of the issue's ten slots for #288.
+clean in two by its recorded numbers (1 / 1; its section says why that is weak). Seven picks leaves three of the issue's ten slots for #288.
 
 ## Fields every pick shares
 
@@ -85,7 +103,9 @@ refuses anything but the Actions-API form (`gh run list|view …` or
 `gh api repos/<o>/<r>/actions/…`), because the sandbox token cannot read checks. So **every
 fixture rebinds this row**, to the workflow named per pick. Workflows that need a secret or run on
 a schedule cannot work in a fixture repo and should be dropped from the copy; the per-pick lists
-name them, and also name any other workflow the pick's PR would trigger.
+name them, and also name any other workflow the pick's PR would trigger. A binding of the form
+`gh run list --workflow <file>` reads only the named workflow; the others still run in the fixture
+repo, but no gate reads them.
 
 **`MODEL_TIERS`** is absent at every base. The 0.6.0 engine reads an absent row as every role
 inheriting, so it needs nothing.
@@ -113,15 +133,20 @@ The only measured base rate is the pilot fixture, a trivial issue: 1 of 3 replic
 at `in-review` and none @medium did (`replicate-repilot-2026-11.md:87`). Every call below is a
 judgment from one history, made under whatever engine ran it.
 
-**Engine era** comes from `README.md` → Status, which dates each install. Where that table does not
-settle a pick, it says "not established".
+**What the sandbox can discharge.** Each pick has a **Sandbox** line under rule 1: whether the hard
+part holds, and which acceptance criteria step 10 cannot discharge in the sandbox, or that it can
+discharge them all. Where nobody walked a criterion, the line says "not established".
+
+**Engine era** comes from `README.md` → Status, which dates each install, and from root `CLAUDE.md`
+→ Dogfooding this repo for anything before 0.2.0, which that table does not cover. Where neither
+settles a pick, it says "not established".
 
 ## Per pick
 
 ### 1. vote #172 — unit-tier `bool(x) is False` shapes (≥ 5 rounds)
 
-- **Diff:** 6 files, +302/−25, all under `tests/` (`tests/_helpers.py` and five test modules).
-  Offline unit tier.
+- **Diff:** 6 files, +302/−25, all under `tests/`: `tests/_helpers.py`, four unit-test modules,
+  and `tests/integration/test_snapshot_build.py` (+16/−4), a live-Postgres integration test.
 - **Why it is here:** five code-review rounds and no design-question stop. Round 1 found two
   correctness defects; rounds 2–4 each found new false claims inside the previous round's fix text
   (8 false claims across all five rounds), and round 5 was clean. That is the pattern R1's fix agent
@@ -131,10 +156,16 @@ settle a pick, it says "not established".
 - **Stops in review:** three: round 2 dirty at the cap, then rounds 3 and 4 dirty, each after a
   human release of the cap. Engine 0.2.1.
 - **In-review halt:** high overall. (a) low; (b) high.
-- **Fidelity risk:** one acceptance criterion was discharged with the integration tier, against
-  Postgres and local corpora; that was the planning pass's read and was not re-derived here.
-- **CI:** `ci.yml` (jobs `checks` and `integration`; `integration` runs a `postgres:16` service
-  container, no secret). Drop `api-canary.yml` (schedule, secret), `deploy.yml` (secrets),
+- **Sandbox:** the hard part holds, because `TEST_CMD` deselects the integration tier
+  (`addopts = "-m 'not integration'"` in `pyproject.toml` at the base). Not dischargeable: the issue
+  has no acceptance-criteria section, and the run's plan wrote an AC-8 — `uv run pytest -m
+  integration` green locally against a throwaway `postgres:16` — that its architect made a merge
+  precondition. That run also needs the three local corpora. A replay's step 10 cannot do it, so
+  this pick's step-10 stop kind is fixed by the environment. #288 must also make sure a replicate
+  cannot reach a Postgres that happens to be running on the host, or the replay depends on host
+  state.
+- **CI:** `ci.yml` (jobs `checks`, `integration` and `docker-build`; `integration` runs a
+  `postgres:16` service container, and `docker-build` builds the Docker image; no secret). Drop `api-canary.yml` (schedule, secret), `deploy.yml` (secrets),
   `pages-sync.yml` (secret). `prettier.yml` runs on every PR; `og-card-guard.yml` is path-filtered
   and this diff does not trigger it.
 - **Config:** frozen with named rebinds. `HERMETIC_TEST_CMD` is
@@ -156,6 +187,11 @@ settle a pick, it says "not established".
 - **Why it is here:** ordinary code with five code-review rounds. It is the largest pick; it is kept
   because the planning pass found no smaller ≥ 5 issue in esg without a round-1 design-question stop
   or an outside dependency.
+- **Sandbox:** the hard part holds (offline tests). Every criterion can be discharged in the
+  sandbox: AC4 ("reading an archived YAML written before this change still loads") by a tracked
+  fixture YAML in the pre-verdict shape, which the run wrote. Fidelity: the historical verifier also
+  loaded all 1,461 real archives in `~/.esg-agent/history` and the live `state.yaml`, which a replay
+  cannot.
 - **Stops in review:** three: round 2 dirty at the cap, then rounds 3 and 4 dirty, both
   human-authorized. No round-1 design-question stop. After round 2 the human directed an architect
   consult on three of its findings that had a design component, and the architect ruled one of them a
@@ -186,10 +222,20 @@ settle a pick, it says "not established".
   design question. It does not carry the "≥ 5" slot.
 - **Stops in review:** two: round 2 dirty at the cap, then round 3 (human-authorized) with sound
   code and dirty prose. A fourth round deleted the prose.
-- **Engine era:** not established. 0.3.0 reached esg on 2026-09-11, the day this iteration ran.
+- **Engine era:** not established. The iteration's journal blocks span 2026-09-11 to 2026-09-12,
+  across the day 0.3.0 was installed.
 - **In-review halt:** high overall. (a) low; (b) high.
-- **CI, config, auto-loaded:** as esg #74. Root `CLAUDE.md` 30,911 bytes. Tracked tree 365 files,
-  134 MB.
+- **Sandbox:** the hard part holds. Criteria 1–6 are checkable through the fake-`docker` harness
+  the tests use, and criterion 7 is a decision. Fidelity: the historical review measured one gap
+  against a live PostgreSQL 16.11 server, which a replay's review cannot reach.
+- **CI:** as esg #74.
+- **Config:** frozen with named rebinds, from the derived base `504810a`. Two differences from #74's
+  config: the `DESIGN_AGENT` row names two uses (it adds the step-8 scope ruling); and the run
+  itself planned and reviewed on `a8ca32c`, which lacks that change, so the fixture freezes a config
+  the historical run did not have. That matters only if a design-question finding arises, and #93
+  had none.
+- **Auto-loaded at base:** as esg #74, with root `CLAUDE.md` at 30,911 bytes.
+- **Tests need:** as esg #74. Tracked tree 365 files, 134 MB.
 - **Pre-merge comments:** one (2026-09-07), correcting the body's SIGPIPE framing: the inversion is
   a race, not a buffer-size threshold. The plan does not cite it, its approach removes the pipe
   altogether, and no acceptance criterion turns on the mechanism. The body (never edited) is
@@ -213,9 +259,12 @@ settle a pick, it says "not established".
   `og-card-guard.yml`, so both would run on the PR; `prettier.yml` runs on every PR.
 - **Config:** frozen with named rebinds. `HERMETIC_TEST_CMD` is `—` plus a reason.
 - **Auto-loaded at base:** root `CLAUDE.md`, 38,773 bytes; `tests/CLAUDE.md`, 17,805 bytes, loads
-  when the diff's test file is opened; `plugins/CLAUDE.md` (12,444 bytes) loads only if something
-  under `plugins/` is opened, which is the read rule 2 forbids.
+  when the diff's test file is opened; `plugins/CLAUDE.md` (12,444 bytes) loads if anything under
+  `plugins/` is opened. Only a read of an engine file under `skills/dev-loop/` fails the audit.
   `.claude/settings.json` enables the dev-loop plugin only.
+- **Sandbox:** the hard part holds, and all four criteria can be discharged in the sandbox: the
+  tests run on the stdlib against a temporary git fixture, and AC3's mutation check runs through
+  the plugin's own harness.
 - **Tests need:** `python3` only. Tracked tree 67 files, 1.5 MB.
 - **Pre-merge comments:** none.
 
@@ -228,7 +277,15 @@ settle a pick, it says "not established".
 - **Stops in review:** one, round 2 dirty at the cap (round 1 recorded "Design-question findings:
   none"). Round 3 was human-directed. Engine 0.5.0.
 - **In-review halt:** medium overall. (a) low; (b) medium.
-- **CI, config:** as esg #74.
+- **Sandbox:** the hard part holds (offline tests). Criteria 1 and 2 (the import isolation and its
+  pinning test) are discharged by tracked tests. Criterion 3 ("`scripts/label_articles.py` and the
+  labeling cron behave as before") was discharged by running `label_articles.py --stats`, which
+  initializes the database, and a `--dry-run`. Whether `--stats` needs a live database is not
+  established, so under rule 1 that half is named as not dischargeable, and this pick's step-10
+  stop kind may be fixed by the environment.
+- **CI:** as esg #74.
+- **Config:** frozen with named rebinds. Its `DESIGN_AGENT` row names two uses (it adds the step-8
+  scope ruling), unlike #74's.
 - **Auto-loaded at base:** root `CLAUDE.md`, 61,060 bytes; same hooks and skills as esg #74.
 - **Tests need:** as esg #74. Tracked tree 408 files, 91 MB.
 - **Pre-merge comments:** one owner comment (2026-11-04) on placement and the overlap with #252.
@@ -255,6 +312,8 @@ settle a pick, it says "not established".
 - **Auto-loaded at base:** root `CLAUDE.md`, 19,626 bytes; `dashboard/CLAUDE.md`, 92,416 bytes,
   loads as soon as the diff's page module is opened. Five more nested `CLAUDE.md` files load only
   if their directories are opened. `.claude/settings.json` enables the dev-loop plugin only.
+- **Sandbox:** the hard part holds, and all three criteria (page code, its unit test, and glossary
+  entries) can be discharged in the sandbox, provided the fixture supplies the `ba` agent.
 - **Tests need:** `uv sync --locked --dev`. Tracked tree 391 files, 14 MB.
 - **Pre-merge comments:** none.
 
@@ -265,7 +324,8 @@ settle a pick, it says "not established".
 - **Why it is here:** it fills the "clean in two" slot by the numbers only. Its review gate was
   discharged with `/review 115` rather than the bound `/code-review` (the run's own correction note
   says so), review and AC-verify are journaled together in one block at the merge gate, and it ran
-  under engine 0.0.1, which put AC-verify before code review.
+  under engine 0.0.1, which put AC-verify before code review. (0.0.1 is not in the Status table;
+  every consumer ran it until the 2026-08-21 re-install, per root `CLAUDE.md`.)
 - **Stops in review:** none recorded.
 - **In-review halt:** low to medium overall, on thin evidence. (a) and (b) both low to medium.
 - **CI:** `ci.yml` (as vote #172). Drop `deploy.yml` (secrets). No other workflow at the base.
@@ -275,6 +335,10 @@ settle a pick, it says "not established".
   0.0.1.
 - **Auto-loaded at base:** root `CLAUDE.md`, 24,726 bytes; `.claude/settings.json` enables the
   dev-loop plugin only.
+- **Sandbox:** the hard part holds. The issue has no acceptance-criteria section; the run's plan
+  took three from its body (one shared grain check and one shared totals check under `usvote/pv/`,
+  called by both sources). They are refactor criteria checked by unit tests, and all can be
+  discharged in the sandbox.
 - **Tests need:** `uv sync --locked --dev`. Tracked tree 156 files, 3.0 MB.
 - **Pre-merge comments:** one, the run's own architect review, which a replay regenerates.
 
@@ -307,7 +371,11 @@ approval at the plan gate named no other pick.
 - **esg:** #75 (five in-review stops, one a design question); #239 (a design-question stop); #259
   (no stops, but every touched test needs Postgres); #154, #155 and #248 (open).
 
-These reasons are the planning pass's reads and were not re-derived here.
+These reasons are the planning pass's reads and were not re-derived here. They were also applied
+under rule 1's earlier wording, which excluded a pick for how its criteria were historically
+checked. Under the amended rule, a candidate excluded only for that reason (needing outside data or
+a live service at acceptance, not before it) would be disclosed rather than excluded. None was
+re-examined, so #288 should re-check any it wants for the three open slots.
 
 ## Observations for #382
 
@@ -315,22 +383,28 @@ Facts with their evidence. None decides anything; each is #382's to use or not.
 
 1. **A replicate can show at most two review rounds.** Since the two-round cap, a third round
    exists only because a human authorized it, so every issue that took five code-review rounds
-   stopped in review at least once, and on replay each such stop halts (`REPLY_STATUSES`). As
-   written, appendix A §4's outcome 1 ("lower by at least one round"), outcome 2 beyond round 2,
-   outcome 5's "what the human chose", and outcome 4's 14-day fix-up commits (nothing merges) cannot
-   be observed.
+   stopped in review at least once, and on replay each such stop halts (`REPLY_STATUSES`). Appendix
+   A §4's outcome 1 ("lower by at least one round") can be read only as a censored comparison: a
+   replicate that needs a third round halts at the cap. Outcome 2 beyond round 2, outcome 5's "what
+   the human chose", and outcome 4's 14-day fix-up commits (nothing merges) cannot be observed as
+   written.
 2. **A round-1 design-question stop halts before R1 acts.** The planning pass counted it in 29 of
    37 esg rows, in all eleven non-engine loop candidates, and in 32 of 37 low-round vote rows since
    2026-11-01. Those are the planning pass's counts and were not re-counted here. Halts of that kind
    should not differ between arms, which makes them a candidate negative control.
-3. **"Clean in two" exists only under engine 0.0.1.** Across every `- Budget:` line in the three
-   repos' ledgers (120 loop, 155 vote, 37 esg), code-review = 1 with ac-verify = 1 is on 13 lines,
+3. **"Clean in two" exists only under engine 0.0.1.** Across every line carrying a `gate-rounds=` slot in
+   the three repos' ledgers (134 loop, 161 vote, 38 esg), code-review = 1 with ac-verify = 1 is on
+   13 lines,
    and the latest are vote #152 and #132 on 2026-08-12; none is in esg. The planning pass also found
    no code-route vote issue since 2026-11-01 that passed review with no stop. A definition of
    "clean" that the control arm sets for itself (it reaches `in-acceptance` within two rounds in
    every replicate) is one way to fill the slot.
 4. **Loop-repo issues that edit or guard the engine cannot be fixtures** while the audit rejects
    in-tree engine reads (rule 2).
+5. **Some picks reach a step-10 stop whose kind the environment fixes.** vote #172 has a criterion
+   the sandbox cannot discharge, and esg #211 may (rule 1's disclosure part; their sections). Such a
+   pick reaches the same kind of step-10 stop in both arms, so it can carry no outcome defined on
+   stop kind.
 
 ## Scope
 
