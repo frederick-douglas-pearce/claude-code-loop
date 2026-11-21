@@ -1393,7 +1393,7 @@ class RunTests(Tmp):
                               (rdir / "stop" / "ledger" / "fixture" / "queue.md").read_text())
 
     def test_halt_signals_are_handled_for_the_run_only_and_ignored_in_teardown(self):
-        """#380 c.2: during the run SIGTERM and SIGHUP raise KeyboardInterrupt (so
+        """#380: during the run SIGTERM and SIGHUP raise KeyboardInterrupt (so
         every finally runs); teardown ignores them as it ignores SIGINT; after
         cmd_run the previous handlers are back."""
         before = {n: signal.getsignal(getattr(signal, n)) for n in ("SIGTERM", "SIGHUP")}
@@ -1402,6 +1402,42 @@ class RunTests(Tmp):
         self.assertTrue(callable(ops.handlers["SIGTERM"]))
         self.assertEqual(ops.teardown_signals[-1], {n: signal.SIG_IGN
                                                     for n in ("SIGINT", "SIGTERM", "SIGHUP")})
+        self.assertEqual({n: signal.getsignal(getattr(signal, n)) for n in before}, before)
+
+    def test_a_signal_started_ignored_stays_ignored(self):
+        """#380: under `nohup` SIGHUP starts ignored; a closed terminal must not
+        halt a paid run, so the harness leaves it alone."""
+        old = signal.signal(signal.SIGHUP, signal.SIG_IGN)
+        self.addCleanup(signal.signal, signal.SIGHUP, old)
+        seen = {}
+
+        class Ops(FakeOps):
+            def sandboxed(self, rdir, claude_real, cwd, cmd, env, stdout=None, timeout=None):
+                if "-p" in cmd:
+                    seen["SIGHUP"] = signal.getsignal(signal.SIGHUP)
+                    seen["SIGTERM"] = signal.getsignal(signal.SIGTERM)
+                return super().sandboxed(rdir, claude_real, cwd, cmd, env, stdout, timeout)
+        env = self.run_it(Ops())
+        self.assertIs(seen["SIGHUP"], signal.SIG_IGN)
+        self.assertTrue(callable(seen["SIGTERM"]))
+        self.assertNotIn("signal", env)
+        self.assertIs(signal.getsignal(signal.SIGHUP), signal.SIG_IGN)
+
+    def test_the_last_environment_write_runs_with_halt_signals_ignored(self):
+        """#380: a second `kill` after teardown cannot cut off the record of what
+        teardown did; the handlers come back only after the write."""
+        real, seen = pathlib.Path.write_text, []
+
+        def write_text(path, *a, **k):
+            if path.name == "environment.json":
+                seen.append({n: signal.getsignal(getattr(signal, n))
+                             for n in ("SIGINT", "SIGTERM", "SIGHUP")})
+            return real(path, *a, **k)
+        before = {n: signal.getsignal(getattr(signal, n)) for n in ("SIGINT", "SIGTERM", "SIGHUP")}
+        with mock.patch.object(pathlib.Path, "write_text", write_text):
+            env = self.run_it(FakeOps())
+        self.assertEqual(seen[-1], {n: signal.SIG_IGN for n in ("SIGINT", "SIGTERM", "SIGHUP")})
+        self.assertIn("repos_deleted", env)
         self.assertEqual({n: signal.getsignal(getattr(signal, n)) for n in before}, before)
 
     def test_capture_runs_in_its_own_profile_before_the_sandbox_repo_is_deleted(self):
@@ -1435,7 +1471,7 @@ class RunTests(Tmp):
         self.assertTrue(self.audit()["d_stop_capture"])
 
     def test_a_rehash_that_raises_keeps_the_feed_read(self):
-        """#380 c.1: a stop/ that cannot be re-hashed at the delayed re-audit is a
+        """#380: a stop/ that cannot be re-hashed at the delayed re-audit is a
         d_stop_capture problem, and the audit is still written with that
         re-audit's feed read in it."""
         env = self.run_it(FakeOps())
@@ -1447,6 +1483,27 @@ class RunTests(Tmp):
         self.assertIn("cannot be re-hashed", " ".join(audit["d_stop_capture"]))
         self.assertTrue(audit["account_feed"]["delayed_read"])
         self.assertEqual(len(self.audit()["account_feed"]["reads"]), 2)
+        # And the check runs before the feed is read: if it raises anyway, no
+        # read has been made to lose.
+        late = FakeOps()
+        late.feed_reads, late.t = 1, 8 * 3600
+        with mock.patch.object(R, "stop_capture_problems", side_effect=RuntimeError("x")):
+            with self.assertRaises(RuntimeError):
+                R.write_audit(rdir, env, spec, "me", env["version_dir"], late)
+        self.assertEqual(late.feed_reads, 1)
+
+    def test_an_unreadable_stop_dir_is_a_problem_not_a_raise(self):
+        env = self.run_it(FakeOps())
+        rdir = self.tmp / "out" / "r1"
+        real = os.lstat
+
+        def lstat(p, *a, **k):
+            if pathlib.Path(p) == rdir / "stop":
+                raise PermissionError(13, "denied", str(p))
+            return real(p, *a, **k)
+        with mock.patch.object(R.os, "lstat", lstat):
+            got = R.stop_capture_problems(rdir, env)
+        self.assertIn("stop/ is gone or unreadable", got)
 
     def test_a_bad_capture_turns_a_passing_audit_into_a_fail(self):
         """#380 AC2: from the one setup whose audit passes, change only the
@@ -1487,7 +1544,10 @@ class RunTests(Tmp):
                     # The hash recorded after the removal, so only the per-part
                     # check can see the part is gone.
                     ("gone, hash agrees", lambda: patch.rename(rdir / "diff.patch"),
-                     lambda: (rdir / "diff.patch").rename(patch), True)):
+                     lambda: (rdir / "diff.patch").rename(patch), True),
+                    ("replaced, hash agrees",
+                     lambda: (patch.rename(rdir / "diff.patch"), patch.mkdir()),
+                     lambda: (patch.rmdir(), (rdir / "diff.patch").rename(patch)), True)):
                 with self.subTest(name):
                     change()
                     e = dict(env, stop_capture=dict(rec, sha256=R.stop_sha256(rdir / "stop"))) \
@@ -1495,8 +1555,9 @@ class RunTests(Tmp):
                     got = audit(e)
                     self.assertTrue(got["d_stop_capture"])
                     if rehash:
-                        self.assertEqual(got["d_stop_capture"],
-                                         ["stop capture diff is gone: stop/diff.patch"])
+                        self.assertEqual(got["d_stop_capture"], [
+                            "stop capture diff is %s: stop/diff.patch" % (
+                                "gone" if name.startswith("gone") else "not what was written")])
                     self.assertFalse(got["pass"])
                     undo()
             self.assertTrue(audit(env)["pass"])
@@ -1708,7 +1769,7 @@ class CaptureTests(Tmp):
                 os.unlink(target)
 
     def test_links_and_special_files_inside_the_ledger_are_errors_not_copies(self):
-        """#380 hook finding: stop/ is read later on the host, so nothing in it may
+        """#380: stop/ is read later on the host, so nothing in it may
         be a link a reader would follow. A symlink or FIFO in the ledger is named
         as an error and not copied; the regular files beside it still are, and
         the ledger part is withheld, so the audit fails."""
@@ -1757,7 +1818,7 @@ class CaptureTests(Tmp):
         self.assertNotEqual(R.stop_sha256(d), h)
 
     def test_stop_hash_cannot_be_matched_by_moving_bytes_between_files(self):
-        """#380 k.4: without each file's size ahead of its bytes, a=X plus b=Y and
+        """#380: without each file's size ahead of its bytes, a=X plus b=Y and
         a single a="X\\0Fb\\0Y" feed the hash the same stream."""
         two, one = self.tmp / "two", self.tmp / "one"
         two.mkdir()
@@ -1789,7 +1850,7 @@ class CaptureTests(Tmp):
 
 
 class SandboxProfileTests(Tmp):
-    """#380 k.2: the stop capture's sandbox profile -- argv and wiring. FakeOps
+    """#380: the stop capture's sandbox profile -- argv and wiring. FakeOps
     never runs bwrap, so these pin what the real path builds."""
 
     def argv(self, profile):
@@ -1865,7 +1926,7 @@ class SandboxProfileTests(Tmp):
         self.assertEqual([a[0] for a in started], [R.BWRAP, R.SLIRP])
 
     def test_ops_forward_every_argument_to_run_sandboxed(self):
-        """#380 g.1: FakeOps stands in for Ops everywhere else, so the real Ops'
+        """#380: FakeOps stands in for Ops everywhere else, so the real Ops'
         forwarding is pinned here."""
         rec = mock.Mock(return_value=(0, None))
         o, e = object(), object()

@@ -347,7 +347,11 @@ def sandbox_argv(rdir, claude_real, cwd, info_fd, block_fd, research_dir=RESEARC
     shim imports this module) and the shim dir, and
     read-write only the replicate's `home/`, `work/` and shim log. Nothing else
     of the host or of `rdir` exists inside. `info_fd` reports the child pid and
-    `block_fd` holds the command until `run_sandboxed` has the network up."""
+    `block_fd` holds the command until `run_sandboxed` has the network up.
+
+    That is the `turn` profile. Under `profile="capture"` (the stop capture's
+    git, #380) only `work/` is added after `/tmp` and `/run`, read-only, and
+    `run_sandboxed` attaches no network."""
     rdir = pathlib.Path(rdir)
     resolv_dest = resolv_dest or os.path.realpath("/etc/resolv.conf")
     argv = [BWRAP, "--unshare-all", "--unshare-user", "--cap-drop", "ALL",
@@ -874,14 +878,18 @@ def stop_capture_problems(rdir, env_record):
             except OSError:
                 out.append("stop capture %s is gone: %s" % (key, want))
     stop = pathlib.Path(rdir) / STOP_DIR
+    try:
+        stop_is_dir = stat.S_ISDIR(os.lstat(stop).st_mode)
+    except OSError:
+        stop_is_dir = False
     if not rec.get("sha256"):
         out.append("stop capture recorded no hash")
-    elif not stop.is_dir() or stop.is_symlink():
-        out.append("%s/ is gone" % STOP_DIR)
+    elif not stop_is_dir:
+        out.append("%s/ is gone or unreadable" % STOP_DIR)
     else:
         try:
             got = stop_sha256(stop)
-        except OSError as exc:
+        except Exception as exc:                    # OSError; RecursionError on a deep tree
             out.append("%s/ cannot be re-hashed: %s" % (STOP_DIR, exc))
         else:
             if got != rec["sha256"]:
@@ -1308,9 +1316,15 @@ def cmd_run(a, ops=None):
         env_record.setdefault("interrupted", type(exc).__name__)
         raise
     finally:
-        restore_handlers(previous)
-        env_record["wall_clock_end"] = ops.now()
-        (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
+        # The last record of the run (teardown's outcome among it) is written
+        # with every halt signal ignored, and the handlers come back only after.
+        held = ignore_signals((signal.SIGINT,) + HALT_SIGNALS)
+        try:
+            env_record["wall_clock_end"] = ops.now()
+            (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
+        finally:
+            restore_handlers(held)
+            restore_handlers(previous)
 
 
 # A replicate stopped from outside -- `kill`, `timeout`, a closed terminal --
@@ -1321,14 +1335,29 @@ HALT_SIGNALS = tuple(getattr(signal, n) for n in ("SIGTERM", "SIGHUP") if hasatt
 
 
 def install_halt_handlers(env_record):
-    """Map HALT_SIGNALS to KeyboardInterrupt for the run. -> what to restore."""
+    """Map HALT_SIGNALS to KeyboardInterrupt for the run. -> what to restore. A
+    signal the harness was started ignoring stays ignored: under `nohup`, a
+    closed terminal must not halt the run."""
     def halt(signum, _frame):
         env_record.setdefault("signal", signal.Signals(signum).name)
         raise KeyboardInterrupt(signal.Signals(signum).name)
     previous = {}
     for sig in HALT_SIGNALS:
         try:
+            if signal.getsignal(sig) is signal.SIG_IGN:
+                continue
             previous[sig] = signal.signal(sig, halt)
+        except ValueError:                          # not the main thread
+            pass
+    return previous
+
+
+def ignore_signals(sigs):
+    """Set each of `sigs` to SIG_IGN. -> what to restore."""
+    previous = {}
+    for sig in sigs:
+        try:
+            previous[sig] = signal.signal(sig, signal.SIG_IGN)
         except ValueError:                          # not the main thread
             pass
     return previous
@@ -1373,12 +1402,7 @@ def teardown(ops, henv, planned, env_record, keep):
         return
     if not planned:
         return
-    old = {}
-    for sig in (signal.SIGINT,) + HALT_SIGNALS:
-        try:
-            old[sig] = signal.signal(sig, signal.SIG_IGN)
-        except ValueError:                          # not the main thread
-            pass
+    old = ignore_signals((signal.SIGINT,) + HALT_SIGNALS)
     try:
         for repo in planned:
             try:
