@@ -52,8 +52,10 @@ Applied in this order.
      named.**
 
    An undischargeable criterion does not move where a replicate halts in review. It fixes the kind
-   of step-10 stop the pick reaches, the same in both arms, and raises step-10 cost. Whether such a
-   pick counts toward an outcome defined on stop kind or step-10 cost is #382's to decide.
+   of step-10 stop the pick reaches, the same in both arms, and raises step-10 cost. It can also
+   raise the ac-verify round count, since an unmet criterion sends step 10 to its second round, and
+   outcome 1 counts ac-verify rounds. Whether such a pick counts toward any outcome is #382's to
+   decide.
 2. **No reason to read the dev-loop engine inside the fixture repo.** `replicate.py`'s
    `audit_engine_loads` records a problem for any engine read that `engine_cost.classify` calls
    `'tree'` (an engine file read at a path with no `/.claude/plugins/cache/` segment), and the audit's `pass`
@@ -157,7 +159,7 @@ settles a pick, it says "not established".
   human release of the cap. Engine 0.2.1.
 - **In-review halt:** high overall. (a) low; (b) high.
 - **Sandbox:** the hard part holds, because `TEST_CMD` deselects the integration tier
-  (`addopts = "-m 'not integration'"` in `pyproject.toml` at the base). Not dischargeable: the issue
+  (`addopts` in `pyproject.toml` at the base includes `-m 'not integration'`). Not dischargeable: the issue
   has no acceptance-criteria section, and the run's plan wrote an AC-8 — `uv run pytest -m
   integration` green locally against a throwaway `postgres:16` — that its architect made a merge
   precondition. That run also needs the three local corpora. A replay's step 10 cannot do it, so
@@ -186,7 +188,8 @@ settles a pick, it says "not established".
   (`CLAUDE.md`, `docs/AGENT.md`, `docs/CHANGELOG.md`, `.claude/specs/decisions.md`). Offline tests.
 - **Why it is here:** ordinary code with five code-review rounds. It is the largest pick; it is kept
   because the planning pass found no smaller ≥ 5 issue in esg without a round-1 design-question stop
-  or an outside dependency.
+  or an outside dependency. That search used rule 1's earlier wording, under which a dependency
+  needed only at acceptance excluded a candidate, and it was not re-run under the amended rule.
 - **Sandbox:** the hard part holds (offline tests). Every criterion can be discharged in the
   sandbox: AC4 ("reading an archived YAML written before this change still loads") by a tracked
   fixture YAML in the pre-verdict shape, which the run wrote. Fidelity: the historical verifier also
@@ -229,11 +232,13 @@ settles a pick, it says "not established".
   the tests use, and criterion 7 is a decision. Fidelity: the historical review measured one gap
   against a live PostgreSQL 16.11 server, which a replay's review cannot reach.
 - **CI:** as esg #74.
-- **Config:** frozen with named rebinds, from the derived base `504810a`. Two differences from #74's
-  config: the `DESIGN_AGENT` row names two uses (it adds the step-8 scope ruling); and the run
-  itself planned and reviewed on `a8ca32c`, which lacks that change, so the fixture freezes a config
-  the historical run did not have. That matters only if a design-question finding arises, and #93
-  had none.
+- **Config:** frozen with named rebinds, from the derived base `504810a`. It is not #74's config
+  (`git diff 0c94ff9 504810a -- .claude/loop.config.md`). Among the differences: a §6, "Claim
+  authoring — the class this project does not assert", a rule against writing the kind of claim
+  R1's outcome 2 counts, which #74's base lacks; and a `DESIGN_AGENT` row and §2 preamble that add
+  the step-8 scope ruling. The run itself planned and reviewed on `a8ca32c`, which already had §6
+  but not the `DESIGN_AGENT` and §2 changes, so the fixture freezes a config the historical run did
+  not have. That part matters only if a design-question finding arises, and #93 had none.
 - **Auto-loaded at base:** as esg #74, with root `CLAUDE.md` at 30,911 bytes.
 - **Tests need:** as esg #74. Tracked tree 365 files, 134 MB.
 - **Pre-merge comments:** one (2026-09-07), correcting the body's SIGPIPE framing: the inversion is
@@ -284,8 +289,10 @@ settles a pick, it says "not established".
   established, so under rule 1 that half is named as not dischargeable, and this pick's step-10
   stop kind may be fixed by the environment.
 - **CI:** as esg #74.
-- **Config:** frozen with named rebinds. Its `DESIGN_AGENT` row names two uses (it adds the step-8
-  scope ruling), unlike #74's.
+- **Config:** frozen with named rebinds. It is not #74's config
+  (`git diff 0c94ff9 3fef3d8 -- .claude/loop.config.md`). Among the differences, it carries the same
+  §6 "Claim authoring" rule as #93's base, which #74's base lacks, and a `DESIGN_AGENT` row that adds
+  the step-8 scope ruling.
 - **Auto-loaded at base:** root `CLAUDE.md`, 61,060 bytes; same hooks and skills as esg #74.
 - **Tests need:** as esg #74. Tracked tree 408 files, 91 MB.
 - **Pre-merge comments:** one owner comment (2026-11-04) on placement and the overlap with #252.
@@ -403,8 +410,8 @@ Facts with their evidence. None decides anything; each is #382's to use or not.
    in-tree engine reads (rule 2).
 5. **Some picks reach a step-10 stop whose kind the environment fixes.** vote #172 has a criterion
    the sandbox cannot discharge, and esg #211 may (rule 1's disclosure part; their sections). Such a
-   pick reaches the same kind of step-10 stop in both arms, so it can carry no outcome defined on
-   stop kind.
+   pick reaches the same kind of step-10 stop in both arms, possibly after a second ac-verify round.
+   Whether it counts toward an outcome is #382's to decide (rule 1).
 
 ## Scope
 
