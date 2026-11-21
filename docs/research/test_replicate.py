@@ -10,7 +10,9 @@ import itertools
 import json
 import os
 import pathlib
+import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -991,7 +993,7 @@ class FakeOps:
                  git_noise=False, git_timeout=False):
         self.probe_error = set(probe_error)
         self.status, self.git_noise, self.git_timeout = status, git_noise, git_timeout
-        self.git_calls = []
+        self.git_calls, self.handlers, self.teardown_signals = [], {}, []
         self.calls, self.existing = [], set(existing)
         self.audit_events, self.mutate_cache, self.feed_reads = audit_events, mutate_cache, 0
         self.install_problems, self.turn, self.fail_create = list(install_problems), turn, fail_create
@@ -1020,25 +1022,29 @@ class FakeOps:
                 raise R.Refused("create failed")
             self.existing.add(args[2])
         if args[:2] == ["repo", "delete"]:
+            self.teardown_signals.append({n: signal.getsignal(getattr(signal, n))
+                                          for n in ("SIGINT", "SIGTERM", "SIGHUP")})
             self.existing.discard(args[2])
         if args[:2] == ["issue", "create"]:
             return fake_proc(0, "https://github.com/x/issues/1")
         return fake_proc(0)
 
-    def sandboxed(self, rdir, claude_real, cwd, cmd, env, stdout=None,
-                  stderr=subprocess.STDOUT, timeout=None):
+    def capture_sandboxed(self, rdir, cwd, cmd, env, stdout, stderr, timeout):
+        """The stop capture's git, run for real on the clone, and logged with its
+        environment, so a test can tell it came through the capture profile."""
+        self.calls.append((self.now(), ["capture_sandboxed"] + list(cmd)))
+        self.git_calls.append({"cmd": list(cmd), "env": dict(env), "timeout": timeout})
+        if self.git_timeout:
+            raise subprocess.TimeoutExpired(cmd, timeout)
+        if self.git_noise:          # run_sandboxed merges stderr into stdout by default
+            (stdout if stderr == subprocess.STDOUT else stderr).write(b"warning: noise\n")
+        r = _REAL_RUN(cmd, cwd=str(cwd), env=env, stdout=stdout,
+                      stderr=stdout if stderr == subprocess.STDOUT else stderr)
+        return r.returncode, None
+
+    def sandboxed(self, rdir, claude_real, cwd, cmd, env, stdout=None, timeout=None):
         if cmd[0] == "git":
-            # The stop capture's git, run for real on the clone, and logged with
-            # its environment, so a test can tell it came through the sandbox.
-            self.calls.append((self.now(), ["sandboxed"] + list(cmd)))
-            self.git_calls.append({"cmd": list(cmd), "env": dict(env), "timeout": timeout})
-            if self.git_timeout:
-                raise subprocess.TimeoutExpired(cmd, timeout)
-            if self.git_noise:      # run_sandboxed merges stderr into stdout by default
-                (stdout if stderr == subprocess.STDOUT else stderr).write(b"warning: noise\n")
-            r = _REAL_RUN(cmd, cwd=str(cwd), env=env, stdout=stdout,
-                          stderr=stdout if stderr == subprocess.STDOUT else stderr)
-            return r.returncode, None
+            raise AssertionError("capture git reached the turn sandbox: %r" % (cmd,))
         if "install" in cmd:
             cache = pathlib.Path(rdir) / "home" / ".claude" / "plugins" / "cache" / \
                 "claude-code-loop" / "dev-loop" / "0.6.0"
@@ -1049,6 +1055,12 @@ class FakeOps:
         do_work(cwd, self.status)
         if self.turn == "interrupt":
             raise KeyboardInterrupt
+        if self.turn in ("SIGTERM", "SIGHUP"):
+            # What the harness's handler does when `kill` lands mid-turn.
+            sig = getattr(signal, self.turn)
+            handler = signal.getsignal(sig)
+            self.handlers[self.turn] = handler
+            handler(sig, None)      # SIG_DFL (an int) is not callable: the test fails
         # A parent transcript, so the audit gets past project_dir to its checks.
         write_jsonl(pathlib.Path(rdir) / "home" / ".claude" / "projects" /
                     R.project_slug(cwd) / "s.jsonl", [asst()])
@@ -1158,6 +1170,10 @@ class RunTests(Tmp):
         self.assertEqual(env["repos_deleted"], [self.PLUG])
         self.assertEqual(ops.existing, set())
         self.assertNotIn(self.SB, env["repos_planned"])
+        # #380: the capture runs here too, on the base clone; no ledger exists yet.
+        rec = env["stop_capture"]
+        self.assertEqual(set(rec["files"]), set(R.STOP_FILES) - {"ledger"})
+        self.assertEqual(rec["errors"], ["ledger: ledger .loop-ledger does not exist at the stop"])
 
     def test_keyboard_interrupt_mid_drive_still_tears_down(self):
         ops = FakeOps(turn="interrupt")
@@ -1343,12 +1359,15 @@ class RunTests(Tmp):
     def test_capture_runs_on_every_way_a_replicate_ends(self):
         """#380 AC2: the final in-acceptance stop, an in-review halt, a
         gate-error-shaped halt (a row left at a pipeline status no stop names),
-        and an external halt each leave a complete capture, named in
-        environment.json, of the clone as the run left it."""
+        and an external halt -- Ctrl-C, `kill` (SIGTERM) or a closed terminal
+        (SIGHUP) -- each leave a complete capture, named in environment.json, of
+        the clone as the run left it."""
         cases = (("in-acceptance", "done", None, "done"),
                  ("in-review", "done", None, "in-review"),
                  ("in-pr", "done", None, "in-pr"),
-                 ("in-acceptance", "interrupt", KeyboardInterrupt, None))
+                 ("in-acceptance", "interrupt", KeyboardInterrupt, None),
+                 ("in-acceptance", "SIGTERM", KeyboardInterrupt, None),
+                 ("in-acceptance", "SIGHUP", KeyboardInterrupt, None))
         for i, (status, turn, exc, outcome) in enumerate(cases):
             with self.subTest(status=status, turn=turn):
                 out = self.tmp / ("o%d" % i)
@@ -1363,6 +1382,9 @@ class RunTests(Tmp):
                 env = json.loads((rdir / "environment.json").read_text())
                 if outcome:
                     self.assertIn(outcome, env["outcome"])
+                if turn.startswith("SIG"):
+                    self.assertEqual(env["signal"], turn)
+                    self.assertEqual(env["interrupted"], "KeyboardInterrupt")
                 rec = self.stop_ok(env, rdir)
                 clone = rdir / "work" / "r1"
                 self.assertEqual(rec["head_sha"], git(clone, "rev-parse", "HEAD"))
@@ -1370,10 +1392,22 @@ class RunTests(Tmp):
                 self.assertIn("| %s |" % status,
                               (rdir / "stop" / "ledger" / "fixture" / "queue.md").read_text())
 
-    def test_capture_runs_in_the_sandbox_before_the_sandbox_repo_is_deleted(self):
-        """#380: every capture git call went through ops.sandboxed, carrying no
-        token and a timeout, and all of them precede the delete of the sandbox
-        repo (the plugin repo goes at install, before any turn)."""
+    def test_halt_signals_are_handled_for_the_run_only_and_ignored_in_teardown(self):
+        """#380 c.2: during the run SIGTERM and SIGHUP raise KeyboardInterrupt (so
+        every finally runs); teardown ignores them as it ignores SIGINT; after
+        cmd_run the previous handlers are back."""
+        before = {n: signal.getsignal(getattr(signal, n)) for n in ("SIGTERM", "SIGHUP")}
+        ops = FakeOps(turn="SIGTERM")
+        self.run_it(ops, KeyboardInterrupt)
+        self.assertTrue(callable(ops.handlers["SIGTERM"]))
+        self.assertEqual(ops.teardown_signals[-1], {n: signal.SIG_IGN
+                                                    for n in ("SIGINT", "SIGTERM", "SIGHUP")})
+        self.assertEqual({n: signal.getsignal(getattr(signal, n)) for n in before}, before)
+
+    def test_capture_runs_in_its_own_profile_before_the_sandbox_repo_is_deleted(self):
+        """#380: every capture git call went through ops.capture_sandboxed with
+        exactly CAPTURE_ENV and the timeout, and all of them precede the delete
+        of the sandbox repo (the plugin repo goes at install, before any turn)."""
         ops = FakeOps()
         self.run_it(ops)
         self.assertEqual(sorted(c["cmd"][5] for c in ops.git_calls),
@@ -1381,12 +1415,14 @@ class RunTests(Tmp):
         for c in ops.git_calls:
             self.assertEqual(c["cmd"][:5], R.CAPTURE_GIT)
             self.assertEqual(c["timeout"], R.CAPTURE_TIMEOUT)
-            self.assertFalse({"CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN", "GH_REPO"} & set(c["env"]))
-        git_times = [t for t, c in ops.calls if c[0] == "sandboxed"]
+            self.assertEqual(c["env"], R.CAPTURE_ENV)
+        self.assertFalse([k for k in R.CAPTURE_ENV if re.search("TOKEN|KEY|SECRET", k)])
+        git_times = [t for t, c in ops.calls if c[0] == "capture_sandboxed"]
         delete = [t for t, c in ops.calls if c[0] == R.REAL_GH and c[1:3] == ["repo", "delete"]
                   and c[3] == self.SB]
         self.assertEqual(len(delete), 1)
-        self.assertTrue(git_times and max(git_times) < delete[0], (git_times, delete))
+        self.assertEqual(len(git_times), 5)
+        self.assertTrue(max(git_times) < delete[0], (git_times, delete))
 
     def test_a_capture_that_raises_is_recorded_and_fails_the_audit(self):
         """#380 AC2 at the call site: an exception from the capture never reaches
@@ -1396,9 +1432,21 @@ class RunTests(Tmp):
         errors = env["stop_capture"]["errors"]
         self.assertIn("capture did not complete", errors)
         self.assertTrue(any("boom" in e for e in errors), errors)
-        audit = self.audit()
-        self.assertTrue(audit["d_stop_capture"])
-        self.assertFalse(audit["pass"])
+        self.assertTrue(self.audit()["d_stop_capture"])
+
+    def test_a_rehash_that_raises_keeps_the_feed_read(self):
+        """#380 c.1: a stop/ that cannot be re-hashed at the delayed re-audit is a
+        d_stop_capture problem, and the audit is still written with that
+        re-audit's feed read in it."""
+        env = self.run_it(FakeOps())
+        rdir, spec = self.tmp / "out" / "r1", R.load_fixture(env["fixture_dir"])
+        late = FakeOps()
+        late.feed_reads, late.t = 1, 7 * 3600
+        with mock.patch.object(R, "stop_sha256", side_effect=PermissionError("denied")):
+            audit = R.write_audit(rdir, env, spec, "me", env["version_dir"], late)
+        self.assertIn("cannot be re-hashed", " ".join(audit["d_stop_capture"]))
+        self.assertTrue(audit["account_feed"]["delayed_read"])
+        self.assertEqual(len(self.audit()["account_feed"]["reads"]), 2)
 
     def test_a_bad_capture_turns_a_passing_audit_into_a_fail(self):
         """#380 AC2: from the one setup whose audit passes, change only the
@@ -1416,6 +1464,8 @@ class RunTests(Tmp):
             variants = {
                 "absent": {k: v for k, v in env.items() if k != "stop_capture"},
                 "errors": dict(env, stop_capture=dict(rec, errors=["status: boom"])),
+                "errors unreadable": dict(env, stop_capture={k: v for k, v in rec.items()
+                                                             if k != "errors"}),
                 "missing part": dict(env, stop_capture=dict(
                     rec, files={k: v for k, v in rec["files"].items() if k != "status"})),
                 "renamed part": dict(env, stop_capture=dict(
@@ -1429,15 +1479,24 @@ class RunTests(Tmp):
                     self.assertFalse(got["pass"])
             patch = rdir / "stop" / "diff.patch"
             original = patch.read_bytes()
-            for name, change, undo in (
+            for name, change, undo, rehash in (
                     ("tampered", lambda: patch.write_bytes(original + b"x"),
-                     lambda: patch.write_bytes(original)),
+                     lambda: patch.write_bytes(original), False),
                     ("gone", lambda: patch.rename(rdir / "diff.patch"),
-                     lambda: (rdir / "diff.patch").rename(patch))):
+                     lambda: (rdir / "diff.patch").rename(patch), False),
+                    # The hash recorded after the removal, so only the per-part
+                    # check can see the part is gone.
+                    ("gone, hash agrees", lambda: patch.rename(rdir / "diff.patch"),
+                     lambda: (rdir / "diff.patch").rename(patch), True)):
                 with self.subTest(name):
                     change()
-                    got = audit(env)
+                    e = dict(env, stop_capture=dict(rec, sha256=R.stop_sha256(rdir / "stop"))) \
+                        if rehash else env
+                    got = audit(e)
                     self.assertTrue(got["d_stop_capture"])
+                    if rehash:
+                        self.assertEqual(got["d_stop_capture"],
+                                         ["stop capture diff is gone: stop/diff.patch"])
                     self.assertFalse(got["pass"])
                     undo()
             self.assertTrue(audit(env)["pass"])
@@ -1507,7 +1566,7 @@ class RunTests(Tmp):
 
 
 class CaptureTests(Tmp):
-    """#380 AC1: `capture_stop` on a real clone, through FakeOps' sandbox."""
+    """#380 AC1: `capture_stop` on a real clone, through FakeOps' capture sandbox."""
 
     def setUp(self):
         super().setUp()
@@ -1517,13 +1576,12 @@ class CaptureTests(Tmp):
         self.base = R.build_base(src, self.tmp / "clone")
         self.clone = self.tmp / "clone"
         do_work(self.clone)
-        os.symlink("queue.md", self.clone / ".loop-ledger" / "fixture" / "link.md")
         self.rdir = self.tmp / "r"
         self.rdir.mkdir()
 
-    def capture(self, ops=None, base=None, ledger_root=".loop-ledger"):
-        return R.capture_stop(self.rdir, self.clone, base or self.base, ledger_root,
-                              "/bin/true", ops or FakeOps())
+    def capture(self, ops=None, base=None, ledger_root=".loop-ledger", rdir=None):
+        return R.capture_stop(rdir or self.rdir, self.clone, base or self.base, ledger_root,
+                              ops or FakeOps())
 
     def read(self, key):
         return (self.rdir / R.STOP_FILES[key]).read_bytes()
@@ -1547,14 +1605,14 @@ class CaptureTests(Tmp):
         self.assertIn(" M work.txt", status)
         ledger = self.rdir / R.STOP_FILES["ledger"] / "fixture"
         self.assertIn("in-acceptance", (ledger / "queue.md").read_text())
-        self.assertTrue((ledger / "link.md").is_symlink())
-        self.assertEqual(os.readlink(ledger / "link.md"), "queue.md")
         self.assertEqual(rec["sha256"], R.stop_sha256(self.rdir / "stop"))
         self.assertEqual(R.stop_capture_problems(self.rdir, {"stop_capture": rec}), [])
 
-    def test_no_host_process_touches_the_clone(self):
-        """#380 Q1: the capture's git goes through the sandbox only. With every
-        host subprocess barred, the capture still completes."""
+    def test_capture_spawns_no_host_subprocess(self):
+        """#380: with subprocess.run and subprocess.Popen barred on the host, the
+        capture still completes; that its git went through ops.capture_sandboxed
+        is test_capture_runs_in_its_own_profile_before_the_sandbox_repo_is_deleted's
+        to show."""
         def barred(*a, **k):
             raise AssertionError("host process during capture: %r" % (a[:1],))
         with mock.patch.object(R.subprocess, "run", barred), \
@@ -1567,6 +1625,36 @@ class CaptureTests(Tmp):
         self.assertEqual(rec["errors"], [])
         for key in ("diff", "uncommitted", "head", "branch", "status"):
             self.assertNotIn(b"warning: noise", self.read(key), key)
+
+    def test_hostile_repo_config_does_not_steer_what_options_can_close(self):
+        """#380: the replicate writes the clone's config. An external diff, a
+        textconv driver and an fsmonitor hook it names never run; untracked
+        files stay listed under showUntrackedFiles=no, inside an untracked
+        directory too; a binary change comes out as a binary patch."""
+        sentinel = self.tmp / "ran"
+        hook = self.tmp / "hook.sh"
+        hook.write_text("#!/bin/sh\necho ran >> %s\ncat \"$1\" 2>/dev/null\n" % sentinel)
+        hook.chmod(0o755)
+        (self.clone / ".gitattributes").write_text("*.txt diff=tc\n")
+        (self.clone / "blob.bin").write_bytes(bytes(range(256)))
+        git(self.clone, "add", "blob.bin", ".gitattributes")
+        git(self.clone, "commit", "-q", "-m", "binary")
+        (self.clone / "newdir").mkdir()
+        (self.clone / "newdir" / "f").write_text("x\n")
+        # Last, so no git call of the test's own runs under it.
+        for k, v in (("diff.external", str(hook)), ("diff.tc.textconv", str(hook)),
+                     ("core.fsmonitor", str(hook)), ("status.showUntrackedFiles", "no"),
+                     ("color.ui", "always"), ("diff.noprefix", "true")):
+            _REAL_RUN(["git", "config", k, v], cwd=str(self.clone), env=GIT_ENV, check=True)
+        rec = self.capture()
+        self.assertEqual(rec["errors"], [])
+        self.assertFalse(sentinel.exists(), sentinel.read_text() if sentinel.exists() else "")
+        diff = self.read("diff")
+        self.assertIn(b"GIT binary patch", diff)
+        self.assertIn(b"+committed line", diff)
+        self.assertIn(b"diff --git a/blob.bin b/blob.bin", diff)
+        self.assertNotIn(b"\x1b[", diff + self.read("uncommitted"))
+        self.assertIn("?? newdir/f", self.read("status").decode())
 
     def test_detached_head_is_not_an_error(self):
         git(self.clone, "checkout", "-q", "--detach")
@@ -1596,8 +1684,8 @@ class CaptureTests(Tmp):
         self.assertEqual(set(rec["files"]), set(R.STOP_FILES) - {"ledger"})
 
     def test_a_symlinked_ledger_path_is_refused_and_nothing_copied(self):
-        """#380 B2: a link anywhere from the clone down to the ledger root would
-        resolve on the host; the copy refuses rather than follow it."""
+        """A link anywhere from the clone down to the ledger root would resolve
+        on the host; the copy refuses rather than follow it."""
         secret = self.tmp / "secret"
         secret.mkdir()
         (secret / "harness-token").write_text("token")
@@ -1612,23 +1700,45 @@ class CaptureTests(Tmp):
                 os.symlink(secret if linked is None else self.tmp, target)
                 if linked:
                     (self.tmp / ".loop-ledger").mkdir(exist_ok=True)
-                rec = R.capture_stop(rdir, self.clone, self.base, ledger_root, "/bin/true", FakeOps())
+                rec = self.capture(ledger_root=ledger_root, rdir=rdir)
                 self.assertEqual(len(rec["errors"]), 1, rec["errors"])
                 self.assertIn("is a symlink", rec["errors"][0])
                 self.assertFalse(os.path.lexists(rdir / R.STOP_FILES["ledger"]))
                 self.assertNotIn("ledger", rec["files"])
                 os.unlink(target)
 
+    def test_links_and_special_files_inside_the_ledger_are_errors_not_copies(self):
+        """#380 hook finding: stop/ is read later on the host, so nothing in it may
+        be a link a reader would follow. A symlink or FIFO in the ledger is named
+        as an error and not copied; the regular files beside it still are, and
+        the ledger part is withheld, so the audit fails."""
+        led = self.clone / ".loop-ledger" / "fixture"
+        os.symlink(str(self.tmp / "secret-target"), led / "link.md")
+        os.mkfifo(led / "pipe")
+        rec = self.capture()
+        out = self.rdir / R.STOP_FILES["ledger"] / "fixture"
+        self.assertEqual(sorted(rec["errors"]), [
+            "ledger: .loop-ledger/fixture/link.md is a symlink to %r; not copied"
+            % str(self.tmp / "secret-target"),
+            "ledger: .loop-ledger/fixture/pipe is not a regular file or directory; not copied"])
+        self.assertFalse(os.path.lexists(out / "link.md"))
+        self.assertFalse(os.path.lexists(out / "pipe"))
+        self.assertTrue((out / "queue.md").is_file())
+        self.assertNotIn("ledger", rec["files"])
+        self.assertTrue(R.stop_capture_problems(self.rdir, {"stop_capture": rec}))
+
     def test_a_symlinked_clone_is_refused(self):
         link = self.tmp / "clone-link"
         os.symlink(self.clone, link)
-        self.assertIn("is a symlink", R._copy_ledger(link, ".loop-ledger", self.tmp / "d"))
+        errors = R._copy_ledger(link, ".loop-ledger", self.tmp / "d")
+        self.assertIn("is a symlink", errors[0])
         self.assertFalse((self.tmp / "d").exists())
 
     def test_ledger_root_must_stay_inside_the_clone(self):
         for bad in ("/etc", "../x", ""):
             with self.subTest(bad):
-                self.assertIn("not a relative path", R._copy_ledger(self.clone, bad, self.tmp / "d"))
+                self.assertIn("not a relative path",
+                              R._copy_ledger(self.clone, bad, self.tmp / "d")[0])
 
     def test_stop_hash_follows_no_link_and_sees_every_change(self):
         d = self.tmp / "h"
@@ -1645,6 +1755,128 @@ class CaptureTests(Tmp):
         h = R.stop_sha256(d)
         (d / "f").write_text("b")
         self.assertNotEqual(R.stop_sha256(d), h)
+
+    def test_stop_hash_cannot_be_matched_by_moving_bytes_between_files(self):
+        """#380 k.4: without each file's size ahead of its bytes, a=X plus b=Y and
+        a single a="X\\0Fb\\0Y" feed the hash the same stream."""
+        two, one = self.tmp / "two", self.tmp / "one"
+        two.mkdir()
+        one.mkdir()
+        (two / "a").write_bytes(b"X")
+        (two / "b").write_bytes(b"Y")
+        (one / "a").write_bytes(b"X\0Fb\0Y")
+        self.assertNotEqual(R.stop_sha256(two), R.stop_sha256(one))
+
+    def test_stop_hash_reads_in_chunks(self):
+        d = self.tmp / "big"
+        d.mkdir()
+        (d / "f").write_bytes(b"z" * (R.HASH_CHUNK * 2 + 1))
+        real_open, sizes = open, []
+
+        class Rec:
+            def __init__(self, f):
+                self.f = f
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                self.f.close()
+            def read(self, n=-1):
+                sizes.append(n)
+                return self.f.read(n)
+        with mock.patch("builtins.open", lambda p, m="r", *a, **k: Rec(real_open(p, m, *a, **k))):
+            R.stop_sha256(d)
+        self.assertTrue(sizes and all(n == R.HASH_CHUNK for n in sizes), sizes)
+
+
+class SandboxProfileTests(Tmp):
+    """#380 k.2: the stop capture's sandbox profile -- argv and wiring. FakeOps
+    never runs bwrap, so these pin what the real path builds."""
+
+    def argv(self, profile):
+        return R.sandbox_argv(self.tmp, "/opt/claude", self.tmp / "work" / "r1", 5, 6,
+                              research_dir="/research", resolv_dest="/etc/resolv.conf",
+                              links=(), profile=profile)
+
+    def test_capture_profile_mounts_work_read_only_and_nothing_else_of_rdir(self):
+        argv = self.argv("capture")
+        self.assertIn("--unshare-all", argv)
+        self.assertNotIn("--bind", argv)                    # nothing writable from the host
+        ro = [argv[i + 1] for i, x in enumerate(argv) if x == "--ro-bind"]
+        self.assertEqual([p for p in ro if p.startswith(str(self.tmp))], [str(self.tmp / "work")])
+        for absent in ("/opt/claude", "/research", "home", "gh-calls.jsonl", "resolv.conf", "bin"):
+            self.assertFalse([x for x in argv if x == absent or x.endswith("/" + absent)], absent)
+        self.assertEqual(argv[-2:], ["--chdir", str(self.tmp / "work" / "r1")])
+
+    def test_turn_profile_is_unchanged(self):
+        argv = self.argv("turn")
+        rw = [argv[i + 1] for i, x in enumerate(argv) if x == "--bind"]
+        self.assertEqual(rw, [str(self.tmp / n) for n in ("home", "work", "gh-calls.jsonl")])
+        self.assertIn("/opt/claude", argv)
+
+    def test_unknown_profile_refuses(self):
+        with self.assertRaises(ValueError):
+            self.argv("other")
+
+    def run_fake(self, profile):
+        """run_sandboxed with Popen faked: bwrap reports a pid on --info-fd and
+        slirp4netns, if started, reports ready."""
+        started = []
+
+        class Proc:
+            returncode = 0
+
+            def __init__(self, argv, pass_fds=(), **kw):
+                started.append(argv)
+                self.block = None
+                if argv[0] == R.BWRAP:
+                    os.write(int(argv[argv.index("--info-fd") + 1]), b'{"child-pid": 1}')
+                    # Hold --block-fd open, as bwrap does, until the run ends.
+                    self.block = os.dup(int(argv[argv.index("--block-fd") + 1]))
+                else:
+                    os.write(pass_fds[0], b"1")
+
+            def communicate(self, timeout=None):
+                self.wait()
+                return None, None
+
+            def wait(self, timeout=None):
+                if self.block is not None:
+                    os.close(self.block)
+                    self.block = None
+                return 0
+
+            def kill(self):
+                pass
+        with mock.patch.object(R.subprocess, "Popen", Proc):
+            rc, _ = R.run_sandboxed(self.tmp, None, self.tmp, ["git", "status"], {},
+                                    stdout=None, stderr=None, timeout=5, profile=profile)
+        return rc, started
+
+    def test_capture_profile_starts_no_network(self):
+        rc, started = self.run_fake("capture")
+        self.assertEqual(rc, 0)
+        self.assertEqual([a[0] for a in started], [R.BWRAP])
+        self.assertIn("--ro-bind", started[0])
+        self.assertFalse((self.tmp / "resolv.conf").exists())
+
+    def test_turn_profile_starts_slirp(self):
+        (self.tmp / "bin").mkdir()
+        _, started = self.run_fake("turn")
+        self.assertEqual([a[0] for a in started], [R.BWRAP, R.SLIRP])
+
+    def test_ops_forward_every_argument_to_run_sandboxed(self):
+        """#380 g.1: FakeOps stands in for Ops everywhere else, so the real Ops'
+        forwarding is pinned here."""
+        rec = mock.Mock(return_value=(0, None))
+        o, e = object(), object()
+        with mock.patch.object(R, "run_sandboxed", rec):
+            R.Ops().capture_sandboxed("rd", "cwd", ["git"], {"A": "1"}, stdout=o, stderr=e,
+                                      timeout=7)
+            R.Ops().sandboxed("rd", "/c", "cwd", ["claude"], {}, stdout=o, timeout=9)
+        cap, turn = rec.call_args_list
+        self.assertEqual(cap, mock.call("rd", None, "cwd", ["git"], {"A": "1"}, stdout=o,
+                                        stderr=e, timeout=7, profile="capture"))
+        self.assertEqual(turn, mock.call("rd", "/c", "cwd", ["claude"], {}, stdout=o, timeout=9))
 
 
 class ProvenanceTests(Tmp):
