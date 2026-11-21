@@ -1424,8 +1424,8 @@ class RunTests(Tmp):
         self.assertIs(signal.getsignal(signal.SIGHUP), signal.SIG_IGN)
 
     def test_the_last_environment_write_runs_with_halt_signals_ignored(self):
-        """#380: a second `kill` after teardown cannot cut off the record of what
-        teardown did; the handlers come back only after the write."""
+        """#380: the last environment.json write runs with SIGINT and the halt
+        signals ignored, and the handlers come back only after it."""
         real, seen = pathlib.Path.write_text, []
 
         def write_text(path, *a, **k):
@@ -1439,6 +1439,27 @@ class RunTests(Tmp):
         self.assertEqual(seen[-1], {n: signal.SIG_IGN for n in ("SIGINT", "SIGTERM", "SIGHUP")})
         self.assertIn("repos_deleted", env)
         self.assertEqual({n: signal.getsignal(getattr(signal, n)) for n in before}, before)
+
+    def test_halt_is_never_reinstalled_after_the_last_write(self):
+        """#380: the handlers come back in one pass after the final
+        environment.json write; no signal.signal call after that write installs
+        the harness's `halt` handler."""
+        real_signal, real_write, log = signal.signal, pathlib.Path.write_text, []
+
+        def record_signal(sig, handler):
+            log.append(("signal", getattr(handler, "__name__", handler)))
+            return real_signal(sig, handler)
+
+        def write_text(path, *a, **k):
+            if path.name == "environment.json":
+                log.append(("write", None))
+            return real_write(path, *a, **k)
+        with mock.patch.object(signal, "signal", record_signal), \
+                mock.patch.object(pathlib.Path, "write_text", write_text):
+            self.run_it(FakeOps())
+        last = max(i for i, e in enumerate(log) if e[0] == "write")
+        self.assertIn(("signal", "halt"), log[:last])       # it was installed for the run
+        self.assertNotIn(("signal", "halt"), log[last:])
 
     def test_capture_runs_in_its_own_profile_before_the_sandbox_repo_is_deleted(self):
         """#380: every capture git call went through ops.capture_sandboxed with

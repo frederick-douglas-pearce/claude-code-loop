@@ -1317,20 +1317,25 @@ def cmd_run(a, ops=None):
         raise
     finally:
         # The last record of the run (teardown's outcome among it) is written
-        # with every halt signal ignored, and the handlers come back only after.
+        # with SIGINT and HALT_SIGNALS ignored; the caller's handlers come back
+        # after it, in one pass, so `halt` is never reinstalled.
         held = ignore_signals((signal.SIGINT,) + HALT_SIGNALS)
         try:
             env_record["wall_clock_end"] = ops.now()
             (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
         finally:
-            restore_handlers(held)
-            restore_handlers(previous)
+            restore_handlers({**held, **previous})
 
 
 # A replicate stopped from outside -- `kill`, `timeout`, a closed terminal --
 # takes the same path as Ctrl-C (#380): Python's default for these signals ends
 # the process without running a `finally`, which would skip the stop capture,
 # environment.json, the audit and the teardown, and leak the repos.
+# What this leaves unprotected: a second signal arriving in the few bytecodes
+# between the start of a `finally` and its `ignore_signals` still raises there.
+# At teardown's entry that can strand the repos (recorded: `repos_planned`
+# without `repos_deleted`); after teardown it loses the final environment.json
+# write. Accepted for #380; closing it is #384's.
 HALT_SIGNALS = tuple(getattr(signal, n) for n in ("SIGTERM", "SIGHUP") if hasattr(signal, n))
 
 
@@ -1393,8 +1398,9 @@ def create_repo(ops, henv, repo, planned):
 
 def teardown(ops, henv, planned, env_record, keep):
     """Delete each planned repo that exists. SIGINT and HALT_SIGNALS are ignored
-    for the loop, and each repo is handled on its own, so one failure or a second
-    Ctrl-C or `kill` does not strand the rest. A repo whose existence cannot be told is recorded, never
+    during the loop, and each repo is handled on its own, so neither one failure
+    nor a signal during the loop strands the rest (one at its entry can; see
+    HALT_SIGNALS). A repo whose existence cannot be told is recorded, never
     deleted blind."""
     if keep:
         gone = env_record.get("plugin_repo") if env_record.get("plugin_repo_deleted") else None
@@ -1549,8 +1555,9 @@ def _run(a, spec, rdir, env_record, ops):
         finally:
             env_record.setdefault("run_end", ops.now())
             # The stop capture (#380) runs first, before the audit reads it and
-            # before the outer finally's teardown. The placeholder stands if a
-            # second interrupt cuts it short; the audit fails on either.
+            # before the outer finally's teardown. If a second interrupt cuts it
+            # short, the placeholder stands and no audit runs, so no `pass`
+            # exists; a later `audit` fails on the placeholder.
             env_record["stop_capture"] = {"errors": ["capture did not complete"]}
             try:
                 env_record["stop_capture"] = capture_stop(rdir, clone, spec["base_sha"],
