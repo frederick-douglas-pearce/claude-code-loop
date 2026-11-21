@@ -990,9 +990,10 @@ class FakeOps:
 
     def __init__(self, install_problems=(), turn="done", existing=(), fail_create=(),
                  audit_events="ok", mutate_cache=False, probe_error=(), status="in-acceptance",
-                 git_noise=False, git_timeout=False):
+                 git_noise=False, git_timeout=False, git_raise=None):
         self.probe_error = set(probe_error)
         self.status, self.git_noise, self.git_timeout = status, git_noise, git_timeout
+        self.git_raise = git_raise
         self.git_calls, self.handlers, self.teardown_signals = [], {}, []
         self.calls, self.existing = [], set(existing)
         self.audit_events, self.mutate_cache, self.feed_reads = audit_events, mutate_cache, 0
@@ -1036,6 +1037,8 @@ class FakeOps:
         self.git_calls.append({"cmd": list(cmd), "env": dict(env), "timeout": timeout})
         if self.git_timeout:
             raise subprocess.TimeoutExpired(cmd, timeout)
+        if self.git_raise is not None:
+            raise self.git_raise
         if self.git_noise:          # run_sandboxed merges stderr into stdout by default
             (stdout if stderr == subprocess.STDOUT else stderr).write(b"warning: noise\n")
         r = _REAL_RUN(cmd, cwd=str(cwd), env=env, stdout=stdout,
@@ -1115,6 +1118,11 @@ class RunTests(Tmp):
         self.addCleanup(env.stop)
         for v in R.EFFORT_ENV:
             os.environ.pop(v, None)
+        # Known handlers per test, so a before/after comparison never starts from
+        # a disposition an earlier test left behind.
+        for sig, known in ((signal.SIGINT, signal.default_int_handler),
+                           (signal.SIGTERM, signal.SIG_DFL), (signal.SIGHUP, signal.SIG_DFL)):
+            self.addCleanup(signal.signal, sig, signal.signal(sig, known))
 
     def args(self, **kw):
         a = dict(fixture=PILOT, replicate_id="r1", out=str(self.tmp / "out"), plugin_src=self.src,
@@ -1513,6 +1521,13 @@ class RunTests(Tmp):
                 R.write_audit(rdir, env, spec, "me", env["version_dir"], late)
         self.assertEqual(late.feed_reads, 1)
 
+    def test_a_rehash_that_recurses_too_deep_is_a_problem(self):
+        env = self.run_it(FakeOps())
+        rdir = self.tmp / "out" / "r1"
+        with mock.patch.object(R, "stop_sha256", side_effect=RecursionError("deep")):
+            got = R.stop_capture_problems(rdir, env)
+        self.assertIn("cannot be re-hashed", " ".join(got))
+
     def test_an_unreadable_stop_dir_is_a_problem_not_a_raise(self):
         env = self.run_it(FakeOps())
         rdir = self.tmp / "out" / "r1"
@@ -1759,6 +1774,51 @@ class CaptureTests(Tmp):
         self.assertIn("exceeded %ds" % R.CAPTURE_TIMEOUT, rec["errors"][0])
         self.assertEqual(set(rec["files"]), {"ledger"})
 
+    def test_a_staged_change_is_in_the_uncommitted_patch(self):
+        """uncommitted.patch is HEAD against the worktree, so a staged change is
+        in it as well as an unstaged one."""
+        (self.clone / "staged.txt").write_text("staged line\n")
+        git(self.clone, "add", "staged.txt")
+        rec = self.capture()
+        self.assertEqual(rec["errors"], [])
+        unc = self.read("uncommitted")
+        self.assertIn(b"+staged line", unc)
+        self.assertIn(b"+uncommitted line", unc)
+
+    def test_capture_env_is_pinned(self):
+        """The capture environment's contents are the mechanism: no token, no
+        global or system config, no replace refs, no optional locks."""
+        self.assertEqual(R.CAPTURE_ENV, {
+            "PATH": "/usr/bin:/bin", "HOME": "/tmp", "LANG": "C",
+            "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_NO_REPLACE_OBJECTS": "1", "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_TERMINAL_PROMPT": "0"})
+        self.assertEqual(R.CAPTURE_GIT, ["git", "-c", "core.fsmonitor=false",
+                                         "-c", "core.untrackedCache=false"])
+
+    def test_a_sandbox_that_raises_is_recorded_and_the_rest_still_run(self):
+        """A failure other than a timeout -- bwrap refusing, say -- is one part's
+        error; the other parts are still attempted."""
+        rec = self.capture(FakeOps(git_raise=R.Refused("bwrap exited 1")))
+        self.assertEqual(sorted(e.split(":")[0] for e in rec["errors"]),
+                         ["branch", "diff", "head", "status", "uncommitted"])
+        self.assertTrue(all("bwrap exited 1" in e for e in rec["errors"]), rec["errors"])
+        self.assertEqual(set(rec["files"]), {"ledger"})
+
+    def test_a_non_directory_on_the_ledger_path_is_refused(self):
+        for ledger_root, make in ((".loop-ledger", ".loop-ledger"),
+                                  ("mid/.loop-ledger", "mid")):
+            with self.subTest(ledger_root):
+                target = self.clone / make
+                if target.is_dir():
+                    shutil.rmtree(target)
+                target.write_text("not a dir\n")
+                errors = R._copy_ledger(self.clone, ledger_root, self.tmp / ("d-" + make))
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn("is not a directory", errors[0])
+                self.assertFalse((self.tmp / ("d-" + make)).exists())
+                target.unlink()
+
     def test_a_missing_ledger_is_an_error(self):
         shutil.rmtree(self.clone / ".loop-ledger")
         rec = self.capture()
@@ -1838,15 +1898,36 @@ class CaptureTests(Tmp):
         (d / "f").write_text("b")
         self.assertNotEqual(R.stop_sha256(d), h)
 
+    def test_stop_hash_sees_contents_swapped_between_files(self):
+        d = self.tmp / "sw"
+        d.mkdir()
+        (d / "a").write_bytes(b"11")
+        (d / "b").write_bytes(b"22")
+        h = R.stop_sha256(d)
+        (d / "a").write_bytes(b"22")
+        (d / "b").write_bytes(b"11")
+        self.assertNotEqual(R.stop_sha256(d), h)
+
+    def test_stop_hash_does_not_descend_a_directory_link(self):
+        d, outside = self.tmp / "dl", self.tmp / "outside-dir"
+        d.mkdir()
+        outside.mkdir()
+        (outside / "f").write_text("1")
+        os.symlink(str(outside), d / "link")
+        h = R.stop_sha256(d)
+        (outside / "f").write_text("2")
+        (outside / "g").write_text("new")
+        self.assertEqual(R.stop_sha256(d), h)
+
     def test_stop_hash_cannot_be_matched_by_moving_bytes_between_files(self):
         """#380: without each file's size ahead of its bytes, a=X plus b=Y and
-        a single a="X\\0Fb\\0Y" feed the hash the same stream."""
+        a single a="XFb\\0Y" feed the hash the same stream."""
         two, one = self.tmp / "two", self.tmp / "one"
         two.mkdir()
         one.mkdir()
         (two / "a").write_bytes(b"X")
         (two / "b").write_bytes(b"Y")
-        (one / "a").write_bytes(b"X\0Fb\0Y")
+        (one / "a").write_bytes(b"XFb\0Y")
         self.assertNotEqual(R.stop_sha256(two), R.stop_sha256(one))
 
     def test_stop_hash_reads_in_chunks(self):
@@ -1938,13 +2019,19 @@ class SandboxProfileTests(Tmp):
         rc, started = self.run_fake("capture")
         self.assertEqual(rc, 0)
         self.assertEqual([a[0] for a in started], [R.BWRAP])
-        self.assertIn("--ro-bind", started[0])
+        argv = started[0]
+        self.assertNotIn("--bind", argv)                    # the turn profile's rw binds
+        work = str(self.tmp / "work")
+        self.assertIn(["--ro-bind", work, work],
+                      [argv[i:i + 3] for i in range(len(argv) - 2)])
+        self.assertEqual(argv[-2:], ["git", "status"])
         self.assertFalse((self.tmp / "resolv.conf").exists())
 
     def test_turn_profile_starts_slirp(self):
         (self.tmp / "bin").mkdir()
         _, started = self.run_fake("turn")
         self.assertEqual([a[0] for a in started], [R.BWRAP, R.SLIRP])
+        self.assertIn("--bind", started[0])
 
     def test_ops_forward_every_argument_to_run_sandboxed(self):
         """#380: FakeOps stands in for Ops everywhere else, so the real Ops'
