@@ -12,7 +12,20 @@ directory that holds everything the run can touch:
       marketplace/     that archive committed with a fixed identity; pushed to a
                        private sandbox-org repo and installed from it over https
       streams/         one stream-json file per `claude -p` turn
+      stop/            the state at the stop, frozen before teardown (#380): the
+                       committed diff against base_sha at the clone's HEAD (the
+                       pushed head is not recorded), the uncommitted diff, HEAD,
+                       the branch, `git status`, and the ledger root's plain files
       environment.json, result.json, audit.json, gh-calls.jsonl
+
+The stop capture runs on every way a replicate ends once its repos are being
+made: the final `in-acceptance` stop, every halt, an external halt (Ctrl-C,
+SIGTERM or SIGHUP; a SIGKILL runs nothing), and an install refusal. A refusal
+before that (base mismatch, preflight, the launch environment) spends nothing
+and reaches neither the capture nor the audit, so no `pass` exists for it.
+`environment.json`'s `stop_capture` names each file, and the audit fails a
+replicate whose capture is missing, errored, or changed, or whose ledger held
+anything but regular files and directories.
 
 Containment has two layers. (1) Every `claude` process of a replicate runs
 under bubblewrap (`sandbox_argv`, `run_sandboxed`) in new user, mount, pid,
@@ -23,7 +36,9 @@ the replicate's own `home/`, `work/` and `gh-calls.jsonl` read-write; nothing
 else of the host exists inside, including the human's home, `/media`, `/mnt` and
 the X11 and session sockets. Its network is slirp4netns user-mode networking
 with host loopback disabled. The pid namespace dies with each turn, taking any
-background process with it. (2) The only GitHub credential in its environment
+background process with it. The stop capture's `git` runs under a narrower
+profile of the same sandbox: no network, `work/` read-only, and nothing else of
+`rdir` -- no `home/`, no shim log, no `claude`. (2) The only GitHub credential in its environment
 -- an explicit allowlisted dict (`launch_env`), never an inherited one -- is a
 fine-grained token owned by the sandbox org.
 
@@ -56,6 +71,7 @@ import select
 import shlex
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -321,7 +337,7 @@ def root_entries(links=ROOT_LINKS):
 
 
 def sandbox_argv(rdir, claude_real, cwd, info_fd, block_fd, research_dir=RESEARCH_DIR,
-                 resolv_dest=None, links=None):
+                 resolv_dest=None, links=None, profile="turn"):
     """The bubblewrap prefix every replicate `claude` process runs under.
 
     Default-deny on every axis: `--unshare-all` (user, ipc, pid, net, uts,
@@ -331,7 +347,11 @@ def sandbox_argv(rdir, claude_real, cwd, info_fd, block_fd, research_dir=RESEARC
     shim imports this module) and the shim dir, and
     read-write only the replicate's `home/`, `work/` and shim log. Nothing else
     of the host or of `rdir` exists inside. `info_fd` reports the child pid and
-    `block_fd` holds the command until `run_sandboxed` has the network up."""
+    `block_fd` holds the command until `run_sandboxed` has the network up.
+
+    That is the `turn` profile. Under `profile="capture"` (the stop capture's
+    git, #380) only `work/` is added after `/tmp` and `/run`, read-only, and
+    `run_sandboxed` attaches no network."""
     rdir = pathlib.Path(rdir)
     resolv_dest = resolv_dest or os.path.realpath("/etc/resolv.conf")
     argv = [BWRAP, "--unshare-all", "--unshare-user", "--cap-drop", "ALL",
@@ -342,6 +362,15 @@ def sandbox_argv(rdir, claude_real, cwd, info_fd, block_fd, research_dir=RESEARC
     for kind, src, dest in root_entries(ROOT_LINKS if links is None else links):
         argv += [kind, src, dest]
     argv += ["--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp", "--tmpfs", "/run"]
+    if profile == "capture":
+        # The stop capture's git (#380): `work/` read-only and nothing else of
+        # `rdir`, no `claude`, and (run_sandboxed) no network. Replicate code a
+        # repo filter runs here cannot change the tree between the capture's
+        # parts, reach a saved credential, or spend.
+        argv += ["--ro-bind", str(rdir / "work"), str(rdir / "work")]
+        return argv + ["--chdir", str(cwd)]
+    if profile != "turn":
+        raise ValueError("unknown sandbox profile %r" % (profile,))
     argv += ["--ro-bind", str(rdir / "resolv.conf"), resolv_dest]
     for path in (claude_real, research_dir, rdir / "bin"):
         argv += ["--ro-bind", str(path), str(path)]
@@ -389,17 +418,21 @@ def _bwrap_exit(box, grace=1.0):
 
 
 def run_sandboxed(rdir, claude_real, cwd, cmd, env, stdout=subprocess.PIPE,
-                  stderr=subprocess.STDOUT, timeout=None):
-    """Run `cmd` in the sandbox with slirp4netns attached before it starts.
+                  stderr=subprocess.STDOUT, timeout=None, profile="turn"):
+    """Run `cmd` in the sandbox, under `profile` (`sandbox_argv`). A `turn` gets
+    slirp4netns attached before it starts; a `capture` gets no network at all.
     -> (returncode, stdout bytes or None). Raises subprocess.TimeoutExpired after
     killing the sandbox; slirp4netns is stopped on every path."""
     rdir = pathlib.Path(rdir)
-    (rdir / "resolv.conf").write_text(RESOLV)
+    network = profile == "turn"
+    if network:
+        (rdir / "resolv.conf").write_text(RESOLV)
     info_r, info_w = os.pipe()
     block_r, block_w = os.pipe()
     ready_r, ready_w = os.pipe()
     exit_r, exit_w = os.pipe()
-    box = subprocess.Popen(sandbox_argv(rdir, claude_real, cwd, info_w, block_r) + list(cmd),
+    box = subprocess.Popen(sandbox_argv(rdir, claude_real, cwd, info_w, block_r,
+                                        profile=profile) + list(cmd),
                            env=env, cwd=str(cwd), stdout=stdout, stderr=stderr,
                            stdin=subprocess.DEVNULL, pass_fds=(info_w, block_r))
     os.close(info_w)
@@ -408,14 +441,15 @@ def run_sandboxed(rdir, claude_real, cwd, cmd, env, stdout=subprocess.PIPE,
     try:
         try:
             pid = _read_json_fd(info_r)["child-pid"]
-            slirp = subprocess.Popen(slirp_argv(pid, ready_w, exit_r), pass_fds=(ready_w, exit_r),
-                                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                     stderr=subprocess.DEVNULL)
-            os.close(ready_w)
-            os.close(exit_r)
-            ready_w = exit_r = None
-            if not select.select([ready_r], [], [], 10)[0] or os.read(ready_r, 1) != b"1":
-                raise Refused("slirp4netns did not report ready")
+            if network:
+                slirp = subprocess.Popen(slirp_argv(pid, ready_w, exit_r),
+                                         pass_fds=(ready_w, exit_r), stdin=subprocess.DEVNULL,
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                os.close(ready_w)
+                os.close(exit_r)
+                ready_w = exit_r = None
+                if not select.select([ready_r], [], [], 10)[0] or os.read(ready_r, 1) != b"1":
+                    raise Refused("slirp4netns did not report ready")
         except Refused as exc:
             # A bwrap setup failure (a bad bind, say) also leaves slirp nothing to
             # attach to; name bwrap's own exit and output rather than the symptom.
@@ -661,6 +695,207 @@ def classify_stop(status, final_text, stops):
                 return "reply", stop["reply"]
             return "halt", "status %r: stop is not allowed here (#373)" % (status,)
     return "halt", "unrecognized stop: row status %r" % (status,)
+
+
+# --------------------------------------------------------------------- stop capture
+
+# What the blind evaluator and the stop-type judgment read (#380): the state at
+# the stop, frozen into `stop/` before teardown. These names are an interface;
+# `stop_capture.files` maps each key to its path, relative to the replicate dir.
+STOP_DIR = "stop"
+STOP_FILES = {"diff": "stop/diff.patch",              # base_sha..HEAD: the committed work at the
+                                                      # clone's HEAD (the pushed head is not recorded)
+              "uncommitted": "stop/uncommitted.patch",  # HEAD vs the worktree: leftovers
+              "head": "stop/head.txt",                # git rev-parse HEAD
+              "branch": "stop/branch.txt",            # git symbolic-ref -q HEAD (empty: detached)
+              "status": "stop/status.txt",            # git status --porcelain --untracked-files=all
+              "ledger": "stop/ledger"}                # the clone's ledger root: plain files and dirs
+CAPTURE_TIMEOUT = 120
+# The capture's git runs in the sandbox under the `capture` profile (no network,
+# `work/` read-only, nothing else of `rdir`), because the clone's `.git/config`
+# and `.gitattributes` are the replicate's to write: run on the host, a filter
+# driver there would execute outside bwrap. The repo's config is still read, and
+# a clean filter it names still runs in that sandbox, so the repo can still shape
+# what git prints; these options and this environment close the paths that
+# options can, and the capture is evidence, not proof. No token is in this
+# environment.
+CAPTURE_ENV = {"PATH": "/usr/bin:/bin", "HOME": "/tmp", "LANG": "C",
+               "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",
+               "GIT_NO_REPLACE_OBJECTS": "1", "GIT_OPTIONAL_LOCKS": "0",
+               "GIT_TERMINAL_PROMPT": "0"}
+CAPTURE_GIT = ["git", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"]
+CAPTURE_DIFF = ["diff", "--binary", "--no-color", "--no-ext-diff", "--no-textconv",
+                "--src-prefix=a/", "--dst-prefix=b/"]
+HASH_CHUNK = 1 << 20
+
+
+def _capture_git(ops, rdir, clone, args, dest, ok=(0,)):
+    """Run one git command in the capture sandbox, its stdout straight to `dest`
+    as raw bytes and its stderr kept apart. -> None, or why it failed."""
+    try:
+        with open(dest, "wb") as out, tempfile.TemporaryFile() as err:
+            rc, _ = ops.capture_sandboxed(rdir, clone, CAPTURE_GIT + list(args),
+                                          dict(CAPTURE_ENV), stdout=out, stderr=err,
+                                          timeout=CAPTURE_TIMEOUT)
+            if rc not in ok:
+                err.seek(0)
+                return "git %s exited %s: %s" % (args[0], rc, err.read().decode(
+                    errors="replace").strip()[:300])
+    except subprocess.TimeoutExpired:
+        return "git %s exceeded %ds" % (args[0], CAPTURE_TIMEOUT)
+    except Exception as exc:
+        return "git %s: %s" % (args[0], exc)
+    return None
+
+
+def _copy_plain(src, dest, rel, errors):
+    """Copy `src` to `dest`: directories and regular files only. Any other entry
+    -- a symlink above all, which a later reader of `stop/` would follow to the
+    host -- is named in `errors` and not copied. Nothing is followed."""
+    os.mkdir(dest)
+    for name in sorted(os.listdir(src)):
+        s, d, r = os.path.join(src, name), os.path.join(dest, name), os.path.join(rel, name)
+        st = os.lstat(s)
+        if stat.S_ISDIR(st.st_mode):
+            _copy_plain(s, d, r, errors)
+        elif stat.S_ISREG(st.st_mode):
+            shutil.copyfile(s, d, follow_symlinks=False)
+        elif stat.S_ISLNK(st.st_mode):
+            errors.append("%s is a symlink to %r; not copied" % (r, os.readlink(s)))
+        else:
+            errors.append("%s is not a regular file or directory; not copied" % r)
+
+
+def _copy_ledger(clone, ledger_root, dest):
+    """Copy the clone's ledger root to `dest`. -> [errors]; empty when every entry
+    was copied. No path component from the clone down may be a symlink: the
+    replicate can write `work/`, and a link that points nowhere inside the
+    sandbox resolves on the host, where the harness's own tokens live."""
+    rel = pathlib.PurePosixPath(ledger_root)
+    if rel.is_absolute() or ".." in rel.parts or not rel.parts:
+        return ["ledger_root %r is not a relative path inside the clone" % ledger_root]
+    path = pathlib.Path(clone)
+    for part in (None,) + rel.parts:
+        if part is not None:
+            path = path / part
+        try:
+            st = os.lstat(path)
+        except FileNotFoundError:
+            return ["ledger %s does not exist at the stop" % ledger_root]
+        if stat.S_ISLNK(st.st_mode):
+            return ["%s is a symlink; the ledger was not copied" % path]
+        if not stat.S_ISDIR(st.st_mode):
+            return ["%s is not a directory; the ledger was not copied" % path]
+    if os.path.realpath(path) != os.path.join(os.path.realpath(clone), *rel.parts):
+        return ["ledger %s resolves outside the clone; not copied" % ledger_root]
+    errors = []
+    try:
+        _copy_plain(path, dest, ledger_root, errors)
+    except Exception as exc:                        # OSError, RecursionError on a deep tree
+        errors.append("ledger copy: %s" % str(exc)[:300])
+    return errors
+
+
+def stop_sha256(directory):
+    """sha256 over `directory`'s sorted relative paths and contents, following no
+    link (a symlink is hashed by its target string) and reading in chunks. Each
+    file's size precedes its bytes, so no two trees hash alike by moving bytes
+    between files."""
+    root = str(directory)
+    entries = []
+    for d, dirs, files in os.walk(root):            # followlinks=False
+        entries += [os.path.join(d, n) for n in dirs + files]
+    h = hashlib.sha256()
+    for p in sorted(entries):
+        rel, st = os.fsencode(os.path.relpath(p, root)), os.lstat(p)
+        if stat.S_ISLNK(st.st_mode):
+            h.update(b"L" + rel + b"\0" + os.fsencode(os.readlink(p)) + b"\0")
+        elif stat.S_ISREG(st.st_mode):
+            h.update(b"F" + rel + b"\0" + str(st.st_size).encode() + b"\0")
+            with open(p, "rb") as f:
+                for chunk in iter(lambda: f.read(HASH_CHUNK), b""):
+                    h.update(chunk)
+        else:
+            h.update((b"D" if stat.S_ISDIR(st.st_mode) else b"?") + rel + b"\0")
+    return h.hexdigest()
+
+
+def capture_stop(rdir, clone, base_sha, ledger_root, ops):
+    """Freeze the state at the stop into `rdir/stop/` (#380). -> the record kept as
+    `stop_capture` in environment.json. Each part is attempted on its own; a part
+    that fails is named in `errors` and left out of `files`, and the rest still
+    run. The audit fails the replicate on any error or missing part."""
+    rdir = pathlib.Path(rdir)
+    rec = {"dir": STOP_DIR, "files": {}, "errors": [], "taken_at": ops.now()}
+    (rdir / STOP_DIR).mkdir()
+    for key, args, ok in (("diff", CAPTURE_DIFF + [base_sha, "HEAD", "--"], (0,)),
+                          ("uncommitted", CAPTURE_DIFF + ["HEAD", "--"], (0,)),
+                          ("head", ["rev-parse", "--verify", "HEAD"], (0,)),
+                          ("branch", ["symbolic-ref", "-q", "HEAD"], (0, 1)),
+                          ("status", ["status", "--porcelain", "--untracked-files=all"], (0,))):
+        err = _capture_git(ops, rdir, clone, args, rdir / STOP_FILES[key], ok)
+        if err:
+            rec["errors"].append("%s: %s" % (key, err))
+        else:
+            rec["files"][key] = STOP_FILES[key]
+    errors = _copy_ledger(clone, ledger_root, rdir / STOP_FILES["ledger"])
+    rec["errors"] += ["ledger: %s" % e for e in errors]
+    if not errors:
+        rec["files"]["ledger"] = STOP_FILES["ledger"]
+    if "head" in rec["files"]:
+        rec["head_sha"] = (rdir / STOP_FILES["head"]).read_text(errors="replace").strip()
+    rec["sha256"] = stop_sha256(rdir / STOP_DIR)
+    return rec
+
+
+def stop_capture_problems(rdir, env_record):
+    """-> [problems]; empty only when every part in STOP_FILES was captured without
+    error, is still where it was written, and `stop/` hashes as it did at capture.
+    Default-deny: a missing record, part or hash is a problem, and so is a
+    re-hash that cannot be read. Never raises on the tree's state."""
+    rec = env_record.get("stop_capture")
+    if not isinstance(rec, dict):
+        return ["no stop capture recorded (pre-#380 harness?)"]
+    out = []
+    errors = rec.get("errors")
+    if not isinstance(errors, list):
+        out.append("stop capture errors are unreadable: %r" % (errors,))
+    else:
+        out += ["stop capture: %s" % e for e in errors]
+    files = rec.get("files") if isinstance(rec.get("files"), dict) else {}
+    for key, want in STOP_FILES.items():
+        got = files.get(key)
+        if got is None:
+            out.append("stop capture has no %s" % key)
+        elif got != want:
+            out.append("stop capture names %s as %r, expected %r" % (key, got, want))
+        else:
+            try:
+                st = os.lstat(pathlib.Path(rdir) / want)
+                kind = stat.S_ISDIR if key == "ledger" else stat.S_ISREG
+                if not kind(st.st_mode):
+                    out.append("stop capture %s is not what was written: %s" % (key, want))
+            except OSError:
+                out.append("stop capture %s is gone: %s" % (key, want))
+    stop = pathlib.Path(rdir) / STOP_DIR
+    try:
+        stop_is_dir = stat.S_ISDIR(os.lstat(stop).st_mode)
+    except OSError:
+        stop_is_dir = False
+    if not rec.get("sha256"):
+        out.append("stop capture recorded no hash")
+    elif not stop_is_dir:
+        out.append("%s/ is gone or unreadable" % STOP_DIR)
+    else:
+        try:
+            got = stop_sha256(stop)
+        except Exception as exc:                    # OSError; RecursionError on a deep tree
+            out.append("%s/ cannot be re-hashed: %s" % (STOP_DIR, exc))
+        else:
+            if got != rec["sha256"]:
+                out.append("%s/ re-hashes to %s, recorded %s at capture"
+                           % (STOP_DIR, got, rec["sha256"]))
+    return out
 
 
 def read_stream(path):
@@ -1039,6 +1274,11 @@ class Ops:
                   timeout=None):
         return run_sandboxed(rdir, claude_real, cwd, cmd, env, stdout=stdout, timeout=timeout)
 
+    def capture_sandboxed(self, rdir, cwd, cmd, env, stdout, stderr, timeout):
+        """The stop capture's git (#380): the `capture` profile, no `claude`."""
+        return run_sandboxed(rdir, None, cwd, cmd, env, stdout=stdout, stderr=stderr,
+                             timeout=timeout, profile="capture")
+
     def events(self, login):
         return account_events(login)
 
@@ -1066,6 +1306,7 @@ def cmd_run(a, ops=None):
                   "gate_latency": "0 (scripted)", "approval_channel": "--resume",
                   "fixture_dir": spec["dir"], "fixture_sha256": spec["fixture_sha256"]}
     env_record.update(provenance)
+    previous = install_halt_handlers(env_record)
     try:
         _run(a, spec, rdir, env_record, ops)
     except Exception as exc:
@@ -1075,8 +1316,61 @@ def cmd_run(a, ops=None):
         env_record.setdefault("interrupted", type(exc).__name__)
         raise
     finally:
-        env_record["wall_clock_end"] = ops.now()
-        (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
+        # The last record of the run (teardown's outcome among it) is written
+        # with SIGINT and HALT_SIGNALS ignored; the caller's handlers come back
+        # after it, in one pass, so `halt` is never reinstalled.
+        held = ignore_signals((signal.SIGINT,) + HALT_SIGNALS)
+        try:
+            env_record["wall_clock_end"] = ops.now()
+            (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
+        finally:
+            restore_handlers({**held, **previous})
+
+
+# A replicate stopped from outside -- `kill`, `timeout`, a closed terminal --
+# takes the same path as Ctrl-C (#380): Python's default for these signals ends
+# the process without running a `finally`, which would skip the stop capture,
+# environment.json, the audit and the teardown, and leak the repos.
+# What this leaves unprotected: a signal arriving in the few bytecodes
+# between the start of a `finally` and its `ignore_signals` still raises there.
+# At teardown's entry that can strand the repos (recorded: `repos_planned`
+# without `repos_deleted`); after teardown it loses the final environment.json
+# write. Accepted for #380; closing it is #384's.
+HALT_SIGNALS = tuple(getattr(signal, n) for n in ("SIGTERM", "SIGHUP") if hasattr(signal, n))
+
+
+def install_halt_handlers(env_record):
+    """Map HALT_SIGNALS to KeyboardInterrupt for the run. -> what to restore. A
+    signal the harness was started ignoring stays ignored: under `nohup`, a
+    closed terminal must not halt the run."""
+    def halt(signum, _frame):
+        env_record.setdefault("signal", signal.Signals(signum).name)
+        raise KeyboardInterrupt(signal.Signals(signum).name)
+    previous = {}
+    for sig in HALT_SIGNALS:
+        try:
+            if signal.getsignal(sig) is signal.SIG_IGN:
+                continue
+            previous[sig] = signal.signal(sig, halt)
+        except ValueError:                          # not the main thread
+            pass
+    return previous
+
+
+def ignore_signals(sigs):
+    """Set each of `sigs` to SIG_IGN. -> what to restore."""
+    previous = {}
+    for sig in sigs:
+        try:
+            previous[sig] = signal.signal(sig, signal.SIG_IGN)
+        except ValueError:                          # not the main thread
+            pass
+    return previous
+
+
+def restore_handlers(previous):
+    for sig, handler in previous.items():
+        signal.signal(sig, handler)
 
 
 def repo_exists(ops, henv, repo):
@@ -1103,9 +1397,10 @@ def create_repo(ops, henv, repo, planned):
 
 
 def teardown(ops, henv, planned, env_record, keep):
-    """Delete each planned repo that exists. SIGINT is ignored for the loop, and
-    each repo is handled on its own, so one failure or a second Ctrl-C does not
-    strand the rest. A repo whose existence cannot be told is recorded, never
+    """Delete each planned repo that exists. SIGINT and HALT_SIGNALS are ignored
+    during the loop, and each repo is handled on its own, so neither one failure
+    nor a signal during the loop strands the rest (one at its entry can; see
+    HALT_SIGNALS). A repo whose existence cannot be told is recorded, never
     deleted blind."""
     if keep:
         gone = env_record.get("plugin_repo") if env_record.get("plugin_repo_deleted") else None
@@ -1113,10 +1408,7 @@ def teardown(ops, henv, planned, env_record, keep):
         return
     if not planned:
         return
-    try:
-        old = signal.signal(signal.SIGINT, signal.SIG_IGN)
-    except ValueError:                              # not the main thread
-        old = None
+    old = ignore_signals((signal.SIGINT,) + HALT_SIGNALS)
     try:
         for repo in planned:
             try:
@@ -1137,8 +1429,7 @@ def teardown(ops, henv, planned, env_record, keep):
             except Exception as exc:
                 env_record.setdefault("repo_delete_failed", []).append("%s: %s" % (repo, exc))
     finally:
-        if old is not None:
-            signal.signal(signal.SIGINT, old)
+        restore_handlers(old)
 
 
 def _run(a, spec, rdir, env_record, ops):
@@ -1263,6 +1554,16 @@ def _run(a, spec, rdir, env_record, ops):
             _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, ops)
         finally:
             env_record.setdefault("run_end", ops.now())
+            # The stop capture (#380) runs first, before the audit reads it and
+            # before the outer finally's teardown. If a second interrupt cuts it
+            # short, the placeholder stands and no audit runs, so no `pass`
+            # exists; a later `audit` fails on the placeholder.
+            env_record["stop_capture"] = {"errors": ["capture did not complete"]}
+            try:
+                env_record["stop_capture"] = capture_stop(rdir, clone, spec["base_sha"],
+                                                          spec["ledger_root"], ops)
+            except Exception as exc:                  # recorded; the audit fails on it
+                env_record["stop_capture"]["errors"].append("capture raised: %s" % exc)
             (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
             steps = (("audit", lambda: write_audit(rdir, env_record, spec, login, version_dir, ops)),
                      ("measure", lambda: (rdir / "result.json").write_text(
@@ -1468,6 +1769,7 @@ def write_audit(rdir, env_record, spec, login, version_dir, ops=None):
     expected = {k: tuple(v) for k, v in env_record["expected_strata"].items()}
     tools = audit_tools(transcripts, inits, pathlib.Path.home(), rdir)
     strata = check_strata(observed_strata(pdir), expected)
+    stop_problems = stop_capture_problems(rdir, env_record)
     # The feed is read last, so no later check can raise and discard the read.
     reads = account_reads(rdir, env_record, login, sandbox, harness, ops)
     audit = {
@@ -1478,13 +1780,15 @@ def write_audit(rdir, env_record, spec, login, version_dir, ops=None):
         "a_tools": tools,
         "b_engine_loads": load_problems, "engine_loads": loads,
         "c_strata": strata,
+        "d_stop_capture": stop_problems,
         "gh_calls": gh_calls,
         "unattended": env_record.get("unattended"),
     }
     # The delayed re-audit is owed, not optional: until a successful read lands at
     # least FEED_LATENCY_S after run_end, the audit is incomplete and does not pass.
     audit["pass"] = not any(audit[k] for k in ("a_tracker", "a_account_events", "a_tools",
-                                               "b_engine_loads", "c_strata")) and \
+                                               "b_engine_loads", "c_strata",
+                                               "d_stop_capture")) and \
         bool(audit["unattended"]) and audit["account_feed"]["delayed_read"]
     # audit.json is the only store of the accumulated reads: replace it whole or not at all.
     tmp = pathlib.Path(rdir) / "audit.json.tmp"
