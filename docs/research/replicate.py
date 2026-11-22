@@ -322,8 +322,12 @@ def check_env(env):
 
 
 # What a shakedown's environment drops from a replicate's: both tokens and the
-# sandbox repo it never creates (#391).
-SHAKEDOWN_DROP = ("CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN", "GH_REPO", "REPLICATE_SANDBOX")
+# sandbox repo it never creates (#391). `REPLICATE_SANDBOX` stays, empty, so the
+# gh shim refuses and logs every call instead of failing before its log write.
+SHAKEDOWN_DROP = ("CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN", "GH_REPO")
+# A shakedown refuses to start while either is in the harness's own environment:
+# its host-side processes (the clone, `uv --version`) inherit that environment.
+SHAKEDOWN_REFUSE_ENV = ("GH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN")
 
 
 def shakedown_env(rdir):
@@ -370,8 +374,7 @@ def sandbox_argv(rdir, claude_real, cwd, info_fd, block_fd, research_dir=RESEARC
     git, #380) only `work/` is added after `/tmp` and `/run`, read-only, and
     `run_sandboxed` attaches no network.
 
-    `claude_real=None` drops the pinned binary's bind and nothing else; only
-    `shakedown` passes it, since it runs no `claude` (#391)."""
+    `claude_real=None` drops the pinned binary's bind and nothing else (#391)."""
     rdir = pathlib.Path(rdir)
     resolv_dest = resolv_dest or os.path.realpath("/etc/resolv.conf")
     argv = [BWRAP, "--unshare-all", "--unshare-user", "--cap-drop", "ALL",
@@ -1326,7 +1329,7 @@ def provision_uv(ops, rdir, uv_bin):
     read-only and first on PATH, so `uv` resolves inside the turn sandbox with no
     new bind and no PATH change. The record describes the copy, so a host-side
     `uv self update` mid-replicate cannot change what ran. With no `--uv-bin`
-    both fields are null, never absent: the admissibility check is default-deny."""
+    both fields are null."""
     if uv_bin is None:
         return {"uv_bin": None, "uv_version": None, "uv_sha256": None}
     dest = pathlib.Path(rdir) / "bin" / "uv"
@@ -1864,10 +1867,15 @@ def _tail(out, n=TAIL_CHARS):
 def cmd_shakedown(a, ops=None):
     """Run one command in a replicate's turn sandbox, with network, and record
     what happened in `<out>/<id>/shakedown.json` (#391). No `claude` runs, no
-    token is in the environment, no repo is created, and no model is called, so
-    it costs nothing; it shows whether a fixture's gates can run at all. It
-    records the harness commit but certifies nothing, so a dirty tree is not
-    refused. A base mismatch is refused exactly as `run` refuses it."""
+    repo is created, and no model is called, so it costs nothing; it shows
+    whether a fixture's gates can run at all. It refuses to start while a token
+    is in the harness environment (`SHAKEDOWN_REFUSE_ENV`), and the sandbox gets
+    none. It records the harness commit but certifies nothing, so a dirty tree
+    is not refused. A base mismatch is refused exactly as `run` refuses it."""
+    leaked = [v for v in SHAKEDOWN_REFUSE_ENV if os.environ.get(v)]
+    if leaked:
+        raise Refused("%s set in the harness environment; a shakedown carries no token"
+                      % ", ".join(leaked))
     ops = ops or Ops()
     spec = load_fixture(a.fixture)
     provenance = harness_provenance()
@@ -1932,8 +1940,7 @@ def _shakedown(a, spec, rdir, record, ops):
 
 def uv_bin_arg(s):
     """--uv-bin must be an absolute path to an executable file, checked at parse
-    time so nothing is created for a bad one (#391). -> its realpath, so the
-    copy is of the binary itself, not of a link."""
+    time so nothing is created for a bad one (#391). -> its realpath."""
     if not os.path.isabs(s):
         raise argparse.ArgumentTypeError("%r is not an absolute path" % s)
     if not (os.path.isfile(s) and os.access(s, os.X_OK)):

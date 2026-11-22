@@ -1684,9 +1684,11 @@ class RunTests(Tmp):
     def test_run_refuses_a_base_mismatch_before_any_side_effect(self):
         """#391: the refusal `shakedown` shares through build_clone."""
         ops = FakeOps()
-        env = self.run_it(ops, R.Refused, fixture=str(mismatched_fixture(self.tmp)))
+        env = self.run_it(ops, R.Refused, fixture=str(mismatched_fixture(self.tmp)),
+                          uv_bin=str(fake_uv(self.tmp)))
         self.assertIn("frozen base_sha", env["refused"])
         self.assertEqual(ops.calls, [])
+        self.assertFalse((self.tmp / "out" / "r1" / "bin").exists())
 
 
 class CaptureTests(Tmp):
@@ -2181,8 +2183,12 @@ class UvBinArgTests(Tmp):
         plain = self.tmp / "plain"
         plain.write_text("not executable\n")
         plain.chmod(0o644)
+        fake_uv(self.tmp)                         # a real executable, named relatively below
+        cwd = os.getcwd()
+        os.chdir(self.tmp)
+        self.addCleanup(os.chdir, cwd)
         out = self.tmp / "out"
-        bad = ("uv", str(self.tmp / "absent"), str(plain), str(self.tmp))
+        bad = ("uv-real", "./uv-real", str(self.tmp / "absent"), str(plain), str(self.tmp))
         for sub in (VersionDirTests.RUN,
                     ["shakedown", "--fixture", PILOT, "--replicate-id", "r1",
                      "--command", "true"]):
@@ -2251,14 +2257,30 @@ class ShakedownSandboxTests(Tmp):
         env = R.shakedown_env(self.tmp)
         full = R.replicate_env(self.tmp, "o/r", "tok", "ghtok")
         self.assertEqual(set(env), set(full) - {"CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN",
-                                                 "GH_REPO", "REPLICATE_SANDBOX"})
-        self.assertEqual({k: full[k] for k in env}, env)
+                                                 "GH_REPO"})
+        self.assertEqual(env["REPLICATE_SANDBOX"], "")
+        self.assertEqual({k: full[k] for k in env if k != "REPLICATE_SANDBOX"},
+                         {k: v for k, v in env.items() if k != "REPLICATE_SANDBOX"})
         self.assertEqual(R.check_env(env), env)
+
+    def test_the_real_shim_refuses_and_logs_under_shakedown_env(self):
+        """A fixture gate's `gh` call is refused by the shim and logged, not lost
+        to a traceback before the log write."""
+        shim = R.write_shim(self.tmp / "bin")
+        env = R.shakedown_env(self.tmp)
+        r = _REAL_RUN([str(shim), "run", "list"], cwd=str(self.tmp), env=env,
+                      capture_output=True, text=True)
+        self.assertEqual(r.returncode, 4, r.stderr)
+        self.assertIn("replicate gh shim: refused", r.stderr)
+        lines = (self.tmp / "gh-calls.jsonl").read_text().splitlines()
+        self.assertEqual(len(lines), 1)
+        rec = json.loads(lines[0])
+        self.assertEqual((rec["argv"], rec["allowed"]), (["run", "list"], False))
 
 
 class ShakedownOps:
-    """Only what a shakedown may touch. Everything that reaches a token, the
-    account, GitHub or `claude` raises, so the call list is the whole story."""
+    """Only what a shakedown may touch through `Ops`: the methods that read a
+    token, the account feed, the install record or the stop capture raise."""
 
     def __init__(self, rc=0, timeout=False):
         self.rc, self.timeout = rc, timeout
@@ -2287,6 +2309,14 @@ class ShakedownOps:
 
 class ShakedownTests(Tmp):
     """#391 AC3: no `claude`, no repo, no token; a base mismatch refuses as `run` does."""
+
+    def setUp(self):
+        super().setUp()
+        env = mock.patch.dict(os.environ)          # a token exported by whoever runs the suite
+        env.start()
+        self.addCleanup(env.stop)
+        for var in R.SHAKEDOWN_REFUSE_ENV:
+            os.environ.pop(var, None)
 
     def args(self, **kw):
         a = dict(fixture=PILOT, replicate_id="s1", out=str(self.tmp / "out"), uv_bin=None,
@@ -2346,11 +2376,23 @@ class ShakedownTests(Tmp):
     def test_base_mismatch_refuses_before_any_sandbox(self):
         ops = ShakedownOps()
         with self.assertRaises(R.Refused):
-            R.cmd_shakedown(self.args(fixture=str(mismatched_fixture(self.tmp))), ops)
+            R.cmd_shakedown(self.args(fixture=str(mismatched_fixture(self.tmp)),
+                                      uv_bin=str(fake_uv(self.tmp))), ops)
         self.assertEqual(ops.calls, [])
         rec = self.record()
         self.assertIn("frozen base_sha", rec["refused"])
-        self.assertFalse((self.tmp / "out" / "s1" / "work").exists())
+        for absent in ("work", "bin"):
+            self.assertFalse((self.tmp / "out" / "s1" / absent).exists(), absent)
+
+    def test_refuses_while_a_token_is_in_the_harness_environment(self):
+        for var in R.SHAKEDOWN_REFUSE_ENV:
+            with mock.patch.dict(os.environ, {var: "secret"}):
+                ops = ShakedownOps()
+                with self.assertRaises(R.Refused) as cm:
+                    R.cmd_shakedown(self.args(), ops)
+                self.assertIn(var, str(cm.exception))
+                self.assertEqual(ops.calls, [])
+                self.assertFalse((self.tmp / "out").exists())
 
     def test_main_returns_0_when_it_ran_and_2_on_a_refusal(self):
         base = ["shakedown", "--replicate-id", "s1", "--command", "false"]
