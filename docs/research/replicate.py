@@ -8,6 +8,7 @@ directory that holds everything the run can touch:
       home/            HOME and CLAUDE_CONFIG_DIR (home/.claude) -- the only config
       work/<id>/       the cwd: a clone of the fixture at its base SHA
       bin/gh           the logging shim, first on PATH (a second line of defense)
+      bin/uv           with `--uv-bin`, a copy of the pinned uv, hashed (#391)
       plugin-archive/  the pinned plugin, git-archived at its commit (A5 rewrite here)
       marketplace/     that archive committed with a fixed identity; pushed to a
                        private sandbox-org repo and installed from it over https
@@ -53,9 +54,11 @@ proof. The one harness call made with the human's own gh login is the read-only
 `account_events` GET, outside the sandbox.
 
 Subcommands:
-    run      build, run, record, measure and audit one replicate
-    audit    re-run the audit over an existing replicate directory
-    measure  re-run the cost read over an existing replicate directory
+    run        build, run, record, measure and audit one replicate
+    shakedown  run one command in a replicate's turn sandbox, with no `claude`,
+               no token and no repo (#391): what a fixture's gates see, for free
+    audit      re-run the audit over an existing replicate directory
+    measure    re-run the cost read over an existing replicate directory
 
 Stdlib only: `docs/research/test_replicate.py` imports this module, and `TEST_CMD`
 runs that test on bare python3 (CLAUDE.md, stdlib-only by reach).
@@ -318,6 +321,20 @@ def check_env(env):
     return env
 
 
+# What a shakedown's environment drops from a replicate's: both tokens and the
+# sandbox repo it never creates (#391).
+SHAKEDOWN_DROP = ("CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN", "GH_REPO", "REPLICATE_SANDBOX")
+
+
+def shakedown_env(rdir):
+    """A replicate's environment with no credential in it: what a fixture's
+    commands see inside a turn, less what only `claude` and `gh` need."""
+    env = replicate_env(rdir, "", "", "")
+    for k in SHAKEDOWN_DROP:
+        del env[k]
+    return check_env(env)
+
+
 SLIRP = "/usr/bin/slirp4netns"
 ROOT_DIRS = ("/usr", "/etc")                                   # the allowlisted host tree
 ROOT_LINKS = ("/bin", "/sbin", "/lib", "/lib64", "/lib32", "/libx32")
@@ -351,7 +368,10 @@ def sandbox_argv(rdir, claude_real, cwd, info_fd, block_fd, research_dir=RESEARC
 
     That is the `turn` profile. Under `profile="capture"` (the stop capture's
     git, #380) only `work/` is added after `/tmp` and `/run`, read-only, and
-    `run_sandboxed` attaches no network."""
+    `run_sandboxed` attaches no network.
+
+    `claude_real=None` drops the pinned binary's bind and nothing else; only
+    `shakedown` passes it, since it runs no `claude` (#391)."""
     rdir = pathlib.Path(rdir)
     resolv_dest = resolv_dest or os.path.realpath("/etc/resolv.conf")
     argv = [BWRAP, "--unshare-all", "--unshare-user", "--cap-drop", "ALL",
@@ -373,7 +393,8 @@ def sandbox_argv(rdir, claude_real, cwd, info_fd, block_fd, research_dir=RESEARC
         raise ValueError("unknown sandbox profile %r" % (profile,))
     argv += ["--ro-bind", str(rdir / "resolv.conf"), resolv_dest]
     for path in (claude_real, research_dir, rdir / "bin"):
-        argv += ["--ro-bind", str(path), str(path)]
+        if path is not None:
+            argv += ["--ro-bind", str(path), str(path)]
     for path in (rdir / "home", rdir / "work", rdir / "gh-calls.jsonl"):
         argv += ["--bind", str(path), str(path)]
     return argv + ["--chdir", str(cwd)]
@@ -1292,6 +1313,43 @@ class Ops:
         return harness_env(rdir)
 
 
+def file_sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(HASH_CHUNK), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def provision_uv(ops, rdir, uv_bin):
+    """Copy the pinned uv into `<rdir>/bin/uv` (#391): that dir is bound
+    read-only and first on PATH, so `uv` resolves inside the turn sandbox with no
+    new bind and no PATH change. The record describes the copy, so a host-side
+    `uv self update` mid-replicate cannot change what ran. With no `--uv-bin`
+    both fields are null, never absent: the admissibility check is default-deny."""
+    if uv_bin is None:
+        return {"uv_bin": None, "uv_version": None, "uv_sha256": None}
+    dest = pathlib.Path(rdir) / "bin" / "uv"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(uv_bin, dest)
+    dest.chmod(0o755)
+    return {"uv_bin": uv_bin, "uv_sha256": file_sha256(dest),
+            "uv_version": ops.sh([str(dest), "--version"]).stdout.strip()}
+
+
+def build_clone(spec, rdir, rid):
+    """Build the fixture's base, refuse unless it is the frozen base_sha, and
+    only then clone it to `<rdir>/work/<rid>`. -> (base sha, clone path).
+    Shared by `run` and `shakedown`, so both refuse a mismatch the same way."""
+    base = build_base(pathlib.Path(spec["dir"]) / "repo", rdir / "base")
+    if base != spec["base_sha"]:
+        raise Refused("fixture builds base %s, frozen base_sha is %s" % (base, spec["base_sha"]))
+    clone = rdir / "work" / rid
+    clone.parent.mkdir(parents=True)
+    sh(["git", "clone", "-q", str(rdir / "base"), str(clone)])
+    return base, clone
+
+
 def cmd_run(a, ops=None):
     ops = ops or Ops()
     spec = load_fixture(a.fixture)
@@ -1439,12 +1497,7 @@ def _run(a, spec, rdir, env_record, ops):
     login = env_record["login"] = a.login           # every later feed read must match it
     sandbox = "%s/%s-%s" % (spec["org"], spec["name"], a.replicate_id)
     # Base: built from the fixture's bytes, verified against the frozen SHA.
-    base = build_base(pathlib.Path(spec["dir"]) / "repo", rdir / "base")
-    if base != spec["base_sha"]:
-        raise Refused("fixture builds base %s, frozen base_sha is %s" % (base, spec["base_sha"]))
-    clone = rdir / "work" / a.replicate_id
-    clone.parent.mkdir(parents=True)
-    sh(["git", "clone", "-q", str(rdir / "base"), str(clone)])
+    base, clone = build_clone(spec, rdir, a.replicate_id)
     # Plugin: git-archived at the pin, optionally re-versioned in the copy only (A5).
     plugin_resolved = git_out(a.plugin_src, "rev-parse", a.plugin_commit + "^{commit}")
     cli_actual = ops.sh([a.claude_bin, "--version"]).stdout.strip()
@@ -1500,6 +1553,7 @@ def _run(a, spec, rdir, env_record, ops):
                                          "note": spec.get("ci_status_binding")},
                       settings_sha256=hashlib.sha256((home / "settings.json").read_bytes()).hexdigest())
     write_shim(rdir / "bin")
+    env_record.update(provision_uv(ops, rdir, a.uv_bin))
     (rdir / "gh-calls.jsonl").touch()
     env = ops.launch_env(rdir, sandbox)
     # Which spike-verified token ran this replicate: (a) rests on it (#369).
@@ -1797,6 +1851,96 @@ def write_audit(rdir, env_record, spec, login, version_dir, ops=None):
     return audit
 
 
+# ----------------------------------------------------------------------- shakedown
+
+TAIL_CHARS = 4000
+PROBE_TIMEOUT = 300
+
+
+def _tail(out, n=TAIL_CHARS):
+    return (out or b"").decode(errors="replace")[-n:]
+
+
+def cmd_shakedown(a, ops=None):
+    """Run one command in a replicate's turn sandbox, with network, and record
+    what happened in `<out>/<id>/shakedown.json` (#391). No `claude` runs, no
+    token is in the environment, no repo is created, and no model is called, so
+    it costs nothing; it shows whether a fixture's gates can run at all. It
+    records the harness commit but certifies nothing, so a dirty tree is not
+    refused. A base mismatch is refused exactly as `run` refuses it."""
+    ops = ops or Ops()
+    spec = load_fixture(a.fixture)
+    provenance = harness_provenance()
+    rdir = pathlib.Path(a.out).resolve() / a.replicate_id
+    if rdir.exists():
+        raise Refused("replicate dir %s already exists" % rdir)
+    rdir.mkdir(parents=True)
+    record = {"shakedown": a.replicate_id, "fixture": spec["name"],
+              "fixture_dir": spec["dir"], "fixture_sha256": spec["fixture_sha256"],
+              "command": a.command, "wall_clock_start": ops.now()}
+    record.update(provenance)
+    previous = install_halt_handlers(record)
+    try:
+        _shakedown(a, spec, rdir, record, ops)
+    except Exception as exc:
+        record.setdefault("refused" if isinstance(exc, Refused) else "error", str(exc))
+        raise
+    except BaseException as exc:                   # KeyboardInterrupt, SystemExit
+        record.setdefault("interrupted", type(exc).__name__)
+        raise
+    finally:
+        held = ignore_signals((signal.SIGINT,) + HALT_SIGNALS)
+        try:
+            record["wall_clock_end"] = ops.now()
+            (rdir / "shakedown.json").write_text(json.dumps(record, indent=2))
+        finally:
+            restore_handlers({**held, **previous})
+
+
+def _shakedown(a, spec, rdir, record, ops):
+    base, clone = build_clone(spec, rdir, a.replicate_id)
+    record["base_sha"] = base
+    write_shim(rdir / "bin")
+    record.update(provision_uv(ops, rdir, a.uv_bin))
+    (rdir / "gh-calls.jsonl").touch()
+    (rdir / "home").mkdir()
+    env = shakedown_env(rdir)
+    start = time.monotonic()
+    try:
+        rc, out = ops.sandboxed(rdir, None, clone, ["/bin/sh", "-c", a.command], env,
+                                timeout=a.timeout)
+    except subprocess.TimeoutExpired:
+        rc, out = None, b""
+        record["timeout_s"] = a.timeout
+    record.update(exit_code=rc, duration_s=round(time.monotonic() - start, 1),
+                  output_tail=_tail(out))
+    # The probes run after the command, so the command met a cold cache: which
+    # Python the system offers, and which one uv resolved for the fixture.
+    probes = [["python3", "--version"]]
+    if a.uv_bin is not None:
+        probes.append(["uv", "python", "find"])
+    record["probes"] = []
+    for argv in probes:
+        entry = {"argv": argv}
+        try:
+            prc, pout = ops.sandboxed(rdir, None, clone, argv, env, timeout=PROBE_TIMEOUT)
+            entry.update(exit_code=prc, output=_tail(pout, 500).strip())
+        except subprocess.TimeoutExpired:
+            entry.update(exit_code=None, timeout_s=PROBE_TIMEOUT)
+        record["probes"].append(entry)
+
+
+def uv_bin_arg(s):
+    """--uv-bin must be an absolute path to an executable file, checked at parse
+    time so nothing is created for a bad one (#391). -> its realpath, so the
+    copy is of the binary itself, not of a link."""
+    if not os.path.isabs(s):
+        raise argparse.ArgumentTypeError("%r is not an absolute path" % s)
+    if not (os.path.isfile(s) and os.access(s, os.X_OK)):
+        raise argparse.ArgumentTypeError("%r is not an executable file" % s)
+    return os.path.realpath(s)
+
+
 def version_dir_arg(s):
     """--version-dir must be an `x.y.z` era directory, checked at parse time: a
     typo otherwise surfaces only after a paid replicate has started (#357)."""
@@ -1824,6 +1968,17 @@ def main(argv=None):
     r.add_argument("--keep-sandbox", action="store_true")
     r.add_argument("--turn-timeout", type=int, default=3600,
                    help="seconds before one `claude -p` turn is killed and the replicate halts")
+    r.add_argument("--uv-bin", type=uv_bin_arg,
+                   help="absolute path to the pinned uv, copied to bin/uv (#391)")
+    s = sub.add_parser("shakedown")
+    s.add_argument("--fixture", required=True)
+    s.add_argument("--replicate-id", required=True)
+    s.add_argument("--out", required=True)
+    s.add_argument("--uv-bin", type=uv_bin_arg,
+                   help="absolute path to the pinned uv, copied to bin/uv")
+    s.add_argument("--command", required=True,
+                   help="one string, run as `/bin/sh -c` in the clone")
+    s.add_argument("--timeout", type=int, default=1800)
     m = sub.add_parser("measure")
     m.add_argument("rdir")
     au = sub.add_parser("audit")
@@ -1835,6 +1990,8 @@ def main(argv=None):
             if not os.path.isabs(args.claude_bin):
                 raise Refused("--claude-bin must be an absolute path")
             cmd_run(args)
+        elif args.cmd == "shakedown":
+            cmd_shakedown(args)
         elif args.cmd == "audit":
             rdir = pathlib.Path(args.rdir).resolve()
             env = json.loads((rdir / "environment.json").read_text())
