@@ -45,7 +45,9 @@ outcomes section 7 fixes cannot be dropped: without their instruments the instan
   `--plugin-dir`.
 - Both arms run the same `MODEL_TIERS` value, the same `(model, effort)` stratum, the same subagent
   roster, the same Claude Code version (`--claude-version`), and the same `fixture.json` per pick.
-- Every replicate runs on a harness commit the instance registers. A certifying record names that
+- Every replicate runs from a checkout whose HEAD is a harness commit the instance registers.
+  `harness_commit` records that HEAD, so a replicate run from any other commit, the freeze commit
+  included, fails section 8. A certifying record names that
   commit, as `replicate-pilot-2026-11.md` and `replicate-repilot-2026-11.md` do for earlier ones,
   and its `replicate.py` writes the `stop/` capture section 8 reads.
 - Both arms run under `mode: calibration`. The harness does not check it, so section 8 does.
@@ -152,7 +154,9 @@ cap; and where in the schedule a replacement runs.
 **Fixed — replacement.** An external halt or an inadmissible replicate is replaced, up to the
 registered cap per pick and arm. No other halt is replaced. The decision to replace reads sections
 8 and 9 only, never an outcome. Admissibility is not known when a replicate ends: the delayed feed
-read comes at least six hours later.
+read comes at least six hours later. The stop-type judgment runs after the last replicate
+(section 13), so it never causes a replacement: a replicate it alone censors stays censored and is
+not replaced.
 
 ## 10. Excluded measures
 
@@ -212,7 +216,8 @@ note that was dropped, with one line of reason each; and the population the resu
 - Nothing merges, so nothing that needs a merged PR is observable.
 - The result holds for the registered stratum and the picked issues.
 - The record does not show that both arms ran the same agent prompts. `fixture_sha256` covers
-  `fixture.json` only, and no recorded hash covers the roster's prompt text (#390). Both arms are
+  `fixture.json` only, and no recorded hash covers the roster's prompt text (#390). `memory_snapshot` records the memory
+  files per replicate; section 8 does not compare it. Both arms are
   run from one fixture directory, unchanged for the length of the run.
 
 ## 15. Deviations

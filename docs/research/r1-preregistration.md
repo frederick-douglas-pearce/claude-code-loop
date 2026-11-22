@@ -14,11 +14,8 @@ applies here. Outcomes 4 and 7 use the judgments in `blind-evaluator-protocol.md
   stop. Section 14 goes through §4 element by element.
 - **Status:** `draft`, 2026-11-21 (#382). **Not frozen: no replicate may be spent against it.**
 
-**What this draft holds, and what it leaves open.** It restates each of §4's outcomes in words:
-what is measured, the direction predicted, and the reading that refutes. It does not hold the
-rules that classify a replicate, the conditions for each verdict, or any numeric bound. Those are
-rows in section 2, written at freeze against R1's treatment text and a certified harness, neither
-of which exists yet.
+**What this draft holds.** It restates each of §4's outcomes in words: what is measured, the
+direction predicted, and the reading that refutes.
 
 ## 2. Fields filled at freeze
 
@@ -36,7 +33,7 @@ Every row is open. The draft cannot be frozen while one is.
 | Picks beyond the seven | #288 |
 | Frozen criteria list per pick | #288 |
 | Environment-fixed set: its members | #288 |
-| Classification rules (section 9), including the rule that a replicate reached the endpoint | #288 |
+| Classification rules (section 9), including the rule that a replicate reached the endpoint, and which halts each of outcome 6's counts takes | #288 |
 | The transcript script for outcome 1 and the treatment check | #288 |
 | Compliance: what a compliant round is, and the floor below which the run is void | owner |
 | Peak-context instrument: that `engine_cost.profile()` reads a replicate's transcript in both arms | #288 |
@@ -47,6 +44,9 @@ Every row is open. The draft cannot be frozen while one is.
 | Every numeric bound: the cost bound, the balance bound, the quality margin, the stop-type bound, the safety counts | owner |
 | The projection's inputs (outcome 3) | owner |
 | Verdict order and the conditions for each (section 12) | owner |
+| How picks combine into one reading for outcomes 3, 4, and 7, and outcome 2's reading on a pick where an arm has no round-2 verdict | owner |
+| Whether a flagged stop-type judgment (protocol part 2, rule 2) enters outcome 7's share | owner |
+| Confirmation of section 13's arm schedule and section 12's routes | owner |
 
 ## 3. Arms and pins
 
@@ -157,9 +157,10 @@ per round. Its inputs are a section 2 row.
 - **Instrument:** the lever-stop rule in part 2 of `blind-evaluator-protocol.md`; the pattern is a
   section 2 row.
 - **Unit:** a treatment-arm replicate. The ceiling exists in one arm only.
-- **Reading:** a no-go at one ceiling stop. On an unattended path the engine opens at most two
+- **Prediction:** no ceiling stop; one is a no-go. On an unattended path the engine opens at most two
   rounds per capped gate, and no replicate answers a stop after the plan gate, so a replicate
   cannot reach six rounds. A ceiling stop therefore means the orchestrator lost count.
+- **Refuted if:** one ceiling stop in any treatment replicate.
 - **Selection:** every treatment replicate, halted or not. Both the cap and the counting rule are
   re-read in the treatment's text at freeze.
 
@@ -169,8 +170,9 @@ per round. Its inputs are a section 2 row.
 - **Unit:** counts per arm over the whole run, of: fix agents that returned no report (the
   `code-review — fix agent` `gate-error` signature of appendix A §3); other gate-error halts after
   round 1's verdict; and other halts, turn timeouts and `max_turns` included.
-- **Reading:** the count at which each is a no-go is a section 2 bound. Halts before review are
-  reported apart: they precede R1.
+- **Prediction:** each count stays below its no-go count, a section 2 bound. Halts before review
+  are reported apart: they precede R1.
+- **Refuted if:** a count reaches its no-go count.
 - **Selection:** every admissible replicate. These replicates are censored at the endpoint, and
   this is where they count. Every halt is listed with its journal block.
 
@@ -198,7 +200,7 @@ classify a replicate are a section 2 row. One part is fixed now: **a review halt
 shown to be a round-1 design-question halt counts as at risk and not clean.**
 
 **Rates that are outcomes:** a review halt after round 2 is what outcome 1 reads; a round-1
-design-question halt is a balance check; every other halt counts in outcome 6.
+design-question halt is a balance check.
 
 ## 10. Excluded measures
 
@@ -254,12 +256,12 @@ together. The design cannot separate them; what is tested is the combination. A 
 | Control = 0.3.1, treatment = 0.3.1 + R1 | Restated, section 3 | #288's control decision. |
 | Same `(parent model, effort, subagent roster)` stratum | Kept | The roster's prompt text is not pinned by the record (template section 14). |
 | Arms interleaved by issue parity | Restated, section 13 | The order now alternates within each pick's pairs as well. |
-| k ≥ 3 replicates per issue per arm | Kept, section 2 | — |
+| k ≥ 3 replicates per issue per arm | Open, section 2 | — |
 | Plan gate answered by the same scripted approval | Kept | — |
 | Fixture: 6–10 issues, at least two of ≥ 5 rounds, at least one clean in two | Kept by reference, section 4 | `benchmark-fixture-set.md` made the selection. |
 | The candidate issues §4 names | Superseded | The fixture note picked vote #172 and none of the others. |
 | Round blocks, re-check launches, and fix-agent spawns counted from transcripts | Kept for code review, sections 6 and 7 | Acceptance rounds are no longer counted: outcome 1 reads review round 2 only. |
-| Outcome 1: rounds per completed issue, lower by at least one round | Restated as outcome 1; **the size is withdrawn** | A replicate shows at most two review rounds, so a round count cannot fall by one. |
+| Outcome 1: rounds per completed issue, lower by at least one round | Restated as outcome 1; **appendix A's size is withdrawn, and a new one is open** | A replicate shows at most two review rounds, so a round count cannot fall by one. |
 | Outcome 1: not higher on the clean issues | Restated as the first balance check | R1 acts after round 1, so it cannot change whether round 1 is dirty. |
 | Outcome 2: `claims=` after round 1 falls toward zero | Restated to round 2; **the size is open** | Rounds 3 and later never run. |
 | Outcome 2: refuted if the sum does not fall | Restated: refuted if higher | A control count of zero cannot fall. |
@@ -283,7 +285,8 @@ together. The design cannot separate them; what is tested is the combination. A 
 | Stopping rule: once per arm per replicate, no interim look | Kept | — |
 | Verdict posted on #169, with the σ from #209 | Restated, section 13 | #288 absorbs #169's core; σ is replaced by the control arm's spread. |
 
-Any element of §4 not in this table is not registered.
+This table maps §4 to this file and is not the registration: what is registered is this file and
+the template's Fixed text, and no element of §4 applies unless this file names it.
 
 **Not registered:** a prediction that parent turns between the round-1 verdict and the round-2
 spawn are lower in the treatment arm. It has no instrument. It may be added before freeze if one
@@ -302,10 +305,8 @@ For this pre-registration:
   the `- Budget:` specification. The line has one specification, under Ledger format in
   `loop-engine.md`.
 - **Site 7, Ledger-format insert:** it goes after the `justification=` bullet of that
-  specification. No measurement here reads the slot (outcome 5).
+  specification. No measurement here reads the slot (section 10).
 - **Site 7's rows in appendix A's byte table** count two inserts. #288 recomputes them.
-- **The fields this file reads** are named, not located: `claims=` on the `- Code-review:` round
-  elements.
 
 Every other site's line numbers are against engine 0.3.1. Re-locating that text is #288's first
 acceptance criterion and is not done here.
