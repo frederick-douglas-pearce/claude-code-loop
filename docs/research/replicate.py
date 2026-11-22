@@ -326,7 +326,7 @@ def check_env(env):
 # gh shim refuses and logs every call instead of failing before its log write.
 SHAKEDOWN_DROP = ("CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN", "GH_REPO")
 # A shakedown refuses to start while either is in the harness's own environment:
-# its host-side processes (the clone, `uv --version`) inherit that environment.
+# its host-side processes inherit that environment.
 SHAKEDOWN_REFUSE_ENV = ("GH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN")
 
 
