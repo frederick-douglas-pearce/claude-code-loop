@@ -1,0 +1,5 @@
+# Cloud Function deps (installed by Cloud Functions at deploy; NOT part of the usvote
+# package or its lock — this is a standalone GCP function, deployed from deploy/killswitch/).
+functions-framework>=3.5
+cloudevents>=1.10
+google-cloud-run>=0.10

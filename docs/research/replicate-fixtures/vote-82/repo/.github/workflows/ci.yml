@@ -1,0 +1,165 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same ref (e.g. new pushes to an open PR).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      # Pin the interpreter to .python-version so CI matches local dev.
+      - name: Set up Python
+        run: uv python install
+
+      # --locked fails the build on a stale uv.lock instead of re-resolving.
+      - name: Install dependencies
+        id: install
+        run: uv sync --locked --dev
+
+      - name: Lint (ruff)
+        run: uv run ruff check
+
+      # Run the type/test checks even if a sibling check failed, so a lint
+      # failure doesn't mask a type or test failure. Gate on the install step
+      # succeeding, so a dependency-install failure short-circuits cleanly
+      # instead of spawning confusing secondary failures here.
+      - name: Type check (mypy)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run mypy
+
+      - name: Tests (pytest, integration excluded)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run pytest -m "not integration" --cov=usvote
+
+  # The live-Postgres integration tests run in a SEPARATE job so a service-
+  # container/database hiccup is distinguishable from a lint/type/unit failure
+  # in `checks`. The Postgres major version matches the local/prod target (16).
+  integration:
+    runs-on: ubuntu-latest
+    # Bound a wedged connection (DBC connects once and does not retry) rather
+    # than letting a hung step ride the 6h default.
+    timeout-minutes: 10
+
+    # Ephemeral throwaway Postgres with no real data: the password is a plain
+    # literal (no GitHub secret needed) and the tests' destructive `replace=True`
+    # schema drop is safe against it. Do NOT point this at a real database.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: usvote_test
+        ports:
+          - 5432:5432
+        # Gate the job's steps on Postgres being ready to accept connections,
+        # so pytest fails on an assertion rather than a connection refusal.
+        # Probe the target DB (-d usvote_test), not just the server: a bare
+        # `pg_isready -U postgres` can pass against the transient socket-only
+        # server the image runs during init, before usvote_test exists / TCP is
+        # up. DBC connects once with no retry, so this gate is the only guard.
+        options: >-
+          --health-cmd "pg_isready -U postgres -d usvote_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --locked --dev
+
+      # Point the USVOTE_TEST_DB_* config (read in tests/conftest.py) at the
+      # service container. `-m integration` overrides the ini's default
+      # `-m 'not integration'` (last -m wins), running ONLY these tests here.
+      - name: Tests (pytest, integration only)
+        env:
+          USVOTE_TEST_DB_HOST: localhost
+          USVOTE_TEST_DB_PORT: 5432
+          USVOTE_TEST_DB_NAME: usvote_test
+          USVOTE_TEST_DB_USER: postgres
+          USVOTE_TEST_DB_PASSWORD: postgres
+        run: uv run pytest -m integration
+
+  # Build the API container and boot it (E8-S6, #100 / D033). This is the drift guard
+  # for the SLIM serve-only image: the import-graph test (a denylist) catches new db/
+  # pandas imports under usvote/api/, but NOT an allowed-but-unpackaged import (e.g.
+  # httpx) that would pass every unit gate yet crash the --no-deps container at runtime.
+  # Building + booting the real image + curling /health catches exactly that, plus
+  # Dockerfile rot and the $PORT/CMD wiring. CI has no warehouse, so we bake a
+  # schema-valid PLACEHOLDER snapshot (synthetic MIT/CC0 data); real snapshot *contents*
+  # are not validated here.
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --locked --dev
+
+      # Reuse the committed synthetic snapshot frame so the placeholder carries the
+      # current SNAPSHOT_SCHEMA_VERSION and passes the app's schema check at boot.
+      - name: Build placeholder snapshot (no warehouse needed)
+        run: uv run python scripts/make_placeholder_snapshot.py api_snapshot.sqlite
+
+      - name: Build image
+        run: docker build -t usvote-api:ci .
+
+      # Boot the container on the Cloud-Run-style $PORT and confirm the slim serve
+      # closure imports and the app answers /health with no DB.
+      - name: Run + smoke-test /health
+        run: |
+          docker run -d --name usvote-api-ci -e PORT=8080 -p 8080:8080 usvote-api:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/health > /tmp/health.json; then
+              echo "healthy after ${i}s"; cat /tmp/health.json; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::container did not become healthy in 30s"
+          docker logs usvote-api-ci
+          exit 1
+
+      - name: Container logs (always)
+        if: ${{ always() }}
+        run: docker logs usvote-api-ci || true
+
+      - name: Stop container
+        if: ${{ always() }}
+        run: docker rm -f usvote-api-ci || true

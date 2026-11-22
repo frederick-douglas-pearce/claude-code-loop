@@ -1,0 +1,227 @@
+{
+ "_README": "Regenerable snapshot of the Electoral College president-EV getters, one entry per in-scope UCSB year: the canonical candidate names with president_electoral_votes > 0 (the 1944 footnote asterisk stripped per usvote.transform.strip_name_footnote_markers). TEST INPUT ONLY -- never read from src/ (a test enforces this). It is the independent witness the UCSB reciprocal completeness guard (#38) checks against, so it must not be derived from usvote.ucsb.reconcile's own map. Source: National Archives (public domain, https://www.archives.gov/electoral-college/<year>), via usvote.parse + usvote.transform. Deliberately carries NO electoral-vote counts (D024 section 5) -- only the getter identity.",
+ "years": {
+  "1824": [
+   "Andrew Jackson",
+   "John Quincy Adams",
+   "William H. Crawford",
+   "Henry Clay"
+  ],
+  "1828": [
+   "Andrew Jackson",
+   "John Quincy Adams"
+  ],
+  "1832": [
+   "Andrew Jackson",
+   "Henry Clay",
+   "John Floyd",
+   "William Wirt"
+  ],
+  "1836": [
+   "Martin Van Buren",
+   "William H. Harrison",
+   "Hugh L. White",
+   "Daniel Webster",
+   "Willie P. Mangum"
+  ],
+  "1840": [
+   "William H. Harrison",
+   "Martin Van Buren"
+  ],
+  "1844": [
+   "James K. Polk",
+   "Henry Clay"
+  ],
+  "1848": [
+   "Zachary Taylor",
+   "Lewis Cass"
+  ],
+  "1852": [
+   "Franklin Pierce",
+   "Winfield Scott"
+  ],
+  "1856": [
+   "James Buchanan",
+   "John C. Frémont",
+   "Millard Fillmore"
+  ],
+  "1860": [
+   "Abraham Lincoln",
+   "John C. Breckinridge",
+   "John Bell",
+   "Stephen A. Douglas"
+  ],
+  "1864": [
+   "Abraham Lincoln",
+   "George B. McClellan"
+  ],
+  "1876": [
+   "Rutherford B. Hayes",
+   "Samuel J. Tilden"
+  ],
+  "1880": [
+   "James A. Garfield",
+   "Winfield S. Hancock"
+  ],
+  "1884": [
+   "Grover Cleveland",
+   "James G. Blaine"
+  ],
+  "1888": [
+   "Benjamin Harrison",
+   "Grover Cleveland"
+  ],
+  "1892": [
+   "Grover Cleveland",
+   "Benjamin Harrison",
+   "James B. Weaver"
+  ],
+  "1896": [
+   "William McKinley",
+   "William J. Bryan"
+  ],
+  "1900": [
+   "William McKinley",
+   "William J. Bryan"
+  ],
+  "1904": [
+   "Theodore Roosevelt",
+   "Alton B. Parker"
+  ],
+  "1908": [
+   "William H. Taft",
+   "William J. Bryan"
+  ],
+  "1912": [
+   "Woodrow Wilson",
+   "Theodore Roosevelt",
+   "William H. Taft"
+  ],
+  "1916": [
+   "Woodrow Wilson",
+   "Charles E. Hughes"
+  ],
+  "1920": [
+   "Warren G. Harding",
+   "James M. Cox"
+  ],
+  "1924": [
+   "Calvin Coolidge",
+   "John W. Davis",
+   "Robert M. La Follette"
+  ],
+  "1928": [
+   "Herbert C. Hoover",
+   "Alfred E. Smith"
+  ],
+  "1932": [
+   "Franklin D. Roosevelt",
+   "Herbert C. Hoover"
+  ],
+  "1936": [
+   "Franklin D. Roosevelt",
+   "Alfred M. Landon"
+  ],
+  "1940": [
+   "Franklin D. Roosevelt",
+   "Wendell L. Willkie"
+  ],
+  "1944": [
+   "Franklin D. Roosevelt",
+   "Thomas E. Dewey"
+  ],
+  "1948": [
+   "Harry S. Truman",
+   "Thomas E. Dewey",
+   "J. Strom Thurmond"
+  ],
+  "1952": [
+   "Dwight D. Eisenhower",
+   "Adlai Stevenson"
+  ],
+  "1956": [
+   "Dwight D. Eisenhower",
+   "Adlai Stevenson",
+   "Walter B. Jones"
+  ],
+  "1960": [
+   "John F. Kennedy",
+   "Richard M. Nixon",
+   "Harry F. Byrd"
+  ],
+  "1964": [
+   "Lyndon B. Johnson",
+   "Barry M. Goldwater"
+  ],
+  "1968": [
+   "Richard M. Nixon",
+   "Hubert H. Humphrey",
+   "George C. Wallace"
+  ],
+  "1972": [
+   "Richard M. Nixon",
+   "George S. McGovern",
+   "John Hospers"
+  ],
+  "1976": [
+   "Jimmy Carter",
+   "Gerald R. Ford",
+   "Ronald Reagan"
+  ],
+  "1980": [
+   "Ronald Reagan",
+   "Jimmy Carter"
+  ],
+  "1984": [
+   "Ronald Reagan",
+   "Walter F. Mondale"
+  ],
+  "1988": [
+   "George Bush",
+   "Michael S. Dukakis",
+   "Lloyd Bentsen"
+  ],
+  "1992": [
+   "William J. Clinton",
+   "George Bush"
+  ],
+  "1996": [
+   "William J. Clinton",
+   "Robert Dole"
+  ],
+  "2000": [
+   "George W. Bush",
+   "Albert Gore Jr."
+  ],
+  "2004": [
+   "George W. Bush",
+   "John F. Kerry",
+   "John Edwards"
+  ],
+  "2008": [
+   "Barack Obama",
+   "John McCain"
+  ],
+  "2012": [
+   "Barack Obama",
+   "Mitt Romney"
+  ],
+  "2016": [
+   "Donald J. Trump",
+   "Hillary Clinton",
+   "Colin Powell",
+   "Bernie Sanders",
+   "Ron Paul",
+   "John Kasich",
+   "Faith Spotted Eagle"
+  ],
+  "2020": [
+   "Joseph R. Biden Jr.",
+   "Donald J. Trump"
+  ],
+  "2024": [
+   "Donald J. Trump",
+   "Kamala D. Harris"
+  ]
+ }
+}

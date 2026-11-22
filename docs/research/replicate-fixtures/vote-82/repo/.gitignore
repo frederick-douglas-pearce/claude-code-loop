@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+
+# Build output
+dist/
+build/
+
+# uv manages the environment; uv.lock IS committed for reproducible installs.
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Testing / coverage
+.coverage
+coverage/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment / secrets
+.env
+.env.local
+
+# API snapshot copied into the repo root for `docker build` (the baked-in artifact,
+# built outside the tree by `python -m usvote.snapshot`). Gitignored so it is never
+# committed and — because hatchling's `packages` layout respects .gitignore — never
+# bundled into the wheel either. It is still available to `docker build` (.dockerignore
+# keeps it in the build context).
+/api_snapshot.sqlite
+*.sqlite
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# dev-loop ledger (local working state, never committed)
+.claude/loop/
+
+# Loop ledger (fixture rebind: LEDGER_ROOT)
+.loop-ledger/

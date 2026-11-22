@@ -1,0 +1,57 @@
+<!--
+  SYNTHETIC UCSB fixture — structure mimics 1820 (layout L0, summary-only); ALL VALUES
+  ARE FABRICATED. No UCSB-sourced bytes (D022).
+
+  Pins for the #35 parser — the pre-1824 era, where NO POPULAR VOTE EXISTS:
+    - there is NO state table at all. The page carries only the summary block: party,
+      nominees, and electoral vote. There is no STATE/STATES row anywhere, and no
+      TOTAL VOTE or Votes/%/EV columns.
+    - `select_results_table` (which selects the table containing an own-row with a cell
+      reading STATE/STATES) must therefore return None here. Verified against the real
+      snapshot: that rule selects exactly one table on every popular-vote year and ZERO
+      on all nine 1789-1820 pages, so it doubles as the L0 detector.
+    - max table width is 6, well under the 8 that the narrowest popular-vote year
+      (g=2 -> W=8) can produce. There is no width at which this could be mistaken for a
+      data table.
+    - `parse_election_year(html, 1820)` returns None (1820 is in NO_POPULAR_VOTE_YEARS).
+      The SAME html labelled with a year >= 1824 must RAISE, not return None: a missing
+      state table in a year that should have one means UCSB restructured something, and
+      guessing is exactly the silent failure D024 sec 4 rules out.
+
+  There are no aggregation identities to pin -- that is the whole point of this fixture.
+-->
+<section id="block-system-main" class="block block-system clearfix">
+<div class="field-body">
+<table class="table table-responsive">
+<tbody>
+<tr>
+<td colspan="2" rowspan="2"><strong>Party</strong></td>
+<td colspan="2"><strong>Nominees</strong></td>
+<td colspan="2" rowspan="2"><strong>Electoral Vote</strong></td>
+</tr>
+<tr>
+<td><strong>Presidential</strong></td>
+<td><strong>Vice Presidential</strong></td>
+</tr>
+<tr>
+<td bgcolor="#990000"> </td>
+<td><em> Testytonian</em></td>
+<td>Alexandra Placeholder</td>
+<td>Wilhelmina Stand-In</td>
+<td>228</td>
+<td>98.3%</td>
+</tr>
+<tr>
+<td bgcolor="#000099"> </td>
+<td><em> Exemplary</em></td>
+<td>Benedict Fabricated</td>
+<td>Theodore Notreal</td>
+<td>4</td>
+<td>1.7%</td>
+</tr>
+</tbody>
+</table>
+<p>Electors were chosen by the state legislature in most states in this era; no
+statewide popular vote was recorded.</p>
+</div>
+</section>

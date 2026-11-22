@@ -1,0 +1,167 @@
+<!--
+  SYNTHETIC UCSB popular-vote fixture — structure mimics 1876; ALL VOTE VALUES ARE
+  FABRICATED. No UCSB-sourced bytes (D022): this repo is public and UCSB content is
+  non-redistributable (D014/D016), so this page is hand-written from a close reading of
+  the real snapshot, never copied from it. The candidate names, parties, and layout
+  reproduce the real 1876 page's shape; every number below is made up.
+
+  Pins for the #35 parser (the two-candidate-group era, ~1856-2020):
+    - wide-not-long layout: candidates in columns, one row per state -> melt required.
+    - TWO candidate groups (contrast with the 4-group fixture) -> the group count must
+      be discovered from the header, never hard-coded.
+    - colspan/rowspan multi-row header: STATE/TOTAL VOTE span 3 header rows; each
+      candidate group is a colspan=3 (Votes / % / EV) block.
+    - a legislature-chosen-elector state with no popular vote (Colorado here, mimicking
+      1876) -> a single wide cell spanning the data columns; must be FLAGGED, never
+      zeroed (D005).
+    - empty EV cells are a literal U+00A0 (NBSP), NOT "&nbsp;" and NOT "" -- matching the
+      real page, so a parser that treats them as blank must handle NBSP.
+    - a separator row (bgcolor #AACAEA, one wide colspan cell) between header and body,
+      before Totals, that is not a data row.
+    - a Totals row at the bottom, distinguished by its "Totals" label, not position.
+
+  AGGREGATION IDENTITIES — faithfully reproduced from the real data so #35's sum
+  validation has something true to check (verified by tests/unit/test_ucsb_fixtures.py):
+    (1) each candidate's Votes column sums EXACTLY across the PV-reporting states to the
+        Totals row: Placeholder 60,000+80,000+59,000+10,000 = 209,000;
+        Fabricated 40,000+70,000+61,000+14,000 = 185,000.
+    (2) the TOTAL VOTE column sums EXACTLY to the Totals row: 398,000.
+    (3) per state, TOTAL VOTE EXCEEDS the two shown candidates by a residual "other"
+        (1,000 each here) -- as in the real data, the columned candidates are not the
+        whole ballot. So within-row votes do NOT sum to TOTAL VOTE.
+    (4) EV totals INCLUDE the legislature state: data rows give Placeholder 16 EV
+        (Alabama 10 + California 6), but the Totals row says 19 -- the extra 3 are
+        Colorado's legislature electors (D005). Zero Colorado out and 16 != 19.
+
+  Identities (1)-(3) are what #35's popular-vote validation reconciles. The EV columns
+  are reproduced faithfully but UCSB's electoral-vote figures are NOT parsed (they are
+  error-prone -- UCSB assigns EC votes to the state's popular-vote winner; the Electoral
+  College source of truth is the National Archives spine, D006). They are kept here so
+  #35 can prove it correctly SKIPS them; identity (4) is a fixture-internal consistency
+  check, not a reconciliation #35 performs. The real 60-election external snapshot
+  remains the acceptance corpus (D022); this fixture pins structure in CI, it does not
+  stand in for real data.
+-->
+<section id="block-system-main" class="block block-system clearfix">
+<div class="field-body">
+<table class="table table-responsive">
+<tbody>
+<tr>
+<td colspan="2" rowspan="2"><strong>Party</strong></td>
+<td> </td>
+<td colspan="2"><strong>Nominees</strong></td>
+<td colspan="2" rowspan="2"><strong>Electoral Vote</strong></td>
+<td colspan="2" rowspan="2"><strong>Popular Vote</strong></td>
+</tr>
+<tr>
+<td> </td>
+<td><strong>Presidential</strong></td>
+<td><strong>Vice Presidential</strong></td>
+</tr>
+<tr>
+<td bgcolor="#990000"> </td>
+<td><em> Testytonian</em></td>
+<td><img alt="election party winner" src="https://example.invalid/winner.png" /></td>
+<td>Alexandra Placeholder</td>
+<td>Wilhelmina Stand-In</td>
+<td>19</td>
+<td>67.9%</td>
+<td>209,000</td>
+<td>52.5%</td>
+</tr>
+<tr>
+<td bgcolor="#000099"> </td>
+<td><em> Exemplary</em></td>
+<td> </td>
+<td>Benedict Fabricated</td>
+<td>Theodore Notreal</td>
+<td>9</td>
+<td>32.1%</td>
+<td>185,000</td>
+<td>46.5%</td>
+</tr>
+<tr>
+<td> </td>
+</tr>
+<tr>
+<td rowspan="3"><strong>STATE</strong></td>
+<td rowspan="3"><strong>TOTAL VOTE</strong></td>
+<td bgcolor="#990000" colspan="3"><span>Testytonian</span></td>
+<td bgcolor="#000099" colspan="3"><span>Exemplary</span></td>
+</tr>
+<tr>
+<td colspan="3"><strong>ALEXANDRA PLACEHOLDER</strong></td>
+<td colspan="3"><strong>BENEDICT FABRICATED</strong></td>
+</tr>
+<tr>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+</tr>
+<tr>
+<td bgcolor="#AACAEA" colspan="8"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Alabama</td>
+<td bgcolor="#F7FAFD">101,000</td>
+<td bgcolor="#F7FAFD">60,000</td>
+<td bgcolor="#F7FAFD">59.4</td>
+<td bgcolor="#F7FAFD">10</td>
+<td bgcolor="#F7FAFD">40,000</td>
+<td bgcolor="#F7FAFD">39.6</td>
+<td bgcolor="#F7FAFD"> </td>
+</tr>
+<tr bgcolor="#F7FAFD">
+<td bgcolor="#FFFFFF">California</td>
+<td bgcolor="#FFFFFF">151,000</td>
+<td bgcolor="#FFFFFF">80,000</td>
+<td bgcolor="#FFFFFF">53.0</td>
+<td bgcolor="#FFFFFF">6</td>
+<td bgcolor="#FFFFFF">70,000</td>
+<td bgcolor="#FFFFFF">46.4</td>
+<td bgcolor="#FFFFFF"> </td>
+</tr>
+<tr bgcolor="#F7FAFD">
+<td bgcolor="#FFFFFF">Colorado</td>
+<td bgcolor="#FFFFFF" colspan="7">3 electors chosen by state legislature and awarded to Alexandra Placeholder</td>
+</tr>
+<tr>
+<td>Connecticut</td>
+<td>121,000</td>
+<td>59,000</td>
+<td>48.8</td>
+<td> </td>
+<td>61,000</td>
+<td>50.4</td>
+<td>6</td>
+</tr>
+<tr bgcolor="#F7FAFD">
+<td bgcolor="#FFFFFF">Delaware</td>
+<td bgcolor="#FFFFFF">25,000</td>
+<td bgcolor="#FFFFFF">10,000</td>
+<td bgcolor="#FFFFFF">40.0</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">14,000</td>
+<td bgcolor="#FFFFFF">56.0</td>
+<td bgcolor="#FFFFFF">3</td>
+</tr>
+<tr>
+<td bgcolor="#AACAEA" colspan="8"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Totals</td>
+<td bgcolor="#F7FAFD">398,000</td>
+<td bgcolor="#F7FAFD">209,000</td>
+<td bgcolor="#F7FAFD">52.5</td>
+<td bgcolor="#F7FAFD">19</td>
+<td bgcolor="#F7FAFD">185,000</td>
+<td bgcolor="#F7FAFD">46.5</td>
+<td bgcolor="#F7FAFD">9</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>

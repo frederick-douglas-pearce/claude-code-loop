@@ -1,0 +1,250 @@
+<!--
+  SYNTHETIC UCSB popular-vote fixture — structure mimics 1824; ALL VOTE VALUES ARE
+  FABRICATED. No UCSB-sourced bytes (D022): this repo is public and UCSB content is
+  non-redistributable (D014/D016), so this page is hand-written from a close reading of
+  the real snapshot, never copied from it. The layout, the four one-party candidates,
+  and the six legislature-chosen states reproduce the real 1824 page's shape; every
+  number below is made up.
+
+  Pins for the #35 parser, beyond what the 2-group fixture covers:
+    - FOUR candidate groups (vs. two) -> the drift in group count across eras is why the
+      parser must read the count from the header rather than assume a fixed width.
+      Full-width rows here span 14 columns (2 + 4x3); the 2-group fixture spans 8.
+    - the state-block column order DIFFERS from the summary-block order -- a real 1824
+      quirk. The summary lists Fictitious/Notional/Hypothetical/Spurious; the state
+      table below is ordered NOTIONAL/FICTITIOUS/SPURIOUS/HYPOTHETICAL. A parser must
+      key candidates by the state-block header, not by summary position.
+    - SIX legislature-chosen-elector states with no popular vote (Delaware, Georgia,
+      Louisiana, New York, South Carolina, Vermont -- the real 1824 set) -> each a single
+      colspan=13 cell; all must be FLAGGED, never zeroed (D005). Their prose forms vary
+      ("awarded to X", "N for A; M for B"), and New York's cell contains a <br /> line
+      break mid-sentence -- so the flag cannot depend on one fixed phrasing.
+    - a FOOTNOTE row at the table bottom (colspan=14, "elected by the House of
+      Representatives") -- must not be mistaken for a data row.
+    - empty cells are a literal U+00A0 (NBSP), matching the real page.
+    - a contingent election: the popular- AND electoral-vote leader (Fictitious, 43 EV)
+      is NOT the winner -- Notional (32 EV) is "elected by the House," mirroring 1824.
+
+  AGGREGATION IDENTITIES — faithfully reproduced from the real data so #35's sum
+  validation has something true to check (verified by tests/unit/test_ucsb_fixtures.py).
+  Candidates keyed by state-block column: Notional (N), Fictitious (F), Spurious (S),
+  Hypothetical (H):
+    (1) each candidate's Votes column sums EXACTLY across the three PV states to the
+        Totals row: N 2,400+7,000+2,000 = 11,400; F 9,000+100+4,000 = 13,100;
+        S 100+2,800+400 = 3,300; H 1,500+100+8,300 = 9,900.
+    (2) the TOTAL VOTE column sums EXACTLY to the Totals row: 13,100+10,100+14,800 =
+        38,000.
+    (3) per state, TOTAL VOTE EXCEEDS the four shown candidates by a residual "other"
+        (100 each) -- within-row votes do NOT sum to TOTAL VOTE.
+    (4) EV totals INCLUDE the six legislature states, apportioned by the prose in each
+        cell (D005). Data (PV-state) EV: F 5 (Alabama), N 8 (Connecticut), H 24
+        (Virginia). Legislature EV: N 1(DE)+2(LA)+14(NY)+7(VT)=24; F 9(GA)+3(LA)+15(NY)
+        +11(SC)=38; S 5(NY); H 2(DE)+2(NY)=4. Totals row = data + legislature:
+        N 8+24=32, F 5+38=43, S 0+5=5, H 24+4=28 (sum 108; the 71 legislature electors
+        + 37 PV-state electors). Zero the legislature states out and every EV total
+        breaks.
+
+  Identities (1)-(3) are what #35's popular-vote validation reconciles; the legislature
+  cells matter to it because those six states are FLAGGED as PV-absent (D005), not
+  entered as zeros. UCSB's electoral-vote figures are NOT parsed (error-prone -- UCSB
+  assigns EC votes to the popular-vote winner; the EC source of truth is the National
+  Archives spine, D006). The EV columns and the elector apportionments are reproduced
+  faithfully so #35 can prove it SKIPS them; identity (4) is a fixture-internal
+  consistency check, not a reconciliation #35 performs. The real 60-election external
+  snapshot remains the acceptance corpus (D022).
+-->
+<section id="block-system-main" class="block block-system clearfix">
+<div class="field-body">
+<table class="table table-responsive">
+<tbody>
+<tr>
+<td colspan="2" rowspan="2"><strong>Party</strong></td>
+<td> </td>
+<td colspan="2"><strong>Nominees</strong></td>
+<td colspan="2" rowspan="2"><strong>Electoral Vote</strong></td>
+<td colspan="2" rowspan="2"><strong>Popular Vote</strong></td>
+</tr>
+<tr>
+<td> </td>
+<td><strong>Presidential</strong></td>
+<td><strong>Vice Presidential</strong></td>
+</tr>
+<tr>
+<td bgcolor="#000099"> </td>
+<td><em> Placeholder-Whig</em></td>
+<td> </td>
+<td>Jebediah Fictitious</td>
+<td>Cornelius Invented</td>
+<td>43</td>
+<td>39.8%</td>
+<td>13,100</td>
+<td>34.5%</td>
+</tr>
+<tr>
+<td bgcolor="#CC6600"> </td>
+<td><em> Placeholder-Whig</em></td>
+<td><img alt="election party winner" src="https://example.invalid/winner.png" /></td>
+<td>Millicent Notional</td>
+<td>Cornelius Invented</td>
+<td>32</td>
+<td>29.6%</td>
+<td>11,400</td>
+<td>30.0%</td>
+</tr>
+<tr>
+<td bgcolor="#009900"> </td>
+<td> <em>Placeholder-Whig</em></td>
+<td> </td>
+<td>Percival Hypothetical</td>
+<td>Ambrose Madeup</td>
+<td>28</td>
+<td>25.9%</td>
+<td>9,900</td>
+<td>26.1%</td>
+</tr>
+<tr>
+<td bgcolor="#990099"> </td>
+<td> <em>Placeholder-Whig</em></td>
+<td> </td>
+<td>Endora Spurious</td>
+<td>Nathan Contrived</td>
+<td>5</td>
+<td>4.6%</td>
+<td>3,300</td>
+<td> 8.7%</td>
+</tr>
+<tr>
+<td> </td>
+</tr>
+<tr>
+<td rowspan="3"><strong>STATE</strong></td>
+<td rowspan="3"><strong>TOTAL VOTE</strong></td>
+<td bgcolor="#CC6600" colspan="3"><span>Placeholder-Whig</span></td>
+<td bgcolor="#000099" colspan="3"><span>Placeholder-Whig</span></td>
+<td bgcolor="#990099" colspan="3"><span>Placeholder-Whig</span></td>
+<td bgcolor="#009900" colspan="3"><span>Placeholder-Whig</span></td>
+</tr>
+<tr>
+<td colspan="3"><strong>NOTIONAL</strong></td>
+<td colspan="3"><strong>FICTITIOUS</strong></td>
+<td colspan="3"><strong>SPURIOUS</strong></td>
+<td colspan="3"><strong>HYPOTHETICAL</strong></td>
+</tr>
+<tr>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+</tr>
+<tr>
+<td bgcolor="#AACAEA" colspan="14"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Alabama</td>
+<td bgcolor="#F7FAFD">13,100</td>
+<td bgcolor="#F7FAFD">2,400</td>
+<td bgcolor="#F7FAFD">18.3</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD"><strong>9,000</strong></td>
+<td bgcolor="#F7FAFD"><strong>68.7</strong></td>
+<td bgcolor="#F7FAFD"><strong>5</strong></td>
+<td bgcolor="#F7FAFD">100</td>
+<td bgcolor="#F7FAFD">0.8</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD">1,500</td>
+<td bgcolor="#F7FAFD">11.5</td>
+<td bgcolor="#F7FAFD"> </td>
+</tr>
+<tr bgcolor="#F7FAFD">
+<td bgcolor="#FFFFFF">Connecticut</td>
+<td bgcolor="#FFFFFF">10,100</td>
+<td bgcolor="#FFFFFF"><strong>7,000</strong></td>
+<td bgcolor="#FFFFFF"><strong>69.3</strong></td>
+<td bgcolor="#FFFFFF"><strong>8</strong></td>
+<td bgcolor="#FFFFFF">100</td>
+<td bgcolor="#FFFFFF">1.0</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">2,800</td>
+<td bgcolor="#FFFFFF">27.7</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">100</td>
+<td bgcolor="#FFFFFF">1.0</td>
+<td bgcolor="#FFFFFF"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Delaware</td>
+<td bgcolor="#F7FAFD" colspan="13">3 electors chosen by state legislature: 2 for Hypothetical; 1 for Notional</td>
+</tr>
+<tr>
+<td bgcolor="#FFFFFF">Georgia</td>
+<td bgcolor="#FFFFFF" colspan="13">9 electors chosen by state legislature and awarded to Jebediah Fictitious</td>
+</tr>
+<tr bgcolor="#F7FAFD">
+<td bgcolor="#FFFFFF">Louisiana</td>
+<td bgcolor="#FFFFFF" colspan="13">5 electors chosen by state legislature: 3 for Fictitious; 2 for Notional</td>
+</tr>
+<tr>
+<td>New York</td>
+<td colspan="13">36 electors chosen by state legislature:<br />15 to Fictitious; 14 to Notional; 5 to Spurious; 2 to Hypothetical</td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">South Carolina</td>
+<td bgcolor="#F7FAFD" colspan="13">11 electors chosen by state legislature and awarded to Jebediah Fictitious</td>
+</tr>
+<tr bgcolor="#F7FAFD">
+<td bgcolor="#FFFFFF">Vermont</td>
+<td bgcolor="#FFFFFF" colspan="13">7 electors chosen by state legislature and awarded to Millicent Notional</td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Virginia</td>
+<td bgcolor="#F7FAFD">14,800</td>
+<td bgcolor="#F7FAFD">2,000</td>
+<td bgcolor="#F7FAFD">13.5</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD">4,000</td>
+<td bgcolor="#F7FAFD">27.0</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD">400</td>
+<td bgcolor="#F7FAFD">2.7</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD"><strong>8,300</strong></td>
+<td bgcolor="#F7FAFD"><strong>56.1</strong></td>
+<td bgcolor="#F7FAFD"><strong>24</strong></td>
+</tr>
+<tr>
+<td bgcolor="#AACAEA" colspan="14"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Totals</td>
+<td bgcolor="#F7FAFD">38,000</td>
+<td bgcolor="#F7FAFD">11,400</td>
+<td bgcolor="#F7FAFD">30.0</td>
+<td bgcolor="#F7FAFD">32</td>
+<td bgcolor="#F7FAFD"><strong>13,100</strong></td>
+<td bgcolor="#F7FAFD"><strong>34.5</strong></td>
+<td bgcolor="#F7FAFD"><strong>43</strong></td>
+<td bgcolor="#F7FAFD">3,300</td>
+<td bgcolor="#F7FAFD">8.7</td>
+<td bgcolor="#F7FAFD">5</td>
+<td bgcolor="#F7FAFD">9,900</td>
+<td bgcolor="#F7FAFD">26.1</td>
+<td bgcolor="#F7FAFD">28</td>
+</tr>
+<tr>
+<td bgcolor="#AACAEA" colspan="14"> </td>
+</tr>
+<tr>
+<td colspan="14">Millicent Notional was elected by the House of Representatives.</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>

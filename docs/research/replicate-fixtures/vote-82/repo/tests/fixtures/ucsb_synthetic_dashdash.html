@@ -1,0 +1,235 @@
+<!--
+  SYNTHETIC UCSB popular-vote fixture — structure mimics 1948 (layout L2); ALL VOTE
+  VALUES ARE FABRICATED. No UCSB-sourced bytes (D022).
+
+  Pins for the #35 parser — the "--" ABSENCE TOKEN and the 0.0-PERCENT DECOY:
+
+    - "--" in a Votes cell means THE CANDIDATE WAS NOT ON THAT STATE'S BALLOT (D024
+      sec 4, case 4; the pre-1852 spelling of the same case is a lone U+00A0). It parses
+      to None, NEVER to 0. A literal 0 appears nowhere in a state-row vote column in the
+      entire corpus, so a 0 in the output is by itself proof of a parser bug.
+
+    - THE DECOY, and the single easiest way to get this wrong: California's fourth
+      candidate reads 1,228 votes at 0.0 percent against a 4,000,000 state total
+      (0.03%, which genuinely rounds to 0.0). The percent column is PUBLISHED AND
+      ROUNDED, so 0.0 means "rounds to zero", not "zero" -- and certainly not "absent".
+      Meanwhile Alabama's fourth candidate is "--", genuinely absent. Any absence rule
+      that consults the percent column classifies these two identically and is wrong.
+      Absence is read from the VOTES cell only. This fixture exists so that a
+      percent-based implementation fails a test instead of shipping.
+
+    - the proof that "--" is not 0: the fourth candidate's national total is 4,228
+      (1,228 + 3,000), not 0. Zeroing the two absent cells leaves the column sum
+      unchanged, so identity (1) alone would NOT catch the mistake -- which is why the
+      never-zero invariant is asserted directly.
+
+    - percent is nonetheless RETAINED, with one job: `votes/total ~= percent` per cell
+      is the only cheap detector for a column-window shift of the 1976 kind. Retained
+      for that, documented as never an absence signal.
+
+  Layout L2 (names-first, NESTED summary) is also pinned:
+    - the summary block is a <table> NESTED INSIDE a cell of the outer table. A plain
+      `table.find_all("tr")` walks into it and leaks 4 summary rows into the body. Hence
+      `own_rows`: [r for r in t.find_all("tr") if r.find_parent("table") is t].
+      (Contrast the nocolspan/1836 fixture, where the summary is sibling rows of the
+      SAME table and only the modal-width rule separates them. Both defences are needed;
+      neither covers the other.)
+    - the candidate NAME row precedes the STATE row, inverting L1's order.
+
+  AGGREGATION IDENTITIES (verified by tests/unit/test_ucsb_fixtures.py):
+    (1) Placeholder 100,000+2,000,000+70,000+24,000 = 2,194,000;
+        Fabricated 60,000+1,900,000+75,000+25,000 = 2,060,000;
+        Notional 38,000+80,000 = 118,000 (two states absent);
+        Invented 1,228 + 3,000 = 4,228 (two states absent).
+    (2) TOTAL VOTE 200,000+4,000,000+150,000+50,000 = 4,400,000.
+    (3) per state, TOTAL VOTE strictly exceeds the shown candidates.
+    (4) EV totals equal the data-row EV sum: Placeholder 11+25 = 36, Fabricated 8+3 = 11.
+        No legislature state in this year.
+-->
+<section id="block-system-main" class="block block-system clearfix">
+<div class="field-body">
+<table class="table table-responsive">
+<tbody>
+<tr>
+<td colspan="14">
+<table class="table table-responsive">
+<tbody>
+<tr>
+<td colspan="2" rowspan="2"><strong>Party</strong></td>
+<td> </td>
+<td colspan="2"><strong>Nominees</strong></td>
+<td colspan="2" rowspan="2"><strong>Electoral Vote</strong></td>
+<td colspan="2" rowspan="2"><strong>Popular Vote</strong></td>
+</tr>
+<tr>
+<td> </td>
+<td><strong>Presidential</strong></td>
+<td><strong>Vice Presidential</strong></td>
+</tr>
+<tr>
+<td bgcolor="#990000"> </td>
+<td><em> Testytonian</em></td>
+<td><img alt="election party winner" src="https://example.invalid/winner.png" /></td>
+<td>Alexandra Placeholder</td>
+<td>Wilhelmina Stand-In</td>
+<td>36</td>
+<td>76.6%</td>
+<td>2,194,000</td>
+<td>49.9%</td>
+</tr>
+<tr>
+<td bgcolor="#000099"> </td>
+<td><em> Exemplary</em></td>
+<td> </td>
+<td>Benedict Fabricated</td>
+<td>Theodore Notreal</td>
+<td>11</td>
+<td>23.4%</td>
+<td>2,060,000</td>
+<td>46.8%</td>
+</tr>
+<tr>
+<td bgcolor="#666666"> </td>
+<td><em> Hypothetical</em></td>
+<td> </td>
+<td>Cornelia Notional</td>
+<td>Ambrose Placeheld</td>
+<td>0</td>
+<td>0.0%</td>
+<td>118,000</td>
+<td>2.7%</td>
+</tr>
+<tr>
+<td bgcolor="#336633"> </td>
+<td><em> Ersatz</em></td>
+<td> </td>
+<td>Dorothea Invented</td>
+<td>Percival Madeup</td>
+<td>0</td>
+<td>0.0%</td>
+<td>4,228</td>
+<td>0.1%</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td colspan="2"> </td>
+<td colspan="3"><strong>ALEXANDRA PLACEHOLDER</strong></td>
+<td colspan="3"><strong>BENEDICT FABRICATED</strong></td>
+<td colspan="3"><strong>CORNELIA NOTIONAL</strong></td>
+<td colspan="3"><strong>DOROTHEA INVENTED</strong></td>
+</tr>
+<tr>
+<td rowspan="2"><strong>STATE</strong></td>
+<td rowspan="2"><strong>TOTAL VOTE</strong></td>
+<td bgcolor="#990000" colspan="3"><span>Testytonian</span></td>
+<td bgcolor="#000099" colspan="3"><span>Exemplary</span></td>
+<td bgcolor="#666666" colspan="3"><span>Hypothetical</span></td>
+<td bgcolor="#336633" colspan="3"><span>Ersatz</span></td>
+</tr>
+<tr>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+</tr>
+<tr>
+<td bgcolor="#AACAEA" colspan="14"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Alabama</td>
+<td bgcolor="#F7FAFD">200,000</td>
+<td bgcolor="#F7FAFD">100,000</td>
+<td bgcolor="#F7FAFD">50.0</td>
+<td bgcolor="#F7FAFD">11</td>
+<td bgcolor="#F7FAFD">60,000</td>
+<td bgcolor="#F7FAFD">30.0</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD">38,000</td>
+<td bgcolor="#F7FAFD">19.0</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD">--</td>
+<td bgcolor="#F7FAFD">--</td>
+<td bgcolor="#F7FAFD"> </td>
+</tr>
+<tr>
+<td bgcolor="#FFFFFF">California</td>
+<td bgcolor="#FFFFFF">4,000,000</td>
+<td bgcolor="#FFFFFF">2,000,000</td>
+<td bgcolor="#FFFFFF">50.0</td>
+<td bgcolor="#FFFFFF">25</td>
+<td bgcolor="#FFFFFF">1,900,000</td>
+<td bgcolor="#FFFFFF">47.5</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">80,000</td>
+<td bgcolor="#FFFFFF">2.0</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">1,228</td>
+<td bgcolor="#FFFFFF">0.0</td>
+<td bgcolor="#FFFFFF"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Connecticut</td>
+<td bgcolor="#F7FAFD">150,000</td>
+<td bgcolor="#F7FAFD">70,000</td>
+<td bgcolor="#F7FAFD">46.7</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD">75,000</td>
+<td bgcolor="#F7FAFD">50.0</td>
+<td bgcolor="#F7FAFD">8</td>
+<td bgcolor="#F7FAFD">--</td>
+<td bgcolor="#F7FAFD">--</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD">3,000</td>
+<td bgcolor="#F7FAFD">2.0</td>
+<td bgcolor="#F7FAFD"> </td>
+</tr>
+<tr>
+<td bgcolor="#FFFFFF">Delaware</td>
+<td bgcolor="#FFFFFF">50,000</td>
+<td bgcolor="#FFFFFF">24,000</td>
+<td bgcolor="#FFFFFF">48.0</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">25,000</td>
+<td bgcolor="#FFFFFF">50.0</td>
+<td bgcolor="#FFFFFF">3</td>
+<td bgcolor="#FFFFFF">--</td>
+<td bgcolor="#FFFFFF">--</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">--</td>
+<td bgcolor="#FFFFFF">--</td>
+<td bgcolor="#FFFFFF"> </td>
+</tr>
+<tr>
+<td bgcolor="#AACAEA" colspan="14"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Totals</td>
+<td bgcolor="#F7FAFD">4,400,000</td>
+<td bgcolor="#F7FAFD">2,194,000</td>
+<td bgcolor="#F7FAFD">49.9</td>
+<td bgcolor="#F7FAFD">36</td>
+<td bgcolor="#F7FAFD">2,060,000</td>
+<td bgcolor="#F7FAFD">46.8</td>
+<td bgcolor="#F7FAFD">11</td>
+<td bgcolor="#F7FAFD">118,000</td>
+<td bgcolor="#F7FAFD">2.7</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD">4,228</td>
+<td bgcolor="#F7FAFD">0.1</td>
+<td bgcolor="#F7FAFD"> </td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>

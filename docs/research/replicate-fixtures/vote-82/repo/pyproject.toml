@@ -1,0 +1,157 @@
+[project]
+name = "usvote"
+version = "0.1.0"
+description = "Historical US Presidential Election analysis: Electoral College vs. Popular Vote (and a hybrid)"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Fred Pearce", email = "fpearce@gmail.com" }
+]
+requires-python = ">=3.11"
+keywords = ["elections", "electoral-college", "popular-vote", "data-pipeline", "analysis"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    "beautifulsoup4>=4.12",
+    "requests>=2.31",
+    "pandas>=2.0",
+    "geopandas>=1.0",
+    "psycopg2-binary>=2.9",
+    "matplotlib>=3.8",
+    # E8 internal API (usvote/api/): serves the read-only snapshot over HTTP with no
+    # live DB (D028/D031). fastapi is the app; uvicorn is the ASGI server (D032). These
+    # ride in the base dependencies, not an extra: the heavy stack (pandas/geopandas/
+    # psycopg2) is already mandatory, so an `api` extra would buy no install-size lever
+    # while forcing `--extra api` onto every CI gate that lints/types/tests usvote/api/.
+    # The CONTAINER's size lever is a different mechanism — the `serve` dependency-group
+    # below installed with `--no-deps` (D033), NOT an extra (extras can't subtract the
+    # heavy base deps).
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+]
+
+[project.urls]
+Homepage = "https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis"
+Repository = "https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis"
+Issues = "https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=6.0",
+    "ruff>=0.11",
+    "mypy>=1.15",
+    # Notebook remains runnable during the incremental notebook->package migration.
+    "jupyterlab>=4.0",
+]
+
+# The API container's serve-time closure (D033). `usvote/api/` imports ONLY
+# fastapi/starlette/pydantic + stdlib (enforced by tests/unit/test_api_import_graph.py),
+# so the container installs the package with `--no-deps` and adds just this group,
+# leaving the heavy warehouse/analysis stack (pandas/geopandas/GDAL/psycopg2/matplotlib)
+# out of the image. Versions are single-sourced from uv.lock (the Dockerfile resolves
+# `uv sync --frozen --only-group serve`) — never hand-pinned in the Dockerfile. pydantic
+# is listed explicitly because usvote/api/models.py imports it directly (it otherwise
+# arrives only transitively via fastapi).
+serve = [
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+    "pydantic>=2",
+]
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+# Use `packages = [...]` (respects .gitignore). Do NOT switch to
+# `force-include` -- it bypasses .gitignore and can bundle secrets
+# into the wheel.
+[tool.hatch.build.targets.wheel]
+packages = ["src/usvote"]
+
+# ruff >=0.11 lints notebooks by default. The legacy step1 notebook is kept
+# runnable during the notebook->package migration and is not held to the
+# package's lint policy; exclude it so bare `ruff check` targets our code and
+# stays green in CI.
+[tool.ruff]
+line-length = 88
+# UP (pyupgrade) needs the language floor so it never suggests >3.11 syntax.
+# ruff infers this from requires-python, but pin it explicitly as insurance.
+target-version = "py311"
+extend-exclude = ["*.ipynb"]
+
+# A pragmatic starter rule set (issue #19): pyflakes/pycodestyle errors plus the
+# high-signal, low-noise families. Strictness can ratchet up later. Beyond the
+# E/F defaults:
+#   I   - import sorting (isort), so ordering is enforced not argued
+#   UP  - pyupgrade, keep syntax modern for requires-python >=3.11
+#   B   - bugbear, catch likely bugs (mutable defaults, etc.)
+#   SIM - flake8-simplify, collapse needlessly verbose constructs
+#   C4  - flake8-comprehensions, prefer comprehension idioms
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
+
+# Test bodies carry long boolean-mask expressions and assert comparisons that
+# don't reflow cleanly; exempt them from the line-length cap (E501 only) rather
+# than mangle readable assertions. src/ stays held to the 88-col limit.
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E501"]
+
+[tool.mypy]
+files = ["src", "tests"]
+# Pragmatic strictness (issue #19): require annotations and surface the common
+# unsoundness (implicit Optional, unreachable code, silently-Any returns, stale
+# ignores). Not full `strict = true` yet — `disallow_any_*` would drown in the
+# untyped pandas/geopandas surface; ratchet up once those are stub-covered.
+#
+# No `python_version` pin: it's defeated by numpy 2.x's PEP-695 stubs (numpy is
+# imported in db.py) and buys nothing while CI runs a single interpreter. Floor
+# (3.11) coverage belongs to a CI version matrix, not here.
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+warn_unreachable = true
+strict_equality = true
+
+# pandas/geopandas/psycopg2 ship no type stubs in this project's deps; silence the
+# missing-import noise so mypy checks our own annotations, not theirs. Submodule
+# globs cover the deeper imports later ports will reach for. (bs4, requests, and
+# numpy all ship py.typed, so they need no override.)
+[[tool.mypy.overrides]]
+module = ["pandas", "pandas.*", "geopandas", "geopandas.*", "psycopg2", "psycopg2.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Exclude live-Postgres integration tests by default (and in CI). Run them
+# explicitly with `pytest -m integration`. The `integration` MARKER (not the
+# tests/ directory layout) is the source of truth for selection; the offline
+# suite lives under tests/unit/ and the live-DB tests under tests/integration/,
+# each carrying the marker.
+addopts = "-m 'not integration' --strict-markers"
+markers = [
+    "integration: tests that require a live Postgres database (excluded by default)",
+]
+
+# `pytest --cov=usvote` reads this. Measure the installed package, not the
+# tests, and report branch coverage.
+[tool.coverage.run]
+source = ["usvote"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true

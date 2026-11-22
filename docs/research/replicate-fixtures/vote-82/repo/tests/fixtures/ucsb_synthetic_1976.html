@@ -1,0 +1,164 @@
+<!--
+  SYNTHETIC UCSB popular-vote fixture — structure mimics 1976 (layout L1c); ALL VOTE
+  VALUES ARE FABRICATED. No UCSB-sourced bytes (D022).
+
+  Pins for the #35 parser — 1976 is the ONLY year whose HEADER IS NARROWER THAN ITS
+  DATA ROWS:
+    - the header is THREE stacked rows -- names, then parties alongside TOTAL VOTES,
+      then STATE alongside the Votes/%/EV units -- and the STATE row carries NO
+      TOTAL VOTE header of its own. That is what makes it 1 + 3g = 7 cells against
+      data rows of 2 + 3g = 8. Any rule that takes the column window from the header
+      shifts every candidate column by one from this year on, silently attributing
+      one candidate's votes to the next.
+    - the name and party rows are therefore at STATE_row - 2 and STATE_row - 1, not
+      the single adjacent name row the other layouts use. This shape was read off the
+      real page: an earlier guess at it put the names one row too low, and the parser
+      then found 3 "name" cells where it wanted 2 -- caught only by running against
+      the real snapshot, which is why the corpus acceptance test exists.
+    - this is also why `select_results_table` cannot be "the widest table in the
+      section": on the real 1976 page the SUMMARY rows are 9 wide and the DATA rows are
+      8, so widest-table picks the summary block. The rule that works, and is verified
+      across all 60 pages, is "the table containing an own-row with a cell reading
+      STATE/STATES".
+    - L1c must be reachable in `detect_layout`. The L3 test ("the STATE row also
+      contains a cell reading Votes") is TRUE here too, because 1976's STATE row IS its
+      units row. L3 therefore carries the extra discriminator
+      `len(state_row) == data_width`, which is 7 != 8 here, so 1976 falls through to
+      L1c. Without that discriminator this fixture is unreachable and the column shift
+      ships (architect finding B1).
+    - the cheapest independent detector for a column-window shift is the published
+      percent: votes/total ~= percent per cell. `validate_year` checks it IN
+      AGGREGATE, not per cell -- a shift misaligns essentially every row, whereas
+      UCSB's own occasional typos hit one cell (1860 Vermont prints the same 4.16
+      twice; 1968 Utah prints 31.1 for what is 37.1). Both of those years' rows sum
+      exactly to their state totals, proving the columns are aligned and the percent
+      is the source's error. This is the only reason `percent` is retained at all --
+      it is NEVER an absence signal (see the dashdash fixture for that trap).
+
+  AGGREGATION IDENTITIES (verified by tests/unit/test_ucsb_fixtures.py):
+    (1) Placeholder 56+35+22+12 = 125,000; Fabricated 43+44+27+17 = 131,000.
+    (2) TOTAL VOTE 100+80+50+30 = 260,000.
+    (3) per state, TOTAL VOTE strictly exceeds the two shown candidates.
+    (4) EV totals equal the data-row EV sum: Placeholder 9, Fabricated 8+4+3 = 15.
+        No legislature state in this year.
+-->
+<section id="block-system-main" class="block block-system clearfix">
+<div class="field-body">
+<table class="table table-responsive">
+<tbody>
+<tr>
+<td colspan="2" rowspan="2"><strong>Party</strong></td>
+<td> </td>
+<td colspan="2"><strong>Nominees</strong></td>
+<td colspan="2" rowspan="2"><strong>Electoral Vote</strong></td>
+<td colspan="2" rowspan="2"><strong>Popular Vote</strong></td>
+</tr>
+<tr>
+<td> </td>
+<td><strong>Presidential</strong></td>
+<td><strong>Vice Presidential</strong></td>
+</tr>
+<tr>
+<td bgcolor="#000099"> </td>
+<td><em> Exemplary</em></td>
+<td><img alt="election party winner" src="https://example.invalid/winner.png" /></td>
+<td>Benedict Fabricated</td>
+<td>Theodore Notreal</td>
+<td>15</td>
+<td>62.5%</td>
+<td>131,000</td>
+<td>50.4%</td>
+</tr>
+<tr>
+<td bgcolor="#990000"> </td>
+<td><em> Testytonian</em></td>
+<td> </td>
+<td>Alexandra Placeholder</td>
+<td>Wilhelmina Stand-In</td>
+<td>9</td>
+<td>37.5%</td>
+<td>125,000</td>
+<td>48.1%</td>
+</tr>
+<tr>
+<td> </td>
+</tr>
+<tr>
+<td colspan="4"><strong>ALEXANDRA PLACEHOLDER</strong></td>
+<td colspan="4"><strong>BENEDICT FABRICATED</strong></td>
+</tr>
+<tr>
+<td> </td>
+<td><strong>TOTAL VOTES</strong></td>
+<td colspan="3">Testytonian</td>
+<td colspan="3">Exemplary</td>
+</tr>
+<tr>
+<td><strong>STATE</strong></td>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+</tr>
+<tr>
+<td bgcolor="#AACAEA" colspan="8"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Alabama</td>
+<td bgcolor="#F7FAFD">100,000</td>
+<td bgcolor="#F7FAFD">56,000</td>
+<td bgcolor="#F7FAFD">56.0</td>
+<td bgcolor="#F7FAFD">9</td>
+<td bgcolor="#F7FAFD">43,000</td>
+<td bgcolor="#F7FAFD">43.0</td>
+<td bgcolor="#F7FAFD"> </td>
+</tr>
+<tr>
+<td bgcolor="#FFFFFF">Connecticut</td>
+<td bgcolor="#FFFFFF">80,000</td>
+<td bgcolor="#FFFFFF">35,000</td>
+<td bgcolor="#FFFFFF">43.8</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">44,000</td>
+<td bgcolor="#FFFFFF">55.0</td>
+<td bgcolor="#FFFFFF">8</td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Maine</td>
+<td bgcolor="#F7FAFD">50,000</td>
+<td bgcolor="#F7FAFD">22,000</td>
+<td bgcolor="#F7FAFD">44.0</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD">27,000</td>
+<td bgcolor="#F7FAFD">54.0</td>
+<td bgcolor="#F7FAFD">4</td>
+</tr>
+<tr>
+<td bgcolor="#FFFFFF">Vermont</td>
+<td bgcolor="#FFFFFF">30,000</td>
+<td bgcolor="#FFFFFF">12,000</td>
+<td bgcolor="#FFFFFF">40.0</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">17,000</td>
+<td bgcolor="#FFFFFF">56.7</td>
+<td bgcolor="#FFFFFF">3</td>
+</tr>
+<tr>
+<td bgcolor="#AACAEA" colspan="8"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Totals</td>
+<td bgcolor="#F7FAFD">260,000</td>
+<td bgcolor="#F7FAFD">125,000</td>
+<td bgcolor="#F7FAFD">48.1</td>
+<td bgcolor="#F7FAFD">9</td>
+<td bgcolor="#F7FAFD">131,000</td>
+<td bgcolor="#F7FAFD">50.4</td>
+<td bgcolor="#F7FAFD">15</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
