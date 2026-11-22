@@ -2229,6 +2229,12 @@ class ProvisionUvTests(Tmp):
             rec = R.provision_uv(FakeOps(), self.tmp / "r1", str(real))
         self.assertEqual(rec["uv_sha256"], hashlib.sha256(b"other").hexdigest())
 
+    def test_file_sha256_reads_every_chunk(self):
+        data = b"z" * (R.HASH_CHUNK * 2) + b"tail"
+        path = self.tmp / "big"
+        path.write_bytes(data)
+        self.assertEqual(R.file_sha256(path), hashlib.sha256(data).hexdigest())
+
     def test_absent_records_nulls_and_copies_nothing(self):
         ops = FakeOps()
         rec = R.provision_uv(ops, self.tmp / "r1", None)
@@ -2282,8 +2288,8 @@ class ShakedownOps:
     """Only what a shakedown may touch through `Ops`: the methods that read a
     token, the account feed, the install record or the stop capture raise."""
 
-    def __init__(self, rc=0, timeout=False):
-        self.rc, self.timeout = rc, timeout
+    def __init__(self, rc=0, timeout=(), probe_rc=0):
+        self.rc, self.timeout, self.probe_rc = rc, set(timeout), probe_rc
         self.calls, self.envs, self.t = [], [], 0
 
     def now(self):
@@ -2297,9 +2303,17 @@ class ShakedownOps:
     def sandboxed(self, rdir, claude_real, cwd, cmd, env, stdout=None, timeout=None):
         self.calls.append(("sandboxed", claude_real, str(cwd), list(cmd), timeout))
         self.envs.append(dict(env))
-        if self.timeout and cmd[0] == "/bin/sh":
+        # What bwrap needs before it starts: every bind source exists (resolv.conf
+        # is run_sandboxed's own write), and the shim is in place (#391).
+        argv = R.sandbox_argv(rdir, claude_real, cwd, 0, 0, links=())
+        for i, x in enumerate(argv):
+            if x in ("--bind", "--ro-bind") and not argv[i + 1].endswith("resolv.conf"):
+                assert os.path.exists(argv[i + 1]), "bind source missing: " + argv[i + 1]
+        assert (pathlib.Path(rdir) / "bin" / "gh").is_file(), "no gh shim in bin/"
+        if cmd[0] in self.timeout:
             raise subprocess.TimeoutExpired(cmd, timeout)
-        return (self.rc if cmd[0] == "/bin/sh" else 0), b"out of " + cmd[0].encode()
+        rc = self.rc if cmd[0] == "/bin/sh" else self.probe_rc
+        return rc, b"out of " + cmd[0].encode()
 
     def _forbidden(self, *a, **k):
         raise AssertionError("a shakedown reached a forbidden side effect")
@@ -2365,7 +2379,7 @@ class ShakedownTests(Tmp):
         self.assertIsNone(rec["uv_sha256"])
 
     def test_timeout_is_recorded_as_timeout_and_probes_still_run(self):
-        ops = ShakedownOps(timeout=True)
+        ops = ShakedownOps(timeout={"/bin/sh"})
         R.cmd_shakedown(self.args(), ops)
         rec = self.record()
         self.assertEqual(rec["timeout_s"], 99)
@@ -2385,7 +2399,8 @@ class ShakedownTests(Tmp):
             self.assertFalse((self.tmp / "out" / "s1" / absent).exists(), absent)
 
     def test_refuses_while_a_token_is_in_the_harness_environment(self):
-        for var in R.SHAKEDOWN_REFUSE_ENV:
+        self.assertEqual(set(R.SHAKEDOWN_REFUSE_ENV), {"GH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"})
+        for var in ("GH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"):
             with mock.patch.dict(os.environ, {var: "secret"}):
                 ops = ShakedownOps()
                 with self.assertRaises(R.Refused) as cm:
@@ -2393,6 +2408,37 @@ class ShakedownTests(Tmp):
                 self.assertIn(var, str(cm.exception))
                 self.assertEqual(ops.calls, [])
                 self.assertFalse((self.tmp / "out").exists())
+
+    def test_an_existing_replicate_dir_refuses_and_keeps_the_first_record(self):
+        R.cmd_shakedown(self.args(), ShakedownOps())
+        first = (self.tmp / "out" / "s1" / "shakedown.json").read_bytes()
+        ops = ShakedownOps()
+        with self.assertRaisesRegex(R.Refused, "already exists"):
+            R.cmd_shakedown(self.args(), ops)
+        self.assertEqual(ops.calls, [])
+        self.assertEqual((self.tmp / "out" / "s1" / "shakedown.json").read_bytes(), first)
+
+    def test_a_probe_timeout_is_recorded_on_that_probe(self):
+        R.cmd_shakedown(self.args(), ShakedownOps(timeout={"python3"}))
+        rec = self.record()
+        self.assertEqual(rec["probes"], [{"argv": ["python3", "--version"], "exit_code": None,
+                                          "timeout_s": R.PROBE_TIMEOUT}])
+        self.assertNotIn("error", rec)
+        self.assertNotIn("timeout_s", rec)
+
+    def test_probe_exit_codes_are_recorded(self):
+        R.cmd_shakedown(self.args(uv_bin=str(fake_uv(self.tmp))), ShakedownOps(probe_rc=7))
+        self.assertEqual([pr["exit_code"] for pr in self.record()["probes"]], [7, 7])
+
+    def test_the_shim_is_the_one_run_writes(self):
+        R.cmd_shakedown(self.args(), ShakedownOps())
+        ref = R.write_shim(self.tmp / "ref")
+        self.assertEqual((self.tmp / "out" / "s1" / "bin" / "gh").read_bytes(), ref.read_bytes())
+        self.assertTrue((self.tmp / "out" / "s1" / "home").is_dir())
+
+    def test_tail_keeps_the_end(self):
+        self.assertEqual(R._tail(b"a" * 10 + b"b" * 5, 5), "bbbbb")
+        self.assertEqual(R._tail(None), "")
 
     def test_main_returns_0_when_it_ran_and_2_on_a_refusal(self):
         base = ["shakedown", "--replicate-id", "s1", "--command", "false"]
