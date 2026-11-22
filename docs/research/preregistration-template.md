@@ -45,11 +45,10 @@ outcomes section 7 fixes cannot be dropped: without their instruments the instan
   `--plugin-dir`.
 - Both arms run the same `MODEL_TIERS` value, the same `(model, effort)` stratum, the same subagent
   roster, the same Claude Code version (`--claude-version`), and the same `fixture.json` per pick.
-- Every replicate runs from a checkout whose HEAD is a harness commit the instance registers.
-  `harness_commit` records that HEAD, so a replicate run from any other commit, the freeze commit
-  included, fails section 8. A certifying record names that
-  commit, as `replicate-pilot-2026-11.md` and `replicate-repilot-2026-11.md` do for earlier ones,
-  and its `replicate.py` writes the `stop/` capture section 8 reads.
+- Every replicate runs from a checkout whose HEAD is a harness commit the instance registers. A
+  certifying record names that commit, as `replicate-pilot-2026-11.md` and
+  `replicate-repilot-2026-11.md` do for earlier ones, and its `replicate.py` writes the `stop/`
+  capture section 8 reads.
 - Both arms run under `mode: calibration`. The harness does not check it, so section 8 does.
 
 ## 4. Fixture set

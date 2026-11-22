@@ -285,9 +285,6 @@ together. The design cannot separate them; what is tested is the combination. A 
 | Stopping rule: once per arm per replicate, no interim look | Kept | — |
 | Verdict posted on #169, with the σ from #209 | Restated, section 13 | #288 absorbs #169's core; σ is replaced by the control arm's spread. |
 
-This table maps §4 to this file and is not the registration: what is registered is this file and
-the template's Fixed text, and no element of §4 applies unless this file names it.
-
 **Not registered:** a prediction that parent turns between the round-1 verdict and the round-2
 spawn are lower in the treatment arm. It has no instrument. It may be added before freeze if one
 exists by then.
