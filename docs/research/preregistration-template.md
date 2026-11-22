@@ -215,9 +215,9 @@ note that was dropped, with one line of reason each; and the population the resu
 - Nothing merges, so nothing that needs a merged PR is observable.
 - The result holds for the registered stratum and the picked issues.
 - The record does not show that both arms ran the same agent prompts. `fixture_sha256` covers
-  `fixture.json` only, and no recorded hash covers the roster's prompt text (#390). `memory_snapshot` records the memory
-  files per replicate; section 8 does not compare it. Both arms are
-  run from one fixture directory, unchanged for the length of the run.
+  `fixture.json` only, and no recorded hash covers the roster's prompt text (#390).
+  `memory_snapshot` records the memory files per replicate; section 8 does not compare it. Both
+  arms are run from one fixture directory, unchanged for the length of the run.
 
 ## 15. Deviations
 

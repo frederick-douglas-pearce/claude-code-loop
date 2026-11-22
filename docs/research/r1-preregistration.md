@@ -11,7 +11,7 @@ applies here. Outcomes 4 and 7 use the judgments in `blind-evaluator-protocol.md
 - **Source:** `cost-review-2026-10-26/A-design-R1-fix-agent-and-ceiling.md` §4, "The falsifier,
   written for pre-registration". It was written against engine 0.3.1 and merged runs. This file
   restates it for a harness on which every replicate ends unmerged at its first `in-acceptance`
-  stop. Section 14 goes through §4 element by element.
+  stop.
 - **Status:** `draft`, 2026-11-21 (#382). **Not frozen: no replicate may be spent against it.**
 
 **What this draft holds.** It restates each of §4's outcomes in words: what is measured, the
@@ -133,9 +133,9 @@ is a section 2 row.
 
 **No size is registered for the saving.** Appendix A predicted 15–35% lower USD on issues that took
 five or more rounds. A replicate runs at most two review rounds, so that prediction cannot be read
-here, and it is withdrawn. What is reported instead is a projection, labeled as one and not a
-test: the outcome-1 difference × the review rounds the historical run took past the cap × a cost
-per round. Its inputs are a section 2 row.
+here, and it is withdrawn. What is reported instead is a projection, labeled as one and not a test:
+the outcome-1 difference × the review rounds the historical run took past the cap × a cost per
+round. Its inputs are a section 2 row.
 
 ### Outcome 4 — quality at the stop
 
@@ -157,8 +157,8 @@ per round. Its inputs are a section 2 row.
 - **Instrument:** the lever-stop rule in part 2 of `blind-evaluator-protocol.md`; the pattern is a
   section 2 row.
 - **Unit:** a treatment-arm replicate. The ceiling exists in one arm only.
-- **Prediction:** no ceiling stop; one is a no-go. On an unattended path the engine opens at most two
-  rounds per capped gate, and no replicate answers a stop after the plan gate, so a replicate
+- **Prediction:** no ceiling stop; one is a no-go. On an unattended path the engine opens at most
+  two rounds per capped gate, and no replicate answers a stop after the plan gate, so a replicate
   cannot reach six rounds. A ceiling stop therefore means the orchestrator lost count.
 - **Refuted if:** one ceiling stop in any treatment replicate.
 - **Selection:** every treatment replicate, halted or not. Both the cap and the counting rule are
@@ -168,8 +168,8 @@ per round. Its inputs are a section 2 row.
 
 - **Instrument:** the section 9 classification.
 - **Unit:** counts per arm over the whole run, of: fix agents that returned no report (the
-  `code-review — fix agent` `gate-error` signature of appendix A §3); other gate-error halts after
-  round 1's verdict; and other halts, turn timeouts and `max_turns` included.
+  `code-review — fix agent` `gate-error` signature of appendix A §3); other gate-error halts
+  after round 1's verdict; and other halts, turn timeouts and `max_turns` included.
 - **Prediction:** each count stays below its no-go count, a section 2 bound. Halts before review
   are reported apart: they precede R1.
 - **Refuted if:** a count reaches its no-go count.
@@ -290,8 +290,8 @@ spawn are lower in the treatment arm. It has no instrument. It may be added befo
 exists by then.
 
 **Population.** Rule 5 of `benchmark-fixture-set.md` prefers picks with no historical round-1
-design-question stop. Five of the seven have none recorded; loop #199 and vote #392 each had one. None of
-the seven edits the engine (rule 2), so the result does not carry to issues that do.
+design-question stop. Five of the seven have none recorded; loop #199 and vote #392 each had one.
+None of the seven edits the engine (rule 2), so the result does not carry to issues that do.
 
 ## Appendix A's stale line references
 
