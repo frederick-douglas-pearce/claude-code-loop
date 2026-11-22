@@ -25,10 +25,10 @@ the verdict names the freeze commit and every entry.
 
 **Fill:** a checklist of every field the draft leaves open, each with its owner. An instance
 cannot be frozen while any row is open. Every instance carries at least these rows: both arms'
-commits and `--version-dir` values, the harness commit, the Claude Code version, each pick's
-`fixture_sha256`, the stratum, k, the arm schedule, the replacement cap, the frozen criteria list
-per pick, the redaction list, the classification rules, every instrument an outcome names, and
-every numeric bound.
+commits and `--version-dir` values, the harness commit, the Claude Code version, the `uv`
+binary's version and sha256 (or none), each pick's `fixture_sha256`, the stratum, k, the arm
+schedule, the replacement cap, the frozen criteria list per pick, the redaction list, the
+classification rules, every instrument an outcome names, and every numeric bound.
 
 **Fixed.** An outcome the instance adds, whose instrument does not exist at freeze, is dropped in
 one line under section 14. It is not registered with an instrument to be written later. The five
@@ -44,7 +44,8 @@ outcomes section 7 fixes cannot be dropped: without their instruments the instan
   commit. No arm is a plugin-cache directory on the maintainer's machine, and none is loaded with
   `--plugin-dir`.
 - Both arms run the same `MODEL_TIERS` value, the same `(model, effort)` stratum, the same subagent
-  roster, the same Claude Code version (`--claude-version`), and the same `fixture.json` per pick.
+  roster, the same Claude Code version (`--claude-version`), the same `uv` binary on every pick
+  (`--uv-bin`, or none), and the same `fixture.json` per pick.
 - Every replicate runs from a checkout whose HEAD is a harness commit the instance registers. A
   certifying record names that commit, as `replicate-pilot-2026-11.md` and
   `replicate-repilot-2026-11.md` do for earlier ones, and its `replicate.py` writes the `stop/`
@@ -109,8 +110,8 @@ below is shown to hold. If a line cannot be checked, the replicate is inadmissib
 
 - `environment.json`'s `harness_commit` is a harness commit the instance registers, and
   `harness_tree_clean` is true.
-- `plugin_commit`, `version_dir`, `cli_version`, `parent`, and `fixture_sha256` equal the
-  registered pins.
+- `plugin_commit`, `version_dir`, `cli_version`, `parent`, `fixture_sha256`, `uv_version`, and
+  `uv_sha256` equal the registered pins. A registered none is met only by null fields.
 - The `MODEL_TIERS` row in the fixture's `loop.config.md` is the registered value.
   `environment.json`'s `model_tiers` is copied from `fixture.json`, so it does not show this.
 - The `queue.md` header in the captured ledger (`stop/ledger/`) reads `mode: calibration`.

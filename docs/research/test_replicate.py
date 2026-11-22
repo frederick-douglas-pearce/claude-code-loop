@@ -1128,7 +1128,7 @@ class RunTests(Tmp):
         a = dict(fixture=PILOT, replicate_id="r1", out=str(self.tmp / "out"), plugin_src=self.src,
                  plugin_commit=self.pin, version_dir=None, claude_bin="/bin/true",
                  claude_version="v1", model=S55, effort="medium", login="me",
-                 keep_sandbox=False, turn_timeout=60)
+                 keep_sandbox=False, turn_timeout=60, uv_bin=None)
         a.update(kw)
         return R.argparse.Namespace(**a)
 
@@ -1661,6 +1661,35 @@ class RunTests(Tmp):
             with self.assertRaisesRegex(R.Refused, "not the pin's tree"):
                 R.cmd_run(self.args(out=str(self.tmp / "o3")), FakeOps())
 
+    def test_uv_is_copied_before_the_first_sandbox_and_recorded(self):
+        real = fake_uv(self.tmp)
+        seen = []
+
+        class Ops(FakeOps):
+            def sandboxed(inner, rdir, *a, **k):
+                seen.append((pathlib.Path(rdir) / "bin" / "uv").exists())
+                return FakeOps.sandboxed(inner, rdir, *a, **k)
+
+        env = self.run_it(Ops(), uv_bin=str(real))
+        self.assertTrue(seen and all(seen))
+        self.assertEqual(env["uv_sha256"], hashlib.sha256(real.read_bytes()).hexdigest())
+        self.assertEqual(env["uv_version"], "v1")
+
+    def test_no_uv_records_nulls(self):
+        env = self.run_it(FakeOps())
+        self.assertIsNone(env["uv_version"])
+        self.assertIsNone(env["uv_sha256"])
+        self.assertFalse((self.tmp / "out" / "r1" / "bin" / "uv").exists())
+
+    def test_run_refuses_a_base_mismatch_before_any_side_effect(self):
+        """#391: the refusal `shakedown` shares through build_clone."""
+        ops = FakeOps()
+        env = self.run_it(ops, R.Refused, fixture=str(mismatched_fixture(self.tmp)),
+                          uv_bin=str(fake_uv(self.tmp)))
+        self.assertIn("frozen base_sha", env["refused"])
+        self.assertEqual(ops.calls, [])
+        self.assertFalse((self.tmp / "out" / "r1" / "bin").exists())
+
 
 class CaptureTests(Tmp):
     """#380 AC1: `capture_stop` on a real clone, through FakeOps' capture sandbox."""
@@ -2118,6 +2147,306 @@ class ProvenanceTests(Tmp):
                          hashlib.sha256((d / "fixture.json").read_bytes()).hexdigest())
         (d / "fixture.json").write_bytes((d / "fixture.json").read_bytes() + b"\n")
         self.assertNotEqual(R.load_fixture(d)["fixture_sha256"], spec["fixture_sha256"])
+
+
+def fake_uv(directory):
+    """An executable file standing in for the pinned uv. -> its path."""
+    path = pathlib.Path(directory) / "uv-real"
+    path.write_text("#!/bin/sh\necho uv 0.0-test\n")
+    path.chmod(0o755)
+    return path
+
+
+def mismatched_fixture(directory):
+    """The pilot fixture with a base_sha it does not build. -> its dir."""
+    d = pathlib.Path(directory) / "fixture"
+    shutil.copytree(PILOT, d)
+    spec = json.loads((d / "fixture.json").read_text())
+    spec["base_sha"] = "0" * 40
+    (d / "fixture.json").write_text(json.dumps(spec))
+    return d
+
+
+def quiet_main(argv):
+    with open(os.devnull, "w") as devnull:
+        saved, sys.stderr = sys.stderr, devnull
+        try:
+            return R.main(argv)
+        finally:
+            sys.stderr = saved
+
+
+class UvBinArgTests(Tmp):
+    """#391: --uv-bin is refused at parse time unless absolute and executable."""
+
+    def test_refusals_stop_both_subcommands_before_anything_is_created(self):
+        plain = self.tmp / "plain"
+        plain.write_text("not executable\n")
+        plain.chmod(0o644)
+        fake_uv(self.tmp)                         # a real executable, named relatively below
+        cwd = os.getcwd()
+        os.chdir(self.tmp)
+        self.addCleanup(os.chdir, cwd)
+        out = self.tmp / "out"
+        bad = ("uv-real", "./uv-real", str(self.tmp / "absent"), str(plain), str(self.tmp))
+        for sub in (VersionDirTests.RUN,
+                    ["shakedown", "--fixture", PILOT, "--replicate-id", "r1",
+                     "--command", "true"]):
+            for value in bad:
+                with self.assertRaises(SystemExit, msg=(sub[0], value)) as cm:
+                    quiet_main(sub + ["--out", str(out), "--uv-bin", value])
+                self.assertEqual(cm.exception.code, 2, (sub[0], value))
+                self.assertFalse(out.exists(), (sub[0], value))
+
+    def test_accepts_an_executable_and_returns_its_realpath(self):
+        real = fake_uv(self.tmp)
+        link = self.tmp / "uv-link"
+        os.symlink(real, link)
+        self.assertEqual(R.uv_bin_arg(str(link)), os.path.realpath(real))
+        self.assertEqual(R.uv_bin_arg(str(real)), os.path.realpath(real))
+
+
+class ProvisionUvTests(Tmp):
+    """#391: uv reaches the sandbox as a copy in bin/, and the record describes
+    the copy."""
+
+    def test_copies_into_bin_and_records_the_copy(self):
+        real = fake_uv(self.tmp)
+        ops = FakeOps()
+        rec = R.provision_uv(ops, self.tmp / "r1", str(real))
+        copy = self.tmp / "r1" / "bin" / "uv"
+        self.assertEqual(copy.read_bytes(), real.read_bytes())
+        self.assertTrue(os.access(copy, os.X_OK))
+        self.assertEqual(rec["uv_sha256"], hashlib.sha256(real.read_bytes()).hexdigest())
+        self.assertEqual(rec["uv_version"], "v1")
+        self.assertEqual(rec["uv_bin"], str(real))
+        self.assertEqual([c for _, c in ops.calls], [[str(copy), "--version"]])
+
+    def test_hashes_the_copy_not_the_source(self):
+        real = fake_uv(self.tmp)
+        with mock.patch.object(R.shutil, "copyfile",
+                               lambda s, d: pathlib.Path(d).write_bytes(b"other")):
+            rec = R.provision_uv(FakeOps(), self.tmp / "r1", str(real))
+        self.assertEqual(rec["uv_sha256"], hashlib.sha256(b"other").hexdigest())
+
+    def test_file_sha256_reads_every_chunk(self):
+        data = b"z" * (R.HASH_CHUNK * 2) + b"tail"
+        path = self.tmp / "big"
+        path.write_bytes(data)
+        self.assertEqual(R.file_sha256(path), hashlib.sha256(data).hexdigest())
+
+    def test_absent_records_nulls_and_copies_nothing(self):
+        ops = FakeOps()
+        rec = R.provision_uv(ops, self.tmp / "r1", None)
+        self.assertEqual(rec, {"uv_bin": None, "uv_version": None, "uv_sha256": None})
+        self.assertFalse((self.tmp / "r1").exists())
+        self.assertEqual(ops.calls, [])
+
+
+class ShakedownSandboxTests(Tmp):
+    """#391: the shakedown runs in the turn profile with no `claude`, and with no
+    credential in its environment."""
+
+    def argv(self, claude):
+        return R.sandbox_argv(self.tmp, claude, self.tmp / "work" / "r1", 5, 6,
+                              research_dir="/research", resolv_dest="/etc/resolv.conf",
+                              links=(), profile="turn")
+
+    def test_no_claude_drops_exactly_its_bind(self):
+        with_claude, without = self.argv("/opt/claude"), self.argv(None)
+        i = with_claude.index("/opt/claude") - 1
+        self.assertEqual(with_claude[i:i + 3], ["--ro-bind", "/opt/claude", "/opt/claude"])
+        self.assertEqual(with_claude[:i] + with_claude[i + 3:], without)
+        self.assertNotIn("None", without)
+
+    def test_shakedown_env_is_the_replicate_env_less_credentials(self):
+        env = R.shakedown_env(self.tmp)
+        full = R.replicate_env(self.tmp, "o/r", "tok", "ghtok")
+        self.assertEqual(set(env), set(full) - {"CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN",
+                                                 "GH_REPO"})
+        self.assertEqual(env["REPLICATE_SANDBOX"], "")
+        self.assertEqual({k: full[k] for k in env if k != "REPLICATE_SANDBOX"},
+                         {k: v for k, v in env.items() if k != "REPLICATE_SANDBOX"})
+        self.assertEqual(R.check_env(env), env)
+
+    def test_the_real_shim_refuses_and_logs_under_shakedown_env(self):
+        """A fixture gate's `gh` call is refused by the shim and logged, not lost
+        to a traceback before the log write."""
+        shim = R.write_shim(self.tmp / "bin")
+        env = R.shakedown_env(self.tmp)
+        r = _REAL_RUN([str(shim), "run", "list"], cwd=str(self.tmp), env=env,
+                      capture_output=True, text=True)
+        self.assertEqual(r.returncode, 4, r.stderr)
+        self.assertIn("replicate gh shim: refused", r.stderr)
+        lines = (self.tmp / "gh-calls.jsonl").read_text().splitlines()
+        self.assertEqual(len(lines), 1)
+        rec = json.loads(lines[0])
+        self.assertEqual((rec["argv"], rec["allowed"]), (["run", "list"], False))
+
+
+class ShakedownOps:
+    """Only what a shakedown may touch through `Ops`: the methods that read a
+    token, the account feed, the install record or the stop capture raise."""
+
+    def __init__(self, rc=0, timeout=(), probe_rc=0):
+        self.rc, self.timeout, self.probe_rc = rc, set(timeout), probe_rc
+        self.calls, self.envs, self.t = [], [], 0
+
+    def now(self):
+        self.t += 1
+        return datetime.datetime.fromtimestamp(epoch(self.t), datetime.timezone.utc).isoformat()
+
+    def sh(self, cmd, env=None, cwd=None, check=True):
+        self.calls.append(("sh", list(cmd)))
+        return fake_proc(0, "uv 0.0-test\n")
+
+    def sandboxed(self, rdir, claude_real, cwd, cmd, env, stdout=None, timeout=None):
+        self.calls.append(("sandboxed", claude_real, str(cwd), list(cmd), timeout))
+        self.envs.append(dict(env))
+        # What bwrap needs before it starts: every bind source exists (resolv.conf
+        # is run_sandboxed's own write), and the shim is in place (#391).
+        argv = R.sandbox_argv(rdir, claude_real, cwd, 0, 0, links=())
+        for i, x in enumerate(argv):
+            if x in ("--bind", "--ro-bind") and not argv[i + 1].endswith("resolv.conf"):
+                assert os.path.exists(argv[i + 1]), "bind source missing: " + argv[i + 1]
+        assert (pathlib.Path(rdir) / "bin" / "gh").is_file(), "no gh shim in bin/"
+        if cmd[0] in self.timeout:
+            raise subprocess.TimeoutExpired(cmd, timeout)
+        rc = self.rc if cmd[0] == "/bin/sh" else self.probe_rc
+        return rc, b"out of " + cmd[0].encode()
+
+    def _forbidden(self, *a, **k):
+        raise AssertionError("a shakedown reached a forbidden side effect")
+
+    capture_sandboxed = events = check_install = launch_env = harness_env = _forbidden
+
+
+class ShakedownTests(Tmp):
+    """#391 AC3: no `claude`, no repo, no token; a base mismatch refuses as `run` does."""
+
+    def setUp(self):
+        super().setUp()
+        env = mock.patch.dict(os.environ)          # a token exported by whoever runs the suite
+        env.start()
+        self.addCleanup(env.stop)
+        for var in R.SHAKEDOWN_REFUSE_ENV:
+            os.environ.pop(var, None)
+
+    def args(self, **kw):
+        a = dict(fixture=PILOT, replicate_id="s1", out=str(self.tmp / "out"), uv_bin=None,
+                 command="uv run pytest", timeout=99)
+        a.update(kw)
+        return R.argparse.Namespace(**a)
+
+    def record(self):
+        return json.loads((self.tmp / "out" / "s1" / "shakedown.json").read_text())
+
+    def test_exact_calls_with_uv_and_no_credential(self):
+        real = fake_uv(self.tmp)
+        ops = ShakedownOps(rc=3)
+        R.cmd_shakedown(self.args(uv_bin=str(real)), ops)
+        rdir = (self.tmp / "out" / "s1").resolve()
+        clone = str(rdir / "work" / "s1")
+        self.assertEqual(ops.calls, [
+            ("sh", [str(rdir / "bin" / "uv"), "--version"]),
+            ("sandboxed", None, clone, ["/bin/sh", "-c", "uv run pytest"], 99),
+            ("sandboxed", None, clone, ["python3", "--version"], R.PROBE_TIMEOUT),
+            ("sandboxed", None, clone, ["uv", "python", "find"], R.PROBE_TIMEOUT)])
+        for env in ops.envs:
+            self.assertEqual(env, R.shakedown_env(rdir))
+        rec = self.record()
+        self.assertEqual(rec["exit_code"], 3)
+        self.assertEqual(rec["output_tail"], "out of /bin/sh")
+        self.assertEqual(rec["base_sha"], R.load_fixture(PILOT)["base_sha"])
+        self.assertEqual(rec["uv_sha256"], hashlib.sha256(real.read_bytes()).hexdigest())
+        self.assertEqual(rec["uv_version"], "uv 0.0-test")
+        self.assertEqual([pr["argv"] for pr in rec["probes"]],
+                         [["python3", "--version"], ["uv", "python", "find"]])
+        self.assertEqual(rec["probes"][1]["output"], "out of uv")
+        for key in ("command", "duration_s", "fixture_sha256", "harness_commit",
+                    "harness_tree_clean", "wall_clock_start", "wall_clock_end"):
+            self.assertIn(key, rec)
+        self.assertNotIn("timeout_s", rec)
+        self.assertFalse((rdir / "gh-calls.jsonl").read_text())
+
+    def test_without_uv_no_uv_probe_and_null_fields(self):
+        ops = ShakedownOps()
+        R.cmd_shakedown(self.args(), ops)
+        self.assertEqual([c[3] for c in ops.calls],
+                         [["/bin/sh", "-c", "uv run pytest"], ["python3", "--version"]])
+        rec = self.record()
+        self.assertIsNone(rec["uv_version"])
+        self.assertIsNone(rec["uv_sha256"])
+
+    def test_timeout_is_recorded_as_timeout_and_probes_still_run(self):
+        ops = ShakedownOps(timeout={"/bin/sh"})
+        R.cmd_shakedown(self.args(), ops)
+        rec = self.record()
+        self.assertEqual(rec["timeout_s"], 99)
+        self.assertIsNone(rec["exit_code"])
+        self.assertNotIn("error", rec)
+        self.assertEqual(len(rec["probes"]), 1)
+
+    def test_base_mismatch_refuses_before_any_sandbox(self):
+        ops = ShakedownOps()
+        with self.assertRaises(R.Refused):
+            R.cmd_shakedown(self.args(fixture=str(mismatched_fixture(self.tmp)),
+                                      uv_bin=str(fake_uv(self.tmp))), ops)
+        self.assertEqual(ops.calls, [])
+        rec = self.record()
+        self.assertIn("frozen base_sha", rec["refused"])
+        for absent in ("work", "bin"):
+            self.assertFalse((self.tmp / "out" / "s1" / absent).exists(), absent)
+
+    def test_refuses_while_a_token_is_in_the_harness_environment(self):
+        self.assertEqual(set(R.SHAKEDOWN_REFUSE_ENV), {"GH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"})
+        for var in ("GH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"):
+            with mock.patch.dict(os.environ, {var: "secret"}):
+                ops = ShakedownOps()
+                with self.assertRaises(R.Refused) as cm:
+                    R.cmd_shakedown(self.args(), ops)
+                self.assertIn(var, str(cm.exception))
+                self.assertEqual(ops.calls, [])
+                self.assertFalse((self.tmp / "out").exists())
+
+    def test_an_existing_replicate_dir_refuses_and_keeps_the_first_record(self):
+        R.cmd_shakedown(self.args(), ShakedownOps())
+        first = (self.tmp / "out" / "s1" / "shakedown.json").read_bytes()
+        ops = ShakedownOps()
+        with self.assertRaisesRegex(R.Refused, "already exists"):
+            R.cmd_shakedown(self.args(), ops)
+        self.assertEqual(ops.calls, [])
+        self.assertEqual((self.tmp / "out" / "s1" / "shakedown.json").read_bytes(), first)
+
+    def test_a_probe_timeout_is_recorded_on_that_probe(self):
+        R.cmd_shakedown(self.args(), ShakedownOps(timeout={"python3"}))
+        rec = self.record()
+        self.assertEqual(rec["probes"], [{"argv": ["python3", "--version"], "exit_code": None,
+                                          "timeout_s": R.PROBE_TIMEOUT}])
+        self.assertNotIn("error", rec)
+        self.assertNotIn("timeout_s", rec)
+
+    def test_probe_exit_codes_are_recorded(self):
+        R.cmd_shakedown(self.args(uv_bin=str(fake_uv(self.tmp))), ShakedownOps(probe_rc=7))
+        self.assertEqual([pr["exit_code"] for pr in self.record()["probes"]], [7, 7])
+
+    def test_the_shim_is_the_one_run_writes(self):
+        R.cmd_shakedown(self.args(), ShakedownOps())
+        ref = R.write_shim(self.tmp / "ref")
+        self.assertEqual((self.tmp / "out" / "s1" / "bin" / "gh").read_bytes(), ref.read_bytes())
+        self.assertTrue((self.tmp / "out" / "s1" / "home").is_dir())
+
+    def test_tail_keeps_the_end(self):
+        self.assertEqual(R._tail(b"a" * 10 + b"b" * 5, 5), "bbbbb")
+        self.assertEqual(R._tail(None), "")
+
+    def test_main_returns_0_when_it_ran_and_2_on_a_refusal(self):
+        base = ["shakedown", "--replicate-id", "s1", "--command", "false"]
+        with mock.patch.object(R, "Ops", lambda: ShakedownOps(rc=1)):
+            self.assertEqual(quiet_main(base + ["--fixture", PILOT,
+                                                "--out", str(self.tmp / "a")]), 0)
+            self.assertEqual(quiet_main(base + ["--fixture", str(mismatched_fixture(self.tmp)),
+                                                "--out", str(self.tmp / "b")]), 2)
 
 
 if __name__ == "__main__":
