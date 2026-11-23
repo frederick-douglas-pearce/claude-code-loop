@@ -3096,13 +3096,36 @@ class ShakedownHaltTests(ShakedownBase):
                 if cmd[0] == "/bin/sh":
                     os.kill(os.getpid(), signal.SIGTERM)
                 return super().sandboxed(rdir, claude_real, cwd, cmd, env, stdout, timeout)
+        ops = Ops()
         with mock.patch.object(R, "write_json_atomic", wrapped):
             with self.assertRaises(KeyboardInterrupt):
-                R.cmd_shakedown(self.args(), Ops())
+                R.cmd_shakedown(self.args(), ops)
         rec = self.record()
         self.assertEqual(rec["signal"], "SIGTERM")
         self.assertEqual(rec["interrupted"], "KeyboardInterrupt")
         self.assertEqual(seen, [["SIGHUP", "SIGINT", "SIGTERM"]])
+        # Delivered inside the shakedown's window, so it raised at the kill,
+        # before the command was recorded as run, and no probe ran.
+        self.assertEqual([c for c in ops.calls if c[0] == "sandboxed"], [])
+        self.assertNotIn("exit_code", rec)
+
+    def test_a_first_signal_seen_only_at_the_final_write_still_raises(self):
+        """Blocked during the final write, drained, and then raised once after
+        the `try` statement, as in `run`."""
+        real, calls = R.write_json_atomic, []
+
+        def wrapped(path, obj):
+            calls.append(1)
+            if len(calls) == 1:
+                os.kill(os.getpid(), signal.SIGTERM)       # pends: blocked here
+            return real(path, obj)
+        with mock.patch.object(R, "write_json_atomic", wrapped):
+            with self.assertRaises(KeyboardInterrupt):
+                R.cmd_shakedown(self.args(), ShakedownOps())
+        rec = self.record()
+        self.assertEqual(rec["signal"], "SIGTERM")
+        self.assertEqual(rec["interrupted"], "KeyboardInterrupt")
+        self.assertEqual(len(calls), 2)                    # drained, so rewritten
 
 
 class Deferred391Tests(ShakedownBase):
@@ -3351,6 +3374,73 @@ class HaltUnitTests(unittest.TestCase):
         self.assertEqual(signal.pthread_sigmask(signal.SIG_BLOCK, []), before)
 
 
+class AcceptanceR1Tests(RunBase):
+    """#384 acceptance round 1: guards for the mutation survivors."""
+
+    def test_a_teardown_timeout_on_one_repo_never_strands_the_next(self):
+        """teardown-timeout-strands-rest: a `gh` call past NET_TIMEOUT on the
+        first repo is recorded, and the second is still deleted."""
+        ops, probes = FakeOps(), []
+
+        def on_gh(cmd):
+            if cmd[1:3] == ["api", "repos/%s" % self.PLUG]:
+                probes.append(1)
+                if len(probes) == 2:                        # 1: create_repo; 2: teardown
+                    raise subprocess.TimeoutExpired(cmd, R.NET_TIMEOUT)
+        ops.on_gh = on_gh
+        env = self.run_it(ops)
+        self.assertIn(self.SB, env["repos_deleted"])
+        self.assertTrue(any(f.startswith(self.PLUG + ":") and "timed out" in f
+                            for f in env["repo_delete_failed"]), env["repo_delete_failed"])
+
+
+class HaltOneShotTests(unittest.TestCase):
+    def setUp(self):
+        guard_signals(self)
+
+    def test_only_the_first_of_two_pending_signals_raises(self):
+        """handler-not-one-shot: two signals pending when a window opens are both
+        delivered; the first raises, the second only counts, even though its
+        handler runs after the first one's KeyboardInterrupt."""
+        rec, raised = {}, []
+        h = R.HaltSignals(rec)
+        os.kill(os.getpid(), signal.SIGTERM)
+        os.kill(os.getpid(), signal.SIGHUP)
+        for step in range(2):
+            try:
+                if step == 0:
+                    with h.window():
+                        pass
+                else:
+                    for _ in range(1000):                    # bytecode checks after the raise
+                        len([])
+            except KeyboardInterrupt as exc:
+                raised.append(str(exc))
+        self.assertEqual(len(raised), 1, raised)
+        self.assertEqual(rec["signal"], raised[0])
+        self.assertEqual(rec["signals_after_first"], 1)
+        h.close(lambda: None)
+
+    def test_a_first_signal_after_the_last_drain_is_discarded_not_raised(self):
+        """close-drop-sigign-before-restore: a first signal landing after the
+        last drain (the documented residual) is discarded by SIG_IGN before the
+        mask comes back; it must never be delivered to the handler and raise
+        out of close."""
+        rec = {}
+        h = R.HaltSignals(rec)
+        real, calls = signal.sigtimedwait, []
+
+        def sigtimedwait(sigs, timeout):
+            got = real(sigs, timeout)
+            calls.append(got)
+            if got is None and len(calls) == 2:              # the second drain is done
+                os.kill(os.getpid(), signal.SIGTERM)
+            return got
+        with mock.patch.object(R.signal, "sigtimedwait", sigtimedwait):
+            h.close(lambda: None)                             # must not raise
+        self.assertNotIn("signal", rec)
+
+
 class Round1CaptureTests(CaptureBase):
     def test_refused_ledger_entries_are_charged_and_their_text_bounded(self):
         """host-io.2: symlinks cost the minimum each, and a target's text is cut."""
@@ -3363,6 +3453,17 @@ class Round1CaptureTests(CaptureBase):
         self.assertLess(len(links), 40)                      # stopped by the total cap
         self.assertTrue(any("total cap" in e for e in rec["errors"]))
         self.assertTrue(all(len(e) < 400 for e in links), links[:1])
+
+    def test_directories_are_charged(self):
+        """copy-dirs-uncharged: a flood of empty directories reaches the total cap."""
+        many = self.clone / ".loop-ledger" / "fixture" / "dirs"
+        many.mkdir()
+        for i in range(20):
+            (many / ("d%02d" % i)).mkdir()
+        with mock.patch.object(R, "STOP_TOTAL_CAP", 12 * R.STOP_ENTRY_MIN):
+            rec = self.capture()
+        self.assertTrue(any("dirs/d" in e and "total cap" in e for e in rec["errors"]),
+                        rec["errors"])
 
     def test_a_failed_git_part_keeps_no_bytes(self):
         """host-io.3: a part whose git fails is emptied, as a breaching one is."""
@@ -3414,6 +3515,19 @@ class Round1ReadTests(Tmp):
             signal.alarm(0)
             signal.signal(signal.SIGALRM, old)
         self.assertEqual(status, R.ROW_UNREADABLE)
+
+    def test_row_status_refuses_a_different_regular_file_at_the_open(self):
+        """row-drop-fstat-identity: the lstat saw one regular file, a different
+        one is there at the open; the (dev, ino) check refuses it."""
+        d = self.tmp / "q"
+        d.mkdir()
+        row = "| # | Issue | Status |\n|---|---|---|\n| 1 | #1 x | planning |\n"
+        (d / "queue.md").write_text(row)
+        other = self.tmp / "other.md"
+        other.write_text(row)
+        with mock.patch.object(R, "lstat_walk", return_value=(d / "queue.md", os.lstat(other))):
+            self.assertEqual(R.row_status(self.tmp, "q/queue.md", 1), R.ROW_UNREADABLE)
+        self.assertEqual(R.row_status(self.tmp, "q/queue.md", 1), "planning")
 
     def test_a_failed_write_leaves_the_earlier_record(self):
         """guard-efficacy.7: the write goes to a temp file and is renamed."""
