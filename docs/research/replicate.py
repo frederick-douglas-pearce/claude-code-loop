@@ -112,9 +112,18 @@ def now():
 # --------------------------------------------------------------------------- fixture
 
 def load_fixture(fixture_dir):
-    """-> the fixture spec, with `dir` absolute (so `audit` works from any cwd) and
-    `fixture_sha256` the hash of the exact `fixture.json` bytes it was read from (#374)."""
+    """-> the fixture spec, with `dir` absolute and
+    `fixture_sha256` the hash of the exact `fixture.json` bytes it was read from (#374).
+
+    `fixture_tree_sha256` is `snapshot_id` over the whole fixture directory: every
+    file's relative path and bytes, so `roster/`, `memory/`, `repo/` and anything
+    else under it (#390). It does not cover file modes or empty directories. A
+    symlink anywhere under the directory refuses."""
     fixture_dir = pathlib.Path(fixture_dir).resolve()
+    links = sorted(str(p.relative_to(fixture_dir)) for p in fixture_dir.rglob("*")
+                   if p.is_symlink())
+    if links:
+        raise Refused("fixture %s holds symlinks: %s" % (fixture_dir, ", ".join(links)))
     raw = (fixture_dir / "fixture.json").read_bytes()
     spec = json.loads(raw.decode())
     for key in ("name", "org", "label", "issue", "stops", "max_turns", "ledger_root",
@@ -123,6 +132,7 @@ def load_fixture(fixture_dir):
             raise Refused("fixture.json lacks %r" % key)
     spec["dir"] = str(fixture_dir)
     spec["fixture_sha256"] = hashlib.sha256(raw).hexdigest()
+    spec["fixture_tree_sha256"] = snapshot_id(fixture_dir)
     spec["ci_status_cmd"] = ci_status_binding(fixture_dir / "repo")
     return spec
 
@@ -1610,6 +1620,7 @@ def cmd_run(a, ops=None):
     env_record = {"replicate": rid, "fixture": spec["name"], "wall_clock_start": ops.now(),
                   "gate_latency": "0 (scripted)", "approval_channel": "--resume",
                   "fixture_dir": spec["dir"], "fixture_sha256": spec["fixture_sha256"],
+                  "fixture_tree_sha256": spec["fixture_tree_sha256"],
                   "requires": spec["requires"]}
     env_record.update(provenance)
     halts = HaltSignals(env_record)                 # blocked from here; see HaltSignals
@@ -1895,6 +1906,8 @@ def _run(a, spec, rdir, env_record, ops, halts):
         env_record.update(project_slug=slug, org=spec["org"])
         mem = home / "projects" / slug / "memory"
         shutil.copytree(pathlib.Path(spec["dir"]) / "memory", mem)
+        if snapshot_id(spec["dir"]) != spec["fixture_tree_sha256"]:
+            raise Refused("fixture %s changed after it was loaded" % spec["dir"])
         (home / "settings.json").write_text(json.dumps(spec.get("settings", {}), indent=2) + "\n")
         expected = expected_strata(pins, a.model, a.effort, spec.get("builtin_agents", {}))
         env_record.update(version_dir=version_dir, memory_snapshot=snapshot_id(mem),
@@ -1975,7 +1988,7 @@ def _run(a, spec, rdir, env_record, ops, halts):
         # cannot pass, and never the repos. Neither makes a call to a planned repo.
         teardown(ops, henv, planned, env_record, a.keep_sandbox)
         write_json_atomic(rdir / "environment.json", env_record)
-        steps = (("audit", lambda: write_audit(rdir, env_record, spec, login, version_dir, ops)),
+        steps = (("audit", lambda: write_audit(rdir, env_record, login, version_dir, ops)),
                  ("measure", lambda: (rdir / "result.json").write_text(
                      json.dumps(measure(project_dir(rdir)), indent=2))))
         for name, step in steps:
@@ -2179,7 +2192,7 @@ def delayed_read(reads, env_record):
                for r in reads)
 
 
-def write_audit(rdir, env_record, spec, login, version_dir, ops=None):
+def write_audit(rdir, env_record, login, version_dir, ops=None):
     ops = ops or Ops()
     pdir = project_dir(rdir)
     transcripts = all_transcripts(pdir)
@@ -2254,6 +2267,7 @@ def cmd_shakedown(a, ops=None):
     rdir.mkdir(parents=True)
     record = {"shakedown": a.replicate_id, "fixture": spec["name"],
               "fixture_dir": spec["dir"], "fixture_sha256": spec["fixture_sha256"],
+              "fixture_tree_sha256": spec["fixture_tree_sha256"],
               "command": a.command, "wall_clock_start": ops.now(),
               "requires": spec.get("requires")}
     record.update(provenance)
@@ -2374,8 +2388,7 @@ def main(argv=None):
         elif args.cmd == "audit":
             rdir = pathlib.Path(args.rdir).resolve()
             env = json.loads((rdir / "environment.json").read_text())
-            spec = load_fixture(env["fixture_dir"])
-            print(json.dumps(write_audit(rdir, env, spec, args.login, env["version_dir"]), indent=2))
+            print(json.dumps(write_audit(rdir, env, args.login, env["version_dir"]), indent=2))
         else:
             print(json.dumps(measure(project_dir(args.rdir)), indent=2))
     except Refused as exc:
