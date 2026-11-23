@@ -42,8 +42,8 @@ All seven are in `replicate-fixtures/vote-82/shakedowns.sh` and were run at `046
 2026-11-22, each in a fresh replicate directory with its own `HOME`, so its own `uv` cache. They
 were first run at `0059048`, before review fixes changed `fixture.json`'s bytes but not `repo/`,
 with the same results. At `0463017`, `lint-type`'s command exited 0, then the harness refused the
-probe sandbox after it with `slirp4netns did not report ready` and recorded no probes. A re-run
-under a new id (`lint-type-2`) was clean, and the table shows it. That message can also mask a
+probe sandbox after it with `slirp4netns did not report ready` and recorded no probes. The same
+command, re-run by hand under a new id (`lint-type-2`), was clean, and the table's row is that run. That message can also mask a
 bubblewrap setup failure (a diagnostic gap first noted in #208's review).
 
 | Run | Command | Exit | Result |
@@ -51,7 +51,7 @@ bubblewrap setup failure (a diagnostic gap first noted in #208's review).
 | `test-hermetic` | `uv run pytest && unshare -rn -- sh -c 'ip link set lo up && uv run --offline pytest'` | 0 | Both halves ran. The hermetic run: 698 passed, 12 skipped, 10 deselected. |
 | `socket-open` | `python3 -c "import socket; socket.create_connection((\"1.1.1.1\", 443), 3)"` | 0 | Control: the probe connects from the sandbox. |
 | `socket-blocked` | the same probe inside `unshare -rn -- sh -c 'ip link set lo up && …'` | 1 | `OSError: [Errno 101] Network is unreachable`. The block is at socket level. |
-| `lint-type` | `uv run ruff check && uv run mypy` | 0 | `All checks passed!`; `Success: no issues found in 100 source files` |
+| `lint-type-2` (by hand) | `uv run ruff check && uv run mypy` | 0 | `All checks passed!`; `Success: no issues found in 100 source files` |
 | `locked` | `uv run --locked pytest` | 0 | 698 passed, 12 skipped, 10 deselected |
 | `python-a` | `uv run python -VV` | 0 | `Python 3.14.0 (main, Oct 14 2025, 21:27:55) [Clang 20.1.4 ]` |
 | `python-b` | `uv run python -VV` | 0 | the same build |
@@ -87,8 +87,11 @@ Item 1, the unpinned host tools, is named in `preregistration-template.md` §14.
   (`working-conventions` in §1's `SCOPE_AGENT` row and `local-api-testdrive` in §5 of the fixture's
   `loop.config.md`); the replay has none.
 - **A replicate of this fixture must pass `--uv-bin`** with `uv 0.9.5`, sha256 `d3dc3ca8…4ce0`.
-  `run` does not require the flag, and without it the sandbox has no `uv`, so `TEST_CMD` cannot
-  run and the replicate stops at step 6. A refusal in the harness is a candidate for #384.
+  `run` does not require the flag, and without it the sandbox has no `uv`, so `TEST_CMD` as bound
+  fails with `uv: not found`. The replicate then either stops at step 6 or fetches an unpinned
+  `uv` itself (the sandbox has outbound network, `curl` and `pip3`). Either way it is inadmissible
+  against this fixture's registered pin, because `uv_version` and `uv_sha256` are null. A refusal
+  in the harness is a candidate for #384.
 - **`/security-review` and `/verify` have not been exercised in the sandbox.** This is the first
   fixture whose `SECURITY_REVIEW` and `VERIFY` rows are skills invoked by name (the pilot binds both
   `—`). `builtin_agents` covers only the four agent types the pilot's spikes saw, so a sub-agent of
