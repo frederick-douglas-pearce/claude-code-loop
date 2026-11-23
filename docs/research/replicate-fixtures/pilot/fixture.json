@@ -8,6 +8,7 @@
   "ledger_root": ".loop-ledger",
   "run_slug": "fixture",
   "max_turns": 6,
+  "requires": [],
   "issue": {
     "title": "Add a shout() helper",
     "body": "Add `shout(name)` to `greet.py`: it returns the greeting from `greet(name)` in upper case, ending in `!` instead of `.`.\n\n## Acceptance criteria\n1. `greet.shout(\"Ada\")` returns `\"HELLO, ADA!\"`.\n2. `greet()` is unchanged.\n3. A unit test in `test_greet.py` covers `shout()`."

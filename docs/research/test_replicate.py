@@ -6,6 +6,7 @@ brake; `TEST_CMD`'s research loop runs it.
 import ast
 import datetime
 import hashlib
+import inspect
 import itertools
 import json
 import os
@@ -13,9 +14,11 @@ import pathlib
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from unittest import mock
 
@@ -62,6 +65,37 @@ def write_jsonl(path, records):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(r) + "\n" for r in records))
     return path
+
+
+HALTS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+
+
+def blocked_halts():
+    """-> the names of the halt signals blocked in this thread right now."""
+    mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
+    return sorted(signal.Signals(s).name for s in HALTS if s in mask)
+
+
+def guard_signals(test):
+    """Known handlers and an empty mask for each test, and a cleanup that drains
+    anything left pending before restoring the mask (#384): a SIGTERM a failing
+    test left pending would otherwise be delivered under SIG_DFL and end the
+    whole suite."""
+    saved = {s: signal.signal(s, k) for s, k in ((signal.SIGINT, signal.default_int_handler),
+                                                (signal.SIGTERM, signal.SIG_DFL),
+                                                (signal.SIGHUP, signal.SIG_DFL))}
+    mask = signal.pthread_sigmask(signal.SIG_UNBLOCK, HALTS)
+
+    def restore():
+        for s in HALTS:
+            signal.signal(s, signal.SIG_IGN)
+        signal.pthread_sigmask(signal.SIG_BLOCK, HALTS)
+        while signal.sigtimedwait(HALTS, 0) is not None:
+            pass
+        signal.pthread_sigmask(signal.SIG_SETMASK, mask)
+        for s, h in saved.items():
+            signal.signal(s, h)
+    test.addCleanup(restore)
 
 
 class Tmp(unittest.TestCase):
@@ -301,7 +335,7 @@ class LaunchTests(Tmp):
                     getattr(first.func, "id", None) in ("account_events_argv", "account_user_argv")
                 if (names_gh or via_argv) and not any(k.arg == "env" for k in call.keywords):
                     offenders.append(fn.name)
-        self.assertEqual(offenders, ["account_events", "account_events"])
+        self.assertEqual(offenders, ["_account_events", "_account_events"])
 
 
 class ShimPolicyTests(unittest.TestCase):
@@ -460,11 +494,11 @@ class StopTests(Tmp):
         q.write_text("| # | Issue | Route | Status | Depends on | PR | Notes |\n"
                      "|---|---|---|---|---|---|---|\n"
                      "| 1 | #1 Add | code | in-review | \u2014 | #2 | r1 \\| see progress.md |\n")
-        status = R.row_status(q, 1)
+        status = R.row_status(self.tmp, "queue.md", 1)
         self.assertEqual(status, R.ROW_UNREADABLE)
         self.assertEqual(R.classify_stop(status, "defer Y to a backlog issue", self.STOPS)[0],
                          "halt")
-        self.assertIsNone(R.row_status(self.tmp / "absent.md", 1))
+        self.assertIsNone(R.row_status(self.tmp, "absent.md", 1))
 
     def test_check_stops_refuses_what_would_pass_silently(self):
         """#371: the in-review reply cannot come back by a fixture edit, and a stop
@@ -522,8 +556,9 @@ class StopTests(Tmp):
                      "|---|---|---|---|---|---|---|\n"
                      "| 1 | #10 other | code | done | — | — | |\n"
                      "| 2 | #1 shout | code | in-acceptance | — | #2 | |\n")
-        self.assertEqual(R.row_status(q, 1), "in-acceptance")
-        self.assertIsNone(R.row_status(self.tmp / "absent.md", 1))
+        self.assertEqual(R.row_status(self.tmp, "queue.md", 1), "in-acceptance")
+        self.assertIsNone(R.row_status(self.tmp, "absent.md", 1))
+        self.assertIsNone(R.row_status(self.tmp, "no-dir/queue.md", 1))
 
 
 class AuditTests(Tmp):
@@ -1156,6 +1191,7 @@ class FakeOps:
         self.status, self.git_noise, self.git_timeout = status, git_noise, git_timeout
         self.git_raise = git_raise
         self.git_calls, self.handlers, self.teardown_signals = [], {}, []
+        self.sh_timeouts, self.on_gh, self.on_capture = [], None, None
         self.calls, self.existing = [], set(existing)
         self.audit_events, self.mutate_cache, self.feed_reads = audit_events, mutate_cache, 0
         self.install_problems, self.turn, self.fail_create = list(install_problems), turn, fail_create
@@ -1166,8 +1202,11 @@ class FakeOps:
         self.t += 1
         return datetime.datetime.fromtimestamp(epoch(self.t), datetime.timezone.utc).isoformat()
 
-    def sh(self, cmd, env=None, cwd=None, check=True):
+    def sh(self, cmd, env=None, cwd=None, check=True, timeout=None):
         self.calls.append((self.now(), list(cmd)))
+        self.sh_timeouts.append((list(cmd[:3]), timeout))
+        if self.on_gh is not None and cmd[0] == R.REAL_GH:
+            self.on_gh(list(cmd))
         if cmd[0] != R.REAL_GH:
             if cmd[-1] == "--version":
                 return fake_proc(0, "v1")
@@ -1184,8 +1223,7 @@ class FakeOps:
                 raise R.Refused("create failed")
             self.existing.add(args[2])
         if args[:2] == ["repo", "delete"]:
-            self.teardown_signals.append({n: signal.getsignal(getattr(signal, n))
-                                          for n in ("SIGINT", "SIGTERM", "SIGHUP")})
+            self.teardown_signals.append(blocked_halts())
             self.existing.discard(args[2])
         if args[:2] == ["issue", "create"]:
             return fake_proc(0, "https://github.com/x/issues/1")
@@ -1196,6 +1234,8 @@ class FakeOps:
         environment, so a test can tell it came through the capture profile."""
         self.calls.append((self.now(), ["capture_sandboxed"] + list(cmd)))
         self.git_calls.append({"cmd": list(cmd), "env": dict(env), "timeout": timeout})
+        if self.on_capture is not None:
+            self.on_capture(list(cmd))
         if self.git_timeout:
             raise subprocess.TimeoutExpired(cmd, timeout)
         if self.git_raise is not None:
@@ -1219,12 +1259,13 @@ class FakeOps:
         do_work(cwd, self.status)
         if self.turn == "interrupt":
             raise KeyboardInterrupt
-        if self.turn in ("SIGTERM", "SIGHUP"):
-            # What the harness's handler does when `kill` lands mid-turn.
+        if self.turn in ("SIGINT", "SIGTERM", "SIGHUP"):
+            # A real `kill` landing mid-turn: the turn runs inside a signal window,
+            # so it is delivered, and raises, before os.kill returns.
             sig = getattr(signal, self.turn)
-            handler = signal.getsignal(sig)
-            self.handlers[self.turn] = handler
-            handler(sig, None)      # SIG_DFL (an int) is not callable: the test fails
+            self.handlers[self.turn] = signal.getsignal(sig)
+            os.kill(os.getpid(), sig)
+            raise AssertionError("%s did not raise mid-turn" % self.turn)
         # A parent transcript, so the audit gets past project_dir to its checks.
         write_jsonl(pathlib.Path(rdir) / "home" / ".claude" / "projects" /
                     R.project_slug(cwd) / "s.jsonl", [asst()])
@@ -1260,9 +1301,9 @@ class FakeOps:
         return [(t, c[3]) for t, c in self.calls if c[0] == R.REAL_GH and c[1:3] == ["repo", "create"]]
 
 
-class RunTests(Tmp):
-    """#366 AC2/AC4/AC6: `_run` through an injected runner -- no network, no `claude`,
-    no `gh`. Local git (base, clone, archive, marketplace) runs for real."""
+class RunBase(Tmp):
+    """`cmd_run` through an injected runner -- no network, no `claude`, no `gh`.
+    Local git (base, clone, archive, marketplace) runs for real."""
 
     def setUp(self):
         super().setUp()
@@ -1279,11 +1320,7 @@ class RunTests(Tmp):
         self.addCleanup(env.stop)
         for v in R.EFFORT_ENV:
             os.environ.pop(v, None)
-        # Known handlers per test, so a before/after comparison never starts from
-        # a disposition an earlier test left behind.
-        for sig, known in ((signal.SIGINT, signal.default_int_handler),
-                           (signal.SIGTERM, signal.SIG_DFL), (signal.SIGHUP, signal.SIG_DFL)):
-            self.addCleanup(signal.signal, sig, signal.signal(sig, known))
+        guard_signals(self)
 
     def args(self, **kw):
         a = dict(fixture=PILOT, replicate_id="r1", out=str(self.tmp / "out"), plugin_src=self.src,
@@ -1303,6 +1340,18 @@ class RunTests(Tmp):
 
     PLUG, SB = "frederick-douglas-pearce-loop-sandbox/pilot-r1-plugin", \
         "frederick-douglas-pearce-loop-sandbox/pilot-r1"
+
+    def stop_ok(self, env, rdir):
+        rec = env["stop_capture"]
+        self.assertEqual(rec["errors"], [])
+        self.assertEqual(rec["files"], R.STOP_FILES)
+        self.assertEqual(R.stop_capture_problems(rdir, env), [])
+        return rec
+
+
+
+class RunTests(RunBase):
+    """#366 AC2/AC4/AC6: `_run` through an injected runner."""
 
     def test_clean_run_deletes_both_repos_and_records_the_binding(self):
         ops = FakeOps()
@@ -1518,13 +1567,6 @@ class RunTests(Tmp):
 
     # ------------------------------------------------------------ stop capture (#380)
 
-    def stop_ok(self, env, rdir):
-        rec = env["stop_capture"]
-        self.assertEqual(rec["errors"], [])
-        self.assertEqual(rec["files"], R.STOP_FILES)
-        self.assertEqual(R.stop_capture_problems(rdir, env), [])
-        return rec
-
     def test_capture_runs_on_every_way_a_replicate_ends(self):
         """#380 AC2: the final in-acceptance stop, an in-review halt, a
         gate-error-shaped halt (a row left at a pipeline status no stop names),
@@ -1560,75 +1602,6 @@ class RunTests(Tmp):
                 self.assertIn(b"+committed line", (rdir / "stop" / "diff.patch").read_bytes())
                 self.assertIn("| %s |" % status,
                               (rdir / "stop" / "ledger" / "fixture" / "queue.md").read_text())
-
-    def test_halt_signals_are_handled_for_the_run_only_and_ignored_in_teardown(self):
-        """#380: during the run SIGTERM and SIGHUP raise KeyboardInterrupt (so
-        every finally runs); teardown ignores them as it ignores SIGINT; after
-        cmd_run the previous handlers are back."""
-        before = {n: signal.getsignal(getattr(signal, n)) for n in ("SIGTERM", "SIGHUP")}
-        ops = FakeOps(turn="SIGTERM")
-        self.run_it(ops, KeyboardInterrupt)
-        self.assertTrue(callable(ops.handlers["SIGTERM"]))
-        self.assertEqual(ops.teardown_signals[-1], {n: signal.SIG_IGN
-                                                    for n in ("SIGINT", "SIGTERM", "SIGHUP")})
-        self.assertEqual({n: signal.getsignal(getattr(signal, n)) for n in before}, before)
-
-    def test_a_signal_started_ignored_stays_ignored(self):
-        """#380: under `nohup` SIGHUP starts ignored; a closed terminal must not
-        halt a paid run, so the harness leaves it alone."""
-        old = signal.signal(signal.SIGHUP, signal.SIG_IGN)
-        self.addCleanup(signal.signal, signal.SIGHUP, old)
-        seen = {}
-
-        class Ops(FakeOps):
-            def sandboxed(self, rdir, claude_real, cwd, cmd, env, stdout=None, timeout=None):
-                if "-p" in cmd:
-                    seen["SIGHUP"] = signal.getsignal(signal.SIGHUP)
-                    seen["SIGTERM"] = signal.getsignal(signal.SIGTERM)
-                return super().sandboxed(rdir, claude_real, cwd, cmd, env, stdout, timeout)
-        env = self.run_it(Ops())
-        self.assertIs(seen["SIGHUP"], signal.SIG_IGN)
-        self.assertTrue(callable(seen["SIGTERM"]))
-        self.assertNotIn("signal", env)
-        self.assertIs(signal.getsignal(signal.SIGHUP), signal.SIG_IGN)
-
-    def test_the_last_environment_write_runs_with_halt_signals_ignored(self):
-        """#380: the last environment.json write runs with SIGINT and the halt
-        signals ignored, and the handlers come back only after it."""
-        real, seen = pathlib.Path.write_text, []
-
-        def write_text(path, *a, **k):
-            if path.name == "environment.json":
-                seen.append({n: signal.getsignal(getattr(signal, n))
-                             for n in ("SIGINT", "SIGTERM", "SIGHUP")})
-            return real(path, *a, **k)
-        before = {n: signal.getsignal(getattr(signal, n)) for n in ("SIGINT", "SIGTERM", "SIGHUP")}
-        with mock.patch.object(pathlib.Path, "write_text", write_text):
-            env = self.run_it(FakeOps())
-        self.assertEqual(seen[-1], {n: signal.SIG_IGN for n in ("SIGINT", "SIGTERM", "SIGHUP")})
-        self.assertIn("repos_deleted", env)
-        self.assertEqual({n: signal.getsignal(getattr(signal, n)) for n in before}, before)
-
-    def test_halt_is_never_reinstalled_after_the_last_write(self):
-        """#380: the handlers come back in one pass after the final
-        environment.json write; no signal.signal call after that write installs
-        the harness's `halt` handler."""
-        real_signal, real_write, log = signal.signal, pathlib.Path.write_text, []
-
-        def record_signal(sig, handler):
-            log.append(("signal", getattr(handler, "__name__", handler)))
-            return real_signal(sig, handler)
-
-        def write_text(path, *a, **k):
-            if path.name == "environment.json":
-                log.append(("write", None))
-            return real_write(path, *a, **k)
-        with mock.patch.object(signal, "signal", record_signal), \
-                mock.patch.object(pathlib.Path, "write_text", write_text):
-            self.run_it(FakeOps())
-        last = max(i for i, e in enumerate(log) if e[0] == "write")
-        self.assertIn(("signal", "halt"), log[:last])       # it was installed for the run
-        self.assertNotIn(("signal", "halt"), log[last:])
 
     def test_capture_runs_in_its_own_profile_before_the_sandbox_repo_is_deleted(self):
         """#380: every capture git call went through ops.capture_sandboxed with
@@ -1871,8 +1844,8 @@ class RunTests(Tmp):
         self.assertFalse((self.tmp / "out" / "r1" / "bin").exists())
 
 
-class CaptureTests(Tmp):
-    """#380 AC1: `capture_stop` on a real clone, through FakeOps' capture sandbox."""
+class CaptureBase(Tmp):
+    """`capture_stop` on a real clone, through FakeOps' capture sandbox."""
 
     def setUp(self):
         super().setUp()
@@ -1891,6 +1864,11 @@ class CaptureTests(Tmp):
 
     def read(self, key):
         return (self.rdir / R.STOP_FILES[key]).read_bytes()
+
+
+
+class CaptureTests(CaptureBase):
+    """#380 AC1: `capture_stop` on a real clone, through FakeOps' capture sandbox."""
 
     def test_writes_each_part_of_the_stop_state(self):
         rec = self.capture()
@@ -2470,19 +2448,20 @@ class ShakedownOps:
 
     def __init__(self, rc=0, timeout=(), probe_rc=0):
         self.rc, self.timeout, self.probe_rc = rc, set(timeout), probe_rc
-        self.calls, self.envs, self.t = [], [], 0
+        self.calls, self.envs, self.rdirs, self.t = [], [], [], 0
 
     def now(self):
         self.t += 1
         return datetime.datetime.fromtimestamp(epoch(self.t), datetime.timezone.utc).isoformat()
 
-    def sh(self, cmd, env=None, cwd=None, check=True):
+    def sh(self, cmd, env=None, cwd=None, check=True, timeout=None):
         self.calls.append(("sh", list(cmd)))
         return fake_proc(0, "uv 0.0-test\n")
 
     def sandboxed(self, rdir, claude_real, cwd, cmd, env, stdout=None, timeout=None):
         self.calls.append(("sandboxed", claude_real, str(cwd), list(cmd), timeout))
         self.envs.append(dict(env))
+        self.rdirs.append(pathlib.Path(rdir))
         # What bwrap needs before it starts: every bind source exists (resolv.conf
         # is run_sandboxed's own write), and the shim is in place (#391).
         argv = R.sandbox_argv(rdir, claude_real, cwd, 0, 0, links=())
@@ -2491,7 +2470,8 @@ class ShakedownOps:
                 assert os.path.exists(argv[i + 1]), "bind source missing: " + argv[i + 1]
         assert (pathlib.Path(rdir) / "bin" / "gh").is_file(), "no gh shim in bin/"
         if cmd[0] in self.timeout:
-            raise subprocess.TimeoutExpired(cmd, timeout)
+            # run_sandboxed keeps what was printed before the kill (#384).
+            raise subprocess.TimeoutExpired(cmd, timeout, output=b"partial " + cmd[0].encode())
         rc = self.rc if cmd[0] == "/bin/sh" else self.probe_rc
         return rc, b"out of " + cmd[0].encode()
 
@@ -2501,8 +2481,8 @@ class ShakedownOps:
     capture_sandboxed = events = check_install = launch_env = harness_env = _forbidden
 
 
-class ShakedownTests(Tmp):
-    """#391 AC3: no `claude`, no repo, no token; a base mismatch refuses as `run` does."""
+class ShakedownBase(Tmp):
+    """`cmd_shakedown` through ShakedownOps."""
 
     def setUp(self):
         super().setUp()
@@ -2511,6 +2491,7 @@ class ShakedownTests(Tmp):
         self.addCleanup(env.stop)
         for var in R.SHAKEDOWN_REFUSE_ENV:
             os.environ.pop(var, None)
+        guard_signals(self)
 
     def args(self, **kw):
         a = dict(fixture=PILOT, replicate_id="s1", out=str(self.tmp / "out"), uv_bin=None,
@@ -2520,6 +2501,11 @@ class ShakedownTests(Tmp):
 
     def record(self):
         return json.loads((self.tmp / "out" / "s1" / "shakedown.json").read_text())
+
+
+
+class ShakedownTests(ShakedownBase):
+    """#391 AC3: no `claude`, no repo, no token; a base mismatch refuses as `run` does."""
 
     def test_exact_calls_with_uv_and_no_credential(self):
         real = fake_uv(self.tmp)
@@ -2602,7 +2588,8 @@ class ShakedownTests(Tmp):
         R.cmd_shakedown(self.args(), ShakedownOps(timeout={"python3"}))
         rec = self.record()
         self.assertEqual(rec["probes"], [{"argv": ["python3", "--version"], "exit_code": None,
-                                          "timeout_s": R.PROBE_TIMEOUT}])
+                                          "timeout_s": R.PROBE_TIMEOUT,
+                                          "output": "partial python3"}])
         self.assertNotIn("error", rec)
         self.assertNotIn("timeout_s", rec)
 
@@ -2627,6 +2614,560 @@ class ShakedownTests(Tmp):
                                                 "--out", str(self.tmp / "a")]), 0)
             self.assertEqual(quiet_main(base + ["--fixture", str(mismatched_fixture(self.tmp)),
                                                 "--out", str(self.tmp / "b")]), 2)
+
+
+# ----------------------------------------------------------------------- #384
+
+
+def objects_inodes(repo):
+    out = set()
+    for d, _dirs, files in os.walk(pathlib.Path(repo) / ".git" / "objects"):
+        for name in files:
+            st = os.lstat(os.path.join(d, name))
+            if stat.S_ISREG(st.st_mode):
+                out.add((st.st_dev, st.st_ino))
+    return out
+
+
+class CloneInodeTests(Tmp):
+    """#384 AC1: the replicate's clone shares no inode with `rdir/base`."""
+
+    def test_clone_shares_no_inode_with_the_base(self):
+        fixture = self.tmp / "fixture"
+        (fixture / "repo").mkdir(parents=True)
+        for i in range(5):
+            (fixture / "repo" / ("f%d.txt" % i)).write_text("content %d\n" % i)
+        base_sha = R.build_base(fixture / "repo", self.tmp / "probe")
+        spec = {"dir": str(fixture), "base_sha": base_sha}
+        rdir = self.tmp / "r"
+        base, clone = R.build_clone(spec, rdir, "c")
+        self.assertEqual(base, base_sha)
+        base_inodes, clone_inodes = objects_inodes(rdir / "base"), objects_inodes(clone)
+        self.assertTrue(base_inodes and clone_inodes)
+        self.assertEqual(base_inodes & clone_inodes, set())
+        # Control: a plain local clone of the same base does share inodes, so the
+        # assertion above can fail.
+        local = self.tmp / "local"
+        subprocess.run(["git", "clone", "-q", str(rdir / "base"), str(local)], check=True)
+        if not base_inodes & objects_inodes(local):
+            self.skipTest("this filesystem does not hardlink a local clone's objects")
+
+
+class RowStatusPlainTests(Tmp):
+    """#384 AC2: `row_status` refuses a non-regular queue.md, symlinks included,
+    without blocking."""
+
+    ROW = "| # | Issue | Status |\n|---|---|---|\n| 1 | #1 x | in-acceptance |\n"
+
+    def setUp(self):
+        super().setUp()
+        guard_signals(self)
+        self.run_dir = self.tmp / ".loop-ledger" / "fixture"
+        self.run_dir.mkdir(parents=True)
+        self.rel = ".loop-ledger/fixture/queue.md"
+
+    def status(self):
+        """row_status under a 5s alarm, so a read that blocks fails the test
+        instead of hanging the suite (an alarm, not a thread: HaltSignals
+        assumes one thread)."""
+        def boom(*_):
+            raise AssertionError("row_status blocked")
+        old = signal.signal(signal.SIGALRM, boom)
+        signal.alarm(5)
+        try:
+            return R.row_status(self.tmp, self.rel, 1)
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old)
+
+    def test_regular_file_is_read(self):
+        (self.run_dir / "queue.md").write_text(self.ROW)
+        self.assertEqual(self.status(), "in-acceptance")
+
+    def test_fifo_is_refused_without_blocking(self):
+        os.mkfifo(self.run_dir / "queue.md")
+        self.assertEqual(self.status(), R.ROW_UNREADABLE)
+
+    def test_symlinked_queue_md_is_refused(self):
+        real = self.tmp / "elsewhere.md"
+        real.write_text(self.ROW)
+        (self.run_dir / "queue.md").symlink_to(real)
+        self.assertEqual(self.status(), R.ROW_UNREADABLE)
+
+    def test_symlinked_run_dir_is_refused(self):
+        real = self.tmp / "real-run"
+        real.mkdir()
+        (real / "queue.md").write_text(self.ROW)
+        shutil.rmtree(self.run_dir)
+        self.run_dir.symlink_to(real)
+        self.assertEqual(self.status(), R.ROW_UNREADABLE)
+
+    def test_a_fifo_in_a_parent_component_is_refused(self):
+        shutil.rmtree(self.run_dir)
+        os.mkfifo(self.run_dir)
+        self.assertEqual(self.status(), R.ROW_UNREADABLE)
+
+    def test_an_oversized_queue_md_is_refused(self):
+        (self.run_dir / "queue.md").write_text(self.ROW + "x" * (R.QUEUE_MD_CAP + 1))
+        self.assertEqual(self.status(), R.ROW_UNREADABLE)
+
+    def test_missing_queue_md_is_still_none(self):
+        self.assertIsNone(self.status())
+        shutil.rmtree(self.tmp / ".loop-ledger")
+        self.assertIsNone(self.status())
+
+
+class StopCapTests(CaptureBase):
+    """#384 AC3: per-file and total caps on `stop/`, a breach a capture error."""
+
+    def test_a_part_over_the_file_cap_is_dropped_and_named(self):
+        with mock.patch.object(R, "STOP_FILE_CAP", 100):
+            rec = self.capture()
+        self.assertTrue(any(e.startswith("diff: ") and "file cap" in e for e in rec["errors"]),
+                        rec["errors"])
+        self.assertNotIn("diff", rec["files"])
+        self.assertEqual(self.read("diff"), b"")             # emptied, not left at size
+        self.assertEqual(rec["caps"], {"file": 100, "total": R.STOP_TOTAL_CAP})
+        problems = R.stop_capture_problems(self.rdir, {"stop_capture": rec})
+        self.assertIn("stop capture has no diff", problems)
+
+    def test_a_ledger_file_over_the_file_cap_is_not_copied(self):
+        big = self.clone / ".loop-ledger" / "fixture" / "big.md"
+        big.write_text("x" * 200)
+        with mock.patch.object(R, "STOP_FILE_CAP", 150):
+            rec = self.capture()
+        self.assertIn("ledger: .loop-ledger/fixture/big.md is 200 bytes, over the 150-byte "
+                      "file cap; not copied", rec["errors"])
+        self.assertFalse((self.rdir / "stop" / "ledger" / "fixture" / "big.md").exists())
+        self.assertNotIn("ledger", rec["files"])
+
+    def test_the_total_cap_ends_the_capture_with_an_error(self):
+        # Five git parts at >= 512 bytes each pass 2000 before the ledger.
+        with mock.patch.object(R, "STOP_TOTAL_CAP", 2000):
+            rec = self.capture()
+        self.assertTrue(any("total cap" in e for e in rec["errors"]), rec["errors"])
+        self.assertLessEqual(rec["bytes_charged"], 2000)
+        self.assertNotEqual(R.stop_capture_problems(self.rdir, {"stop_capture": rec}), [])
+
+    def test_empty_ledger_entries_are_charged(self):
+        many = self.clone / ".loop-ledger" / "fixture" / "many"
+        many.mkdir()
+        for i in range(20):
+            (many / ("e%d" % i)).write_text("")
+        with mock.patch.object(R, "STOP_TOTAL_CAP", 8 * R.STOP_ENTRY_MIN):
+            rec = self.capture()
+        self.assertTrue(any("total cap" in e for e in rec["errors"]), rec["errors"])
+
+    def test_under_the_caps_nothing_changes(self):
+        rec = self.capture()
+        self.assertEqual(rec["errors"], [])
+        self.assertGreater(rec["bytes_charged"], 0)
+
+
+class CapAuditTests(RunBase):
+    def test_a_cap_breach_fails_the_audit(self):
+        """#384 AC3: a breach is a capture error, so `pass` is false."""
+        with mock.patch.object(R, "STOP_FILE_CAP", 50):
+            self.run_it(FakeOps())
+        audit = json.loads((self.tmp / "out" / "r1" / "audit.json").read_text())
+        self.assertFalse(audit["pass"])
+        self.assertIn("file cap", json.dumps(audit))
+
+
+class RequiresTests(RunBase):
+    """#384: `run` refuses, before anything is created, a fixture whose
+    `requires` it cannot satisfy."""
+
+    def fixture(self, requires):
+        d = self.tmp / ("fx-%d" % next(_IDS))
+        shutil.copytree(PILOT, d)
+        spec = json.loads((d / "fixture.json").read_text())
+        if requires is self.ABSENT:
+            spec.pop("requires", None)
+        else:
+            spec["requires"] = requires
+        (d / "fixture.json").write_text(json.dumps(spec, indent=2))
+        return str(d)
+
+    ABSENT = object()
+
+    def test_refusals_create_nothing(self):
+        for requires, why in ((self.ABSENT, "lacks 'requires'"),
+                              ("uv", "must be a list"),
+                              (["uv", 3], "must be a list"),
+                              (["node"], "does not know"),
+                              (["uv"], "pass --uv-bin")):
+            with self.subTest(requires=requires):
+                out = self.tmp / ("out-%d" % next(_IDS))
+                with self.assertRaisesRegex(R.Refused, why):
+                    R.cmd_run(self.args(fixture=self.fixture(requires), out=str(out)), FakeOps())
+                self.assertFalse(out.exists())
+
+    def test_uv_with_its_flag_runs_and_is_recorded(self):
+        env = self.run_it(FakeOps(), fixture=self.fixture(["uv"]),
+                          uv_bin=str(fake_uv(self.tmp)))
+        self.assertEqual(env["requires"], ["uv"])
+        self.assertIn("repos_deleted", env)
+
+    def test_the_shipped_fixtures_declare_it(self):
+        self.assertEqual(R.load_fixture(PILOT)["requires"], [])
+        self.assertEqual(R.load_fixture(VOTE82)["requires"], ["uv"])
+        env = self.run_it(FakeOps())
+        self.assertEqual(env["requires"], [])
+
+    def test_shakedown_does_not_refuse_without_uv(self):
+        env = mock.patch.dict(os.environ)
+        env.start()
+        self.addCleanup(env.stop)
+        for var in R.SHAKEDOWN_REFUSE_ENV:
+            os.environ.pop(var, None)
+        a = R.argparse.Namespace(fixture=self.fixture(["uv"]), replicate_id="s1",
+                                 out=str(self.tmp / "sk"), uv_bin=None, command="true",
+                                 timeout=9)
+        R.cmd_shakedown(a, ShakedownOps())
+        rec = json.loads((self.tmp / "sk" / "s1" / "shakedown.json").read_text())
+        self.assertEqual(rec["requires"], ["uv"])
+
+
+class HaltTests(RunBase):
+    """#384 AC5: no halt signal can skip the teardown or the final record."""
+
+    def teardown_ok(self, env):
+        planned = env["repos_planned"]
+        self.assertTrue(planned)
+        done = set(env.get("repos_deleted", []) + env.get("repos_absent", []) +
+                   env.get("sandbox_kept", []) +
+                   [f.split(":", 1)[0] for f in env.get("repo_delete_failed", [])])
+        self.assertEqual(set(planned) - done, set())
+
+    def final_writes(self):
+        """Wrap write_json_atomic: -> the list of (mask, record copy) for every
+        environment.json write that carries wall_clock_end (the final ones)."""
+        real, seen = R.write_json_atomic, []
+
+        def wrapped(path, obj):
+            if pathlib.Path(path).name == "environment.json" and "wall_clock_end" in obj:
+                seen.append((blocked_halts(), dict(obj)))
+                if self.on_final is not None:
+                    self.on_final(len(seen))
+            return real(path, obj)
+        self.on_final = None
+        p = mock.patch.object(R, "write_json_atomic", wrapped)
+        p.start()
+        self.addCleanup(p.stop)
+        return seen
+
+    def test_a_two_signals_second_from_teardowns_first_gh_call(self):
+        ops = FakeOps(turn="SIGTERM")
+        sent = []
+
+        def on_gh(cmd):
+            if cmd[1:2] == ["api"] and "SIGTERM" in ops.handlers and not sent:
+                sent.append(blocked_halts())
+                os.kill(os.getpid(), signal.SIGINT)
+        ops.on_gh = on_gh
+        env = self.run_it(ops, KeyboardInterrupt)
+        self.assertEqual(sent, [["SIGHUP", "SIGINT", "SIGTERM"]])
+        self.assertEqual(env["signal"], "SIGTERM")
+        self.assertGreaterEqual(env["signals_after_first"], 1)
+        self.assertEqual(env["interrupted"], "KeyboardInterrupt")
+        self.teardown_ok(env)
+        self.assertIn(self.SB, env["repos_deleted"])
+
+    def test_b_first_signal_from_inside_the_stop_capture(self):
+        ops = FakeOps()
+        ops.on_capture = lambda cmd: (os.kill(os.getpid(), signal.SIGTERM)
+                                      if not ops.git_calls[1:] else None)
+        env = self.run_it(ops, KeyboardInterrupt)     # raised once, after the final write
+        self.assertEqual(env["signal"], "SIGTERM")
+        self.assertEqual(env["interrupted"], "KeyboardInterrupt")
+        self.assertIn("done", env["outcome"])
+        self.stop_ok(env, self.tmp / "out" / "r1")
+        self.teardown_ok(env)
+        self.assertIn(self.SB, env["repos_deleted"])
+
+    def run_d(self, turn, during_write):
+        seen = self.final_writes()
+        self.on_final = lambda n: os.kill(os.getpid(), during_write) if n == 1 else None
+        with self.assertRaises(KeyboardInterrupt):
+            R.cmd_run(self.args(), FakeOps(turn=turn))
+        env = json.loads((self.tmp / "out" / "r1" / "environment.json").read_text())
+        self.assertIn("repos_deleted", env)                 # teardown's outcome
+        self.assertEqual(len(seen), 2)                      # drained, so rewritten once
+        self.assertEqual([m for m, _ in seen], [["SIGHUP", "SIGINT", "SIGTERM"]] * 2)
+        return env
+
+    def test_d_a_first_signal_during_the_final_write_is_recorded(self):
+        env = self.run_d("done", signal.SIGTERM)
+        self.assertEqual(env["signal"], "SIGTERM")
+        self.assertEqual(env["interrupted"], "KeyboardInterrupt")
+
+    def test_d_a_second_signal_during_the_final_write_is_counted(self):
+        env = self.run_d("SIGTERM", signal.SIGHUP)
+        self.assertEqual(env["signal"], "SIGTERM")
+        self.assertGreaterEqual(env["signals_after_first"], 1)
+
+    def targets(self):
+        """-> {(function name, absolute line of the first statement of a `finally`
+        or `except` body): the run that reaches it}, read from the source."""
+        out = {}
+        for fn in (R._run, R.cmd_run):
+            lines, start = inspect.getsourcelines(fn)
+            tree = ast.parse(textwrap.dedent("".join(lines)))
+            # A try inside a signal window is window body: raising there is the
+            # design, so it is not a target.
+            windowed = {id(n) for w in ast.walk(tree) if isinstance(w, ast.With)
+                        and "window" in ast.dump(w.items[0].context_expr)
+                        for n in ast.walk(w) if isinstance(n, ast.Try)}
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Try) or id(node) in windowed:
+                    continue
+                if node.finalbody:
+                    out[(fn.__name__, start + node.finalbody[0].lineno - 1)] = "clean"
+                body = ast.dump(ast.Module(body=node.body, type_ignores=[]))
+                for h in node.handlers:
+                    kind = getattr(h.type, "id", None)
+                    if fn is R.cmd_run:
+                        run = "refused" if kind == "Exception" else "interrupt"
+                    else:
+                        run = "capture_stop" if "capture_stop" in body else "measure"
+                    out[(fn.__name__, start + h.body[0].lineno - 1)] = run
+        return out
+
+    def test_c_a_first_signal_at_every_finally_and_except(self):
+        """A `sys.settrace` line event on the first statement of every `finally`
+        and `except` in `_run` and `cmd_run` sends the run's *first* signal, one
+        clean-otherwise run per (target, signal). The mask is recorded at each
+        target, and the lines hit must equal the lines targeted, so a missed
+        event cannot pass."""
+        targets = self.targets()
+        self.assertEqual(sorted(targets.values()).count("clean"), 3)
+        hit = set()
+        for (fn, line), run in sorted(targets.items()):
+            for sig in HALTS:
+                with self.subTest(fn=fn, line=line, run=run, signal=sig.name):
+                    hit |= self.traced_run(fn, line, run, sig)
+        self.assertEqual(hit, set(targets))
+
+    def traced_run(self, fn, line, run, sig):
+        code = {"_run": R._run.__code__, "cmd_run": R.cmd_run.__code__}[fn]
+        hits, masks = set(), []
+
+        def local(frame, event, _arg):
+            if event == "line" and frame.f_lineno == line and not hits:
+                hits.add((fn, line))
+                masks.append(blocked_halts())
+                os.kill(os.getpid(), sig)
+            return local
+
+        def glob(frame, event, _arg):
+            return local if frame.f_code is code else None
+        ops, want, patch = FakeOps(), KeyboardInterrupt, None
+        if run == "refused":
+            ops, want = FakeOps(install_problems=["boom"]), R.Refused
+        elif run == "interrupt":
+            ops = FakeOps(turn="interrupt")
+        elif run in ("capture_stop", "measure"):
+            patch = mock.patch.object(R, run, side_effect=RuntimeError("boom"))
+            patch.start()
+        out = self.tmp / ("c-%s-%d-%s" % (fn, line, sig.name))
+        old = sys.gettrace()
+        try:
+            sys.settrace(glob)
+            try:
+                with self.assertRaises(want):
+                    R.cmd_run(self.args(out=str(out)), ops)
+            finally:
+                sys.settrace(old)
+        finally:
+            if patch is not None:
+                patch.stop()
+        self.assertEqual(hits, {(fn, line)})
+        self.assertEqual(masks, [["SIGHUP", "SIGINT", "SIGTERM"]])
+        env = json.loads((out / "r1" / "environment.json").read_text())
+        self.assertEqual(env["signal"], sig.name)
+        self.teardown_ok(env)
+        return hits
+
+    def test_teardown_and_the_final_write_run_blocked(self):
+        """The fallback the AC names: the halt signals are blocked at teardown's
+        first call and at the final write, on a clean run and an interrupted one."""
+        seen = self.final_writes()
+        for turn in ("done", "SIGTERM"):
+            with self.subTest(turn=turn):
+                ops, plug_probes, first = FakeOps(turn=turn), [], []
+
+                def on_gh(cmd, plug_probes=plug_probes, first=first):
+                    if cmd[1:3] == ["api", "repos/%s" % self.PLUG]:
+                        plug_probes.append(1)
+                        if len(plug_probes) == 2:           # 1: create_repo; 2: teardown
+                            first.append(blocked_halts())
+                ops.on_gh = on_gh
+                try:
+                    R.cmd_run(self.args(out=str(self.tmp / ("blk-" + turn))), ops)
+                except KeyboardInterrupt:
+                    self.assertEqual(turn, "SIGTERM")
+                self.assertEqual(first, [["SIGHUP", "SIGINT", "SIGTERM"]])
+                self.assertEqual(ops.teardown_signals[-1], ["SIGHUP", "SIGINT", "SIGTERM"])
+                self.assertEqual(seen[-1][0], ["SIGHUP", "SIGINT", "SIGTERM"])
+
+    def test_handlers_and_mask_come_back_after_the_run(self):
+        before = {s: signal.getsignal(s) for s in HALTS}
+        mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
+        self.run_it(FakeOps(turn="SIGTERM"), KeyboardInterrupt)
+        self.assertEqual({s: signal.getsignal(s) for s in HALTS}, before)
+        self.assertEqual(signal.pthread_sigmask(signal.SIG_BLOCK, []), mask)
+
+    def test_the_handler_is_never_reinstalled_after_the_final_write(self):
+        real_signal, log = signal.signal, []
+
+        def record_signal(sig, handler):
+            log.append(("signal", getattr(handler, "__name__", handler)))
+            return real_signal(sig, handler)
+        seen = self.final_writes()
+        self.on_final = lambda n: log.append(("write", n))
+        with mock.patch.object(signal, "signal", record_signal):
+            self.run_it(FakeOps())
+        last = max(i for i, e in enumerate(log) if e[0] == "write")
+        self.assertIn(("signal", "_handle"), log[:last])
+        self.assertNotIn(("signal", "_handle"), log[last:])
+        self.assertTrue(seen)
+
+    def test_a_signal_started_ignored_stays_ignored_and_unrecorded(self):
+        """Under `nohup` SIGHUP starts ignored: it is not managed, so it is
+        neither blocked nor recorded, even when sent during teardown."""
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
+        seen = {}
+
+        class Ops(FakeOps):
+            def sandboxed(self, rdir, claude_real, cwd, cmd, env, stdout=None, timeout=None):
+                if "-p" in cmd:
+                    seen["SIGHUP"] = signal.getsignal(signal.SIGHUP)
+                    seen["SIGTERM"] = signal.getsignal(signal.SIGTERM)
+                return super().sandboxed(rdir, claude_real, cwd, cmd, env, stdout, timeout)
+        ops = Ops()
+        ops.on_gh = lambda cmd: os.kill(os.getpid(), signal.SIGHUP) \
+            if cmd[1:3] == ["repo", "delete"] else None
+        env = self.run_it(ops)
+        self.assertIs(seen["SIGHUP"], signal.SIG_IGN)
+        self.assertTrue(callable(seen["SIGTERM"]))
+        self.assertNotIn("signal", env)
+        self.assertEqual(ops.teardown_signals[-1], ["SIGINT", "SIGTERM"])
+        self.assertIs(signal.getsignal(signal.SIGHUP), signal.SIG_IGN)
+
+    def test_finally_path_network_calls_carry_a_timeout(self):
+        ops = FakeOps()
+        self.run_it(ops)
+        probes = [t for c, t in ops.sh_timeouts if c[:2] == [R.REAL_GH, "api"]]
+        deletes = [t for c, t in ops.sh_timeouts if c[1:3] == ["repo", "delete"]]
+        self.assertEqual(len(probes), 4)                    # create x2, teardown x2
+        self.assertEqual(set(probes), {R.NET_TIMEOUT})
+        self.assertEqual(deletes[-1], R.NET_TIMEOUT)       # teardown's delete of the sandbox
+
+    def test_account_feed_reads_carry_a_timeout(self):
+        calls = []
+
+        def run(argv, **kw):
+            calls.append(kw.get("timeout"))
+            raise subprocess.TimeoutExpired(argv, kw.get("timeout"))
+        with mock.patch.object(R.subprocess, "run", run):
+            with self.assertRaisesRegex(R.Refused, "exceeded"):
+                R.account_events("me")
+        self.assertEqual(calls, [R.NET_TIMEOUT])
+
+
+class ShakedownHaltTests(ShakedownBase):
+    """#384: `shakedown` shares `run`'s signal component."""
+
+    def test_a_signal_mid_command_is_recorded_and_raised_once(self):
+        seen = []
+        real = R.write_json_atomic
+
+        def wrapped(path, obj):
+            seen.append(blocked_halts())
+            return real(path, obj)
+
+        class Ops(ShakedownOps):
+            def sandboxed(self, rdir, claude_real, cwd, cmd, env, stdout=None, timeout=None):
+                if cmd[0] == "/bin/sh":
+                    os.kill(os.getpid(), signal.SIGTERM)
+                return super().sandboxed(rdir, claude_real, cwd, cmd, env, stdout, timeout)
+        with mock.patch.object(R, "write_json_atomic", wrapped):
+            with self.assertRaises(KeyboardInterrupt):
+                R.cmd_shakedown(self.args(), Ops())
+        rec = self.record()
+        self.assertEqual(rec["signal"], "SIGTERM")
+        self.assertEqual(rec["interrupted"], "KeyboardInterrupt")
+        self.assertEqual(seen, [["SIGHUP", "SIGINT", "SIGTERM"]])
+
+
+class Deferred391Tests(ShakedownBase):
+    """#384: the gaps #391's review deferred here."""
+
+    def test_file_sha256_past_one_chunk(self):
+        f = self.tmp / "big"
+        data = os.urandom(R.HASH_CHUNK * 2 + 7)
+        f.write_bytes(data)
+        self.assertEqual(R.file_sha256(f), hashlib.sha256(data).hexdigest())
+
+    def test_shakedown_refuses_an_existing_replicate_dir(self):
+        rdir = self.tmp / "out" / "s1"
+        rdir.mkdir(parents=True)
+        with self.assertRaisesRegex(R.Refused, "already exists"):
+            R.cmd_shakedown(self.args(), ShakedownOps())
+        self.assertFalse((rdir / "shakedown.json").exists())
+
+    def test_every_sandbox_runs_in_this_replicate_dir(self):
+        ops = ShakedownOps()
+        R.cmd_shakedown(self.args(uv_bin=str(fake_uv(self.tmp))), ops)
+        rdir = (self.tmp / "out" / "s1").resolve()
+        self.assertEqual(len(ops.rdirs), 3)
+        self.assertEqual(set(ops.rdirs), {rdir})
+
+    def test_a_command_timeout_keeps_its_output_tail(self):
+        R.cmd_shakedown(self.args(), ShakedownOps(timeout={"/bin/sh"}))
+        rec = self.record()
+        self.assertEqual(rec["timeout_s"], 99)
+        self.assertEqual(rec["output_tail"], "partial /bin/sh")
+
+    def test_sandbox_argv_skips_only_a_missing_claude(self):
+        argv = R.sandbox_argv(self.tmp, None, self.tmp, 0, 0, links=())
+        binds = [argv[i + 1] for i, x in enumerate(argv) if x == "--ro-bind"]
+        self.assertIn(R.RESEARCH_DIR, binds)
+        self.assertIn(str(self.tmp / "bin"), binds)
+        with self.assertRaises(ValueError):
+            R.sandbox_argv(self.tmp, None, self.tmp, 0, 0, research_dir=None, links=())
+
+
+class SandboxTimeoutTailTests(Tmp):
+    """#384: `run_sandboxed` keeps a timed-out command's output."""
+
+    def test_timeout_carries_what_was_printed(self):
+        class Proc:
+            returncode = -9
+
+            def __init__(self, argv, pass_fds=(), **kw):
+                os.write(int(argv[argv.index("--info-fd") + 1]), b'{"child-pid": 1}')
+                self.block = os.dup(int(argv[argv.index("--block-fd") + 1]))
+                self.stdout, self.killed, self.calls = object(), False, 0
+
+            def communicate(self, timeout=None):
+                self.calls += 1
+                if not self.killed:
+                    raise subprocess.TimeoutExpired("bwrap", timeout)
+                os.close(self.block)
+                return b"tail before the kill", None
+
+            def wait(self, timeout=None):
+                return -9
+
+            def kill(self):
+                self.killed = True
+        with mock.patch.object(R.subprocess, "Popen", Proc):
+            with self.assertRaises(subprocess.TimeoutExpired) as cm:
+                R.run_sandboxed(self.tmp, None, self.tmp, ["sleep", "9"], {},
+                                timeout=1, profile="capture")
+        self.assertEqual(cm.exception.output, b"tail before the kill")
 
 
 if __name__ == "__main__":

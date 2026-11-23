@@ -221,7 +221,8 @@ note that was dropped, with one line of reason each; and the population the resu
   arms are run from one fixture directory, unchanged for the length of the run.
 - Nothing pins the tools the sandbox takes from the host. `/usr` and `/etc` are bound read-only, so
   every tool under `/usr`, `python3` included, is the host's, and a host `/etc/uv/uv.toml` applies
-  to `uv`. A run without `--uv-bin` would execute a host `/usr/bin/uv` while recording `uv_version`
+  to `uv`. A run without `--uv-bin`, of a fixture whose `requires` does not name `uv` (one that
+  does is refused, #384), would execute a host `/usr/bin/uv` while recording `uv_version`
   and `uv_sha256` as null, which section 8 admits as matching a registered none. With `--uv-bin`, a
   host `/usr` Python that satisfies a fixture's `.python-version` is used in preference to the one
   `uv` would download. (The host on 2026-11-22 had no `/usr/bin/uv`, no `/etc/uv/uv.toml`, and no
