@@ -88,8 +88,9 @@ Item 1, the unpinned host tools, is named in `preregistration-template.md` §14.
   (`working-conventions` in §1's `SCOPE_AGENT` row and `local-api-testdrive` in §5 of the fixture's
   `loop.config.md`); the replay has none.
 - **A replicate of this fixture must pass `--uv-bin`** with `uv 0.9.5`, sha256 `d3dc3ca8…4ce0`.
-  `run` does not require the flag, and without it `uv` is not on the sandbox's `PATH`. A refusal
-  in the harness is a candidate for #384.
+  Without it `uv` is not on the sandbox's `PATH`, so since #384 `fixture.json` declares
+  `"requires": ["uv"]` and `run` refuses without the flag. That edit changed `fixture.json`, so the
+  `fixture_sha256` in the table above describes these shakedowns, not the fixture #274 replays.
 - **`/security-review` and `/verify` have not been exercised in the sandbox.** This is the first
   fixture whose `SECURITY_REVIEW` and `VERIFY` rows are skills invoked by name (the pilot binds both
   `—`). `builtin_agents` covers only the four agent types the pilot's spikes saw, so a sub-agent of

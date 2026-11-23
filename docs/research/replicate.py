@@ -198,6 +198,30 @@ CI_PLACEHOLDER = re.compile(r"<[A-Za-z][\w-]*>")       # `<branch>`, `<PR>`: fil
 SHELL_META = re.compile(r"[;&|$`()<>\\\n]")
 
 
+# What a fixture may require of the run, and the flag that supplies each (#384).
+REQUIRES = {"uv": "uv_bin"}
+
+
+def check_requires(spec, args):
+    """Refuse, before anything is created, a run that cannot satisfy what the
+    fixture requires (#384). `requires` is mandatory -- a fixture that does not
+    say is refused, never read as needing nothing -- and a list drawn from
+    REQUIRES; each entry needs its flag. Checked by `run` only: `audit` loads a
+    fixture for a finished record, and `shakedown` is how a need is found."""
+    req = spec.get("requires")
+    if "requires" not in spec:
+        raise Refused("fixture.json lacks 'requires' (use [] for none)")
+    if not isinstance(req, list) or not all(isinstance(r, str) for r in req):
+        raise Refused("fixture 'requires' must be a list of strings: %r" % (req,))
+    unknown = sorted(set(req) - set(REQUIRES))
+    if unknown:
+        raise Refused("fixture requires %s, which the harness does not know (known: %s)"
+                      % (", ".join(unknown), ", ".join(sorted(REQUIRES))))
+    for r in req:
+        if getattr(args, REQUIRES[r], None) is None:
+            raise Refused("fixture requires %s; pass --%s" % (r, REQUIRES[r].replace("_", "-")))
+
+
 def ci_status_binding(repo_dir):
     """-> the fixture repo's `CI_STATUS_CMD` value, refusing unless it is exactly
     one row in `.claude/loop.config.md`, a single backtick span, free of shell
@@ -415,9 +439,12 @@ def sandbox_argv(rdir, claude_real, cwd, info_fd, block_fd, research_dir=RESEARC
     if profile != "turn":
         raise ValueError("unknown sandbox profile %r" % (profile,))
     argv += ["--ro-bind", str(rdir / "resolv.conf"), resolv_dest]
-    for path in (claude_real, research_dir, rdir / "bin"):
-        if path is not None:
-            argv += ["--ro-bind", str(path), str(path)]
+    if research_dir is None:                        # only claude_real may be absent
+        raise ValueError("sandbox_argv needs research_dir; the shim imports this module")
+    if claude_real is not None:
+        argv += ["--ro-bind", str(claude_real), str(claude_real)]
+    for path in (research_dir, rdir / "bin"):
+        argv += ["--ro-bind", str(path), str(path)]
     for path in (rdir / "home", rdir / "work", rdir / "gh-calls.jsonl"):
         argv += ["--bind", str(path), str(path)]
     return argv + ["--chdir", str(cwd)]
@@ -466,7 +493,9 @@ def run_sandboxed(rdir, claude_real, cwd, cmd, env, stdout=subprocess.PIPE,
     """Run `cmd` in the sandbox, under `profile` (`sandbox_argv`). A `turn` gets
     slirp4netns attached before it starts; a `capture` gets no network at all.
     -> (returncode, stdout bytes or None). Raises subprocess.TimeoutExpired after
-    killing the sandbox; slirp4netns is stopped on every path."""
+    killing the sandbox, with what the command printed before the kill on the
+    exception's `output` when stdout is piped; slirp4netns is stopped on every
+    path."""
     rdir = pathlib.Path(rdir)
     network = profile == "turn"
     if network:
@@ -503,11 +532,21 @@ def run_sandboxed(rdir, claude_real, cwd, cmd, env, stdout=subprocess.PIPE,
         block_w = None
         out, _ = box.communicate(timeout=timeout)
         return box.returncode, out
+    except subprocess.TimeoutExpired as exc:
+        # Keep what the command printed before the kill (#384): communicate()
+        # after kill() returns everything already read, and the rest of the pipe.
+        box.kill()
+        exc.output = box.communicate()[0]           # None when stdout is not piped
+        raise
     except BaseException:
         box.kill()
         box.wait()
         raise
     finally:
+        # A signal at the entry of an `except` above can skip its kill (#384).
+        if box.poll() is None:
+            box.kill()
+            box.wait()
         for fd in (info_r, ready_r, ready_w, exit_r, block_w):
             if fd is not None:
                 try:
@@ -693,15 +732,44 @@ def write_shim(bindir):
 
 # ------------------------------------------------------------------------ driving
 
-def row_status(queue_md, issue):
-    """-> the Status cell of the queue row for `#issue`; None only when queue.md
-    does not exist yet; ROW_UNREADABLE when it exists but the row cannot be read."""
+QUEUE_MD_CAP = 1 << 20
+
+
+def row_status(clone, rel, issue):
+    """-> the Status cell of the queue row for `#issue` in `<clone>/<rel>`; None
+    only when queue.md (or a directory above it) does not exist yet;
+    ROW_UNREADABLE when it exists but the row cannot be read.
+
+    Read on the host from a tree the replicate writes (#384), so nothing is
+    followed and nothing can block: no component from the clone down may be a
+    symlink (`lstat_walk`), queue.md must be a regular file before it is opened
+    -- a FIFO would block the open with the sandbox already gone -- and the
+    open is O_NOFOLLOW|O_NONBLOCK and re-checked by fstat to be that same file."""
     try:
-        lines = pathlib.Path(queue_md).read_text().splitlines()
+        path, st = lstat_walk(clone, rel)
     except FileNotFoundError:
         return None
+    except (NotPlain, ValueError, OSError):
+        return ROW_UNREADABLE
+    if not stat.S_ISREG(st.st_mode) or st.st_size > QUEUE_MD_CAP:
+        return ROW_UNREADABLE
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return ROW_UNREADABLE
+    try:
+        fst = os.fstat(fd)
+        if not stat.S_ISREG(fst.st_mode) or (fst.st_dev, fst.st_ino) != (st.st_dev, st.st_ino):
+            return ROW_UNREADABLE
+        with os.fdopen(fd, "rb", closefd=False) as f:
+            data = f.read(QUEUE_MD_CAP + 1)
+        if len(data) > QUEUE_MD_CAP:
+            return ROW_UNREADABLE
+        lines = data.decode().splitlines()
     except (OSError, ValueError):
         return ROW_UNREADABLE
+    finally:
+        os.close(fd)
     header = None
     for line in lines:
         if not line.startswith("|"):
@@ -771,6 +839,32 @@ CAPTURE_GIT = ["git", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=f
 CAPTURE_DIFF = ["diff", "--binary", "--no-color", "--no-ext-diff", "--no-textconv",
                 "--src-prefix=a/", "--dst-prefix=b/"]
 HASH_CHUNK = 1 << 20
+# Size caps on `stop/` (#384). They make a runaway capture an explicit capture
+# error (so the audit fails), not containment: a turn can already fill the
+# filesystem, and git's output is checked after it is written.
+STOP_FILE_CAP = 64 << 20
+STOP_TOTAL_CAP = 256 << 20
+STOP_ENTRY_MIN = 512                                # what an empty file or a dir costs
+
+
+class StopBudget:
+    """The running total charged to `stop/` against STOP_TOTAL_CAP."""
+
+    class Exhausted(Exception):
+        pass
+
+    def __init__(self):
+        self.used = 0
+
+    def fits(self, size):
+        return self.used + max(size, STOP_ENTRY_MIN) <= STOP_TOTAL_CAP
+
+    def charge(self, size, what):
+        if not self.fits(size):
+            raise StopBudget.Exhausted(
+                "%s would take stop/ past the %d-byte total cap; it and the rest were not "
+                "copied" % (what, STOP_TOTAL_CAP))
+        self.used += max(size, STOP_ENTRY_MIN)
 
 
 def _capture_git(ops, rdir, clone, args, dest, ok=(0,)):
@@ -792,49 +886,83 @@ def _capture_git(ops, rdir, clone, args, dest, ok=(0,)):
     return None
 
 
-def _copy_plain(src, dest, rel, errors):
+def _copy_plain(src, dest, rel, errors, budget):
     """Copy `src` to `dest`: directories and regular files only. Any other entry
     -- a symlink above all, which a later reader of `stop/` would follow to the
-    host -- is named in `errors` and not copied. Nothing is followed."""
+    host -- is named in `errors` and not copied. Nothing is followed. Each entry
+    is charged to `budget` before it is copied: a file over the per-file cap is
+    named and not copied, and reaching the total cap ends the copy (#384)."""
+    budget.charge(0, rel)
     os.mkdir(dest)
     for name in sorted(os.listdir(src)):
         s, d, r = os.path.join(src, name), os.path.join(dest, name), os.path.join(rel, name)
         st = os.lstat(s)
         if stat.S_ISDIR(st.st_mode):
-            _copy_plain(s, d, r, errors)
-        elif stat.S_ISREG(st.st_mode):
+            _copy_plain(s, d, r, errors, budget)
+            continue
+        copy = stat.S_ISREG(st.st_mode) and st.st_size <= STOP_FILE_CAP
+        # Every entry is charged, a refused one at the minimum.
+        budget.charge(st.st_size if copy else 0, r)
+        if copy:
             shutil.copyfile(s, d, follow_symlinks=False)
+        elif stat.S_ISREG(st.st_mode):
+            errors.append("%s is %d bytes, over the %d-byte file cap; not copied"
+                          % (r, st.st_size, STOP_FILE_CAP))
         elif stat.S_ISLNK(st.st_mode):
-            errors.append("%s is a symlink to %r; not copied" % (r, os.readlink(s)))
+            errors.append("%s is a symlink to %r; not copied" % (r, os.readlink(s)[:300]))
         else:
             errors.append("%s is not a regular file or directory; not copied" % r)
 
 
-def _copy_ledger(clone, ledger_root, dest):
+class NotPlain(Exception):
+    """A path component that is a symlink, or a non-directory above the last."""
+
+
+def lstat_walk(root, rel):
+    """lstat `root` and then each component of the relative path `rel` under it,
+    following nothing (#384; shared by `_copy_ledger` and `row_status`). -> (path,
+    lstat of the last component). Raises ValueError for an absolute or empty
+    `rel` or one with `..`; FileNotFoundError for a missing component; NotPlain
+    for the first symlink, or the first non-directory before the last."""
+    relp = pathlib.PurePosixPath(rel)
+    if relp.is_absolute() or ".." in relp.parts or not relp.parts:
+        raise ValueError("%r is not a relative path inside %s" % (str(rel), root))
+    path, parts = pathlib.Path(root), (None,) + relp.parts
+    for i, part in enumerate(parts):
+        if part is not None:
+            path = path / part
+        st = os.lstat(path)
+        if stat.S_ISLNK(st.st_mode):
+            raise NotPlain("%s is a symlink" % path)
+        if i < len(parts) - 1 and not stat.S_ISDIR(st.st_mode):
+            raise NotPlain("%s is not a directory" % path)
+    return path, st
+
+
+def _copy_ledger(clone, ledger_root, dest, budget=None):
     """Copy the clone's ledger root to `dest`. -> [errors]; empty when every entry
     was copied. No path component from the clone down may be a symlink: the
     replicate can write `work/`, and a link that points nowhere inside the
-    sandbox resolves on the host, where the harness's own tokens live."""
-    rel = pathlib.PurePosixPath(ledger_root)
-    if rel.is_absolute() or ".." in rel.parts or not rel.parts:
+    sandbox resolves on the host, where the harness's own tokens live. `budget`
+    (a `StopBudget`) caps what is copied (#384)."""
+    try:
+        path, st = lstat_walk(clone, ledger_root)
+    except ValueError:
         return ["ledger_root %r is not a relative path inside the clone" % ledger_root]
-    path = pathlib.Path(clone)
-    for part in (None,) + rel.parts:
-        if part is not None:
-            path = path / part
-        try:
-            st = os.lstat(path)
-        except FileNotFoundError:
-            return ["ledger %s does not exist at the stop" % ledger_root]
-        if stat.S_ISLNK(st.st_mode):
-            return ["%s is a symlink; the ledger was not copied" % path]
-        if not stat.S_ISDIR(st.st_mode):
-            return ["%s is not a directory; the ledger was not copied" % path]
+    except FileNotFoundError:
+        return ["ledger %s does not exist at the stop" % ledger_root]
+    except NotPlain as exc:
+        return ["%s; the ledger was not copied" % exc]
+    if not stat.S_ISDIR(st.st_mode):
+        return ["%s is not a directory; the ledger was not copied" % path]
+    rel = pathlib.PurePosixPath(ledger_root)
     if os.path.realpath(path) != os.path.join(os.path.realpath(clone), *rel.parts):
         return ["ledger %s resolves outside the clone; not copied" % ledger_root]
     errors = []
     try:
-        _copy_plain(path, dest, ledger_root, errors)
+        _copy_plain(path, dest, ledger_root, errors, budget or StopBudget())
+    except StopBudget.Exhausted as exc:
+        errors.append(str(exc))
     except Exception as exc:                        # OSError, RecursionError on a deep tree
         errors.append("ledger copy: %s" % str(exc)[:300])
     return errors
@@ -870,26 +998,62 @@ def capture_stop(rdir, clone, base_sha, ledger_root, ops):
     that fails is named in `errors` and left out of `files`, and the rest still
     run. The audit fails the replicate on any error or missing part."""
     rdir = pathlib.Path(rdir)
-    rec = {"dir": STOP_DIR, "files": {}, "errors": [], "taken_at": ops.now()}
+    rec = {"dir": STOP_DIR, "files": {}, "errors": [], "taken_at": ops.now(),
+           "caps": {"file": STOP_FILE_CAP, "total": STOP_TOTAL_CAP}}
+    budget = StopBudget()
     (rdir / STOP_DIR).mkdir()
     for key, args, ok in (("diff", CAPTURE_DIFF + [base_sha, "HEAD", "--"], (0,)),
                           ("uncommitted", CAPTURE_DIFF + ["HEAD", "--"], (0,)),
                           ("head", ["rev-parse", "--verify", "HEAD"], (0,)),
                           ("branch", ["symbolic-ref", "-q", "HEAD"], (0, 1)),
                           ("status", ["status", "--porcelain", "--untracked-files=all"], (0,))):
-        err = _capture_git(ops, rdir, clone, args, rdir / STOP_FILES[key], ok)
+        dest = rdir / STOP_FILES[key]
+        err = _capture_git(ops, rdir, clone, args, dest, ok)
+        if err:
+            _empty(dest)                            # a failed part keeps no bytes (#384)
+        else:
+            err = _cap_part(dest, budget)
         if err:
             rec["errors"].append("%s: %s" % (key, err))
         else:
             rec["files"][key] = STOP_FILES[key]
-    errors = _copy_ledger(clone, ledger_root, rdir / STOP_FILES["ledger"])
+    errors = _copy_ledger(clone, ledger_root, rdir / STOP_FILES["ledger"], budget)
     rec["errors"] += ["ledger: %s" % e for e in errors]
     if not errors:
         rec["files"]["ledger"] = STOP_FILES["ledger"]
     if "head" in rec["files"]:
         rec["head_sha"] = (rdir / STOP_FILES["head"]).read_text(errors="replace").strip()
+    rec["bytes_charged"] = budget.used
     rec["sha256"] = stop_sha256(rdir / STOP_DIR)
     return rec
+
+
+def _empty(dest):
+    """Truncate a part `capture_stop` wrote itself, if it is there."""
+    try:
+        with open(dest, "wb"):
+            pass
+    except OSError:
+        pass
+
+
+def _cap_part(dest, budget):
+    """-> None, or why a captured git part breaks a cap. A breaching part is
+    emptied, so it is left out of `files` and charged nothing (#384)."""
+    try:
+        size = os.lstat(dest).st_size
+    except OSError as exc:
+        return "cannot stat %s: %s" % (dest.name, exc)
+    why = None
+    if size > STOP_FILE_CAP:
+        why = "%d bytes, over the %d-byte file cap" % (size, STOP_FILE_CAP)
+    elif not budget.fits(size):
+        why = "%d bytes would take stop/ past the %d-byte total cap" % (size, STOP_TOTAL_CAP)
+    if why:
+        _empty(dest)
+        return why
+    budget.charge(size, dest.name)
+    return None
 
 
 def stop_capture_problems(rdir, env_record):
@@ -1172,15 +1336,27 @@ def account_events(login):
     order: the feed is not served newest-first, by `created_at` or by `id`, so no
     stop rule keyed on the oldest event read is sound (#369). Any error on any page
     refuses, and so does a `gh` signed in as anyone but `login`: the API would then
-    serve only `login`'s public events, and the read would look complete."""
-    r = subprocess.run(account_user_argv(), capture_output=True, text=True)
+    serve only `login`'s public events, and the read would look complete. Each
+    call is bounded by NET_TIMEOUT: the audit inside `run` reads the feed with
+    the halt signals blocked (#384), so a hung read must end on its own, as a
+    refusal."""
+    try:
+        return _account_events(login)
+    except subprocess.TimeoutExpired as exc:
+        raise Refused("account feed read exceeded %ds: %s" % (NET_TIMEOUT, shlex.join(exc.cmd[:4])))
+
+
+def _account_events(login):
+    r = subprocess.run(account_user_argv(), capture_output=True, text=True, timeout=NET_TIMEOUT,
+                       start_new_session=True)
     who = r.stdout.strip() if not r.returncode else None
     if not who or who.lower() != login.lower():
         raise Refused("gh is signed in as %r, not %r: the feed read would miss private events"
                       % (who, login))
     events = []
     for page in range(1, EVENTS_MAX_PAGES + 1):
-        r = subprocess.run(account_events_argv(login, page), capture_output=True, text=True)
+        r = subprocess.run(account_events_argv(login, page), capture_output=True, text=True,
+                           timeout=NET_TIMEOUT, start_new_session=True)
         if r.returncode:
             raise Refused("cannot read the account event feed (page %d): %s"
                           % (page, r.stderr.strip()[:200]))
@@ -1277,9 +1453,10 @@ def measure(pdir):
 
 # ------------------------------------------------------------------------ run
 
-def sh(cmd, env=None, cwd=None, check=True, quiet=True):
+def sh(cmd, env=None, cwd=None, check=True, quiet=True, timeout=None):
     r = subprocess.run(cmd, env=env, cwd=cwd, capture_output=True, text=True,
-                       stdin=subprocess.DEVNULL)
+                       stdin=subprocess.DEVNULL, timeout=timeout,
+                       start_new_session=True)       # see HaltSignals (#384)
     if check and r.returncode:
         raise Refused("%s exited %d: %s" % (shlex.join(cmd[:4]), r.returncode,
                                            (r.stderr or r.stdout).strip()[:300]))
@@ -1311,8 +1488,8 @@ class Ops:
     def now(self):
         return now()
 
-    def sh(self, cmd, env=None, cwd=None, check=True):
-        return sh(cmd, env=env, cwd=cwd, check=check)
+    def sh(self, cmd, env=None, cwd=None, check=True, timeout=None):
+        return sh(cmd, env=env, cwd=cwd, check=check, timeout=timeout)
 
     def sandboxed(self, rdir, claude_real, cwd, cmd, env, stdout=subprocess.PIPE,
                   timeout=None):
@@ -1363,14 +1540,17 @@ def provision_uv(ops, rdir, uv_bin):
 def build_clone(spec, rdir, rid):
     """Build the fixture's base, refuse unless it is the frozen base_sha, and
     only then clone it to `<rdir>/work/<rid>`. -> (base sha, clone path).
-    Shared by `run` and `shakedown`, so both refuse a mismatch the same way."""
+    Shared by `run` and `shakedown`, so both refuse a mismatch the same way.
+    `--no-local` (#384): a local clone hardlinks `.git/objects` into `base/`,
+    which is outside the sandbox's writable set, so a replicate that rewrote an
+    object file in place would change `base/` too. The clone shares no inode."""
     base = build_base(pathlib.Path(spec["dir"]) / "repo", rdir / "base",
                       spec.get("renamed", ()))
     if base != spec["base_sha"]:
         raise Refused("fixture builds base %s, frozen base_sha is %s" % (base, spec["base_sha"]))
     clone = rdir / "work" / rid
     clone.parent.mkdir(parents=True)
-    sh(["git", "clone", "-q", str(rdir / "base"), str(clone)])
+    sh(["git", "clone", "-q", "--no-local", str(rdir / "base"), str(clone)])
     return base, clone
 
 
@@ -1378,6 +1558,7 @@ def cmd_run(a, ops=None):
     ops = ops or Ops()
     spec = load_fixture(a.fixture)
     check_stops(spec)
+    check_requires(spec, a)
     provenance = harness_provenance()           # refuses before anything is created
     rid = a.replicate_id
     rdir = pathlib.Path(a.out).resolve() / rid
@@ -1386,11 +1567,16 @@ def cmd_run(a, ops=None):
     rdir.mkdir(parents=True)
     env_record = {"replicate": rid, "fixture": spec["name"], "wall_clock_start": ops.now(),
                   "gate_latency": "0 (scripted)", "approval_channel": "--resume",
-                  "fixture_dir": spec["dir"], "fixture_sha256": spec["fixture_sha256"]}
+                  "fixture_dir": spec["dir"], "fixture_sha256": spec["fixture_sha256"],
+                  "requires": spec["requires"]}
     env_record.update(provenance)
-    previous = install_halt_handlers(env_record)
+    halts = HaltSignals(env_record)                 # blocked from here; see HaltSignals
+
+    def final_write():
+        env_record["wall_clock_end"] = ops.now()
+        write_json_atomic(rdir / "environment.json", env_record)
     try:
-        _run(a, spec, rdir, env_record, ops)
+        _run(a, spec, rdir, env_record, ops, halts)
     except Exception as exc:
         env_record.setdefault("refused" if isinstance(exc, Refused) else "error", str(exc))
         raise
@@ -1398,68 +1584,165 @@ def cmd_run(a, ops=None):
         env_record.setdefault("interrupted", type(exc).__name__)
         raise
     finally:
-        # The last record of the run (teardown's outcome among it) is written
-        # with SIGINT and HALT_SIGNALS ignored; the caller's handlers come back
-        # after it, in one pass, so `halt` is never reinstalled.
-        held = ignore_signals((signal.SIGINT,) + HALT_SIGNALS)
-        try:
-            env_record["wall_clock_end"] = ops.now()
-            (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
-        finally:
-            restore_handlers({**held, **previous})
+        halts.close(final_write)
+    halts.raise_if_unraised()
 
 
 # A replicate stopped from outside -- `kill`, `timeout`, a closed terminal --
-# takes the same path as Ctrl-C (#380): Python's default for these signals ends
-# the process without running a `finally`, which would skip the stop capture,
-# environment.json, the audit and the teardown, and leak the repos.
-# What this leaves unprotected: a signal arriving in the few bytecodes
-# between the start of a `finally` and its `ignore_signals` still raises there.
-# At teardown's entry that can strand the repos (recorded: `repos_planned`
-# without `repos_deleted`); after teardown it loses the final environment.json
-# write. Accepted for #380; closing it is #384's.
-HALT_SIGNALS = tuple(getattr(signal, n) for n in ("SIGTERM", "SIGHUP") if hasattr(signal, n))
+# takes the same path as Ctrl-C (#380): Python's default for SIGTERM and SIGHUP
+# ends the process without running a `finally`, which would skip the stop
+# capture, environment.json, the audit and the teardown, and leak the repos.
+# #384 closes the window #380 accepted (a signal in the bytecodes between the
+# start of a `finally` and its handler swap): see HaltSignals.
+HALT_SIGNALS = tuple(getattr(signal, n) for n in ("SIGINT", "SIGTERM", "SIGHUP")
+                     if hasattr(signal, n))
+# A network call on the `finally` path (the audit's feed reads, teardown's `gh`)
+# runs with the halt signals blocked, so it gets a timeout instead (#384).
+NET_TIMEOUT = 300
 
 
-def install_halt_handlers(env_record):
-    """Map HALT_SIGNALS to KeyboardInterrupt for the run. -> what to restore. A
-    signal the harness was started ignoring stays ignored: under `nohup`, a
-    closed terminal must not halt the run."""
-    def halt(signum, _frame):
-        env_record.setdefault("signal", signal.Signals(signum).name)
+class HaltSignals:
+    """The one owner of the halt signals' state for a run or a shakedown (#384):
+    their handlers, their mask, and what arrived.
+
+    By construction, no `finally` or `except` of `cmd_run`, `_run` or
+    `cmd_shakedown` that lies outside a window is entered with a halt signal
+    able to raise:
+    - Creating it blocks the managed signals (HALT_SIGNALS less any the process
+      was started ignoring: under `nohup` a closed terminal stays ignored, and
+      neither blocked nor recorded) and installs one handler for them.
+    - They are unblocked only inside `with halts.window():`, and every window
+      closes inside the body of a `try`. A window is never opened inside a
+      `finally` or `except` that must complete. A window is a plain class, not
+      a generator: a raise in its exit leaves nothing suspended to re-block the
+      mask later.
+    - The handler's first delivery records `signal`, blocks the managed signals
+      itself and only then raises KeyboardInterrupt, so the one raise travels
+      blocked wherever it starts: a window's body, the unblock in its entry
+      (which runs a pending handler), its exit, or the gap after its entry.
+      Every later delivery only counts, in `signals_after_first` -- a lower
+      bound, since a standard signal sent twice while blocked pends once.
+    - `close` drains what arrived while blocked, writes the final record, and
+      re-checks once after the write. `raise_if_unraised`, after the caller's
+      `try` statement, raises for a first signal only the drain saw. It is not
+      reached while a refusal or an error propagates: the process then exits
+      with that (`main` returns 2 for a refusal), and the record carries both
+      it and `interrupted`. A batch driver must stop on any non-zero exit.
+    `signal` is the first signal *observed*: signals pending together are
+    taken in signal-number order (the kernel's), and a handler can nest inside
+    another. The mask guards this process only. A child inherits it, but `gh`
+    (Go) clears it, so `sh` and the feed reads start theirs in a new session.
+    The mask is per thread, and `os.kill(os.getpid())` reaches any thread with
+    the signal unblocked: this assumes a single-threaded harness, which it is."""
+
+    def __init__(self, record):
+        self.record, self.fired, self.raised, self.handlers = record, False, False, {}
+        self.managed = tuple(s for s in HALT_SIGNALS if signal.getsignal(s) is not signal.SIG_IGN)
+        self.mask = signal.pthread_sigmask(signal.SIG_BLOCK, self.managed)
+        try:
+            for sig in self.managed:
+                self.handlers[sig] = signal.signal(sig, self._handle)
+        except ValueError:                          # not the main thread: manage nothing
+            for sig, old in self.handlers.items():
+                signal.signal(sig, old)
+            self.handlers, self.managed = {}, ()
+            signal.pthread_sigmask(signal.SIG_SETMASK, self.mask)
+
+    def _count(self, name):
+        if not self.fired:
+            self.fired = True
+            self.record.setdefault("signal", name)
+        else:
+            self.record["signals_after_first"] = self.record.get("signals_after_first", 0) + 1
+
+    def _handle(self, signum, _frame):
+        if self.fired:
+            self._count(signal.Signals(signum).name)
+            return
+        self._count(signal.Signals(signum).name)
+        signal.pthread_sigmask(signal.SIG_BLOCK, self.managed)
+        self.raised = True
         raise KeyboardInterrupt(signal.Signals(signum).name)
-    previous = {}
-    for sig in HALT_SIGNALS:
+
+    def window(self):
+        """-> a context manager that unblocks the managed signals for its body
+        and blocks them again on exit."""
+        return _Window(self.managed)
+
+    def _drain(self):
+        """Take every managed signal pending while blocked into the record,
+        without running the handler. -> whether any was taken."""
+        took = False
+        while self.managed:
+            info = signal.sigtimedwait(self.managed, 0)
+            if info is None:
+                return took
+            took = True
+            self._count(signal.Signals(info.si_signo).name)
+        return took
+
+    def close(self, write):
+        """Called blocked, from the caller's `finally`: drain, `write()` the final
+        record, drain again and rewrite once if that took anything, then give
+        back the handlers and the mask. The managed signals are set to SIG_IGN
+        before the mask is restored, so one still pending is discarded rather
+        than delivered to the caller's handler."""
         try:
-            if signal.getsignal(sig) is signal.SIG_IGN:
-                continue
-            previous[sig] = signal.signal(sig, halt)
-        except ValueError:                          # not the main thread
-            pass
-    return previous
+            self._drain()
+            if self.fired and not self.raised:
+                self.record.setdefault("interrupted", "KeyboardInterrupt")
+            write()
+            if self._drain():
+                if self.fired and not self.raised:
+                    self.record.setdefault("interrupted", "KeyboardInterrupt")
+                write()
+        finally:
+            for sig in self.handlers:
+                signal.signal(sig, signal.SIG_IGN)
+            signal.pthread_sigmask(signal.SIG_SETMASK, self.mask)
+            for sig, old in self.handlers.items():
+                signal.signal(sig, old)
+
+    def raise_if_unraised(self):
+        """After the caller's `try` statement, never inside its `finally`: a first
+        signal that arrived while blocked raises here, once."""
+        if self.fired and not self.raised:
+            self.raised = True
+            raise KeyboardInterrupt(self.record.get("signal"))
 
 
-def ignore_signals(sigs):
-    """Set each of `sigs` to SIG_IGN. -> what to restore."""
-    previous = {}
-    for sig in sigs:
-        try:
-            previous[sig] = signal.signal(sig, signal.SIG_IGN)
-        except ValueError:                          # not the main thread
-            pass
-    return previous
+class _Window:
+    """HaltSignals.window's context manager. A class rather than a
+    @contextmanager generator: a signal raising in a generator's `__exit__`,
+    before the generator resumes, leaves it suspended, and its `finally` would
+    re-block the mask whenever it is collected -- after `close` restored it."""
+
+    def __init__(self, managed):
+        self.managed = managed
+
+    def __enter__(self):
+        signal.pthread_sigmask(signal.SIG_UNBLOCK, self.managed)
+        return self
+
+    def __exit__(self, *_exc):
+        signal.pthread_sigmask(signal.SIG_BLOCK, self.managed)
+        return False
 
 
-def restore_handlers(previous):
-    for sig, handler in previous.items():
-        signal.signal(sig, handler)
+def write_json_atomic(path, obj):
+    """Write `obj` to `path` via a temp file and os.replace, so a kill during
+    the write leaves the earlier record, never a truncated one."""
+    path = pathlib.Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(obj, indent=2))
+    os.replace(tmp, path)
 
 
 def repo_exists(ops, henv, repo):
     """-> True | False | None (cannot tell). Keyed on the HTTP status: `gh api`
     exits 1 for a 404 and for any other error alike. A 404 also means "exists but
     this token cannot see it"; the harness token is an org admin, so it can."""
-    r = ops.sh([REAL_GH, "api", "repos/%s" % repo], env=henv, check=False)
+    r = ops.sh([REAL_GH, "api", "repos/%s" % repo], env=henv, check=False, timeout=NET_TIMEOUT)
     if r.returncode == 0:
         return True
     if "(HTTP 404)" in (r.stderr or "") + (r.stdout or ""):
@@ -1479,180 +1762,185 @@ def create_repo(ops, henv, repo, planned):
 
 
 def teardown(ops, henv, planned, env_record, keep):
-    """Delete each planned repo that exists. SIGINT and HALT_SIGNALS are ignored
-    during the loop, and each repo is handled on its own, so neither one failure
-    nor a signal during the loop strands the rest (one at its entry can; see
-    HALT_SIGNALS). A repo whose existence cannot be told is recorded, never
-    deleted blind."""
+    """Delete each planned repo that exists. Called with the halt signals blocked
+    (HaltSignals; `_run`'s outer `finally` is outside every window), and each
+    repo is handled on its own, so neither a signal nor one failure -- a `gh`
+    call past NET_TIMEOUT included -- strands the rest. A repo whose existence
+    cannot be told is recorded, never deleted blind."""
     if keep:
         gone = env_record.get("plugin_repo") if env_record.get("plugin_repo_deleted") else None
         env_record["sandbox_kept"] = [r for r in planned if r != gone]
+        if gone in planned:                         # deleted at install (#366)
+            env_record.setdefault("repos_deleted", []).append(gone)
         return
     if not planned:
         return
-    old = ignore_signals((signal.SIGINT,) + HALT_SIGNALS)
-    try:
-        for repo in planned:
-            try:
-                state = repo_exists(ops, henv, repo)
-                if state is False:
-                    env_record.setdefault("repos_absent", []).append(repo)
-                    continue
-                if state is None:
-                    env_record.setdefault("repo_delete_failed", []).append(
-                        "%s: existence unknown, not deleted" % repo)
-                    continue
-                r = ops.sh([REAL_GH, "repo", "delete", repo, "--yes"], env=henv, check=False)
-                if r.returncode == 0:
-                    env_record.setdefault("repos_deleted", []).append(repo)
-                else:
-                    env_record.setdefault("repo_delete_failed", []).append(
-                        "%s: %s" % (repo, (r.stderr or r.stdout).strip()[:300]))
-            except Exception as exc:
-                env_record.setdefault("repo_delete_failed", []).append("%s: %s" % (repo, exc))
-    finally:
-        restore_handlers(old)
+    for repo in planned:
+        try:
+            state = repo_exists(ops, henv, repo)
+            if state is False:
+                env_record.setdefault("repos_absent", []).append(repo)
+                continue
+            if state is None:
+                env_record.setdefault("repo_delete_failed", []).append(
+                    "%s: existence unknown, not deleted" % repo)
+                continue
+            r = ops.sh([REAL_GH, "repo", "delete", repo, "--yes"], env=henv, check=False,
+                       timeout=NET_TIMEOUT)
+            if r.returncode == 0:
+                env_record.setdefault("repos_deleted", []).append(repo)
+            else:
+                env_record.setdefault("repo_delete_failed", []).append(
+                    "%s: %s" % (repo, (r.stderr or r.stdout).strip()[:300]))
+        except Exception as exc:                    # TimeoutExpired included
+            env_record.setdefault("repo_delete_failed", []).append("%s: %s" % (repo, exc))
 
 
-def _run(a, spec, rdir, env_record, ops):
-    # The account-event window opens with the replicate, before any repo is
-    # created or any `claude` runs, so it covers the install (#366).
-    env_record["run_start"] = env_record["wall_clock_start"]
-    login = env_record["login"] = a.login           # every later feed read must match it
-    sandbox = "%s/%s-%s" % (spec["org"], spec["name"], a.replicate_id)
-    # Base: built from the fixture's bytes, verified against the frozen SHA.
-    base, clone = build_clone(spec, rdir, a.replicate_id)
-    # Plugin: git-archived at the pin, optionally re-versioned in the copy only (A5).
-    plugin_resolved = git_out(a.plugin_src, "rev-parse", a.plugin_commit + "^{commit}")
-    cli_actual = ops.sh([a.claude_bin, "--version"]).stdout.strip()
-    problems = preflight(clone, spec["base_sha"], spec["ledger_root"], a.plugin_commit,
-                         plugin_resolved, a.claude_version, cli_actual, os.environ)
-    env_record.update(base_sha=base, plugin_commit=plugin_resolved, cli_version=cli_actual,
-                      claude_bin=a.claude_bin, autoupdate="DISABLE_AUTOUPDATER=1 + pinned binary",
-                      auth_mode="CLAUDE_CODE_OAUTH_TOKEN (setup-token)",
-                      parent=[a.model, a.effort], sandbox_repo=sandbox,
-                      effort_env={v: os.environ.get(v) for v in EFFORT_ENV})
-    if problems:
-        env_record["refused"] = problems
-        raise Refused("; ".join(problems))
-    # Plugin: git-archived at the pin, optionally re-versioned in the copy only (A5),
-    # then committed with a fixed identity and date so the marketplace commit is a
-    # pure function of the archive. It is served from a sandbox-org repo over https:
-    # a directory-source marketplace makes Claude Code run the skill from the source
-    # dir, not the cache, which no consumer does (#208 pilot m1).
-    archive = rdir / "plugin-archive"
-    archive.mkdir()
-    arch = subprocess.run(["git", "-C", a.plugin_src, "archive", plugin_resolved],
-                          capture_output=True, check=True).stdout
-    subprocess.run(["tar", "-x", "-C", str(archive)], input=arch, check=True)
-    pj = archive / "plugins" / "dev-loop" / ".claude-plugin" / "plugin.json"
-    manifest = json.loads(pj.read_text())
-    if a.version_dir:
-        manifest["version"] = a.version_dir
-        pj.write_text(json.dumps(manifest, indent=2) + "\n")
-    version_dir = manifest["version"]
-    mk_sha = build_base(archive, rdir / "marketplace")
-    if not a.version_dir:
-        pin_tree = git_out(a.plugin_src, "rev-parse", plugin_resolved + "^{tree}")
-        mk_tree = git_out(rdir / "marketplace", "rev-parse", mk_sha + "^{tree}")
-        if mk_tree != pin_tree:
-            raise Refused("marketplace tree %s is not the pin's tree %s" % (mk_tree, pin_tree))
-    plugin_repo = "%s/%s-%s-plugin" % (spec["org"], spec["name"], a.replicate_id)
-    mk_url = "https://github.com/%s.git" % plugin_repo
-    env_record.update(marketplace_commit=mk_sha, marketplace_url=mk_url, plugin_repo=plugin_repo)
-    # Isolated home: roster, memory snapshot, settings. Nothing from the real one.
-    home = rdir / "home" / ".claude"
-    (home / "agents").mkdir(parents=True)
-    pins = render_roster(pathlib.Path(spec["dir"]) / "roster", home / "agents", a.model, a.effort)
-    slug = project_slug(clone)
-    env_record.update(project_slug=slug, org=spec["org"])
-    mem = home / "projects" / slug / "memory"
-    shutil.copytree(pathlib.Path(spec["dir"]) / "memory", mem)
-    (home / "settings.json").write_text(json.dumps(spec.get("settings", {}), indent=2) + "\n")
-    expected = expected_strata(pins, a.model, a.effort, spec.get("builtin_agents", {}))
-    env_record.update(version_dir=version_dir, memory_snapshot=snapshot_id(mem),
-                      roster=pins, expected_strata={k: list(v) for k, v in expected.items()},
-                      model_tiers=spec.get("model_tiers", "— (every role inherits)"),
-                      ci_status_binding={"value": spec["ci_status_cmd"],
-                                         "note": spec.get("ci_status_binding")},
-                      settings_sha256=hashlib.sha256((home / "settings.json").read_bytes()).hexdigest())
-    write_shim(rdir / "bin")
-    env_record.update(provision_uv(ops, rdir, a.uv_bin))
-    (rdir / "gh-calls.jsonl").touch()
-    env = ops.launch_env(rdir, sandbox)
-    # Which spike-verified token ran this replicate: (a) rests on it (#369).
-    env_record["gh_token_sha256"] = hashlib.sha256(env["GH_TOKEN"].encode()).hexdigest()
-    claude_real = os.path.realpath(a.claude_bin)
-    env_record["claude_real"] = claude_real
-    # Git inside the replicate: sandbox token via gh's credential helper, fixed identity.
-    ops.sh([REAL_GH, "auth", "setup-git"], env=env)
-    for k, v in (("user.name", FIXED_IDENTITY[0]), ("user.email", FIXED_IDENTITY[1])):
-        sh(["git", "config", "--global", k, v], env=env)
-    # Repos (harness side, harness-token only). Each is recorded before its create
-    # call; from then on the audit and the cost read run on every Exception path,
-    # and the teardown, in its own outer finally, on every exception path,
-    # KeyboardInterrupt included (#366).
-    henv = ops.harness_env(rdir)
-    ops.sh([REAL_GH, "auth", "setup-git"], env=henv)
-    try:
-        env_record["account_events_before"] = events_summary(*ops.events(login))
-    except Refused as exc:                         # recorded; nothing gates on the count
-        env_record["account_events_before"] = {"error": str(exc)}
+def _run(a, spec, rdir, env_record, ops, halts):
+    # Two signal windows (HaltSignals): W1, setup, and W2, the inner `try`'s
+    # body. The statements between them and every `finally` run blocked.
+    with halts.window():
+        # The account-event window opens with the replicate, before any repo is
+        # created or any `claude` runs, so it covers the install (#366).
+        env_record["run_start"] = env_record["wall_clock_start"]
+        login = env_record["login"] = a.login           # every later feed read must match it
+        sandbox = "%s/%s-%s" % (spec["org"], spec["name"], a.replicate_id)
+        # Base: built from the fixture's bytes, verified against the frozen SHA.
+        base, clone = build_clone(spec, rdir, a.replicate_id)
+        # Plugin: git-archived at the pin, optionally re-versioned in the copy only (A5).
+        plugin_resolved = git_out(a.plugin_src, "rev-parse", a.plugin_commit + "^{commit}")
+        cli_actual = ops.sh([a.claude_bin, "--version"]).stdout.strip()
+        problems = preflight(clone, spec["base_sha"], spec["ledger_root"], a.plugin_commit,
+                             plugin_resolved, a.claude_version, cli_actual, os.environ)
+        env_record.update(base_sha=base, plugin_commit=plugin_resolved, cli_version=cli_actual,
+                          claude_bin=a.claude_bin, autoupdate="DISABLE_AUTOUPDATER=1 + pinned binary",
+                          auth_mode="CLAUDE_CODE_OAUTH_TOKEN (setup-token)",
+                          parent=[a.model, a.effort], sandbox_repo=sandbox,
+                          effort_env={v: os.environ.get(v) for v in EFFORT_ENV})
+        if problems:
+            env_record["refused"] = problems
+            raise Refused("; ".join(problems))
+        # Plugin: git-archived at the pin, optionally re-versioned in the copy only (A5),
+        # then committed with a fixed identity and date so the marketplace commit is a
+        # pure function of the archive. It is served from a sandbox-org repo over https:
+        # a directory-source marketplace makes Claude Code run the skill from the source
+        # dir, not the cache, which no consumer does (#208 pilot m1).
+        archive = rdir / "plugin-archive"
+        archive.mkdir()
+        arch = subprocess.run(["git", "-C", a.plugin_src, "archive", plugin_resolved],
+                              capture_output=True, check=True).stdout
+        subprocess.run(["tar", "-x", "-C", str(archive)], input=arch, check=True)
+        pj = archive / "plugins" / "dev-loop" / ".claude-plugin" / "plugin.json"
+        manifest = json.loads(pj.read_text())
+        if a.version_dir:
+            manifest["version"] = a.version_dir
+            pj.write_text(json.dumps(manifest, indent=2) + "\n")
+        version_dir = manifest["version"]
+        mk_sha = build_base(archive, rdir / "marketplace")
+        if not a.version_dir:
+            pin_tree = git_out(a.plugin_src, "rev-parse", plugin_resolved + "^{tree}")
+            mk_tree = git_out(rdir / "marketplace", "rev-parse", mk_sha + "^{tree}")
+            if mk_tree != pin_tree:
+                raise Refused("marketplace tree %s is not the pin's tree %s" % (mk_tree, pin_tree))
+        plugin_repo = "%s/%s-%s-plugin" % (spec["org"], spec["name"], a.replicate_id)
+        mk_url = "https://github.com/%s.git" % plugin_repo
+        env_record.update(marketplace_commit=mk_sha, marketplace_url=mk_url, plugin_repo=plugin_repo)
+        # Isolated home: roster, memory snapshot, settings. Nothing from the real one.
+        home = rdir / "home" / ".claude"
+        (home / "agents").mkdir(parents=True)
+        pins = render_roster(pathlib.Path(spec["dir"]) / "roster", home / "agents", a.model, a.effort)
+        slug = project_slug(clone)
+        env_record.update(project_slug=slug, org=spec["org"])
+        mem = home / "projects" / slug / "memory"
+        shutil.copytree(pathlib.Path(spec["dir"]) / "memory", mem)
+        (home / "settings.json").write_text(json.dumps(spec.get("settings", {}), indent=2) + "\n")
+        expected = expected_strata(pins, a.model, a.effort, spec.get("builtin_agents", {}))
+        env_record.update(version_dir=version_dir, memory_snapshot=snapshot_id(mem),
+                          roster=pins, expected_strata={k: list(v) for k, v in expected.items()},
+                          model_tiers=spec.get("model_tiers", "— (every role inherits)"),
+                          ci_status_binding={"value": spec["ci_status_cmd"],
+                                             "note": spec.get("ci_status_binding")},
+                          settings_sha256=hashlib.sha256((home / "settings.json").read_bytes()).hexdigest())
+        write_shim(rdir / "bin")
+        env_record.update(provision_uv(ops, rdir, a.uv_bin))
+        (rdir / "gh-calls.jsonl").touch()
+        env = ops.launch_env(rdir, sandbox)
+        # Which spike-verified token ran this replicate: (a) rests on it (#369).
+        env_record["gh_token_sha256"] = hashlib.sha256(env["GH_TOKEN"].encode()).hexdigest()
+        claude_real = os.path.realpath(a.claude_bin)
+        env_record["claude_real"] = claude_real
+        # Git inside the replicate: sandbox token via gh's credential helper, fixed identity.
+        ops.sh([REAL_GH, "auth", "setup-git"], env=env)
+        for k, v in (("user.name", FIXED_IDENTITY[0]), ("user.email", FIXED_IDENTITY[1])):
+            sh(["git", "config", "--global", k, v], env=env)
+        # Repos (harness side, harness-token only). Each is recorded before its create
+        # call (#366).
+        henv = ops.harness_env(rdir)
+        ops.sh([REAL_GH, "auth", "setup-git"], env=henv)
+        try:
+            env_record["account_events_before"] = events_summary(*ops.events(login))
+        except Refused as exc:                         # recorded; nothing gates on the count
+            env_record["account_events_before"] = {"error": str(exc)}
     planned = []
     env_record["repos_planned"] = planned
     try:
         try:
-            create_repo(ops, henv, plugin_repo, planned)
-            ops.sh(["git", "push", "-q", mk_url, "main"], env=henv, cwd=rdir / "marketplace")
-            # Plugin install inside the isolated config (A5), sandboxed like every
-            # replicate `claude` process; refuse unless it landed as a git install of
-            # exactly the marketplace commit, in the cache.
-            for sub in (["marketplace", "add", mk_url], ["install", "dev-loop@claude-code-loop"]):
-                rc, out = ops.sandboxed(rdir, claude_real, rdir / "home",
-                                        [claude_real, "plugin"] + sub, env, timeout=600)
-                if rc:
-                    raise Refused("claude plugin %s exited %d: %s"
-                                  % (sub[0], rc, (out or b"").decode(errors="replace").strip()[:300]))
-            cache = home / "plugins" / "cache" / "claude-code-loop" / "dev-loop" / version_dir
-            env_record["plugin_cache_dir"] = str(cache)
-            problems = ops.check_install(home, mk_url, mk_sha, cache)
-            if problems:
-                raise Refused("; ".join(problems))
-            env_record["plugin_cache_sha256"] = tree_sha256(cache)
-            # The plugin repo is a write target only while it exists: delete it as
-            # soon as the install is verified (#366). Whether the CLI touches the
-            # marketplace at session start is the re-pilot's to confirm.
-            r = ops.sh([REAL_GH, "repo", "delete", plugin_repo, "--yes"], env=henv, check=False)
-            if r.returncode:
-                raise Refused("cannot delete the plugin repo after install: %s"
-                              % (r.stderr or r.stdout).strip()[:300])
-            env_record["plugin_repo_deleted"] = ops.now()
-            create_repo(ops, henv, sandbox, planned)
-            env_record["sandbox_created"] = ops.now()
-            _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, ops)
+            with halts.window():
+                create_repo(ops, henv, plugin_repo, planned)
+                ops.sh(["git", "push", "-q", mk_url, "main"], env=henv, cwd=rdir / "marketplace")
+                # Plugin install inside the isolated config (A5), sandboxed like every
+                # replicate `claude` process; refuse unless it landed as a git install of
+                # exactly the marketplace commit, in the cache.
+                for sub in (["marketplace", "add", mk_url], ["install", "dev-loop@claude-code-loop"]):
+                    rc, out = ops.sandboxed(rdir, claude_real, rdir / "home",
+                                            [claude_real, "plugin"] + sub, env, timeout=600)
+                    if rc:
+                        raise Refused("claude plugin %s exited %d: %s"
+                                      % (sub[0], rc, (out or b"").decode(errors="replace").strip()[:300]))
+                cache = home / "plugins" / "cache" / "claude-code-loop" / "dev-loop" / version_dir
+                env_record["plugin_cache_dir"] = str(cache)
+                problems = ops.check_install(home, mk_url, mk_sha, cache)
+                if problems:
+                    raise Refused("; ".join(problems))
+                env_record["plugin_cache_sha256"] = tree_sha256(cache)
+                # The plugin repo is a write target only while it exists: delete it as
+                # soon as the install is verified (#366). Whether the CLI touches the
+                # marketplace at session start is the re-pilot's to confirm.
+                r = ops.sh([REAL_GH, "repo", "delete", plugin_repo, "--yes"], env=henv, check=False)
+                if r.returncode:
+                    raise Refused("cannot delete the plugin repo after install: %s"
+                                  % (r.stderr or r.stdout).strip()[:300])
+                env_record["plugin_repo_deleted"] = ops.now()
+                create_repo(ops, henv, sandbox, planned)
+                env_record["sandbox_created"] = ops.now()
+                _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, ops)
         finally:
             env_record.setdefault("run_end", ops.now())
-            # The stop capture (#380) runs first, before the audit reads it and
-            # before the outer finally's teardown. If a second interrupt cuts it
-            # short, the placeholder stands and no audit runs, so no `pass`
-            # exists; a later `audit` fails on the placeholder.
+            # The stop capture (#380) runs first, before the outer finally's
+            # teardown and the audit that reads it. Signals are blocked here, so
+            # none cuts it short; the placeholder stands only if it raises past
+            # its own handler.
             env_record["stop_capture"] = {"errors": ["capture did not complete"]}
             try:
                 env_record["stop_capture"] = capture_stop(rdir, clone, spec["base_sha"],
                                                           spec["ledger_root"], ops)
             except Exception as exc:                  # recorded; the audit fails on it
                 env_record["stop_capture"]["errors"].append("capture raised: %s" % exc)
-            (rdir / "environment.json").write_text(json.dumps(env_record, indent=2))
-            steps = (("audit", lambda: write_audit(rdir, env_record, spec, login, version_dir, ops)),
-                     ("measure", lambda: (rdir / "result.json").write_text(
-                         json.dumps(measure(project_dir(rdir)), indent=2))))
-            for name, step in steps:
-                try:
-                    step()
-                except Exception as exc:              # recorded, never swallowed silently
-                    env_record.setdefault("errors", []).append("%s: %s" % (name, exc))
     finally:
+        # Teardown before the audit (#384): the audit and the cost read open
+        # files the replicate could write, which a FIFO would hang with the
+        # signals blocked. In this order a hang there loses the audit, which then
+        # cannot pass, and never the repos. Neither makes a call to a planned repo.
         teardown(ops, henv, planned, env_record, a.keep_sandbox)
+        write_json_atomic(rdir / "environment.json", env_record)
+        steps = (("audit", lambda: write_audit(rdir, env_record, spec, login, version_dir, ops)),
+                 ("measure", lambda: (rdir / "result.json").write_text(
+                     json.dumps(measure(project_dir(rdir)), indent=2))))
+        for name, step in steps:
+            try:
+                step()
+            except Exception as exc:                  # recorded, never swallowed silently
+                env_record.setdefault("errors", []).append("%s: %s" % (name, exc))
 
 
 def check_install(home, url, commit, cache):
@@ -1699,7 +1987,7 @@ def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, op
         raise Refused("fixture issue is not #1: %s" % url)
     (rdir / "streams").mkdir()
     prompt, session, n, outcome = spec["first_prompt"], None, 0, None
-    queue = clone / spec["ledger_root"] / spec["run_slug"] / "queue.md"
+    queue = "%s/%s/queue.md" % (spec["ledger_root"], spec["run_slug"])
     turns = env_record.setdefault("turns", [])
     while outcome is None:
         n += 1
@@ -1719,7 +2007,7 @@ def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, op
             outcome = ("halt", "turn %d exceeded %ds" % (n, a.turn_timeout))
             break
         _init, result = read_stream(stream)
-        status = row_status(queue, 1)
+        status = row_status(clone, queue, 1)
         turns.append({"turn": n, "returncode": rc, "status": status})
         if not result:
             outcome = ("halt", "turn %d produced no result event" % n)
@@ -1906,11 +2194,17 @@ def cmd_shakedown(a, ops=None):
     rdir.mkdir(parents=True)
     record = {"shakedown": a.replicate_id, "fixture": spec["name"],
               "fixture_dir": spec["dir"], "fixture_sha256": spec["fixture_sha256"],
-              "command": a.command, "wall_clock_start": ops.now()}
+              "command": a.command, "wall_clock_start": ops.now(),
+              "requires": spec.get("requires")}
     record.update(provenance)
-    previous = install_halt_handlers(record)
+    halts = HaltSignals(record)                     # the same owner as `run` (#384)
+
+    def final_write():
+        record["wall_clock_end"] = ops.now()
+        write_json_atomic(rdir / "shakedown.json", record)
     try:
-        _shakedown(a, spec, rdir, record, ops)
+        with halts.window():
+            _shakedown(a, spec, rdir, record, ops)
     except Exception as exc:
         record.setdefault("refused" if isinstance(exc, Refused) else "error", str(exc))
         raise
@@ -1918,12 +2212,8 @@ def cmd_shakedown(a, ops=None):
         record.setdefault("interrupted", type(exc).__name__)
         raise
     finally:
-        held = ignore_signals((signal.SIGINT,) + HALT_SIGNALS)
-        try:
-            record["wall_clock_end"] = ops.now()
-            (rdir / "shakedown.json").write_text(json.dumps(record, indent=2))
-        finally:
-            restore_handlers({**held, **previous})
+        halts.close(final_write)
+    halts.raise_if_unraised()
 
 
 def _shakedown(a, spec, rdir, record, ops):
@@ -1938,8 +2228,8 @@ def _shakedown(a, spec, rdir, record, ops):
     try:
         rc, out = ops.sandboxed(rdir, None, clone, ["/bin/sh", "-c", a.command], env,
                                 timeout=a.timeout)
-    except subprocess.TimeoutExpired:
-        rc, out = None, b""
+    except subprocess.TimeoutExpired as exc:
+        rc, out = None, exc.output                  # the tail run_sandboxed kept (#384)
         record["timeout_s"] = a.timeout
     record.update(exit_code=rc, duration_s=round(time.monotonic() - start, 1),
                   output_tail=_tail(out))
@@ -1954,8 +2244,9 @@ def _shakedown(a, spec, rdir, record, ops):
         try:
             prc, pout = ops.sandboxed(rdir, None, clone, argv, env, timeout=PROBE_TIMEOUT)
             entry.update(exit_code=prc, output=_tail(pout, 500).strip())
-        except subprocess.TimeoutExpired:
-            entry.update(exit_code=None, timeout_s=PROBE_TIMEOUT)
+        except subprocess.TimeoutExpired as exc:
+            entry.update(exit_code=None, timeout_s=PROBE_TIMEOUT,
+                         output=_tail(exc.output, 500).strip())
         record["probes"].append(entry)
 
 
