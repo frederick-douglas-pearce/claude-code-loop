@@ -64,7 +64,6 @@ Stdlib only: `docs/research/test_replicate.py` imports this module, and `TEST_CM
 runs that test on bare python3 (CLAUDE.md, stdlib-only by reach).
 """
 import argparse
-import contextlib
 import datetime
 import hashlib
 import json
@@ -544,6 +543,10 @@ def run_sandboxed(rdir, claude_real, cwd, cmd, env, stdout=subprocess.PIPE,
         box.wait()
         raise
     finally:
+        # A signal at the entry of an `except` above can skip its kill (#384).
+        if box.poll() is None:
+            box.kill()
+            box.wait()
         for fd in (info_r, ready_r, ready_w, exit_r, block_w):
             if fd is not None:
                 try:
@@ -740,7 +743,7 @@ def row_status(clone, rel, issue):
     Read on the host from a tree the replicate writes (#384), so nothing is
     followed and nothing can block: no component from the clone down may be a
     symlink (`lstat_walk`), queue.md must be a regular file before it is opened
-    -- a FIFO would block `read()` with the sandbox already gone -- and the
+    -- a FIFO would block the open with the sandbox already gone -- and the
     open is O_NOFOLLOW|O_NONBLOCK and re-checked by fstat to be that same file."""
     try:
         path, st = lstat_walk(clone, rel)
@@ -896,15 +899,18 @@ def _copy_plain(src, dest, rel, errors, budget):
         st = os.lstat(s)
         if stat.S_ISDIR(st.st_mode):
             _copy_plain(s, d, r, errors, budget)
-        elif stat.S_ISREG(st.st_mode):
-            if st.st_size > STOP_FILE_CAP:
-                errors.append("%s is %d bytes, over the %d-byte file cap; not copied"
-                              % (r, st.st_size, STOP_FILE_CAP))
-                continue
-            budget.charge(st.st_size, r)
+            continue
+        copy = stat.S_ISREG(st.st_mode) and st.st_size <= STOP_FILE_CAP
+        # Every entry is charged, a refused one at the minimum, so a flood of
+        # refusals is bounded by the total cap like a flood of files.
+        budget.charge(st.st_size if copy else 0, r)
+        if copy:
             shutil.copyfile(s, d, follow_symlinks=False)
+        elif stat.S_ISREG(st.st_mode):
+            errors.append("%s is %d bytes, over the %d-byte file cap; not copied"
+                          % (r, st.st_size, STOP_FILE_CAP))
         elif stat.S_ISLNK(st.st_mode):
-            errors.append("%s is a symlink to %r; not copied" % (r, os.readlink(s)))
+            errors.append("%s is a symlink to %r; not copied" % (r, os.readlink(s)[:300]))
         else:
             errors.append("%s is not a regular file or directory; not copied" % r)
 
@@ -1003,7 +1009,11 @@ def capture_stop(rdir, clone, base_sha, ledger_root, ops):
                           ("branch", ["symbolic-ref", "-q", "HEAD"], (0, 1)),
                           ("status", ["status", "--porcelain", "--untracked-files=all"], (0,))):
         dest = rdir / STOP_FILES[key]
-        err = _capture_git(ops, rdir, clone, args, dest, ok) or _cap_part(dest, budget)
+        err = _capture_git(ops, rdir, clone, args, dest, ok)
+        if err:
+            _empty(dest)                            # a failed part keeps no bytes (#384)
+        else:
+            err = _cap_part(dest, budget)
         if err:
             rec["errors"].append("%s: %s" % (key, err))
         else:
@@ -1019,6 +1029,15 @@ def capture_stop(rdir, clone, base_sha, ledger_root, ops):
     return rec
 
 
+def _empty(dest):
+    """Truncate a part `capture_stop` wrote itself, if it is there."""
+    try:
+        with open(dest, "wb"):
+            pass
+    except OSError:
+        pass
+
+
 def _cap_part(dest, budget):
     """-> None, or why a captured git part breaks a cap. A breaching part is
     emptied, so it is left out of `files` and charged nothing (#384)."""
@@ -1032,8 +1051,7 @@ def _cap_part(dest, budget):
     elif not budget.fits(size):
         why = "%d bytes would take stop/ past the %d-byte total cap" % (size, STOP_TOTAL_CAP)
     if why:
-        with open(dest, "wb"):
-            pass
+        _empty(dest)
         return why
     budget.charge(size, dest.name)
     return None
@@ -1320,8 +1338,9 @@ def account_events(login):
     stop rule keyed on the oldest event read is sound (#369). Any error on any page
     refuses, and so does a `gh` signed in as anyone but `login`: the API would then
     serve only `login`'s public events, and the read would look complete. Each
-    call is bounded by NET_TIMEOUT: the audit reads the feed with the halt
-    signals blocked (#384), so a hung read must end on its own, as a refusal."""
+    call is bounded by NET_TIMEOUT: the audit inside `run` reads the feed with
+    the halt signals blocked (#384), so a hung read must end on its own, as a
+    refusal."""
     try:
         return _account_events(login)
     except subprocess.TimeoutExpired as exc:
@@ -1329,7 +1348,8 @@ def account_events(login):
 
 
 def _account_events(login):
-    r = subprocess.run(account_user_argv(), capture_output=True, text=True, timeout=NET_TIMEOUT)
+    r = subprocess.run(account_user_argv(), capture_output=True, text=True, timeout=NET_TIMEOUT,
+                       start_new_session=True)
     who = r.stdout.strip() if not r.returncode else None
     if not who or who.lower() != login.lower():
         raise Refused("gh is signed in as %r, not %r: the feed read would miss private events"
@@ -1337,7 +1357,7 @@ def _account_events(login):
     events = []
     for page in range(1, EVENTS_MAX_PAGES + 1):
         r = subprocess.run(account_events_argv(login, page), capture_output=True, text=True,
-                           timeout=NET_TIMEOUT)
+                           timeout=NET_TIMEOUT, start_new_session=True)
         if r.returncode:
             raise Refused("cannot read the account event feed (page %d): %s"
                           % (page, r.stderr.strip()[:200]))
@@ -1436,7 +1456,8 @@ def measure(pdir):
 
 def sh(cmd, env=None, cwd=None, check=True, quiet=True, timeout=None):
     r = subprocess.run(cmd, env=env, cwd=cwd, capture_output=True, text=True,
-                       stdin=subprocess.DEVNULL, timeout=timeout)
+                       stdin=subprocess.DEVNULL, timeout=timeout,
+                       start_new_session=True)       # see HaltSignals (#384)
     if check and r.returncode:
         raise Refused("%s exited %d: %s" % (shlex.join(cmd[:4]), r.returncode,
                                            (r.stderr or r.stdout).strip()[:300]))
@@ -1586,13 +1607,16 @@ class HaltSignals:
     their handlers, their mask, and what arrived.
 
     By construction, no `finally` or `except` of `cmd_run`, `_run` or
-    `cmd_shakedown` is entered with a halt signal able to raise:
+    `cmd_shakedown` that lies outside a window is entered with a halt signal
+    able to raise:
     - Creating it blocks the managed signals (HALT_SIGNALS less any the process
       was started ignoring: under `nohup` a closed terminal stays ignored, and
       neither blocked nor recorded) and installs one handler for them.
     - They are unblocked only inside `with halts.window():`, and every window
       closes inside the body of a `try`. A window is never opened inside a
-      `finally` or `except` that must complete.
+      `finally` or `except` that must complete. A window is a plain class, not
+      a generator: a raise in its exit leaves nothing suspended to re-block the
+      mask later.
     - The handler's first delivery records `signal`, blocks the managed signals
       itself and only then raises KeyboardInterrupt, so the one raise travels
       blocked wherever it starts: a window's body, the unblock in its entry
@@ -1600,9 +1624,18 @@ class HaltSignals:
       Every later delivery only counts, in `signals_after_first` -- a lower
       bound, since a standard signal sent twice while blocked pends once.
     - `close` drains what arrived while blocked, writes the final record, and
-      re-checks once after the write; `raise_if_unraised` then raises for a
-      first signal that only the drain saw, so the process still exits as
-      interrupted and a batch loop does not start the next paid replicate.
+      re-checks once after the write. `raise_if_unraised`, after the caller's
+      `try` statement, raises for a first signal only the drain saw. It is not
+      reached while a refusal or an error propagates: the process then exits
+      with that (`main` returns 2 for a refusal), and the record carries both
+      it and `interrupted`. A batch driver must stop on any non-zero exit.
+    `signal` is the first signal *observed*: signals pending together are
+    taken in signal-number order (the kernel's), a handler can nest inside
+    another, and one arriving after the last drain is discarded unrecorded.
+    The mask guards this process only. A child inherits it, but `gh` (Go)
+    clears it, so the harness's own children run in a new session
+    (`start_new_session`, as bwrap's `--new-session` does for the sandbox):
+    no signal sent to the terminal's process group reaches them.
     The mask is per thread, and `os.kill(os.getpid())` reaches any thread with
     the signal unblocked: this assumes a single-threaded harness, which it is."""
 
@@ -1635,14 +1668,10 @@ class HaltSignals:
         self.raised = True
         raise KeyboardInterrupt(signal.Signals(signum).name)
 
-    @contextlib.contextmanager
     def window(self):
-        """Unblock the managed signals for the body; block them again on exit."""
-        signal.pthread_sigmask(signal.SIG_UNBLOCK, self.managed)
-        try:
-            yield
-        finally:
-            signal.pthread_sigmask(signal.SIG_BLOCK, self.managed)
+        """-> a context manager that unblocks the managed signals for its body
+        and blocks them again on exit."""
+        return _Window(self.managed)
 
     def _drain(self):
         """Take every managed signal pending while blocked into the record,
@@ -1686,6 +1715,24 @@ class HaltSignals:
             raise KeyboardInterrupt(self.record.get("signal"))
 
 
+class _Window:
+    """HaltSignals.window's context manager. A class rather than a
+    @contextmanager generator: a signal raising in a generator's `__exit__`,
+    before the generator resumes, leaves it suspended, and its `finally` would
+    re-block the mask whenever it is collected -- after `close` restored it."""
+
+    def __init__(self, managed):
+        self.managed = managed
+
+    def __enter__(self):
+        signal.pthread_sigmask(signal.SIG_UNBLOCK, self.managed)
+        return self
+
+    def __exit__(self, *_exc):
+        signal.pthread_sigmask(signal.SIG_BLOCK, self.managed)
+        return False
+
+
 def write_json_atomic(path, obj):
     """Write `obj` to `path` via a temp file and os.replace, so a kill during
     the write leaves the earlier record, never a truncated one."""
@@ -1727,6 +1774,8 @@ def teardown(ops, henv, planned, env_record, keep):
     if keep:
         gone = env_record.get("plugin_repo") if env_record.get("plugin_repo_deleted") else None
         env_record["sandbox_kept"] = [r for r in planned if r != gone]
+        if gone in planned:                         # deleted at install (#366)
+            env_record.setdefault("repos_deleted", []).append(gone)
         return
     if not planned:
         return
@@ -1872,28 +1921,35 @@ def _run(a, spec, rdir, env_record, ops, halts):
                 env_record["sandbox_created"] = ops.now()
                 _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, ops)
         finally:
+            print("replicate %s: stopping -- stop capture, teardown, then audit; further "
+                  "signals are deferred, and kill -9 strands the sandbox repos" % a.replicate_id,
+                  file=sys.stderr)
             env_record.setdefault("run_end", ops.now())
-            # The stop capture (#380) runs first, before the audit reads it and
-            # before the outer finally's teardown. Signals are blocked here, so
-            # nothing cuts it short; the placeholder stands only if it raises
-            # past its own handler.
+            # The stop capture (#380) runs first, before the outer finally's
+            # teardown and the audit that reads it. Signals are blocked here, so
+            # none cuts it short; the placeholder stands only if it raises past
+            # its own handler.
             env_record["stop_capture"] = {"errors": ["capture did not complete"]}
             try:
                 env_record["stop_capture"] = capture_stop(rdir, clone, spec["base_sha"],
                                                           spec["ledger_root"], ops)
             except Exception as exc:                  # recorded; the audit fails on it
                 env_record["stop_capture"]["errors"].append("capture raised: %s" % exc)
-            write_json_atomic(rdir / "environment.json", env_record)
-            steps = (("audit", lambda: write_audit(rdir, env_record, spec, login, version_dir, ops)),
-                     ("measure", lambda: (rdir / "result.json").write_text(
-                         json.dumps(measure(project_dir(rdir)), indent=2))))
-            for name, step in steps:
-                try:
-                    step()
-                except Exception as exc:              # recorded, never swallowed silently
-                    env_record.setdefault("errors", []).append("%s: %s" % (name, exc))
     finally:
+        # Teardown before the audit (#384): the audit and the cost read open
+        # files the replicate could write, which a FIFO would hang with the
+        # signals blocked. In this order a hang there loses the audit, which then
+        # cannot pass, and never the repos. Neither makes a call to a planned repo.
         teardown(ops, henv, planned, env_record, a.keep_sandbox)
+        write_json_atomic(rdir / "environment.json", env_record)
+        steps = (("audit", lambda: write_audit(rdir, env_record, spec, login, version_dir, ops)),
+                 ("measure", lambda: (rdir / "result.json").write_text(
+                     json.dumps(measure(project_dir(rdir)), indent=2))))
+        for name, step in steps:
+            try:
+                step()
+            except Exception as exc:                  # recorded, never swallowed silently
+                env_record.setdefault("errors", []).append("%s: %s" % (name, exc))
 
 
 def check_install(home, url, commit, cache):

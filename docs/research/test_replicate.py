@@ -2207,6 +2207,9 @@ class SandboxProfileTests(Tmp):
 
             def kill(self):
                 pass
+
+            def poll(self):
+                return None if self.block is not None else 0
         with mock.patch.object(R.subprocess, "Popen", Proc):
             rc, _ = R.run_sandboxed(self.tmp, None, self.tmp, ["git", "status"], {},
                                     stdout=None, stderr=None, timeout=5, profile=profile)
@@ -2936,8 +2939,9 @@ class HaltTests(RunBase):
 
     def test_c_a_first_signal_at_every_finally_and_except(self):
         """A `sys.settrace` line event on the first statement of every `finally`
-        and `except` in `_run` and `cmd_run` sends the run's *first* signal, one
-        clean-otherwise run per (target, signal). The mask is recorded at each
+        and `except` outside a window in `_run` and `cmd_run` sends the run's
+        *first* signal, one run per (target, signal), clean except where the
+        target needs a refusal, an interrupt or a raising step. The mask is recorded at each
         target, and the lines hit must equal the lines targeted, so a missed
         event cannot pass."""
         targets = self.targets()
@@ -3163,11 +3167,276 @@ class SandboxTimeoutTailTests(Tmp):
 
             def kill(self):
                 self.killed = True
+
+            def poll(self):
+                return -9 if self.killed else None
         with mock.patch.object(R.subprocess, "Popen", Proc):
             with self.assertRaises(subprocess.TimeoutExpired) as cm:
                 R.run_sandboxed(self.tmp, None, self.tmp, ["sleep", "9"], {},
                                 timeout=1, profile="capture")
         self.assertEqual(cm.exception.output, b"tail before the kill")
+
+
+    def test_a_signal_that_skips_the_except_kill_is_backstopped(self):
+        """signals.5: a signal raising at the entry of run_sandboxed's timeout
+        `except`, before its kill, still leaves no sandbox running."""
+        state = {}
+
+        class Proc:
+            returncode = -9
+
+            def __init__(self, argv, pass_fds=(), **kw):
+                os.write(int(argv[argv.index("--info-fd") + 1]), b'{"child-pid": 1}')
+                self.block = os.dup(int(argv[argv.index("--block-fd") + 1]))
+                state["proc"], self.killed, self.waited = self, False, False
+
+            def communicate(self, timeout=None):
+                raise subprocess.TimeoutExpired("bwrap", timeout)
+
+            def wait(self, timeout=None):
+                self.waited = True
+                if self.block is not None:
+                    os.close(self.block)
+                    self.block = None
+                return -9
+
+            def kill(self):
+                self.killed = True
+
+            def poll(self):
+                return -9 if self.killed else None
+        lines, start = inspect.getsourcelines(R.run_sandboxed)
+        at = next(start + i for i, l in enumerate(lines)
+                  if "except subprocess.TimeoutExpired" in l) + 3     # the kill's line
+        self.assertIn("box.kill()", lines[at - start])
+        code, sent = R.run_sandboxed.__code__, []
+
+        def local(frame, event, _arg):
+            if event == "line" and frame.f_lineno == at and not sent:
+                sent.append(1)
+                raise KeyboardInterrupt("a signal at the except's entry")
+            return local
+        old = sys.gettrace()
+        with mock.patch.object(R.subprocess, "Popen", Proc):
+            sys.settrace(lambda f, e, a: local if f.f_code is code else None)
+            try:
+                with self.assertRaises(KeyboardInterrupt):
+                    R.run_sandboxed(self.tmp, None, self.tmp, ["sleep", "9"], {},
+                                    timeout=1, profile="capture")
+            finally:
+                sys.settrace(old)
+        self.assertTrue(sent)
+        self.assertTrue(state["proc"].killed)
+        self.assertTrue(state["proc"].waited)
+
+
+class Round1FixTests(RunBase):
+    """#384 code review round 1: the fixes the scope ruling set."""
+
+    def test_harness_children_run_in_a_new_session(self):
+        """signals.1: `gh` (Go) clears an inherited mask, so a group signal would
+        kill it; a real child of `sh` is in its own session, out of reach."""
+        r = R.sh([sys.executable, "-c", "import os; print(os.getsid(0))"])
+        self.assertNotEqual(int(r.stdout), os.getsid(0))
+
+    def test_every_feed_call_has_a_timeout_and_a_new_session(self):
+        """guard-efficacy.3: the user check and the page read, both."""
+        calls = []
+
+        def run(argv, **kw):
+            calls.append((kw.get("timeout"), kw.get("start_new_session")))
+            if len(calls) == 1:
+                return fake_proc(0, "me\n")
+            raise subprocess.TimeoutExpired(argv, kw.get("timeout"))
+        with mock.patch.object(R.subprocess, "run", run):
+            with self.assertRaisesRegex(R.Refused, "exceeded"):
+                R.account_events("me")
+        self.assertEqual(calls, [(R.NET_TIMEOUT, True), (R.NET_TIMEOUT, True)])
+
+    def test_teardown_runs_before_the_audit_and_the_cost_read(self):
+        """host-io.1: a hang in a reader of `home/` loses the audit, not the repos."""
+        ops, seen = FakeOps(), []
+        real_audit, real_measure = R.write_audit, R.measure
+
+        def audit(*a, **k):
+            seen.append(("audit", self.SB in ops.existing))
+            return real_audit(*a, **k)
+
+        def measure(*a, **k):
+            seen.append(("measure", self.SB in ops.existing))
+            return real_measure(*a, **k)
+        with mock.patch.object(R, "write_audit", audit), \
+                mock.patch.object(R, "measure", measure):
+            env = self.run_it(ops)
+        self.assertEqual(seen, [("audit", False), ("measure", False)])
+        self.assertIn(self.SB, env["repos_deleted"])
+
+    def test_a_hung_audit_has_already_torn_down(self):
+        """host-io.1: an audit that never returns (a FIFO in `home/`) is stopped
+        here by the test's own exception, after teardown already ran."""
+        ops = FakeOps()
+
+        def hang(*_a, **_k):
+            self.assertNotIn(self.SB, ops.existing)
+            raise SystemExit("stuck")
+        with mock.patch.object(R, "write_audit", hang):
+            with self.assertRaises(SystemExit):
+                R.cmd_run(self.args(), ops)
+        env = json.loads((self.tmp / "out" / "r1" / "environment.json").read_text())
+        self.assertIn(self.SB, env["repos_deleted"])
+
+    def test_the_stopping_path_says_so(self):
+        """readiness.3: one stderr line, so an operator does not reach for kill -9."""
+        import io
+        err = io.StringIO()
+        with mock.patch.object(sys, "stderr", err):
+            self.run_it(FakeOps())
+        self.assertIn("stopping", err.getvalue())
+        self.assertIn("kill -9 strands", err.getvalue())
+
+    def test_keep_sandbox_puts_every_planned_repo_in_a_bucket(self):
+        """signals.6: the plugin repo, deleted at install, is in repos_deleted."""
+        env = self.run_it(FakeOps(), keep_sandbox=True)
+        self.assertEqual(env["sandbox_kept"], [self.SB])
+        self.assertEqual(env["repos_deleted"], [self.PLUG])
+
+
+class HaltUnitTests(unittest.TestCase):
+    """#384 round 1: HaltSignals on its own."""
+
+    def setUp(self):
+        guard_signals(self)
+
+    def test_a_raise_in_a_window_entry_leaves_the_mask_blocked(self):
+        """signals.3: a signal pending when a window opens is delivered by the
+        unblock, before the body; only the handler's own block keeps the raise
+        travelling blocked."""
+        rec = {}
+        h = R.HaltSignals(rec)
+        os.kill(os.getpid(), signal.SIGTERM)                # pends: blocked
+        with self.assertRaises(KeyboardInterrupt):
+            with h.window():
+                self.fail("the body ran")
+        self.assertEqual(blocked_halts(), ["SIGHUP", "SIGINT", "SIGTERM"])
+        self.assertEqual(rec["signal"], "SIGTERM")
+        h.close(lambda: None)
+
+    def test_a_raise_in_a_window_body_is_blocked_before_it_leaves_the_handler(self):
+        h = R.HaltSignals({})
+        seen = []
+        with h.window():
+            try:
+                os.kill(os.getpid(), signal.SIGINT)
+            except KeyboardInterrupt:
+                seen.append(blocked_halts())                # still inside the body
+        self.assertEqual(seen, [["SIGHUP", "SIGINT", "SIGTERM"]])
+        h.close(lambda: None)
+
+    def test_a_raise_at_a_window_exit_leaves_nothing_to_reblock_later(self):
+        """signals.2: a signal at the first line of the window's exit raises
+        there; once close() restores the mask, nothing collected later blocks
+        it again (a suspended generator's finally would)."""
+        import gc
+        before = signal.pthread_sigmask(signal.SIG_BLOCK, [])
+        h = R.HaltSignals({})
+        code, sent = R._Window.__exit__.__code__, []
+
+        def local(frame, event, _arg):
+            if event == "line" and not sent:
+                sent.append(1)
+                os.kill(os.getpid(), signal.SIGTERM)
+            return local
+        old = sys.gettrace()
+        sys.settrace(lambda f, e, a: local if f.f_code is code else None)
+        try:
+            with self.assertRaises(KeyboardInterrupt):
+                with h.window():
+                    pass
+        finally:
+            sys.settrace(old)
+        self.assertTrue(sent)
+        h.close(lambda: None)
+        gc.collect()
+        self.assertEqual(signal.pthread_sigmask(signal.SIG_BLOCK, []), before)
+
+
+class Round1CaptureTests(CaptureBase):
+    def test_refused_ledger_entries_are_charged_and_their_text_bounded(self):
+        """host-io.2: symlinks cost the minimum each, and a target's text is cut."""
+        led = self.clone / ".loop-ledger" / "fixture"
+        for i in range(40):
+            (led / ("l%02d" % i)).symlink_to("x" * 1000)
+        with mock.patch.object(R, "STOP_TOTAL_CAP", 20 * R.STOP_ENTRY_MIN):
+            rec = self.capture()
+        links = [e for e in rec["errors"] if "is a symlink" in e]
+        self.assertLess(len(links), 40)                      # stopped by the total cap
+        self.assertTrue(any("total cap" in e for e in rec["errors"]))
+        self.assertTrue(all(len(e) < 400 for e in links), links[:1])
+
+    def test_a_failed_git_part_keeps_no_bytes(self):
+        """host-io.3: a part whose git fails is emptied, as a breaching one is."""
+        class Ops(FakeOps):
+            def capture_sandboxed(self, rdir, cwd, cmd, env, stdout, stderr, timeout):
+                if "status" in cmd:                         # the `status` part fails
+                    stdout.write(b"partial output " * 100)
+                    return 1, None
+                return super().capture_sandboxed(rdir, cwd, cmd, env, stdout, stderr, timeout)
+        rec = self.capture(ops=Ops())
+        self.assertNotIn("status", rec["files"])
+        self.assertTrue(any(e.startswith("status: ") for e in rec["errors"]), rec["errors"])
+        self.assertEqual(self.read("status"), b"")
+
+    def test_empty_ledger_files_are_what_trips_the_total_cap(self):
+        """guard-efficacy.6: the breach names one of the empty files."""
+        many = self.clone / ".loop-ledger" / "fixture" / "many"
+        many.mkdir()
+        for i in range(20):
+            (many / ("e%02d" % i)).write_text("")
+        with mock.patch.object(R, "STOP_TOTAL_CAP", 12 * R.STOP_ENTRY_MIN):
+            rec = self.capture()
+        self.assertTrue(any("many/e" in e and "total cap" in e for e in rec["errors"]),
+                        rec["errors"])
+
+
+class Round1ReadTests(Tmp):
+    def setUp(self):
+        super().setUp()
+        guard_signals(self)
+
+    def test_row_status_open_is_nonblocking_and_identity_checked(self):
+        """guard-efficacy.4: the lstat said regular, but a FIFO is there at the
+        open: O_NONBLOCK keeps it from blocking and fstat refuses it."""
+        d = self.tmp / "q"
+        d.mkdir()
+        reg = self.tmp / "regular.md"
+        reg.write_text("| # | Issue | Status |\n|---|---|---|\n| 1 | #1 x | planning |\n")
+        os.mkfifo(d / "queue.md")
+
+        def boom(*_):
+            raise AssertionError("row_status blocked")
+        old = signal.signal(signal.SIGALRM, boom)
+        signal.alarm(5)
+        try:
+            with mock.patch.object(R, "lstat_walk", return_value=(d / "queue.md", os.lstat(reg))):
+                status = R.row_status(self.tmp, "q/queue.md", 1)
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old)
+        self.assertEqual(status, R.ROW_UNREADABLE)
+
+    def test_a_failed_write_leaves_the_earlier_record(self):
+        """guard-efficacy.7: the write goes to a temp file and is renamed."""
+        path = self.tmp / "environment.json"
+        R.write_json_atomic(path, {"v": 1})
+        real = pathlib.Path.write_text
+
+        def partial(p, text, *a, **k):
+            real(p, text[:5])
+            raise OSError("disk full")
+        with mock.patch.object(pathlib.Path, "write_text", partial):
+            with self.assertRaises(OSError):
+                R.write_json_atomic(path, {"v": 2, "long": "x" * 100})
+        self.assertEqual(json.loads(path.read_text()), {"v": 1})
 
 
 if __name__ == "__main__":
