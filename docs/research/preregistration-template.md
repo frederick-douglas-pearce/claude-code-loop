@@ -224,8 +224,8 @@ note that was dropped, with one line of reason each; and the population the resu
   to `uv`. A run without `--uv-bin` would execute a host `/usr/bin/uv` while recording `uv_version`
   and `uv_sha256` as null, which section 8 admits as matching a registered none. With `--uv-bin`, a
   host `/usr` Python that satisfies a fixture's `.python-version` is used in preference to the one
-  `uv` would download. (The host on 2026-11-22 had no `/usr/bin/uv`, no `/etc/uv/uv.toml`, and
-  only Python 3.12 under `/usr`.)
+  `uv` would download. (The host on 2026-11-22 had no `/usr/bin/uv`, no `/etc/uv/uv.toml`, and no
+  Python 3.14 under `/usr`: 3.12 and 3.7 only.)
 
 ## 15. Deviations
 

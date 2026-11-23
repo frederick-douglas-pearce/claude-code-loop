@@ -893,7 +893,7 @@ class BuildBaseTests(Tmp):
         (src / "taken").write_text("x\n")
         for entry, msg in (({"stored": "absent", "restored": "CLAUDE.md"}, "not in the fixture"),
                            ({"stored": "CLAUDE.md.fixture", "restored": "taken"}, "already exists"),
-                           ({"stored": "/etc/hostname", "restored": "h"}, "not a path inside"),
+                           ({"stored": "/nonexistent-fixture-probe", "restored": "h"}, "not a path inside"),
                            ({"stored": "../x", "restored": "h"}, "not a path inside"),
                            ({"stored": "CLAUDE.md.fixture", "restored": "../h"}, "not a path inside")):
             with self.subTest(entry=entry):
@@ -950,21 +950,34 @@ class Vote82FixtureTests(Tmp):
                         pathlib.Path(VOTE82, sub, name).read_bytes(),
                         pathlib.Path(PILOT, sub, name).read_bytes())
 
+    def test_clone_restores_the_renamed_files(self):
+        """`build_clone` passes the fixture's `renamed` record, so the clone a
+        replicate works in has `CLAUDE.md` at the source path."""
+        spec = dict(self.spec)
+        base, clone = R.build_clone(spec, self.tmp / "r", "v")
+        self.assertEqual(base, spec["base_sha"])
+        self.assertTrue((clone / "CLAUDE.md").is_file())
+        self.assertFalse((clone / "CLAUDE.md.fixture").exists())
+
     def test_records_the_source_issue(self):
+        """Guards drift between the recorded body and its hash only. That the body is
+        the source issue's was checked when the hash was taken (`issue_body_from`)."""
         src = self.spec["source"]
         self.assertEqual(src["issue_number"], 82)
+        self.assertEqual(src["repo"], "frederick-douglas-pearce/us-presidential-vote-analysis")
         self.assertEqual(src["issue_url"], "https://github.com/%s/issues/82" % src["repo"])
         self.assertEqual(hashlib.sha256(self.spec["issue"]["body"].encode()).hexdigest(),
                          src["issue_body_sha256"])
 
     def test_base_differs_from_the_source_tree_exactly_by_the_records(self):
-        """AC3: every change from the source at base is recorded with its reason.
-        Compares the committed base (so a file a .gitignore silently drops shows up
-        as missing) against `git ls-tree -r` of the source, blob and mode."""
+        """AC3 at file level: every changed, dropped or added file has a record with a
+        reason. Compares the committed base (so a file a .gitignore silently drops
+        shows up as missing) against `git ls-tree -r` of the source, blob and mode.
+        Which rows of a rebound file changed is not compared."""
         src = parse_ls_tree(pathlib.Path(VOTE82, "source-tree.txt").read_text())
         _sha, dest = self.built()
         base = ls_tree(dest, "HEAD")
-        records = {k: self.spec[k] for k in ("rebinds", "dropped", "added")}
+        records = {k: self.spec[k] for k in ("rebinds", "dropped", "added", "renamed")}
         for kind, entries in records.items():
             for e in entries:
                 with self.subTest(kind=kind, entry=e):
@@ -979,17 +992,20 @@ class Vote82FixtureTests(Tmp):
         for e in self.spec["renamed"]:
             self.assertIn(e["restored"], src)
 
-    def test_fixture_tree_holds_no_file_this_repo_would_load(self):
-        """The stored rename is what keeps the source's CLAUDE.md inert here."""
+    def test_fixture_tree_holds_no_file_named_claude_md(self):
+        """The stored rename keeps the source's CLAUDE.md from loading here. Only that
+        file name is checked."""
         hits = [str(p.relative_to(VOTE82)) for p in pathlib.Path(VOTE82).rglob("CLAUDE.md")]
         self.assertEqual(hits, [])
 
 
 class MarketplaceTreeTests(Tmp):
     def test_build_base_over_this_repos_archive_is_its_tree(self):
-        """`run` builds the marketplace with build_base over `git archive <pin>` and
-        refuses unless the tree is the pin's. A fixture's nested .gitignore, or a
-        renames convention, would break that for every later pin (#392)."""
+        """`run` builds the marketplace with build_base over `git archive <pin>` and,
+        without `--version-dir`, refuses unless the tree is the pin's. A fixture's
+        nested .gitignore that matches a file this repo tracks, or a renames
+        convention, would break that for every later pin (#392); under
+        `--version-dir` the drop would be silent, so this test is its only guard."""
         top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=HERE,
                              capture_output=True, text=True)
         if top.returncode != 0:

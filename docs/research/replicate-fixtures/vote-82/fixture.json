@@ -48,7 +48,7 @@
     "issue_number": 82,
     "issue_url": "https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis/issues/82",
     "issue_body_sha256": "c6cc33ff96e90b4f86eb1607c18ce95d41c45462755dab8e78ec82e0a730a242",
-    "issue_body_from": "gh issue view 82 -R frederick-douglas-pearce/us-presidential-vote-analysis --json body -q .body (2026-11-22); the sha256 is of the UTF-8 body as gh returns it"
+    "issue_body_from": "gh issue view 82 -R frederick-douglas-pearce/us-presidential-vote-analysis --json body -q .body (2026-11-22); the sha256 is of the JSON body string, without the trailing newline that -q prints"
   },
   "rebinds": [
     {
@@ -64,7 +64,7 @@
     {
       "path": ".claude/loop.config.md",
       "row": "CODE_REVIEW",
-      "why": "The source binds /code-review, which the isolated home does not install; the row is the 0.6.0 inline finder fan-out, worded as the pilot's, so the reviewer is the one every fixture runs."
+      "why": "The source binds /code-review; the row is the 0.6.0 inline finder fan-out, worded as the pilot's, so every fixture runs the same reviewer. The historical run used /review 115, not the bound skill."
     },
     {
       "path": ".claude/loop.config.md",

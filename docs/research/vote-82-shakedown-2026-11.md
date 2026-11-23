@@ -9,15 +9,18 @@ run before a paid replicate does.
 ## The fixture
 
 - **Source:** `frederick-douglas-pearce/us-presidential-vote-analysis` at
-  `92ce679581a9535406963150af9e0803790b1ede`. The fixture holds the tracked tree from `git archive`
-  (156 files). `source-tree.txt` is `git ls-tree -r` at that commit, verbatim.
+  `92ce679581a9535406963150af9e0803790b1ede`. The source's tracked tree is 156 files; `repo/` holds
+  154 of them, less the two `dropped` below. `source-tree.txt` is `git ls-tree -r` at that commit,
+  verbatim.
 - **Changes from the source:** `fixture.json` records every one with its reason. Its `rebinds` are
   five `loop.config.md` rows (`BACKLOG_SOURCE`, `CI_STATUS_CMD`, `CODE_REVIEW`, `LEDGER_ROOT`, and
-  the added `HERMETIC_TEST_CMD`), the config preamble's host path, and one `.gitignore` line. Its
+  the added `HERMETIC_TEST_CMD`), the config preamble's host path, and one `.gitignore` entry. Its
   `dropped` entries are `deploy.yml` and `.claude/settings.json`. `renamed` stores `CLAUDE.md` as
   `CLAUDE.md.fixture`, which `build_base` restores, so the base carries the source bytes at the
   source path. `Vote82FixtureTests.test_base_differs_from_the_source_tree_exactly_by_the_records`
-  checks the built base against `source-tree.txt` by blob and mode.
+  checks the built base against `source-tree.txt` by blob and mode, file by file: every changed,
+  dropped or added file has a record with a reason. Which rows of `loop.config.md` changed was
+  checked by hand against the source (2026-11-22); no test compares rows.
 - **Shared with the pilot, byte for byte:** the roster (`pm`, `architect`), the empty memory
   snapshot, and the stop list. The fixtures' roster hashes and stop behavior therefore compare.
 - **Source issue:** #82 (`source.issue_url`). The fixture's `issue.body` is the body
@@ -51,7 +54,7 @@ All seven are in `replicate-fixtures/vote-82/shakedowns.sh` and were run at `005
 **AC4 (#392).** `shakedown` runs the config's `TEST_CMD` and `HERMETIC_TEST_CMD` inside the
 sandbox, and both exit 0. The `unshare -rn` form runs under bubblewrap, so the row is the command,
 not `—`. The command strings in `shakedowns.sh` are the config rows, byte for byte. `TEST_CMD`'s
-cell carries three spans; the one counted is `uv run pytest`, as the source's note says. The
+cell carries three spans; the one counted is `uv run pytest`. The
 `integration` marker's 10 tests are deselected, as at the source. The 12 skips are the real-corpus
 tests in `tests/unit/test_ucsb_parse.py` and `test_ucsb_transform.py`, which skip unless
 `USVOTE_UCSB_HTML_DIR` is set; the sandbox does not set it.
@@ -76,7 +79,18 @@ Item 1, the unpinned host tools, is named in `preregistration-template.md` §14.
   `postgres:16` service, and `docker build`. The pilot used only `actions/checkout`. No shakedown
   reaches GitHub Actions, so this has to be checked by hand before #274's replay.
 - **The memory snapshot is empty.** The source run had project memories that its config cites
-  (`local-api-testdrive`, in §5 of the fixture's `loop.config.md`); the replay has none.
+  (`working-conventions` in §1's `SCOPE_AGENT` row and `local-api-testdrive` in §5 of the fixture's
+  `loop.config.md`); the replay has none.
+- **A replicate of this fixture must pass `--uv-bin`** with `uv 0.9.5`, sha256 `d3dc3ca8…4ce0`.
+  `run` does not require the flag, and without it the sandbox has no `uv`, so `TEST_CMD` cannot
+  run and the replicate stops at step 6. A refusal in the harness is a candidate for #384.
+- **`/security-review` and `/verify` have not been exercised in the sandbox.** This is the first
+  fixture whose `SECURITY_REVIEW` and `VERIFY` rows are skills invoked by name (the pilot binds both
+  `—`). `builtin_agents` covers only the four agent types the pilot's spikes saw, so a sub-agent of
+  any other type that `/security-review` spawns fails the strata audit, and `/verify`'s headless
+  behavior is not established. The historical fix (`92ce679..c534650`) touched `usvote/pv/`, the
+  MIT and UCSB transforms, `ucsb/reconcile.py`, tests and `CLAUDE.md`, none of config §4's
+  sensitive surfaces, so step 9 most likely does not fire.
 - **`CODE_REVIEW` is the pilot's inline finder fan-out**, not the `/code-review` the source bound.
   The historical run used `/review 115`, so neither arm replays the reviewer the source used.
 - A shakedown's `output_tail` keeps the last 4000 characters, so a chained command shows only its

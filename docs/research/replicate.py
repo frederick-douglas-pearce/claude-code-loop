@@ -233,7 +233,8 @@ def build_base(repo_dir, dest, renames=()):
     `renames` is a fixture's `renamed` record: `{"stored", "restored"}` pairs of
     paths relative to `repo_dir`, each moved back before the commit. A fixture
     stores a file renamed when it would act on this repo where it sits, as a
-    `CLAUDE.md` would load into any session that opens a file beside it (#392).
+    `CLAUDE.md` would load into any session that opens a file in its directory
+    or below (#392).
     The list is explicit because `run` also builds the plugin marketplace with
     this function over an archive of this whole repo, which must commit as-is."""
     dest = pathlib.Path(dest)
