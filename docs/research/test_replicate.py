@@ -1378,6 +1378,7 @@ class RunTests(RunBase):
         env = self.run_it(FakeOps())
         raw = pathlib.Path(PILOT, "fixture.json").read_bytes()
         self.assertEqual(env["fixture_sha256"], hashlib.sha256(raw).hexdigest())
+        self.assertEqual(env["fixture_tree_sha256"], R.snapshot_id(PILOT))
         self.assertTrue(os.path.isabs(env["fixture_dir"]))
         self.assertEqual(env["fixture_dir"], os.path.realpath(PILOT))
         self.assertRegex(env["harness_commit"], r"^[0-9a-f]{40}$")
@@ -2315,6 +2316,69 @@ class ProvenanceTests(Tmp):
         (d / "fixture.json").write_bytes((d / "fixture.json").read_bytes() + b"\n")
         self.assertNotEqual(R.load_fixture(d)["fixture_sha256"], spec["fixture_sha256"])
 
+    def test_a_roster_edit_moves_the_tree_hash_and_not_the_fixture_json_hash(self):
+        """#390: an agent prompt that changed between arms passed every recorded
+        check, because `fixture_sha256` hashes `fixture.json` alone."""
+        d = self.tmp / "fx"
+        shutil.copytree(PILOT, d)
+        before = R.load_fixture(d)
+        self.assertEqual(before["fixture_tree_sha256"], R.snapshot_id(d))
+        (d / "roster" / "pm.md").write_text((d / "roster" / "pm.md").read_text() + "x\n")
+        after = R.load_fixture(d)
+        self.assertEqual(after["fixture_sha256"], before["fixture_sha256"])
+        self.assertNotEqual(after["fixture_tree_sha256"], before["fixture_tree_sha256"])
+
+    def test_the_tree_hash_covers_the_whole_fixture_directory(self):
+        """#390: one hash over the directory, never a list of inputs: an edit in
+        each part, and a stray file at the root, each move it."""
+        d = self.tmp / "fx"
+        shutil.copytree(PILOT, d)
+        base = R.load_fixture(d)["fixture_tree_sha256"]
+        for rel in ("fixture.json", "roster/architect.md", "memory/MEMORY.md",
+                    "repo/greet.py", "stray.txt"):
+            with self.subTest(rel=rel):
+                p = d / rel
+                old = p.read_bytes() if p.exists() else None
+                p.write_bytes((old or b"") + b" ")
+                self.assertNotEqual(R.load_fixture(d)["fixture_tree_sha256"], base)
+                if old is None:
+                    p.unlink()
+                else:
+                    p.write_bytes(old)
+                self.assertEqual(R.load_fixture(d)["fixture_tree_sha256"], base)
+
+    def test_a_symlink_under_the_fixture_refuses(self):
+        """#390: `copytree` follows a symlink to content the tree hash never reads."""
+        for name, target in (("memory/linked", "../roster"), ("roster/x.md", "pm.md"),
+                             ("dangling", "nowhere")):
+            with self.subTest(name=name):
+                d = self.tmp / ("fx-" + name.replace("/", "-"))
+                shutil.copytree(PILOT, d)
+                os.symlink(target, d / name)
+                with self.assertRaisesRegex(R.Refused, "holds symlinks: " + re.escape(name)):
+                    R.load_fixture(d)
+
+    def test_a_detached_worktree_names_its_own_older_commit_and_is_clean(self):
+        """#390 (ruling 2026-11-22): replicates may run from a worktree detached at
+        the certified commit, so provenance must read the worktree, not the main
+        checkout."""
+        old = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.repo, check=True,
+                             capture_output=True, text=True).stdout.strip()
+        (self.research / "replicate.py").write_text("newer\n")
+        self.git("commit", "-q", "-am", "newer")
+        new = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.repo, check=True,
+                             capture_output=True, text=True).stdout.strip()
+        wt = self.tmp / "wt"
+        self.git("worktree", "add", "-q", "--detach", str(wt), old)
+        research = wt / "docs" / "research"
+        self.assertEqual(R.harness_provenance(research),
+                         {"harness_commit": old, "harness_tree_clean": True})
+        self.assertEqual(R.harness_provenance(self.research),
+                         {"harness_commit": new, "harness_tree_clean": True})
+        (research / "replicate.py").write_text("edited\n")
+        self.assertFalse(R.harness_provenance(research)["harness_tree_clean"])
+        self.assertTrue(R.harness_provenance(self.research)["harness_tree_clean"])
+
 
 def fake_uv(directory):
     """An executable file standing in for the pinned uv. -> its path."""
@@ -2541,6 +2605,7 @@ class ShakedownTests(ShakedownBase):
         for key in ("command", "duration_s", "fixture_sha256", "harness_commit",
                     "harness_tree_clean", "wall_clock_start", "wall_clock_end"):
             self.assertIn(key, rec)
+        self.assertEqual(rec["fixture_tree_sha256"], R.snapshot_id(PILOT))
         self.assertNotIn("timeout_s", rec)
         self.assertFalse((rdir / "gh-calls.jsonl").read_text())
 

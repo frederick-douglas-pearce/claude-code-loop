@@ -26,7 +26,7 @@ Every row is open. The draft cannot be frozen while one is.
 | Treatment commit and `--version-dir` | #288 |
 | Harness commit, certified and with the `stop/` capture. The last certified commit, `f868f97`, predates the capture. | #274's re-certification |
 | Claude Code version | owner |
-| `fixture_sha256` per pick | #274 for vote #82; #288 for the rest |
+| `fixture_sha256` and `fixture_tree_sha256` per pick | #274 for vote #82; #288 for the rest |
 | Stratum `(model, effort)` | owner |
 | k (appendix A: at least 3) | owner |
 | Replacement cap, and where in the schedule a replacement runs | owner |
@@ -254,7 +254,7 @@ together. The design cannot separate them; what is tested is the combination. A 
 | Paired replay of one closed issue at its base under two variants | Kept | — |
 | Variants pinned as versioned plugin-cache directories | Restated, section 3 | The harness installs from a sandbox marketplace at a pinned commit. |
 | Control = 0.3.1, treatment = 0.3.1 + R1 | Restated, section 3 | #288's control decision. |
-| Same `(parent model, effort, subagent roster)` stratum | Kept | The roster's prompt text is not pinned by the record (template section 14). |
+| Same `(parent model, effort, subagent roster)` stratum | Kept | — |
 | Arms interleaved by issue parity | Restated, section 13 | The order now alternates within each pick's pairs as well. |
 | k ≥ 3 replicates per issue per arm | Open, section 2 | — |
 | Plan gate answered by the same scripted approval | Kept | — |

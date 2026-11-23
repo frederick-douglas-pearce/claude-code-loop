@@ -26,9 +26,11 @@ the verdict names the freeze commit and every entry.
 **Fill:** a checklist of every field the draft leaves open, each with its owner. An instance
 cannot be frozen while any row is open. Every instance carries at least these rows: both arms'
 commits and `--version-dir` values, the harness commit, the Claude Code version, the `uv`
-binary's version and sha256 (or none), each pick's `fixture_sha256`, the stratum, k, the arm
-schedule, the replacement cap, the frozen criteria list per pick, the redaction list, the
-classification rules, every instrument an outcome names, and every numeric bound.
+binary's version and sha256 (or none), each pick's `fixture_sha256` and `fixture_tree_sha256`,
+the stratum, k, the arm schedule, the replacement cap, the frozen criteria list per pick, the
+redaction list, the classification rules, every instrument an outcome names, and every numeric
+bound. Read each pick's `fixture_tree_sha256` from a `shakedown` record of the frozen fixture:
+it is `replicate.py`'s own encoding, which `sha256sum` does not reproduce.
 
 **Fixed.** An outcome the instance adds, whose instrument does not exist at freeze, is dropped in
 one line under section 14. It is not registered with an instrument to be written later. The five
@@ -45,11 +47,18 @@ outcomes section 7 fixes cannot be dropped: without their instruments the instan
   `--plugin-dir`.
 - Both arms run the same `MODEL_TIERS` value, the same `(model, effort)` stratum, the same subagent
   roster, the same Claude Code version (`--claude-version`), the same `uv` binary on every pick
-  (`--uv-bin`, or none), and the same `fixture.json` per pick.
+  (`--uv-bin`, or none), and the same fixture per pick (its `fixture_tree_sha256`).
 - Every replicate runs from a checkout whose HEAD is a harness commit the instance registers. A
   certifying record names that commit, as `replicate-pilot-2026-11.md` and
   `replicate-repilot-2026-11.md` do for earlier ones, and its `replicate.py` writes the `stop/`
   capture section 8 reads.
+- That checkout may be a `git worktree` detached at the registered harness commit, with
+  `replicate.py` invoked by its path in the worktree: the harness reads its commit from the
+  invoked file's location, not the working directory. A fixture outside the worktree is then
+  outside the tree-clean check, and its identity is the registered `fixture_tree_sha256`. The
+  worktree stays until the last delayed `audit` or `measure` re-run, because those run the invoked
+  `replicate.py`. The recorded `fixture_dir` stays at its path until then too, because `audit`
+  re-loads it, and a fixture that is missing or no longer loads leaves the audit unwritten.
 - Both arms run under `mode: calibration`. The harness does not check it, so section 8 does.
 
 ## 4. Fixture set
@@ -110,8 +119,9 @@ below is shown to hold. If a line cannot be checked, the replicate is inadmissib
 
 - `environment.json`'s `harness_commit` is a harness commit the instance registers, and
   `harness_tree_clean` is true.
-- `plugin_commit`, `version_dir`, `cli_version`, `parent`, `fixture_sha256`, `uv_version`, and
-  `uv_sha256` equal the registered pins. A registered none is met only by null fields.
+- `plugin_commit`, `version_dir`, `cli_version`, `parent`, `fixture_sha256`,
+  `fixture_tree_sha256`, `uv_version`, and `uv_sha256` equal the registered pins. A registered
+  none is met only by null fields.
 - The `MODEL_TIERS` row in the fixture's `loop.config.md` is the registered value.
   `environment.json`'s `model_tiers` is copied from `fixture.json`, so it does not show this.
 - The `queue.md` header in the captured ledger (`stop/ledger/`) reads `mode: calibration`.
@@ -215,10 +225,6 @@ note that was dropped, with one line of reason each; and the population the resu
   authorizes it, and no reply is sent at an `in-review` stop.
 - Nothing merges, so nothing that needs a merged PR is observable.
 - The result holds for the registered stratum and the picked issues.
-- The record does not show that both arms ran the same agent prompts. `fixture_sha256` covers
-  `fixture.json` only, and no recorded hash covers the roster's prompt text (#390).
-  `memory_snapshot` records the memory files per replicate; section 8 does not compare it. Both
-  arms are run from one fixture directory, unchanged for the length of the run.
 - Nothing pins the tools the sandbox takes from the host. `/usr` and `/etc` are bound read-only, so
   every tool under `/usr`, `python3` included, is the host's, and a host `/etc/uv/uv.toml` applies
   to `uv`. A run without `--uv-bin`, of a fixture whose `requires` does not name `uv` (one that

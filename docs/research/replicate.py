@@ -113,8 +113,18 @@ def now():
 
 def load_fixture(fixture_dir):
     """-> the fixture spec, with `dir` absolute (so `audit` works from any cwd) and
-    `fixture_sha256` the hash of the exact `fixture.json` bytes it was read from (#374)."""
+    `fixture_sha256` the hash of the exact `fixture.json` bytes it was read from (#374).
+
+    `fixture_tree_sha256` is `snapshot_id` over the whole fixture directory: every
+    file's relative path and bytes, so `roster/`, `memory/`, `repo/` and anything
+    else under it (#390). It does not cover file modes or empty directories. A
+    symlink anywhere under the directory refuses: `copytree` follows one to content
+    the hash never reads."""
     fixture_dir = pathlib.Path(fixture_dir).resolve()
+    links = sorted(str(p.relative_to(fixture_dir)) for p in fixture_dir.rglob("*")
+                   if p.is_symlink())
+    if links:
+        raise Refused("fixture %s holds symlinks: %s" % (fixture_dir, ", ".join(links)))
     raw = (fixture_dir / "fixture.json").read_bytes()
     spec = json.loads(raw.decode())
     for key in ("name", "org", "label", "issue", "stops", "max_turns", "ledger_root",
@@ -123,6 +133,7 @@ def load_fixture(fixture_dir):
             raise Refused("fixture.json lacks %r" % key)
     spec["dir"] = str(fixture_dir)
     spec["fixture_sha256"] = hashlib.sha256(raw).hexdigest()
+    spec["fixture_tree_sha256"] = snapshot_id(fixture_dir)
     spec["ci_status_cmd"] = ci_status_binding(fixture_dir / "repo")
     return spec
 
@@ -1610,6 +1621,7 @@ def cmd_run(a, ops=None):
     env_record = {"replicate": rid, "fixture": spec["name"], "wall_clock_start": ops.now(),
                   "gate_latency": "0 (scripted)", "approval_channel": "--resume",
                   "fixture_dir": spec["dir"], "fixture_sha256": spec["fixture_sha256"],
+                  "fixture_tree_sha256": spec["fixture_tree_sha256"],
                   "requires": spec["requires"]}
     env_record.update(provenance)
     halts = HaltSignals(env_record)                 # blocked from here; see HaltSignals
@@ -2254,6 +2266,7 @@ def cmd_shakedown(a, ops=None):
     rdir.mkdir(parents=True)
     record = {"shakedown": a.replicate_id, "fixture": spec["name"],
               "fixture_dir": spec["dir"], "fixture_sha256": spec["fixture_sha256"],
+              "fixture_tree_sha256": spec["fixture_tree_sha256"],
               "command": a.command, "wall_clock_start": ops.now(),
               "requires": spec.get("requires")}
     record.update(provenance)
