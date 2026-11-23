@@ -30,16 +30,21 @@ run before a paid replicate does.
 
 | Pin | Value |
 |---|---|
-| Harness commit | `0059048` (this PR's fixture commit; `harness_tree_clean: true` on every run) |
+| Harness commit | `0463017` (this PR's last fixture edit; `harness_tree_clean: true` on every run) |
 | Fixture base | `4eacda1053018d345f3c66a755661e6a5561e2d7` |
-| `fixture_sha256` | `63bd6d87490eeb89dcd538f68d2553b529525b0514d4ade67661f8c16b4fdcdf` |
+| `fixture_sha256` | `66361f5ecc3288b5ca8dd9d96a3457360ac5731259863b836eac4901f533d7ad` |
 | `uv` | `--uv-bin ~/.local/bin/uv`, `uv 0.9.5`, sha256 `d3dc3ca8e29337dd602a9a4df9e6edb15ebc52aed91461debeedb96939dc4ce0` |
 | Python | `Python 3.14.0 (main, Oct 14 2025, 21:27:55) [Clang 20.1.4 ]`: `cpython-3.14.0-linux-x86_64-gnu`, downloaded by `uv` inside the sandbox on each run (33.0 MiB). The host's `python3` is 3.12.3. |
 
 ## The runs
 
-All seven are in `replicate-fixtures/vote-82/shakedowns.sh` and were run at `0059048` on
-2026-11-22, each in a fresh replicate directory with its own `HOME`, so its own `uv` cache.
+All seven are in `replicate-fixtures/vote-82/shakedowns.sh` and were run at `0463017` on
+2026-11-22, each in a fresh replicate directory with its own `HOME`, so its own `uv` cache. They
+were first run at `0059048`, before review fixes changed `fixture.json`'s bytes but not `repo/`,
+with the same results. At `0463017`, `lint-type`'s command exited 0, then the harness refused the
+probe sandbox after it with `slirp4netns did not report ready` and recorded no probes. A re-run
+under a new id (`lint-type-2`) was clean, and the table shows it. That message can also mask a
+bubblewrap setup failure (a diagnostic gap first noted in #208's review).
 
 | Run | Command | Exit | Result |
 |---|---|---|---|
