@@ -528,9 +528,8 @@ class StopTests(Tmp):
             with self.assertRaisesRegex(R.Refused, why, msg=str(i)):
                 R.check_stops(dict(spec, stops=stops))
 
-    def test_audit_path_loads_a_fixture_without_checking_stops(self):
-        """`audit` never reads stops, so an older fixture still loads for the owed
-        delayed re-audit."""
+    def test_load_fixture_does_not_check_stops(self):
+        """Stops are checked by `run` (`check_stops`), never by the loader."""
         d = self.tmp / "old-fixture"
         shutil.copytree(PILOT, d)
         spec = json.loads((d / "fixture.json").read_text())
@@ -1452,7 +1451,6 @@ class RunTests(RunBase):
         delayed re-audit. An unreadable earlier audit refuses."""
         env = self.run_it(FakeOps())
         rdir = self.tmp / "out" / "r1"
-        spec = R.load_fixture(env["fixture_dir"])
         ev = [{"created_at": env["run_start"], "type": "PushEvent", "repo": {"name": "me/real"}}]
         ops = FakeOps(audit_events=ev)
         ops.feed_reads = 1
@@ -1534,7 +1532,7 @@ class RunTests(RunBase):
                               if audit[k]], [])
             self.assertFalse(audit["account_feed"]["delayed_read"])
             self.assertFalse(audit["pass"])
-            rdir, spec = self.tmp / "out" / "r1", R.load_fixture(env["fixture_dir"])
+            rdir = self.tmp / "out" / "r1"
             late = FakeOps(audit_events="refused")
             late.feed_reads, late.t = 1, 7 * 3600
             self.assertFalse(R.write_audit(rdir, env, "me", env["version_dir"], late)["pass"])
@@ -1646,7 +1644,7 @@ class RunTests(RunBase):
         d_stop_capture problem, and the audit is still written with that
         re-audit's feed read in it."""
         env = self.run_it(FakeOps())
-        rdir, spec = self.tmp / "out" / "r1", R.load_fixture(env["fixture_dir"])
+        rdir = self.tmp / "out" / "r1"
         late = FakeOps()
         late.feed_reads, late.t = 1, 7 * 3600
         with mock.patch.object(R, "stop_sha256", side_effect=PermissionError("denied")):
@@ -1688,7 +1686,7 @@ class RunTests(RunBase):
         capture; each change fails d_stop_capture and with it pass."""
         with mock.patch.object(R, "audit_engine_loads", lambda *a, **k: ([], ["load"])):
             env = self.run_it(FakeOps())
-            rdir, spec = self.tmp / "out" / "r1", R.load_fixture(env["fixture_dir"])
+            rdir = self.tmp / "out" / "r1"
 
             def audit(e):
                 late = FakeOps()
@@ -1763,6 +1761,21 @@ class RunTests(RunBase):
             (fx / "roster" / "pm.md").write_text((fx / "roster" / "pm.md").read_text() + "x\n")
             return real(src, *rest)
         with mock.patch.object(R, "render_roster", side_effect=edit_then_render):
+            env = self.run_it(FakeOps(), R.Refused, fixture=str(fx))
+        self.assertIn("changed after it was loaded", env["refused"])
+
+    def test_a_memory_edit_during_its_copy_refuses(self):
+        """#390: the re-check sits after the memory copy, the last fixture read."""
+        fx = self.tmp / "fx"
+        shutil.copytree(PILOT, fx)
+        real = shutil.copytree
+        mem = (fx / "memory").resolve()
+
+        def edit_then_copy(src, *rest, **kw):
+            if pathlib.Path(src).resolve() == mem:
+                (mem / "MEMORY.md").write_text((mem / "MEMORY.md").read_text() + "x\n")
+            return real(src, *rest, **kw)
+        with mock.patch.object(R.shutil, "copytree", side_effect=edit_then_copy):
             env = self.run_it(FakeOps(), R.Refused, fixture=str(fx))
         self.assertIn("changed after it was loaded", env["refused"])
 
