@@ -3583,52 +3583,66 @@ class ReadResultsTests(Tmp):
 
 class ErrorResultTests(unittest.TestCase):
     def test_the_spend_cap_is_an_api_error_recorded_verbatim(self):
-        rec = R.error_result([clean(), SPEND_CAP], 2)
-        self.assertEqual(rec, {"kind": "api_error", "turn": 2, "result_index": 1, "results_total": 2,
+        rec = R.error_result([clean(), SPEND_CAP])
+        self.assertEqual(rec, {"kind": "api_error", "result_index": 1, "results_total": 2,
                                "is_error": True, "terminal_reason": "api_error",
                                "api_error_status": 400, "api_error_type": "invalid_request_error",
                                "result": SPEND_CAP["result"]})
 
     def test_another_api_error(self):
-        rec = R.error_result([OVERLOADED], 1)
+        rec = R.error_result([OVERLOADED])
         self.assertEqual((rec["kind"], rec["api_error_status"], rec["api_error_type"]),
                          ("api_error", 529, "overloaded_error"))
 
     def test_either_half_of_the_api_error_condition_is_enough(self):
         reason_only = dict(SPEND_CAP, api_error_status=None)
         status_only = dict(SPEND_CAP, terminal_reason="other")
-        self.assertEqual(R.error_result([reason_only], 1)["kind"], "api_error")
-        self.assertEqual(R.error_result([status_only], 1)["kind"], "api_error")
+        self.assertEqual(R.error_result([reason_only])["kind"], "api_error")
+        self.assertEqual(R.error_result([status_only])["kind"], "api_error")
 
     def test_an_error_with_neither_is_unclassified(self):
         ev = dict(SPEND_CAP, terminal_reason="other", api_error_status=None)
-        self.assertEqual(R.error_result([ev], 1)["kind"], "error_unclassified")
+        self.assertEqual(R.error_result([ev])["kind"], "error_unclassified")
 
     def test_an_unreadable_is_error_halts_and_records_the_raw_value(self):
         absent = {k: v for k, v in clean().items() if k != "is_error"}
-        rec = R.error_result([absent], 1)
+        rec = R.error_result([absent])
         self.assertEqual((rec["kind"], rec["is_error"]), ("error_field_unreadable", "absent"))
         for raw in ("yes", "false", 0, None):
-            rec = R.error_result([dict(clean(), is_error=raw)], 1)
+            rec = R.error_result([dict(clean(), is_error=raw)])
             self.assertEqual((rec["kind"], rec["is_error"]), ("error_field_unreadable", raw), raw)
 
     def test_clean_results_are_not_errors(self):
-        self.assertIsNone(R.error_result([clean(), clean("done")], 1))
+        self.assertIsNone(R.error_result([clean(), clean("done")]))
 
     def test_an_earlier_error_counts_even_when_the_last_result_is_clean(self):
-        rec = R.error_result([clean(), SPEND_CAP, clean()], 3)
+        rec = R.error_result([clean(), SPEND_CAP, clean()])
         self.assertEqual((rec["kind"], rec["result_index"], rec["results_total"]),
                          ("api_error", 1, 3))
 
     def test_the_result_text_is_capped(self):
-        rec = R.error_result([dict(SPEND_CAP, result="x" * 2000)], 1)
+        rec = R.error_result([dict(SPEND_CAP, result="x" * 2000)])
         self.assertEqual(rec["result"], "x" * R.ERROR_TEXT_CAP)
+
+    def test_a_missing_result_is_null_and_any_other_value_a_capped_string(self):
+        absent = {k: v for k, v in SPEND_CAP.items() if k != "result"}
+        self.assertIsNone(R.error_result([absent])["result"])
+        self.assertIsNone(R.error_result([dict(SPEND_CAP, result=None)])["result"])
+        rec = R.error_result([dict(SPEND_CAP, result={"msg": "y" * 2000})])
+        self.assertEqual(rec["result"], json.dumps({"msg": "y" * 2000})[:R.ERROR_TEXT_CAP])
+        self.assertEqual(R.error_result([dict(SPEND_CAP, result=[1, 2])])["result"], "[1, 2]")
+
+    def test_the_first_of_two_errors_is_the_one_recorded(self):
+        rec = R.error_result([SPEND_CAP, dict(OVERLOADED, terminal_reason="other",
+                                                  api_error_status=None)])
+        self.assertEqual((rec["kind"], rec["result_index"], rec["api_error_status"]),
+                         ("api_error", 0, 400))
 
 
 class DriveOutcomeTests(RunBase):
-    """#389: every way `_drive` ends writes `outcome` and `outcome_kind` together,
-    an error result or a failed turn halts whatever the row's status, and an
-    external halt leaves both absent."""
+    """#389: every way `_drive` finishes writes `outcome` and `outcome_kind`
+    together, an error result or a failed turn halts whatever the row's status,
+    and a drive cut short by a signal leaves both absent."""
 
     def drive(self, **kw):
         status = kw.pop("status", "in-acceptance")
@@ -3640,8 +3654,26 @@ class DriveOutcomeTests(RunBase):
         self.assertEqual(env["outcome_kind"], "api_error")
         self.assertFalse(env["unattended"])
         self.assertIn("ended on an error result (api_error)", env["outcome"])
-        self.assertEqual(env["error_result"], R.error_result([SPEND_CAP], 1))
+        self.assertEqual(env["error_result"], R.error_result([SPEND_CAP]))
         self.assertNotIn("error_result", env["turns"][0])
+
+    def test_rp2_h1s_shape_an_error_result_and_exit_1_is_an_api_error(self):
+        """The spend-cap turn also exited 1, so the error check must run before
+        the exit-code check, or the record would say only `nonzero_exit`."""
+        env = self.drive(results=[SPEND_CAP], rc=1)
+        self.assertEqual(env["outcome_kind"], "api_error")
+        self.assertEqual(env["error_result"]["kind"], "api_error")
+
+    def test_the_last_of_several_clean_results_is_the_one_classified(self):
+        env = self.drive(status="planning",
+                         results=[clean("Approve the plan?"), clean("Ready to merge #2?")])
+        self.assertEqual(env["outcome_kind"], "stop")
+        self.assertIn("does not match", env["outcome"])
+
+    def test_an_earlier_clean_result_is_not_the_one_classified(self):
+        env = self.drive(status="planning",
+                         results=[clean("Ready to merge #2?"), clean("Approve the plan?")])
+        self.assertEqual(env["outcome_kind"], "max_turns")
 
     def test_an_api_error_at_planning_sends_no_reply(self):
         """The text matches the planning stop, so without the error check the
@@ -3697,7 +3729,7 @@ class DriveOutcomeTests(RunBase):
                          ("final", "done", True))
         self.assertNotIn("error_result", env)
 
-    def test_an_external_halt_leaves_both_absent(self):
+    def test_a_signal_mid_drive_leaves_both_absent(self):
         env = self.drive(turn="SIGTERM", exc=KeyboardInterrupt)
         self.assertNotIn("outcome", env)
         self.assertNotIn("outcome_kind", env)

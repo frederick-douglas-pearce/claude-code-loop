@@ -812,16 +812,16 @@ def classify_stop(status, final_text, stops):
 ERROR_TEXT_CAP = 500
 
 
-def error_result(results, turn):
+def error_result(results):
     """-> None, or the record of the first of a turn's result events whose
     `is_error` is not False (#389). Keyed on the result events only: never on
     the prose, and never on `subtype`, which reads `success` on the spend-cap
-    result. Any such event halts the drive, not only the last one, since a
-    clean background-notification result can follow an error. `kind` is
+    result. Any such event halts the drive, not only the last one. `kind` is
     `api_error` when `is_error` is true and `terminal_reason` is `api_error` or
     `api_error_status` is set; `error_unclassified` for any other true;
     `error_field_unreadable` when `is_error` is absent or not a bool. The
-    `result` text is recorded verbatim, capped, never classified."""
+    `result` is recorded as null or as a string (any other value serialized as
+    JSON) cut at ERROR_TEXT_CAP, and never classified."""
     for i, ev in enumerate(results):
         flag = ev.get("is_error", "absent")
         if flag is False:
@@ -833,11 +833,13 @@ def error_result(results, turn):
         else:
             kind = "error_unclassified"
         text = ev.get("result")
-        return {"kind": kind, "turn": turn, "result_index": i, "results_total": len(results),
+        if text is not None and not isinstance(text, str):
+            text = json.dumps(text)
+        return {"kind": kind, "result_index": i, "results_total": len(results),
                 "is_error": flag, "terminal_reason": ev.get("terminal_reason"),
                 "api_error_status": ev.get("api_error_status"),
                 "api_error_type": ev.get("api_error_type"),
-                "result": text[:ERROR_TEXT_CAP] if isinstance(text, str) else text}
+                "result": text if text is None else text[:ERROR_TEXT_CAP]}
     return None
 
 
@@ -2054,7 +2056,7 @@ def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, op
             break
         # An error result or a failed turn is never a stop to classify, whatever
         # the row's status, and no reply follows it (#389).
-        err = error_result(results, n)
+        err = error_result(results)
         if err:
             env_record["error_result"] = err
             outcome = ("halt", err["kind"], "turn %d ended on an error result (%s): %s %s %s" % (
@@ -2076,7 +2078,8 @@ def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, op
         else:
             outcome = ("halt", "stop", val)
     # `outcome` and `outcome_kind` are written together, here only, so either
-    # present means the drive finished; an external halt leaves both absent (#384).
+    # present means the drive finished; a drive cut short by a signal, a refusal
+    # or an exception leaves both absent (#384).
     env_record.update(run_end=ops.now(), invocations=n, unattended=outcome[0] == "done",
                       outcome_kind=outcome[1], outcome=outcome[2] or "done")
 

@@ -100,8 +100,7 @@ analyzed in the arm it was assigned to, and compliance is reported beside the ve
 **Fixed — stop type.** The categories are: routine merge-gate stop; step-10 escalation; step-11
 escalation; `gate-error`; a stop the lever itself adds, which the instance names; a message that is
 not the engine's, such as an API or account error; and `cannot tell`. The stop is judged blind,
-from the replicate's stream, after the run; the harness never classifies it. It halts on an error
-result it can read (#389), so this category holds what that check missed. `cannot tell` counts
+from the replicate's stream, after the run; the harness never classifies it. `cannot tell` counts
 with the escalations.
 
 ## 8. Admissibility
@@ -133,7 +132,7 @@ rule covers both arms. A halt takes the first kind below that fits:
 
 | Kind | What it is |
 |---|---|
-| External halt | An interrupt, a harness refusal, or an API or account error such as a spend cap. `environment.json` records an API or account error as `error_result`, with `outcome_kind` `api_error` (#389). That is evidence: the instance's classification rules decide whether it is this kind. An `error_unclassified`, `error_field_unreadable` or `nonzero_exit` halt is an other halt unless those rules say otherwise. |
+| External halt | An interrupt, a harness refusal, or an API or account error such as a spend cap. `environment.json`'s `error_result` and `outcome_kind` are evidence for the last of these (#389); the instance's classification rules decide. |
 | Gate-error halt | A gate produced no verdict and the engine stopped, whatever the row's status. |
 | Review halt | The replicate stopped at `in-review`. |
 | Other halt | Any halt that is none of the above, a turn timeout and the fixture's `max_turns` included. It is treated as a halt the lever could have caused. |
