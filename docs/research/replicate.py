@@ -901,18 +901,17 @@ def _copy_plain(src, dest, rel, errors, budget):
             _copy_plain(s, d, r, errors, budget)
             continue
         copy = stat.S_ISREG(st.st_mode) and st.st_size <= STOP_FILE_CAP
-        # Every entry is charged, a refused one at the minimum, so a flood of
-        # refusals is bounded by the total cap like a flood of files.
+        # Every entry is charged, a refused one at the minimum.
         budget.charge(st.st_size if copy else 0, r)
         if copy:
             shutil.copyfile(s, d, follow_symlinks=False)
         elif stat.S_ISREG(st.st_mode):
-            errors.append("%s is %d bytes, over the %d-byte file cap; not copied"
-                          % (r, st.st_size, STOP_FILE_CAP))
+            errors.note("%s is %d bytes, over the %d-byte file cap; not copied"
+                        % (r, st.st_size, STOP_FILE_CAP))
         elif stat.S_ISLNK(st.st_mode):
-            errors.append("%s is a symlink to %r; not copied" % (r, os.readlink(s)[:300]))
+            errors.note("%s is a symlink to %r; not copied" % (r, os.readlink(s)[:300]))
         else:
-            errors.append("%s is not a regular file or directory; not copied" % r)
+            errors.note("%s is not a regular file or directory; not copied" % r)
 
 
 class NotPlain(Exception):
@@ -959,14 +958,32 @@ def _copy_ledger(clone, ledger_root, dest, budget=None):
     rel = pathlib.PurePosixPath(ledger_root)
     if os.path.realpath(path) != os.path.join(os.path.realpath(clone), *rel.parts):
         return ["ledger %s resolves outside the clone; not copied" % ledger_root]
-    errors = []
+    errors = _Refusals()
     try:
         _copy_plain(path, dest, ledger_root, errors, budget or StopBudget())
     except StopBudget.Exhausted as exc:
         errors.append(str(exc))
     except Exception as exc:                        # OSError, RecursionError on a deep tree
         errors.append("ledger copy: %s" % str(exc)[:300])
-    return errors
+    if errors.more:
+        errors.append("%d more ledger entries were refused and not named" % errors.more)
+    return list(errors)
+
+
+STOP_REFUSALS_NAMED = 20
+
+
+class _Refusals(list):
+    """The ledger copy's errors: the first STOP_REFUSALS_NAMED refused entries
+    by name, then only a count (#384)."""
+
+    more = 0
+
+    def note(self, msg):
+        if len(self) < STOP_REFUSALS_NAMED:
+            self.append(msg)
+        else:
+            self.more += 1
 
 
 def stop_sha256(directory):
@@ -1630,12 +1647,9 @@ class HaltSignals:
       with that (`main` returns 2 for a refusal), and the record carries both
       it and `interrupted`. A batch driver must stop on any non-zero exit.
     `signal` is the first signal *observed*: signals pending together are
-    taken in signal-number order (the kernel's), a handler can nest inside
-    another, and one arriving after the last drain is discarded unrecorded.
-    The mask guards this process only. A child inherits it, but `gh` (Go)
-    clears it, so the harness's own children run in a new session
-    (`start_new_session`, as bwrap's `--new-session` does for the sandbox):
-    no signal sent to the terminal's process group reaches them.
+    taken in signal-number order (the kernel's), and a handler can nest inside
+    another. The mask guards this process only. A child inherits it, but `gh`
+    (Go) clears it, so `sh` and the feed reads start theirs in a new session.
     The mask is per thread, and `os.kill(os.getpid())` reaches any thread with
     the signal unblocked: this assumes a single-threaded harness, which it is."""
 
@@ -1878,9 +1892,7 @@ def _run(a, spec, rdir, env_record, ops, halts):
         for k, v in (("user.name", FIXED_IDENTITY[0]), ("user.email", FIXED_IDENTITY[1])):
             sh(["git", "config", "--global", k, v], env=env)
         # Repos (harness side, harness-token only). Each is recorded before its create
-        # call; from then on the audit and the cost read run on every Exception path,
-        # and the teardown, in its own outer finally, on every exception path,
-        # KeyboardInterrupt included (#366).
+        # call (#366).
         henv = ops.harness_env(rdir)
         ops.sh([REAL_GH, "auth", "setup-git"], env=henv)
         try:
@@ -1921,9 +1933,6 @@ def _run(a, spec, rdir, env_record, ops, halts):
                 env_record["sandbox_created"] = ops.now()
                 _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, ops)
         finally:
-            print("replicate %s: stopping -- stop capture, teardown, then audit; further "
-                  "signals are deferred, and kill -9 strands the sandbox repos" % a.replicate_id,
-                  file=sys.stderr)
             env_record.setdefault("run_end", ops.now())
             # The stop capture (#380) runs first, before the outer finally's
             # teardown and the audit that reads it. Signals are blocked here, so
@@ -1936,6 +1945,7 @@ def _run(a, spec, rdir, env_record, ops, halts):
             except Exception as exc:                  # recorded; the audit fails on it
                 env_record["stop_capture"]["errors"].append("capture raised: %s" % exc)
     finally:
+        _write_before_teardown(rdir, env_record)
         # Teardown before the audit (#384): the audit and the cost read open
         # files the replicate could write, which a FIFO would hang with the
         # signals blocked. In this order a hang there loses the audit, which then
@@ -1950,6 +1960,16 @@ def _run(a, spec, rdir, env_record, ops, halts):
                 step()
             except Exception as exc:                  # recorded, never swallowed silently
                 env_record.setdefault("errors", []).append("%s: %s" % (name, exc))
+
+
+def _write_before_teardown(rdir, env_record):
+    """Put the record, `repos_planned` in it, on disk before teardown starts, so
+    a kill during teardown still leaves which repos were made (#384). A failed
+    write is recorded and never stops teardown."""
+    try:
+        write_json_atomic(pathlib.Path(rdir) / "environment.json", env_record)
+    except Exception as exc:
+        env_record.setdefault("errors", []).append("pre-teardown write: %s" % exc)
 
 
 def check_install(home, url, commit, cache):
