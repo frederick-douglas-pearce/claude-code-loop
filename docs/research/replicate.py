@@ -906,12 +906,12 @@ def _copy_plain(src, dest, rel, errors, budget):
         if copy:
             shutil.copyfile(s, d, follow_symlinks=False)
         elif stat.S_ISREG(st.st_mode):
-            errors.note("%s is %d bytes, over the %d-byte file cap; not copied"
-                        % (r, st.st_size, STOP_FILE_CAP))
+            errors.append("%s is %d bytes, over the %d-byte file cap; not copied"
+                          % (r, st.st_size, STOP_FILE_CAP))
         elif stat.S_ISLNK(st.st_mode):
-            errors.note("%s is a symlink to %r; not copied" % (r, os.readlink(s)[:300]))
+            errors.append("%s is a symlink to %r; not copied" % (r, os.readlink(s)[:300]))
         else:
-            errors.note("%s is not a regular file or directory; not copied" % r)
+            errors.append("%s is not a regular file or directory; not copied" % r)
 
 
 class NotPlain(Exception):
@@ -958,32 +958,14 @@ def _copy_ledger(clone, ledger_root, dest, budget=None):
     rel = pathlib.PurePosixPath(ledger_root)
     if os.path.realpath(path) != os.path.join(os.path.realpath(clone), *rel.parts):
         return ["ledger %s resolves outside the clone; not copied" % ledger_root]
-    errors = _Refusals()
+    errors = []
     try:
         _copy_plain(path, dest, ledger_root, errors, budget or StopBudget())
     except StopBudget.Exhausted as exc:
         errors.append(str(exc))
     except Exception as exc:                        # OSError, RecursionError on a deep tree
         errors.append("ledger copy: %s" % str(exc)[:300])
-    if errors.more:
-        errors.append("%d more ledger entries were refused and not named" % errors.more)
-    return list(errors)
-
-
-STOP_REFUSALS_NAMED = 20
-
-
-class _Refusals(list):
-    """The ledger copy's errors: the first STOP_REFUSALS_NAMED refused entries
-    by name, then only a count (#384)."""
-
-    more = 0
-
-    def note(self, msg):
-        if len(self) < STOP_REFUSALS_NAMED:
-            self.append(msg)
-        else:
-            self.more += 1
+    return errors
 
 
 def stop_sha256(directory):
@@ -1945,7 +1927,6 @@ def _run(a, spec, rdir, env_record, ops, halts):
             except Exception as exc:                  # recorded; the audit fails on it
                 env_record["stop_capture"]["errors"].append("capture raised: %s" % exc)
     finally:
-        _write_before_teardown(rdir, env_record)
         # Teardown before the audit (#384): the audit and the cost read open
         # files the replicate could write, which a FIFO would hang with the
         # signals blocked. In this order a hang there loses the audit, which then
@@ -1960,16 +1941,6 @@ def _run(a, spec, rdir, env_record, ops, halts):
                 step()
             except Exception as exc:                  # recorded, never swallowed silently
                 env_record.setdefault("errors", []).append("%s: %s" % (name, exc))
-
-
-def _write_before_teardown(rdir, env_record):
-    """Put the record, `repos_planned` in it, on disk before teardown starts, so
-    a kill during teardown still leaves which repos were made (#384). A failed
-    write is recorded and never stops teardown."""
-    try:
-        write_json_atomic(pathlib.Path(rdir) / "environment.json", env_record)
-    except Exception as exc:
-        env_record.setdefault("errors", []).append("pre-teardown write: %s" % exc)
 
 
 def check_install(home, url, commit, cache):

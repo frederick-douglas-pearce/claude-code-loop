@@ -3285,33 +3285,6 @@ class Round1FixTests(RunBase):
         env = json.loads((self.tmp / "out" / "r1" / "environment.json").read_text())
         self.assertIn(self.SB, env["repos_deleted"])
 
-    def test_the_record_is_on_disk_before_teardown_starts(self):
-        """r2.recheck.3: a kill during teardown still leaves `repos_planned`."""
-        ops, probes, seen = FakeOps(), [], []
-
-        def on_gh(cmd):
-            if cmd[1:3] == ["api", "repos/%s" % self.PLUG]:
-                probes.append(1)
-                if len(probes) == 2:                        # 1: create_repo; 2: teardown
-                    env = json.loads((self.tmp / "out" / "r1" / "environment.json").read_text())
-                    seen.append((env.get("repos_planned"), "repos_deleted" in env))
-        ops.on_gh = on_gh
-        self.run_it(ops)
-        self.assertEqual(seen, [([self.PLUG, self.SB], False)])
-
-    def test_a_failed_pre_teardown_write_never_stops_teardown(self):
-        ops, real, calls = FakeOps(), R.write_json_atomic, []
-
-        def flaky(path, obj):
-            calls.append(1)
-            if len(calls) == 1:
-                raise OSError("No space left on device")
-            return real(path, obj)
-        with mock.patch.object(R, "write_json_atomic", flaky):
-            env = self.run_it(ops)
-        self.assertIn(self.SB, env["repos_deleted"])
-        self.assertIn("pre-teardown write: No space left on device", env["errors"])
-
     def test_keep_sandbox_puts_every_planned_repo_in_a_bucket(self):
         """signals.6: the plugin repo, deleted at install, is in repos_deleted."""
         env = self.run_it(FakeOps(), keep_sandbox=True)
@@ -3390,17 +3363,6 @@ class Round1CaptureTests(CaptureBase):
         self.assertLess(len(links), 40)                      # stopped by the total cap
         self.assertTrue(any("total cap" in e for e in rec["errors"]))
         self.assertTrue(all(len(e) < 400 for e in links), links[:1])
-
-    def test_refusals_past_twenty_are_counted_not_named(self):
-        """r2.recheck.2: the first STOP_REFUSALS_NAMED by name, then a count."""
-        led = self.clone / ".loop-ledger" / "fixture"
-        n = R.STOP_REFUSALS_NAMED + 5
-        for i in range(n):
-            (led / ("l%02d" % i)).symlink_to("target")
-        rec = self.capture()
-        named = [e for e in rec["errors"] if "is a symlink" in e]
-        self.assertEqual(len(named), R.STOP_REFUSALS_NAMED)
-        self.assertIn("ledger: 5 more ledger entries were refused and not named", rec["errors"])
 
     def test_a_failed_git_part_keeps_no_bytes(self):
         """host-io.3: a part whose git fails is emptied, as a breaching one is."""
