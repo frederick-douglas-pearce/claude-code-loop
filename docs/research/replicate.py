@@ -809,6 +809,38 @@ def classify_stop(status, final_text, stops):
     return "halt", "unrecognized stop: row status %r" % (status,)
 
 
+ERROR_TEXT_CAP = 500
+
+
+def error_result(results, turn):
+    """-> None, or the record of the first of a turn's result events whose
+    `is_error` is not False (#389). Keyed on the result events only: never on
+    the prose, and never on `subtype`, which reads `success` on the spend-cap
+    result. Any such event halts the drive, not only the last one, since a
+    clean background-notification result can follow an error. `kind` is
+    `api_error` when `is_error` is true and `terminal_reason` is `api_error` or
+    `api_error_status` is set; `error_unclassified` for any other true;
+    `error_field_unreadable` when `is_error` is absent or not a bool. The
+    `result` text is recorded verbatim, capped, never classified."""
+    for i, ev in enumerate(results):
+        flag = ev.get("is_error", "absent")
+        if flag is False:
+            continue
+        if flag is not True:
+            kind = "error_field_unreadable"
+        elif ev.get("terminal_reason") == "api_error" or ev.get("api_error_status") is not None:
+            kind = "api_error"
+        else:
+            kind = "error_unclassified"
+        text = ev.get("result")
+        return {"kind": kind, "turn": turn, "result_index": i, "results_total": len(results),
+                "is_error": flag, "terminal_reason": ev.get("terminal_reason"),
+                "api_error_status": ev.get("api_error_status"),
+                "api_error_type": ev.get("api_error_type"),
+                "result": text[:ERROR_TEXT_CAP] if isinstance(text, str) else text}
+    return None
+
+
 # --------------------------------------------------------------------- stop capture
 
 # What the blind evaluator and the stop-type judgment read (#380): the state at
@@ -1106,9 +1138,11 @@ def stop_capture_problems(rdir, env_record):
     return out
 
 
-def read_stream(path):
-    """-> (init event or None, result event or None) from one stream-json file."""
-    init = result = None
+def read_results(path):
+    """-> (init event or None, [every result event, in order]) from one
+    stream-json file. Each background-task notification emits its own result
+    event, so a turn can carry several (#389)."""
+    init, results = None, []
     for line in pathlib.Path(path).read_text().splitlines():
         try:
             ev = json.loads(line)
@@ -1117,8 +1151,14 @@ def read_stream(path):
         if ev.get("type") == "system" and ev.get("subtype") == "init" and init is None:
             init = ev
         if ev.get("type") == "result":
-            result = ev
-    return init, result
+            results.append(ev)
+    return init, results
+
+
+def read_stream(path):
+    """-> (init event or None, the last result event or None) from one stream-json file."""
+    init, results = read_results(path)
+    return init, (results[-1] if results else None)
 
 
 # --------------------------------------------------------------------- transcripts
@@ -2004,24 +2044,41 @@ def _drive(a, spec, rdir, env_record, clone, env, claude_real, sandbox, henv, op
                                       timeout=a.turn_timeout)
         except subprocess.TimeoutExpired:
             turns.append({"turn": n, "returncode": None, "timeout_s": a.turn_timeout})
-            outcome = ("halt", "turn %d exceeded %ds" % (n, a.turn_timeout))
+            outcome = ("halt", "turn_timeout", "turn %d exceeded %ds" % (n, a.turn_timeout))
             break
-        _init, result = read_stream(stream)
+        _init, results = read_results(stream)
         status = row_status(clone, queue, 1)
         turns.append({"turn": n, "returncode": rc, "status": status})
-        if not result:
-            outcome = ("halt", "turn %d produced no result event" % n)
+        if not results:
+            outcome = ("halt", "no_result", "turn %d produced no result event" % n)
             break
+        # An error result or a failed turn is never a stop to classify, whatever
+        # the row's status, and no reply follows it (#389).
+        err = error_result(results, n)
+        if err:
+            env_record["error_result"] = err
+            outcome = ("halt", err["kind"], "turn %d ended on an error result (%s): %s %s %s" % (
+                n, err["kind"], err["terminal_reason"], err["api_error_status"],
+                err["api_error_type"]))
+            break
+        if rc != 0:
+            outcome = ("halt", "nonzero_exit", "turn %d exited %r" % (n, rc))
+            break
+        result = results[-1]
         session = result.get("session_id") or session
         kind, val = classify_stop(status, result.get("result"), spec["stops"])
         if kind == "reply" and n >= spec["max_turns"]:
-            kind, val = "halt", "max_turns %d reached" % spec["max_turns"]
-        if kind == "reply":
+            outcome = ("halt", "max_turns", "max_turns %d reached" % spec["max_turns"])
+        elif kind == "reply":
             prompt = val
+        elif kind == "done":
+            outcome = ("done", "final", None)
         else:
-            outcome = (kind, val)
+            outcome = ("halt", "stop", val)
+    # `outcome` and `outcome_kind` are written together, here only, so either
+    # present means the drive finished; an external halt leaves both absent (#384).
     env_record.update(run_end=ops.now(), invocations=n, unattended=outcome[0] == "done",
-                      outcome=outcome[1] or "done")
+                      outcome_kind=outcome[1], outcome=outcome[2] or "done")
 
 
 def cache_problems(rdir, env_record, check=check_install):
