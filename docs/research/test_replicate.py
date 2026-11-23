@@ -895,6 +895,7 @@ class BuildBaseTests(Tmp):
                            ({"stored": "CLAUDE.md.fixture", "restored": "taken"}, "already exists"),
                            ({"stored": "/nonexistent-fixture-probe", "restored": "h"}, "not a path inside"),
                            ({"stored": "../x", "restored": "h"}, "not a path inside"),
+                           ({"stored": "", "restored": "h"}, "not a path inside"),
                            ({"stored": "CLAUDE.md.fixture", "restored": "../h"}, "not a path inside")):
             with self.subTest(entry=entry):
                 with self.assertRaisesRegex(R.Refused, msg):
@@ -1820,6 +1821,25 @@ class RunTests(Tmp):
         with mock.patch.object(R, "build_base", side_effect=drift):
             with self.assertRaisesRegex(R.Refused, "not the pin's tree"):
                 R.cmd_run(self.args(out=str(self.tmp / "o3")), FakeOps())
+
+    def test_renamed_record_reaches_the_base_and_never_the_marketplace(self):
+        """#392: `run` builds two repos with build_base. The fixture's `renamed` record
+        goes to the base build only; the marketplace commits the plugin archive as-is."""
+        fx = self.tmp / "fx"
+        shutil.copytree(PILOT, fx)
+        (fx / "repo" / "README.md").rename(fx / "repo" / "README.md.fixture")
+        spec = json.loads((fx / "fixture.json").read_text())
+        spec["renamed"] = [{"stored": "README.md.fixture", "restored": "README.md", "why": "t"}]
+        (fx / "fixture.json").write_text(json.dumps(spec))
+        real, calls = R.build_base, []
+
+        def spy(src, dest, renames=()):
+            calls.append((pathlib.Path(dest).name, list(renames)))
+            return real(src, dest, renames)
+        with mock.patch.object(R, "build_base", side_effect=spy):
+            env = self.run_it(FakeOps(), fixture=str(fx))
+        self.assertEqual(env["outcome"], "done")
+        self.assertEqual(sorted(calls), [("base", spec["renamed"]), ("marketplace", [])])
 
     def test_uv_is_copied_before_the_first_sandbox_and_recorded(self):
         real = fake_uv(self.tmp)
