@@ -38,13 +38,14 @@ run before a paid replicate does.
 
 ## The runs
 
-All seven are in `replicate-fixtures/vote-82/shakedowns.sh` and were run at `0463017` on
+All seven commands are in `replicate-fixtures/vote-82/shakedowns.sh`, and were run at `0463017` on
 2026-11-22, each in a fresh replicate directory with its own `HOME`, so its own `uv` cache. They
 were first run at `0059048`, before review fixes changed `fixture.json`'s bytes but not `repo/`,
 with the same results. At `0463017`, `lint-type`'s command exited 0, then the harness refused the
 probe sandbox after it with `slirp4netns did not report ready` and recorded no probes. The same
-command, re-run by hand under a new id (`lint-type-2`), was clean, and the table's row is that run. That message can also mask a
-bubblewrap setup failure (a diagnostic gap first noted in #208's review).
+command, re-run by hand under a new id (`lint-type-2`), was clean, and the table's row is that
+run. That message can also mask a bubblewrap setup failure (a diagnostic gap first noted in #208's
+review).
 
 | Run | Command | Exit | Result |
 |---|---|---|---|
@@ -87,10 +88,7 @@ Item 1, the unpinned host tools, is named in `preregistration-template.md` §14.
   (`working-conventions` in §1's `SCOPE_AGENT` row and `local-api-testdrive` in §5 of the fixture's
   `loop.config.md`); the replay has none.
 - **A replicate of this fixture must pass `--uv-bin`** with `uv 0.9.5`, sha256 `d3dc3ca8…4ce0`.
-  `run` does not require the flag, and without it the sandbox has no `uv`, so `TEST_CMD` as bound
-  fails with `uv: not found`. The replicate then either stops at step 6 or fetches an unpinned
-  `uv` itself (the sandbox has outbound network, `curl` and `pip3`). Either way it is inadmissible
-  against this fixture's registered pin, because `uv_version` and `uv_sha256` are null. A refusal
+  `run` does not require the flag, and without it `uv` is not on the sandbox's `PATH`. A refusal
   in the harness is a candidate for #384.
 - **`/security-review` and `/verify` have not been exercised in the sandbox.** This is the first
   fixture whose `SECURITY_REVIEW` and `VERIFY` rows are skills invoked by name (the pilot binds both
