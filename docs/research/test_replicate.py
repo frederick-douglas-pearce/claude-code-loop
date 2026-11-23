@@ -1186,7 +1186,8 @@ class FakeOps:
 
     def __init__(self, install_problems=(), turn="done", existing=(), fail_create=(),
                  audit_events="ok", mutate_cache=False, probe_error=(), status="in-acceptance",
-                 git_noise=False, git_timeout=False, git_raise=None):
+                 git_noise=False, git_timeout=False, git_raise=None, results=None, rc=0):
+        self.results, self.rc = results, rc          # a turn's result events and exit code (#389)
         self.probe_error = set(probe_error)
         self.status, self.git_noise, self.git_timeout = status, git_noise, git_timeout
         self.git_raise = git_raise
@@ -1259,6 +1260,8 @@ class FakeOps:
         do_work(cwd, self.status)
         if self.turn == "interrupt":
             raise KeyboardInterrupt
+        if self.turn == "timeout":
+            raise subprocess.TimeoutExpired(cmd, timeout)
         if self.turn in ("SIGINT", "SIGTERM", "SIGHUP"):
             # A real `kill` landing mid-turn: the turn runs inside a signal window,
             # so it is delivered, and raises, before os.kill returns.
@@ -1272,8 +1275,11 @@ class FakeOps:
         if self.mutate_cache:
             (pathlib.Path(rdir) / "home" / ".claude" / "plugins" / "cache" / "claude-code-loop" /
              "dev-loop" / "0.6.0" / "SKILL.md").write_text("tampered")
-        stdout.write(json.dumps({"type": "result", "session_id": "s", "result": "Ready to merge #2?"}) + "\n")
-        return 0, None
+        results = self.results if self.results is not None else [
+            {"type": "result", "session_id": "s", "is_error": False, "result": "Ready to merge #2?"}]
+        for ev in results:
+            stdout.write(json.dumps(ev) + "\n")
+        return self.rc, None
 
     def events(self, login):
         """The first read is `account_events_before`; `audit_events` shapes the
@@ -3542,6 +3548,191 @@ class Round1ReadTests(Tmp):
             with self.assertRaises(OSError):
                 R.write_json_atomic(path, {"v": 2, "long": "x" * 100})
         self.assertEqual(json.loads(path.read_text()), {"v": 1})
+
+
+# ------------------------------------------------------------- error results (#389)
+
+# rp2-h1's spend-cap result (re-pilot-2026-11, turn-02.jsonl, CLI 2.1.326), its
+# key fields verbatim (the message cut where #389's comment cuts it): `subtype`
+# reads `success` on an error result.
+SPEND_CAP = {"type": "result", "subtype": "success", "is_error": True, "session_id": "s",
+             "terminal_reason": "api_error", "api_error_status": 400,
+             "api_error_type": "invalid_request_error",
+             "result": "API Error: 400 You have reached your specified API usage limits."}
+# Synthetic: no sample of any other API error exists.
+OVERLOADED = {"type": "result", "subtype": "success", "is_error": True, "session_id": "s",
+              "terminal_reason": "api_error", "api_error_status": 529,
+              "api_error_type": "overloaded_error", "result": "API Error: 529 Overloaded"}
+
+
+def clean(text="Ready to merge #2?"):
+    return {"type": "result", "subtype": "success", "is_error": False, "session_id": "s",
+            "terminal_reason": "completed", "api_error_status": None, "result": text}
+
+
+class ReadResultsTests(Tmp):
+    def test_every_result_event_is_returned_and_read_stream_keeps_the_last(self):
+        p = self.tmp / "t.jsonl"
+        write_jsonl(p, [{"type": "system", "subtype": "init", "model": S55}, SPEND_CAP,
+                        {"type": "assistant"}, clean()])
+        init, results = R.read_results(p)
+        self.assertEqual(init["model"], S55)
+        self.assertEqual(results, [SPEND_CAP, clean()])
+        self.assertEqual(R.read_stream(p), (init, clean()))
+
+
+class ErrorResultTests(unittest.TestCase):
+    def test_the_spend_cap_is_an_api_error_recorded_verbatim(self):
+        rec = R.error_result([clean(), SPEND_CAP])
+        self.assertEqual(rec, {"kind": "api_error", "result_index": 1, "results_total": 2,
+                               "is_error": True, "terminal_reason": "api_error",
+                               "api_error_status": 400, "api_error_type": "invalid_request_error",
+                               "result": SPEND_CAP["result"]})
+
+    def test_another_api_error(self):
+        rec = R.error_result([OVERLOADED])
+        self.assertEqual((rec["kind"], rec["api_error_status"], rec["api_error_type"]),
+                         ("api_error", 529, "overloaded_error"))
+
+    def test_either_half_of_the_api_error_condition_is_enough(self):
+        reason_only = dict(SPEND_CAP, api_error_status=None)
+        status_only = dict(SPEND_CAP, terminal_reason="other")
+        self.assertEqual(R.error_result([reason_only])["kind"], "api_error")
+        self.assertEqual(R.error_result([status_only])["kind"], "api_error")
+
+    def test_an_error_with_neither_is_unclassified(self):
+        ev = dict(SPEND_CAP, terminal_reason="other", api_error_status=None)
+        self.assertEqual(R.error_result([ev])["kind"], "error_unclassified")
+
+    def test_an_unreadable_is_error_halts_and_records_the_raw_value(self):
+        absent = {k: v for k, v in clean().items() if k != "is_error"}
+        rec = R.error_result([absent])
+        self.assertEqual((rec["kind"], rec["is_error"]), ("error_field_unreadable", "absent"))
+        for raw in ("yes", "false", 0, None):
+            rec = R.error_result([dict(clean(), is_error=raw)])
+            self.assertEqual((rec["kind"], rec["is_error"]), ("error_field_unreadable", raw), raw)
+
+    def test_clean_results_are_not_errors(self):
+        self.assertIsNone(R.error_result([clean(), clean("done")]))
+
+    def test_an_earlier_error_counts_even_when_the_last_result_is_clean(self):
+        rec = R.error_result([clean(), SPEND_CAP, clean()])
+        self.assertEqual((rec["kind"], rec["result_index"], rec["results_total"]),
+                         ("api_error", 1, 3))
+
+    def test_the_result_text_is_capped(self):
+        rec = R.error_result([dict(SPEND_CAP, result="x" * 2000)])
+        self.assertEqual(rec["result"], "x" * R.ERROR_TEXT_CAP)
+
+    def test_a_missing_result_is_null_and_any_other_value_a_capped_string(self):
+        absent = {k: v for k, v in SPEND_CAP.items() if k != "result"}
+        self.assertIsNone(R.error_result([absent])["result"])
+        self.assertIsNone(R.error_result([dict(SPEND_CAP, result=None)])["result"])
+        rec = R.error_result([dict(SPEND_CAP, result={"msg": "y" * 2000})])
+        self.assertEqual(rec["result"], json.dumps({"msg": "y" * 2000})[:R.ERROR_TEXT_CAP])
+        self.assertEqual(R.error_result([dict(SPEND_CAP, result=[1, 2])])["result"], "[1, 2]")
+
+    def test_the_first_of_two_errors_is_the_one_recorded(self):
+        rec = R.error_result([SPEND_CAP, dict(OVERLOADED, terminal_reason="other",
+                                                  api_error_status=None)])
+        self.assertEqual((rec["kind"], rec["result_index"], rec["api_error_status"]),
+                         ("api_error", 0, 400))
+
+
+class DriveOutcomeTests(RunBase):
+    """#389: every way `_drive` finishes writes `outcome` and `outcome_kind`
+    together, an error result or a failed turn halts whatever the row's status,
+    and a drive cut short by a signal leaves both absent."""
+
+    def drive(self, **kw):
+        status = kw.pop("status", "in-acceptance")
+        exc = kw.pop("exc", None)
+        return self.run_it(FakeOps(status=status, **kw), exc)
+
+    def test_the_spend_cap_at_in_acceptance_halts_instead_of_ending_as_the_final_stop(self):
+        env = self.drive(results=[SPEND_CAP])
+        self.assertEqual(env["outcome_kind"], "api_error")
+        self.assertFalse(env["unattended"])
+        self.assertIn("ended on an error result (api_error)", env["outcome"])
+        self.assertEqual(env["error_result"], R.error_result([SPEND_CAP]))
+        self.assertNotIn("error_result", env["turns"][0])
+
+    def test_rp2_h1s_shape_an_error_result_and_exit_1_is_an_api_error(self):
+        """The spend-cap turn also exited 1, so the error check must run before
+        the exit-code check, or the record would say only `nonzero_exit`."""
+        env = self.drive(results=[SPEND_CAP], rc=1)
+        self.assertEqual(env["outcome_kind"], "api_error")
+        self.assertEqual(env["error_result"]["kind"], "api_error")
+
+    def test_the_last_of_several_clean_results_is_the_one_classified(self):
+        env = self.drive(status="planning",
+                         results=[clean("Approve the plan?"), clean("Ready to merge #2?")])
+        self.assertEqual(env["outcome_kind"], "stop")
+        self.assertIn("does not match", env["outcome"])
+
+    def test_an_earlier_clean_result_is_not_the_one_classified(self):
+        env = self.drive(status="planning",
+                         results=[clean("Ready to merge #2?"), clean("Approve the plan?")])
+        self.assertEqual(env["outcome_kind"], "max_turns")
+
+    def test_an_api_error_at_planning_sends_no_reply(self):
+        """The text matches the planning stop, so without the error check the
+        harness would answer it, turn after turn, to max_turns."""
+        ev = dict(OVERLOADED, result="Approve the plan?")
+        env = self.drive(status="planning", results=[ev])
+        self.assertEqual(env["invocations"], 1)
+        self.assertEqual(env["outcome_kind"], "api_error")
+
+    def test_an_earlier_error_halts_even_when_the_last_result_is_clean(self):
+        env = self.drive(results=[SPEND_CAP, clean()])
+        self.assertEqual(env["outcome_kind"], "api_error")
+        self.assertFalse(env["unattended"])
+        self.assertEqual(env["error_result"]["result_index"], 0)
+
+    def test_a_non_zero_exit_halts_even_on_a_clean_result(self):
+        env = self.drive(rc=1)
+        self.assertEqual(env["outcome_kind"], "nonzero_exit")
+        self.assertFalse(env["unattended"])
+        self.assertEqual(env["turns"][0]["returncode"], 1)
+        self.assertNotIn("error_result", env)
+
+    def test_an_unreadable_is_error_halts(self):
+        env = self.drive(results=[{k: v for k, v in clean().items() if k != "is_error"}])
+        self.assertEqual(env["outcome_kind"], "error_field_unreadable")
+        self.assertFalse(env["unattended"])
+
+    def test_a_review_halt_is_a_stop_with_no_error_record(self):
+        env = self.drive(status="in-review")
+        self.assertEqual(env["outcome_kind"], "stop")
+        self.assertEqual(env["turns"][-1]["status"], "in-review")
+        self.assertNotIn("error_result", env)
+
+    def test_a_turn_timeout(self):
+        env = self.drive(turn="timeout")
+        self.assertEqual(env["outcome_kind"], "turn_timeout")
+        self.assertEqual(env["outcome"], "turn 1 exceeded 60s")
+        self.assertNotIn("error_result", env)
+
+    def test_no_result_event(self):
+        env = self.drive(results=[])
+        self.assertEqual((env["outcome_kind"], env["outcome"]),
+                         ("no_result", "turn 1 produced no result event"))
+
+    def test_max_turns(self):
+        env = self.drive(status="planning", results=[clean("Approve the plan?")])
+        self.assertEqual(env["outcome_kind"], "max_turns")
+        self.assertEqual(env["invocations"], 6)
+
+    def test_the_final_stop(self):
+        env = self.drive()
+        self.assertEqual((env["outcome_kind"], env["outcome"], env["unattended"]),
+                         ("final", "done", True))
+        self.assertNotIn("error_result", env)
+
+    def test_a_signal_mid_drive_leaves_both_absent(self):
+        env = self.drive(turn="SIGTERM", exc=KeyboardInterrupt)
+        self.assertNotIn("outcome", env)
+        self.assertNotIn("outcome_kind", env)
 
 
 if __name__ == "__main__":

@@ -132,7 +132,7 @@ rule covers both arms. A halt takes the first kind below that fits:
 
 | Kind | What it is |
 |---|---|
-| External halt | An interrupt, a harness refusal, or an API or account error such as a spend cap. No harness field records the last of these (#389); it shows only in the stream's final message. |
+| External halt | An interrupt, a harness refusal, or an API or account error such as a spend cap. `environment.json`'s `error_result` and `outcome_kind` are evidence for the last of these (#389); the instance's classification rules decide. |
 | Gate-error halt | A gate produced no verdict and the engine stopped, whatever the row's status. |
 | Review halt | The replicate stopped at `in-review`. |
 | Other halt | Any halt that is none of the above, a turn timeout and the fixture's `max_turns` included. It is treated as a halt the lever could have caused. |
