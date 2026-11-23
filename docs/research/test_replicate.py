@@ -201,9 +201,10 @@ class EnvTests(Tmp):
         one = R.snapshot_id(d)
         self.assertEqual(one, R.snapshot_id(d))
         (d / "MEMORY.md").write_text("b\n")
-        self.assertNotEqual(one, R.snapshot_id(d))
+        two = R.snapshot_id(d)
+        self.assertNotEqual(one, two)
         (d / "MEMORY.md").rename(d / "OTHER.md")
-        self.assertNotEqual(one, R.snapshot_id(d))
+        self.assertNotEqual(two, R.snapshot_id(d))
 
 
 class LaunchTests(Tmp):
@@ -1455,25 +1456,25 @@ class RunTests(RunBase):
         ev = [{"created_at": env["run_start"], "type": "PushEvent", "repo": {"name": "me/real"}}]
         ops = FakeOps(audit_events=ev)
         ops.feed_reads = 1
-        R.write_audit(rdir, env, spec, "me", env["version_dir"], ops)
+        R.write_audit(rdir, env, "me", env["version_dir"], ops)
         late = FakeOps()
         late.feed_reads = 1
         late.t = 7 * 3600 + 100                     # read_at: well past run_end + 6h
-        audit = R.write_audit(rdir, env, spec, "me", env["version_dir"], late)
+        audit = R.write_audit(rdir, env, "me", env["version_dir"], late)
         self.assertEqual(len(audit["account_feed"]["reads"]), 3)
         self.assertEqual(len(audit["a_account_events"]), 1)
         self.assertTrue(audit["account_feed"]["delayed_read"])
         with self.assertRaisesRegex(R.Refused, "not the login"):
-            R.write_audit(rdir, env, spec, "someone-else", env["version_dir"], late)
+            R.write_audit(rdir, env, "someone-else", env["version_dir"], late)
         self.assertEqual(len(json.loads((rdir / "audit.json").read_text())
                              ["account_feed"]["reads"]), 3)
         self.assertFalse((rdir / "audit.json.tmp").exists())
         (rdir / "audit.json").write_text("{}")
         with self.assertRaisesRegex(R.Refused, "earlier account-feed reads.*predates"):
-            R.write_audit(rdir, env, spec, "me", env["version_dir"], late)
+            R.write_audit(rdir, env, "me", env["version_dir"], late)
         (rdir / "audit.json").write_text('{"account_feed": {"reads": ["foreign"]}}')
         with self.assertRaisesRegex(R.Refused, "earlier account-feed reads"):
-            R.write_audit(rdir, env, spec, "me", env["version_dir"], late)
+            R.write_audit(rdir, env, "me", env["version_dir"], late)
 
     def test_account_foreign_keeps_multiplicity_but_not_rereads(self):
         """Two distinct events can render to one line; a re-read of the same
@@ -1491,7 +1492,7 @@ class RunTests(RunBase):
         rdir = self.tmp / "out" / "r1"
         ops = FakeOps(audit_events=["not-an-event"])
         ops.feed_reads = 1
-        audit = R.write_audit(rdir, env, R.load_fixture(env["fixture_dir"]), "me",
+        audit = R.write_audit(rdir, env, "me",
                               env["version_dir"], ops)
         self.assertIn("AttributeError", audit["account_feed"]["reads"][-1]["error"])
         self.assertNotIn("foreign", audit["account_feed"]["reads"][-1])
@@ -1515,7 +1516,7 @@ class RunTests(RunBase):
             def events(self, login):
                 return R.account_events(login)
         with mock.patch.object(R.subprocess, "run", run):
-            audit = R.write_audit(rdir, env, R.load_fixture(env["fixture_dir"]), "me",
+            audit = R.write_audit(rdir, env, "me",
                                   env["version_dir"], FeedOps())
         self.assertEqual(audit["account_feed"]["reads"][-1]["count"], 151)
         self.assertEqual(len(audit["a_account_events"]), 1)
@@ -1536,10 +1537,10 @@ class RunTests(RunBase):
             rdir, spec = self.tmp / "out" / "r1", R.load_fixture(env["fixture_dir"])
             late = FakeOps(audit_events="refused")
             late.feed_reads, late.t = 1, 7 * 3600
-            self.assertFalse(R.write_audit(rdir, env, spec, "me", env["version_dir"], late)["pass"])
+            self.assertFalse(R.write_audit(rdir, env, "me", env["version_dir"], late)["pass"])
             late = FakeOps()
             late.feed_reads, late.t = 1, 7 * 3600
-            self.assertTrue(R.write_audit(rdir, env, spec, "me", env["version_dir"], late)["pass"])
+            self.assertTrue(R.write_audit(rdir, env, "me", env["version_dir"], late)["pass"])
 
     def test_delayed_read_needs_a_successful_read_past_the_latency(self):
         end = "2026-11-17T00:00:00+00:00"
@@ -1649,7 +1650,7 @@ class RunTests(RunBase):
         late = FakeOps()
         late.feed_reads, late.t = 1, 7 * 3600
         with mock.patch.object(R, "stop_sha256", side_effect=PermissionError("denied")):
-            audit = R.write_audit(rdir, env, spec, "me", env["version_dir"], late)
+            audit = R.write_audit(rdir, env, "me", env["version_dir"], late)
         self.assertIn("cannot be re-hashed", " ".join(audit["d_stop_capture"]))
         self.assertTrue(audit["account_feed"]["delayed_read"])
         self.assertEqual(len(self.audit()["account_feed"]["reads"]), 2)
@@ -1659,7 +1660,7 @@ class RunTests(RunBase):
         late.feed_reads, late.t = 1, 8 * 3600
         with mock.patch.object(R, "stop_capture_problems", side_effect=RuntimeError("x")):
             with self.assertRaises(RuntimeError):
-                R.write_audit(rdir, env, spec, "me", env["version_dir"], late)
+                R.write_audit(rdir, env, "me", env["version_dir"], late)
         self.assertEqual(late.feed_reads, 1)
 
     def test_a_rehash_that_recurses_too_deep_is_a_problem(self):
@@ -1692,7 +1693,7 @@ class RunTests(RunBase):
             def audit(e):
                 late = FakeOps()
                 late.feed_reads, late.t = 1, 7 * 3600
-                return R.write_audit(rdir, e, spec, "me", e["version_dir"], late)
+                return R.write_audit(rdir, e, "me", e["version_dir"], late)
             self.assertTrue(audit(env)["pass"])
             rec = env["stop_capture"]
             variants = {
@@ -1750,6 +1751,20 @@ class RunTests(RunBase):
         self.assertIn(self.SB, ops.existing)
         self.assertNotIn(self.SB, env["repos_planned"])
         self.assertNotIn(self.SB, env.get("repos_deleted", []))
+
+    def test_a_fixture_edited_after_load_refuses(self):
+        """#390: the roster and memory are read after the hash is taken, so the
+        hash is re-checked once they have been copied."""
+        fx = self.tmp / "fx"
+        shutil.copytree(PILOT, fx)
+        real = R.render_roster
+
+        def edit_then_render(src, *rest):
+            (fx / "roster" / "pm.md").write_text((fx / "roster" / "pm.md").read_text() + "x\n")
+            return real(src, *rest)
+        with mock.patch.object(R, "render_roster", side_effect=edit_then_render):
+            env = self.run_it(FakeOps(), R.Refused, fixture=str(fx))
+        self.assertIn("changed after it was loaded", env["refused"])
 
     def test_unprobeable_repo_is_refused_and_never_created(self):
         """A repo whose existence cannot be told (a non-404 error) is never
@@ -2299,8 +2314,6 @@ class ProvenanceTests(Tmp):
             R.harness_provenance(bare)
 
     def test_load_fixture_from_another_cwd_is_absolute_and_hashed(self):
-        """`audit` resolves `fixture_dir` from the record, so it must not depend on
-        the cwd the run happened in."""
         d = self.tmp / "fx"
         shutil.copytree(PILOT, d)
         old = os.getcwd()
@@ -2348,9 +2361,9 @@ class ProvenanceTests(Tmp):
                 self.assertEqual(R.load_fixture(d)["fixture_tree_sha256"], base)
 
     def test_a_symlink_under_the_fixture_refuses(self):
-        """#390: `copytree` follows a symlink to content the tree hash never reads."""
+        """#390."""
         for name, target in (("memory/linked", "../roster"), ("roster/x.md", "pm.md"),
-                             ("dangling", "nowhere")):
+                             ("dangling", "nowhere"), ("repo/.claude/linked.md", "loop.config.md")):
             with self.subTest(name=name):
                 d = self.tmp / ("fx-" + name.replace("/", "-"))
                 shutil.copytree(PILOT, d)

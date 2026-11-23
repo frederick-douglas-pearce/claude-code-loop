@@ -57,8 +57,7 @@ outcomes section 7 fixes cannot be dropped: without their instruments the instan
   invoked file's location, not the working directory. A fixture outside the worktree is then
   outside the tree-clean check, and its identity is the registered `fixture_tree_sha256`. The
   worktree stays until the last delayed `audit` or `measure` re-run, because those run the invoked
-  `replicate.py`. The recorded `fixture_dir` stays at its path until then too, because `audit`
-  re-loads it, and a fixture that is missing or no longer loads leaves the audit unwritten.
+  `replicate.py`.
 - Both arms run under `mode: calibration`. The harness does not check it, so section 8 does.
 
 ## 4. Fixture set
