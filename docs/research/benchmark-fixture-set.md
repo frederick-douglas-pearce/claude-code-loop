@@ -415,5 +415,6 @@ Facts with their evidence. None decides anything; each is #382's to use or not.
 
 ## Scope
 
-This note selects and records. Building a fixture directory is #274's job for vote #82 and #288's
-for the others.
+This note selects and records. Vote #82's fixture directory is
+`replicate-fixtures/vote-82/` (#392, shakedowns in `vote-82-shakedown-2026-11.md`); building the
+others is #288's job.

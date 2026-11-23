@@ -1,0 +1,246 @@
+<!--
+  SYNTHETIC UCSB popular-vote fixture — structure mimics 1836 (layout L1b); ALL VOTE
+  VALUES ARE FABRICATED. No UCSB-sourced bytes (D022): this repo is public and UCSB
+  content is non-redistributable (D014/D016), so this page is hand-written from a close
+  reading of the real snapshot, never copied from it.
+
+  Pins for the #35 parser — 1836 is the ONLY year in the corpus with this shape:
+    - the header carries NO colspan attributes at all. Every other stacked-header year
+      wraps each candidate in a colspan=3 block; 1836 does not. A parser that derives the
+      candidate-group count `g` from header colspans gets 0 here. `g` MUST come from the
+      modal width of the all-colspan-1 data rows: W = 2 + 3g, so W=14 -> g=4.
+    - the header rows are RAGGED (widths 6 / 4 / 12) and none of them equals the data
+      width. Header width is not a usable signal in either direction (contrast the 1976
+      fixture, where the header is narrower than the data rows).
+    - the summary block is SIBLING ROWS OF THE SAME TABLE as the state block (width 9
+      interleaved with width 14), NOT a nested table. `own_rows` does not separate them
+      here -- the modal-width rule is what does. This is why the modal rule is
+      load-bearing well before the nested-summary era.
+    - Rhode Island's fourth candidate cell is a single "-" (ONE hyphen), a typo for the
+      "--" used everywhere else. Absence tokens are a set, not a literal (D024 sec 2).
+    - no legislature-chosen state in this year: the absence of that case is itself the
+      pin, so the fixture-integrity suite must not assume every fixture has one.
+
+  AGGREGATION IDENTITIES (verified by tests/unit/test_ucsb_fixtures.py):
+    (1) each candidate's Votes column sums EXACTLY to the Totals row:
+        Placeholder 40+20+30+8+12+24 = 134,000; Fabricated 30+15+25+6+9+18 = 103,000;
+        Notional 20+10+15+5+6+12 = 68,000; Invented 9+4+9+(absent)+2+5 = 29,000.
+    (2) the TOTAL VOTE column sums EXACTLY to the Totals row: 340,000.
+    (3) per state, TOTAL VOTE strictly EXCEEDS the shown candidates by a residual
+        "other" -- the columned candidates are never the whole ballot.
+    (4) Rhode Island's absent candidate contributes NOTHING to the column sum and is
+        NEVER read as 0 (D024 sec 2): a literal 0 appears nowhere in a vote column.
+-->
+<section id="block-system-main" class="block block-system clearfix">
+<div class="field-body">
+<table class="table table-responsive">
+<tbody>
+<tr>
+<td colspan="2" rowspan="2"><strong>Party</strong></td>
+<td> </td>
+<td colspan="2"><strong>Nominees</strong></td>
+<td colspan="2" rowspan="2"><strong>Electoral Vote</strong></td>
+<td colspan="2" rowspan="2"><strong>Popular Vote</strong></td>
+</tr>
+<tr>
+<td> </td>
+<td><strong>Presidential</strong></td>
+<td><strong>Vice Presidential</strong></td>
+</tr>
+<tr>
+<td bgcolor="#990000"> </td>
+<td><em> Testytonian</em></td>
+<td><img alt="election party winner" src="https://example.invalid/winner.png" /></td>
+<td>Alexandra Placeholder</td>
+<td>Wilhelmina Stand-In</td>
+<td>32</td>
+<td>68.1%</td>
+<td>134,000</td>
+<td>39.4%</td>
+</tr>
+<tr>
+<td bgcolor="#000099"> </td>
+<td><em> Exemplary</em></td>
+<td> </td>
+<td>Benedict Fabricated</td>
+<td>Theodore Notreal</td>
+<td>8</td>
+<td>17.0%</td>
+<td>103,000</td>
+<td>30.3%</td>
+</tr>
+<tr>
+<td bgcolor="#666666"> </td>
+<td><em> Hypothetical</em></td>
+<td> </td>
+<td>Cornelia Notional</td>
+<td>Ambrose Placeheld</td>
+<td>7</td>
+<td>14.9%</td>
+<td>68,000</td>
+<td>20.0%</td>
+</tr>
+<tr>
+<td bgcolor="#336633"> </td>
+<td><em> Ersatz</em></td>
+<td> </td>
+<td>Dorothea Invented</td>
+<td>Percival Madeup</td>
+<td>0</td>
+<td>0.0%</td>
+<td>29,000</td>
+<td>8.5%</td>
+</tr>
+<tr>
+<td> </td>
+</tr>
+<tr>
+<td rowspan="3"><strong>STATE</strong></td>
+<td rowspan="3"><strong>TOTAL VOTE</strong></td>
+<td>Testytonian</td>
+<td>Exemplary</td>
+<td>Hypothetical</td>
+<td>Ersatz</td>
+</tr>
+<tr>
+<td><strong>ALEXANDRA PLACEHOLDER</strong></td>
+<td><strong>BENEDICT FABRICATED</strong></td>
+<td><strong>CORNELIA NOTIONAL</strong></td>
+<td><strong>DOROTHEA INVENTED</strong></td>
+</tr>
+<tr>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+</tr>
+<tr>
+<td bgcolor="#AACAEA" colspan="14"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Alabama</td>
+<td bgcolor="#F7FAFD">100,000</td>
+<td bgcolor="#F7FAFD">40,000</td>
+<td bgcolor="#F7FAFD">40.0</td>
+<td bgcolor="#F7FAFD">7</td>
+<td bgcolor="#F7FAFD">30,000</td>
+<td bgcolor="#F7FAFD">30.0</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD">20,000</td>
+<td bgcolor="#F7FAFD">20.0</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD">9,000</td>
+<td bgcolor="#F7FAFD">9.0</td>
+<td bgcolor="#F7FAFD"> </td>
+</tr>
+<tr>
+<td bgcolor="#FFFFFF">Connecticut</td>
+<td bgcolor="#FFFFFF">50,000</td>
+<td bgcolor="#FFFFFF">20,000</td>
+<td bgcolor="#FFFFFF">40.0</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">15,000</td>
+<td bgcolor="#FFFFFF">30.0</td>
+<td bgcolor="#FFFFFF">8</td>
+<td bgcolor="#FFFFFF">10,000</td>
+<td bgcolor="#FFFFFF">20.0</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">4,000</td>
+<td bgcolor="#FFFFFF">8.0</td>
+<td bgcolor="#FFFFFF"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Georgia</td>
+<td bgcolor="#F7FAFD">60,000</td>
+<td bgcolor="#F7FAFD">24,000</td>
+<td bgcolor="#F7FAFD">40.0</td>
+<td bgcolor="#F7FAFD">11</td>
+<td bgcolor="#F7FAFD">18,000</td>
+<td bgcolor="#F7FAFD">30.0</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD">12,000</td>
+<td bgcolor="#F7FAFD">20.0</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD">5,000</td>
+<td bgcolor="#F7FAFD">8.3</td>
+<td bgcolor="#F7FAFD"> </td>
+</tr>
+<tr>
+<td bgcolor="#FFFFFF">Maine</td>
+<td bgcolor="#FFFFFF">80,000</td>
+<td bgcolor="#FFFFFF">30,000</td>
+<td bgcolor="#FFFFFF">37.5</td>
+<td bgcolor="#FFFFFF">10</td>
+<td bgcolor="#FFFFFF">25,000</td>
+<td bgcolor="#FFFFFF">31.3</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">15,000</td>
+<td bgcolor="#FFFFFF">18.8</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">9,000</td>
+<td bgcolor="#FFFFFF">11.3</td>
+<td bgcolor="#FFFFFF"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Rhode Island</td>
+<td bgcolor="#F7FAFD">20,000</td>
+<td bgcolor="#F7FAFD">8,000</td>
+<td bgcolor="#F7FAFD">40.0</td>
+<td bgcolor="#F7FAFD">4</td>
+<td bgcolor="#F7FAFD">6,000</td>
+<td bgcolor="#F7FAFD">30.0</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD">5,000</td>
+<td bgcolor="#F7FAFD">25.0</td>
+<td bgcolor="#F7FAFD"> </td>
+<td bgcolor="#F7FAFD">-</td>
+<td bgcolor="#F7FAFD">-</td>
+<td bgcolor="#F7FAFD"> </td>
+</tr>
+<tr>
+<td bgcolor="#FFFFFF">Vermont</td>
+<td bgcolor="#FFFFFF">30,000</td>
+<td bgcolor="#FFFFFF">12,000</td>
+<td bgcolor="#FFFFFF">40.0</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">9,000</td>
+<td bgcolor="#FFFFFF">30.0</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">6,000</td>
+<td bgcolor="#FFFFFF">20.0</td>
+<td bgcolor="#FFFFFF">7</td>
+<td bgcolor="#FFFFFF">2,000</td>
+<td bgcolor="#FFFFFF">6.7</td>
+<td bgcolor="#FFFFFF"> </td>
+</tr>
+<tr>
+<td bgcolor="#AACAEA" colspan="14"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Totals</td>
+<td bgcolor="#F7FAFD">340,000</td>
+<td bgcolor="#F7FAFD">134,000</td>
+<td bgcolor="#F7FAFD">39.4</td>
+<td bgcolor="#F7FAFD">32</td>
+<td bgcolor="#F7FAFD">103,000</td>
+<td bgcolor="#F7FAFD">30.3</td>
+<td bgcolor="#F7FAFD">8</td>
+<td bgcolor="#F7FAFD">68,000</td>
+<td bgcolor="#F7FAFD">20.0</td>
+<td bgcolor="#F7FAFD">7</td>
+<td bgcolor="#F7FAFD">29,000</td>
+<td bgcolor="#F7FAFD">8.5</td>
+<td bgcolor="#F7FAFD"> </td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>

@@ -1,0 +1,42 @@
+# Keep the build context small and the image reproducible. The Dockerfile only needs
+# pyproject.toml, uv.lock, README.md, LICENSE, src/, and the baked-in snapshot
+# (api_snapshot.sqlite) — everything else is noise or must never enter the image.
+
+# VCS / tooling
+.git
+.gitignore
+.github
+.claude
+.vscode
+.idea
+.DS_Store
+
+# Python caches / local envs
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage/
+
+# Not needed at runtime (slim, serve-only image — D033)
+tests/
+docs/
+scripts/
+deploy/
+*.ipynb
+db_tools.py
+dist/
+build/
+
+# Secrets / local config never belong in an image
+.env
+.env.local
+
+# NOTE: api_snapshot.sqlite is deliberately NOT ignored — it is the baked-in snapshot
+# the Dockerfile COPYs in. Ignore any OTHER stray sqlite files, but keep that one.
+*.sqlite
+!api_snapshot.sqlite

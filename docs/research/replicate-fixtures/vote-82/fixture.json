@@ -1,0 +1,107 @@
+{
+  "name": "vote-82",
+  "why": "#274's control replay (benchmark-fixture-set.md, pick 7): vote #82 at its pre-fix base, the source repo's tracked tree with the rebinds, drops and rename recorded below. The first fixture whose gates need `uv sync` and third-party wheels in the sandbox (#392).",
+  "org": "frederick-douglas-pearce-loop-sandbox",
+  "label": "fixture",
+  "base_sha": "4eacda1053018d345f3c66a755661e6a5561e2d7",
+  "first_prompt": "/dev-loop:dev-loop 1",
+  "ledger_root": ".loop-ledger",
+  "run_slug": "fixture",
+  "max_turns": 6,
+  "issue": {
+    "title": "Consolidate per-source PV grain/totals validators into usvote/pv/",
+    "body": "**Source:** #36 (PR #81) code review — reuse finding, deferred rather than folded into a UCSB PR.\n\n### What\n\nTwo small PV validators are now implemented per source:\n\n- **grain** — `usvote.ucsb.transform.assert_pv_grain` vs. `usvote.mit.transform.assert_unique_grain` (both assert one row per `(year, state, candidate)`)\n- **totals-not-exceeded** — `usvote.ucsb.transform.assert_totals_not_exceeded` vs. `usvote.mit.transform.assert_totals_not_exceeded` (logically identical; differ only in error class + message)\n\nThey can't be shared by importing one source from the other — sibling PV sources must not couple (the rule that correctly moved the roster contract into `usvote/pv/status.py` and the D018 shape guard into `usvote/pv/schema.py`). So the only correct shared home is `usvote/pv/`.\n\n### Why it's deferred, not done in #36\n\n- It's **DRY-only** — no correctness impact. Each source's transform validates its own frame independently, and the checks agree.\n- Doing it in the #36 UCSB PR would pull MIT code into a UCSB change for no behavioural benefit.\n- The **shape guard was already consolidated** in #36: `pv.schema.assert_pv_shape` gained an `error_cls` param and UCSB now delegates to it (the one duplicate that had a real drift-caused gap — a dropped `candidate` non-null check).\n\n### Why it's worth doing\n\nThe finding predicts a **third consumer**: E6 (#68/#70) unions and compares MIT + UCSB and will want the same grain/totals checks. Consolidating before that lands avoids a third copy.\n\n### Suggested shape\n\nMove both into `usvote/pv/` (alongside `assert_pv_shape` / the roster asserts), each taking `error_cls` (mirroring the established `assert_unique_grain` / `assert_pv_shape` pattern), and have MIT + UCSB both call them. Natural to pick up alongside the E6 shared-surface work (#68)."
+  },
+  "stops": [
+    {
+      "status": null,
+      "expect": "(?i)(BACKLOG_SOURCE|backlog|which (milestone|label))",
+      "reply": "Run the `fixture` label, as BACKLOG_SOURCE binds it, and initialize the run.",
+      "why": "0.6.0 engine step 0.1 asks which BACKLOG_SOURCE to run when no run exists, before queue.md is written"
+    },
+    {
+      "status": "planning",
+      "expect": "(?i)approv",
+      "reply": "approve"
+    },
+    {
+      "status": "in-acceptance",
+      "expect": "",
+      "final": true,
+      "why": "#373: the replicate ends unmerged at its first in-acceptance stop. The 0.6.0 engine writes nothing that tells step 11's routine merge-gate stop from a step-10 escalation, so no reply is sent and the final message is not classified; the stop's kind is judged afterwards from the stream."
+    }
+  ],
+  "builtin_agents": {
+    "general-purpose": "parent",
+    "Explore": "parent",
+    "Plan": "parent",
+    "claude": "parent"
+  },
+  "model_tiers": "— (every role inherits), as the fixture's loop.config.md binds it: the MODEL_TIERS row is absent",
+  "settings": {},
+  "builtin_agents_why": "Built-ins spawned with no model/effort run on the parent's stratum: confirmed 2026-11-17 by two sandboxed spikes on CLI 2.1.326 (claude-sonnet-5-5 at medium: Explore, general-purpose and Plan; at high: those three and claude), every record at the parent's (model, effort). Any other built-in (statusline-setup, or claude-code-guide, which runs on its own default) fails check_strata by default-deny.",
+  "ci_status_binding": "The binding itself is read from repo/.claude/loop.config.md at load time and refused unless it is the Actions-API form (#366). gh run list --workflow ci.yml (Actions API), not the source's gh pr checks: the sandbox gh-token is a fine-grained PAT and cannot read checks (pilot m1, 2026-11-17).",
+  "source": {
+    "repo": "frederick-douglas-pearce/us-presidential-vote-analysis",
+    "base_sha": "92ce679581a9535406963150af9e0803790b1ede",
+    "tree": "source-tree.txt: git ls-tree -r 92ce679581a9535406963150af9e0803790b1ede, verbatim",
+    "issue_number": 82,
+    "issue_url": "https://github.com/frederick-douglas-pearce/us-presidential-vote-analysis/issues/82",
+    "issue_body_sha256": "c6cc33ff96e90b4f86eb1607c18ce95d41c45462755dab8e78ec82e0a730a242",
+    "issue_body_from": "gh issue view 82 -R frederick-douglas-pearce/us-presidential-vote-analysis --json body -q .body (2026-11-22); the sha256 is of the JSON body string, without the trailing newline that -q prints"
+  },
+  "rebinds": [
+    {
+      "path": ".claude/loop.config.md",
+      "row": "BACKLOG_SOURCE",
+      "why": "Every fixture rebinds it to the fixture's label (benchmark-fixture-set.md, rebinds)."
+    },
+    {
+      "path": ".claude/loop.config.md",
+      "row": "CI_STATUS_CMD",
+      "why": "The source's gh pr checks is refused by the harness: the sandbox token cannot read checks, so the row reads the Actions API for ci.yml."
+    },
+    {
+      "path": ".claude/loop.config.md",
+      "row": "CODE_REVIEW",
+      "why": "The source binds /code-review; the row is the 0.6.0 inline finder fan-out, worded as the pilot's, so every fixture runs the same reviewer. The historical run used /review 115, not the bound skill."
+    },
+    {
+      "path": ".claude/loop.config.md",
+      "row": "LEDGER_ROOT",
+      "why": "The ledger moves out of .claude/ to .loop-ledger/, as the pilot's: headless writes under .claude/ are refused."
+    },
+    {
+      "path": ".claude/loop.config.md",
+      "row": "HERMETIC_TEST_CMD",
+      "why": "Added: the 0.6.0 engine reads it, and an absent row on a code row that changes a test is a gate-error. The form is the vote repo's own later binding plus --offline."
+    },
+    {
+      "path": ".claude/loop.config.md",
+      "row": "preamble",
+      "why": "The 0.0.1 file named a host path to the 0.0.1 engine; it now names ${CLAUDE_PLUGIN_ROOT}."
+    },
+    {
+      "path": ".gitignore",
+      "why": "Appends .loop-ledger/, the rebound LEDGER_ROOT, so the ledger stays out of the replicate's tree."
+    }
+  ],
+  "dropped": [
+    {
+      "path": ".github/workflows/deploy.yml",
+      "why": "Manual-dispatch Cloud Run deploy that needs secrets; the sandbox has none and no replicate deploys."
+    },
+    {
+      "path": ".claude/settings.json",
+      "why": "A project-scope enabledPlugins entry for dev-loop@claude-code-loop. The harness installs the plugin at user scope and checks exactly one install record; the fixture's settings key is the one channel for settings."
+    }
+  ],
+  "renamed": [
+    {
+      "stored": "CLAUDE.md.fixture",
+      "restored": "CLAUDE.md",
+      "why": "Stored renamed so it does not load as instructions into sessions in this repo that open a file under the fixture; build_base restores it, so the base carries the source bytes at the source path."
+    }
+  ],
+  "added": []
+}

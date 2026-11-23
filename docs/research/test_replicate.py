@@ -24,6 +24,7 @@ sys.path.insert(0, HERE)
 import replicate as R  # noqa: E402
 
 PILOT = os.path.join(HERE, "replicate-fixtures", "pilot")
+VOTE82 = os.path.join(HERE, "replicate-fixtures", "vote-82")
 S55 = "claude-sonnet-5-5"
 ONE_K = {"input_tokens": 1000, "output_tokens": 10,
          "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
@@ -863,6 +864,166 @@ class BuildBaseTests(Tmp):
             sha = R.build_base(os.path.join(PILOT, "repo"), self.tmp / "b")
         self.assertEqual(sha, R.load_fixture(PILOT)["base_sha"])
 
+    def renames_tree(self):
+        src = self.tmp / "src"
+        (src / "sub").mkdir(parents=True)
+        (src / "CLAUDE.md.fixture").write_text("root\n")
+        (src / "sub" / "CLAUDE.md.fixture").write_text("nested\n")
+        return src
+
+    def test_renames_restore_each_recorded_path_and_nothing_else(self):
+        """#392: a fixture stores a file renamed; the base carries it at its source path."""
+        dest = self.tmp / "b"
+        R.build_base(self.renames_tree(), dest,
+                     [{"stored": "CLAUDE.md.fixture", "restored": "CLAUDE.md"}])
+        tracked = subprocess.run(["git", "ls-files"], cwd=dest, capture_output=True,
+                                 text=True, check=True).stdout.split()
+        self.assertEqual(sorted(tracked), ["CLAUDE.md", "sub/CLAUDE.md.fixture"])
+        self.assertEqual((dest / "CLAUDE.md").read_text(), "root\n")
+
+    def test_no_renames_commits_the_stored_name(self):
+        """The marketplace build passes no record, so it commits a fixture as stored."""
+        dest = self.tmp / "b"
+        R.build_base(self.renames_tree(), dest)
+        self.assertTrue((dest / "CLAUDE.md.fixture").is_file())
+        self.assertFalse((dest / "CLAUDE.md").exists())
+
+    def test_renames_refuse_a_bad_record(self):
+        src = self.renames_tree()
+        (src / "taken").write_text("x\n")
+        for entry, msg in (({"stored": "absent", "restored": "CLAUDE.md"}, "not in the fixture"),
+                           ({"stored": "CLAUDE.md.fixture", "restored": "taken"}, "already exists"),
+                           ({"stored": "/nonexistent-fixture-probe", "restored": "h"}, "not a path inside"),
+                           ({"stored": "../x", "restored": "h"}, "not a path inside"),
+                           ({"stored": "", "restored": "h"}, "not a path inside"),
+                           ({"stored": "CLAUDE.md.fixture", "restored": "../h"}, "not a path inside")):
+            with self.subTest(entry=entry):
+                with self.assertRaisesRegex(R.Refused, msg):
+                    R.build_base(src, self.tmp / ("b%d" % next(_IDS)), [entry])
+
+
+def ls_tree(repo, rev):
+    """-> {path: (mode, blob sha)} for every file `git ls-tree -r` lists at `rev`."""
+    out = subprocess.run(["git", "ls-tree", "-r", rev], cwd=repo, capture_output=True,
+                         text=True, check=True).stdout
+    return parse_ls_tree(out)
+
+
+def parse_ls_tree(text):
+    entries = {}
+    for line in text.splitlines():
+        meta, path = line.split("\t", 1)
+        mode, _kind, sha = meta.split()
+        entries[path] = (mode, sha)
+    return entries
+
+
+class Vote82FixtureTests(Tmp):
+    """#392: the vote #82 fixture for #274's control replay."""
+
+    def setUp(self):
+        super().setUp()
+        self.spec = R.load_fixture(VOTE82)
+
+    def built(self):
+        dest = self.tmp / "b"
+        sha = R.build_base(os.path.join(VOTE82, "repo"), dest, self.spec["renamed"])
+        return sha, dest
+
+    def test_builds_its_frozen_base_sha(self):
+        self.assertEqual(self.built()[0], self.spec["base_sha"])
+
+    def test_ci_binding_is_the_actions_form_for_ci_yml(self):
+        self.assertEqual(self.spec["ci_status_cmd"],
+                         "gh run list --workflow ci.yml --branch <branch> "
+                         "--json headSha,status,conclusion")
+
+    def test_stops_and_roster_and_memory_are_the_pilots(self):
+        """Shared so the fixtures' stop lists and roster hashes compare (#392 scope)."""
+        R.check_stops(self.spec)
+        self.assertEqual(self.spec["stops"], R.load_fixture(PILOT)["stops"])
+        for sub in ("roster", "memory"):
+            ours = sorted(os.listdir(os.path.join(VOTE82, sub)))
+            self.assertEqual(ours, sorted(os.listdir(os.path.join(PILOT, sub))), sub)
+            for name in ours:
+                with self.subTest(sub=sub, name=name):
+                    self.assertEqual(
+                        pathlib.Path(VOTE82, sub, name).read_bytes(),
+                        pathlib.Path(PILOT, sub, name).read_bytes())
+
+    def test_clone_restores_the_renamed_files(self):
+        """`build_clone` passes the fixture's `renamed` record, so the clone a
+        replicate works in has `CLAUDE.md` at the source path."""
+        spec = dict(self.spec)
+        base, clone = R.build_clone(spec, self.tmp / "r", "v")
+        self.assertEqual(base, spec["base_sha"])
+        self.assertTrue((clone / "CLAUDE.md").is_file())
+        self.assertFalse((clone / "CLAUDE.md.fixture").exists())
+
+    def test_records_the_source_issue(self):
+        """Guards drift between the recorded body and its hash only. That the body is
+        the source issue's was checked when the hash was taken (`issue_body_from`)."""
+        src = self.spec["source"]
+        self.assertEqual(src["issue_number"], 82)
+        self.assertEqual(src["repo"], "frederick-douglas-pearce/us-presidential-vote-analysis")
+        self.assertEqual(src["issue_url"], "https://github.com/%s/issues/82" % src["repo"])
+        self.assertEqual(hashlib.sha256(self.spec["issue"]["body"].encode()).hexdigest(),
+                         src["issue_body_sha256"])
+
+    def test_base_differs_from_the_source_tree_exactly_by_the_records(self):
+        """AC3 at file level: every changed, dropped or added file has a record with a
+        reason. Compares the committed base (so a file a .gitignore silently drops
+        shows up as missing) against `git ls-tree -r` of the source, blob and mode.
+        Which rows of a rebound file changed is not compared."""
+        src = parse_ls_tree(pathlib.Path(VOTE82, "source-tree.txt").read_text())
+        _sha, dest = self.built()
+        base = ls_tree(dest, "HEAD")
+        records = {k: self.spec[k] for k in ("rebinds", "dropped", "added", "renamed")}
+        for kind, entries in records.items():
+            for e in entries:
+                with self.subTest(kind=kind, entry=e):
+                    self.assertTrue(e.get("why", "").strip())
+        rebound = {e["path"] for e in records["rebinds"]}
+        dropped = {e["path"] for e in records["dropped"]}
+        added = {e["path"] for e in records["added"]}
+        self.assertEqual(sorted(p for p in src if p not in base), sorted(dropped))
+        self.assertEqual(sorted(p for p in base if p not in src), sorted(added))
+        changed = sorted(p for p in src if p in base and base[p] != src[p])
+        self.assertEqual(changed, sorted(rebound))
+        for e in self.spec["renamed"]:
+            self.assertIn(e["restored"], src)
+
+    def test_fixture_tree_holds_no_file_named_claude_md(self):
+        """The stored rename keeps the source's CLAUDE.md from loading here. Only that
+        file name is checked."""
+        hits = [str(p.relative_to(VOTE82)) for p in pathlib.Path(VOTE82).rglob("CLAUDE.md")]
+        self.assertEqual(hits, [])
+
+
+class MarketplaceTreeTests(Tmp):
+    def test_build_base_over_this_repos_archive_is_its_tree(self):
+        """`run` builds the marketplace with build_base over `git archive <pin>` and,
+        without `--version-dir`, refuses unless the tree is the pin's. A fixture's
+        nested .gitignore that matches a file this repo tracks, or a renames
+        convention, would break that for every later pin (#392); under
+        `--version-dir` the drop would be silent, so this test is its only guard."""
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=HERE,
+                             capture_output=True, text=True)
+        if top.returncode != 0:
+            self.skipTest("not a git checkout")
+        root = top.stdout.strip()
+        archive = self.tmp / "archive"
+        archive.mkdir()
+        data = subprocess.run(["git", "-C", root, "archive", "HEAD"], capture_output=True,
+                              check=True).stdout
+        subprocess.run(["tar", "-x", "-C", str(archive)], input=data, check=True)
+        sha = R.build_base(archive, self.tmp / "mk")
+        tree = subprocess.run(["git", "rev-parse", sha + "^{tree}"], cwd=self.tmp / "mk",
+                              capture_output=True, text=True, check=True).stdout.strip()
+        head = subprocess.run(["git", "-C", root, "rev-parse", "HEAD^{tree}"],
+                              capture_output=True, text=True, check=True).stdout.strip()
+        self.assertEqual(tree, head)
+
 
 def fake_proc(rc=0, out="", err=""):
     return subprocess.CompletedProcess([], rc, out, err)
@@ -1648,8 +1809,8 @@ class RunTests(Tmp):
         self.assertEqual(env["outcome"], "done")
         real = R.build_base
 
-        def drift(src, dest):
-            sha = real(src, dest)
+        def drift(src, dest, renames=()):
+            sha = real(src, dest, renames)
             if pathlib.Path(dest).name == "marketplace":
                 (pathlib.Path(dest) / "extra").write_text("x")
                 R.sh(["git", "add", "extra"], cwd=dest)
@@ -1660,6 +1821,25 @@ class RunTests(Tmp):
         with mock.patch.object(R, "build_base", side_effect=drift):
             with self.assertRaisesRegex(R.Refused, "not the pin's tree"):
                 R.cmd_run(self.args(out=str(self.tmp / "o3")), FakeOps())
+
+    def test_renamed_record_reaches_the_base_and_never_the_marketplace(self):
+        """#392: `run` builds two repos with build_base. The fixture's `renamed` record
+        goes to the base build only; the marketplace commits the plugin archive as-is."""
+        fx = self.tmp / "fx"
+        shutil.copytree(PILOT, fx)
+        (fx / "repo" / "README.md").rename(fx / "repo" / "README.md.fixture")
+        spec = json.loads((fx / "fixture.json").read_text())
+        spec["renamed"] = [{"stored": "README.md.fixture", "restored": "README.md", "why": "t"}]
+        (fx / "fixture.json").write_text(json.dumps(spec))
+        real, calls = R.build_base, []
+
+        def spy(src, dest, renames=()):
+            calls.append((pathlib.Path(dest).name, list(renames)))
+            return real(src, dest, renames)
+        with mock.patch.object(R, "build_base", side_effect=spy):
+            env = self.run_it(FakeOps(), fixture=str(fx))
+        self.assertEqual(env["outcome"], "done")
+        self.assertEqual(sorted(calls), [("base", spec["renamed"]), ("marketplace", [])])
 
     def test_uv_is_copied_before_the_first_sandbox_and_recorded(self):
         real = fake_uv(self.tmp)

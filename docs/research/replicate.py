@@ -222,15 +222,35 @@ def ci_status_binding(repo_dir):
     return value
 
 
-def build_base(repo_dir, dest):
+def build_base(repo_dir, dest, renames=()):
     """Commit `repo_dir`'s files into a new repo at `dest` with a fixed identity and
     date, so the base SHA is a pure function of the fixture's bytes. -> sha.
 
     Git runs in an allowlisted environment, not the caller's: `PATH`, a fresh
     empty `HOME` and `XDG_CONFIG_HOME`, no global or system config, and the
-    fixed identity and date (#366)."""
+    fixed identity and date (#366).
+
+    `renames` is a fixture's `renamed` record: `{"stored", "restored"}` pairs of
+    paths relative to `repo_dir`, each moved back before the commit. A fixture
+    stores a file renamed when it would act on this repo where it sits, as a
+    `CLAUDE.md` would load into any session that opens a file in its directory
+    or below (#392).
+    The list is explicit because `run` also builds the plugin marketplace with
+    this function over an archive of this whole repo, which must commit as-is."""
     dest = pathlib.Path(dest)
     shutil.copytree(repo_dir, dest)
+    for entry in renames:
+        for key in ("stored", "restored"):
+            rel = pathlib.PurePosixPath(entry[key])
+            if rel.is_absolute() or ".." in rel.parts or not rel.parts:
+                raise Refused("fixture renamed record: %r is not a path inside the fixture"
+                              % entry[key])
+        stored, restored = dest / entry["stored"], dest / entry["restored"]
+        if not stored.is_file():
+            raise Refused("fixture renamed record: %s is not in the fixture" % entry["stored"])
+        if os.path.lexists(restored):
+            raise Refused("fixture renamed record: %s already exists" % entry["restored"])
+        stored.rename(restored)
     cfg = pathlib.Path(tempfile.mkdtemp(prefix="build-base-"))
     env = {"PATH": os.environ.get("PATH") or "/usr/bin:/bin", "HOME": str(cfg),
            "XDG_CONFIG_HOME": str(cfg / ".config"), "LANG": "C",
@@ -1344,7 +1364,8 @@ def build_clone(spec, rdir, rid):
     """Build the fixture's base, refuse unless it is the frozen base_sha, and
     only then clone it to `<rdir>/work/<rid>`. -> (base sha, clone path).
     Shared by `run` and `shakedown`, so both refuse a mismatch the same way."""
-    base = build_base(pathlib.Path(spec["dir"]) / "repo", rdir / "base")
+    base = build_base(pathlib.Path(spec["dir"]) / "repo", rdir / "base",
+                      spec.get("renamed", ()))
     if base != spec["base_sha"]:
         raise Refused("fixture builds base %s, frozen base_sha is %s" % (base, spec["base_sha"]))
     clone = rdir / "work" / rid

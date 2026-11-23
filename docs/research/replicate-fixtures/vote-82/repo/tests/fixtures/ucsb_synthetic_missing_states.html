@@ -1,0 +1,152 @@
+<!--
+  SYNTHETIC UCSB popular-vote fixture — structure mimics 1864; ALL VOTE VALUES ARE
+  FABRICATED. No UCSB-sourced bytes (D022).
+
+  Pins for the #35 parser — the NOT-PARTICIPATING case (D024 sec 4, case 2):
+    - the eleven seceded states are simply ABSENT. There is no row, no marker, no
+      colspan, no prose in the grid: nothing whatsoever in the markup distinguishes
+      "did not participate" from "UCSB forgot a row". This is why #35 CANNOT emit
+      `not_participating` -- the parser has no signal to read. Detecting it is
+      inherently a roster comparison and therefore belongs to E4-S3 (#36), which owns
+      the EC spine and UCSB_NONPARTICIPATING_STATES.
+    - within #35 this fixture pins two narrower things:
+        (a) the totals label is the SINGULAR "Total", not "Totals" (1864 and 1944).
+            TOTALS_LABELS is a set for exactly this reason; a `== "Totals"` test drops
+            the totals row and silently no-ops the sum validator.
+        (b) the trailing prose footnote is a ONE-cell full-width colspan row. It is
+            SKIP_BENIGN -- distinct from a legislature STATUS row, which is TWO cells
+            (state label + wide-colspan prose). One-cell vs two-cell is the whole
+            discriminator, so both shapes must appear in the fixture set.
+    - the state count here (4) is deliberately far below any real roster. A parser that
+      asserts an expected state count would fail on this fixture; #35 asserts no such
+      thing (design call A -- the parser is roster-free).
+
+  AGGREGATION IDENTITIES (verified by tests/unit/test_ucsb_fixtures.py):
+    (1) Placeholder 55+9+40+20 = 124,000; Fabricated 44+10+29+9 = 92,000.
+    (2) TOTAL VOTE 100+20+70+30 = 220,000.
+    (3) per state, TOTAL VOTE strictly exceeds the two shown candidates.
+    (4) EV totals equal the data-row EV sum: Placeholder 6+7+5 = 18, Fabricated 3.
+        No legislature state in this year.
+-->
+<section id="block-system-main" class="block block-system clearfix">
+<div class="field-body">
+<table class="table table-responsive">
+<tbody>
+<tr>
+<td colspan="2" rowspan="2"><strong>Party</strong></td>
+<td> </td>
+<td colspan="2"><strong>Nominees</strong></td>
+<td colspan="2" rowspan="2"><strong>Electoral Vote</strong></td>
+<td colspan="2" rowspan="2"><strong>Popular Vote</strong></td>
+</tr>
+<tr>
+<td> </td>
+<td><strong>Presidential</strong></td>
+<td><strong>Vice Presidential</strong></td>
+</tr>
+<tr>
+<td bgcolor="#990000"> </td>
+<td><em> Testytonian</em></td>
+<td><img alt="election party winner" src="https://example.invalid/winner.png" /></td>
+<td>Alexandra Placeholder</td>
+<td>Wilhelmina Stand-In</td>
+<td>18</td>
+<td>85.7%</td>
+<td>124,000</td>
+<td>56.4%</td>
+</tr>
+<tr>
+<td bgcolor="#000099"> </td>
+<td><em> Exemplary</em></td>
+<td> </td>
+<td>Benedict Fabricated</td>
+<td>Theodore Notreal</td>
+<td>3</td>
+<td>14.3%</td>
+<td>92,000</td>
+<td>41.8%</td>
+</tr>
+<tr>
+<td> </td>
+</tr>
+<tr>
+<td rowspan="3"><strong>STATE</strong></td>
+<td rowspan="3"><strong>TOTAL VOTE</strong></td>
+<td bgcolor="#990000" colspan="3"><span>Testytonian</span></td>
+<td bgcolor="#000099" colspan="3"><span>Exemplary</span></td>
+</tr>
+<tr>
+<td colspan="3"><strong>ALEXANDRA PLACEHOLDER</strong></td>
+<td colspan="3"><strong>BENEDICT FABRICATED</strong></td>
+</tr>
+<tr>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+<td>Votes</td>
+<td>%</td>
+<td>EV</td>
+</tr>
+<tr>
+<td bgcolor="#AACAEA" colspan="8"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Connecticut</td>
+<td bgcolor="#F7FAFD">100,000</td>
+<td bgcolor="#F7FAFD">55,000</td>
+<td bgcolor="#F7FAFD">55.0</td>
+<td bgcolor="#F7FAFD">6</td>
+<td bgcolor="#F7FAFD">44,000</td>
+<td bgcolor="#F7FAFD">44.0</td>
+<td bgcolor="#F7FAFD"> </td>
+</tr>
+<tr>
+<td bgcolor="#FFFFFF">Delaware</td>
+<td bgcolor="#FFFFFF">20,000</td>
+<td bgcolor="#FFFFFF">9,000</td>
+<td bgcolor="#FFFFFF">45.0</td>
+<td bgcolor="#FFFFFF"> </td>
+<td bgcolor="#FFFFFF">10,000</td>
+<td bgcolor="#FFFFFF">50.0</td>
+<td bgcolor="#FFFFFF">3</td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Maine</td>
+<td bgcolor="#F7FAFD">70,000</td>
+<td bgcolor="#F7FAFD">40,000</td>
+<td bgcolor="#F7FAFD">57.1</td>
+<td bgcolor="#F7FAFD">7</td>
+<td bgcolor="#F7FAFD">29,000</td>
+<td bgcolor="#F7FAFD">41.4</td>
+<td bgcolor="#F7FAFD"> </td>
+</tr>
+<tr>
+<td bgcolor="#FFFFFF">Vermont</td>
+<td bgcolor="#FFFFFF">30,000</td>
+<td bgcolor="#FFFFFF">20,000</td>
+<td bgcolor="#FFFFFF">66.7</td>
+<td bgcolor="#FFFFFF">5</td>
+<td bgcolor="#FFFFFF">9,000</td>
+<td bgcolor="#FFFFFF">30.0</td>
+<td bgcolor="#FFFFFF"> </td>
+</tr>
+<tr>
+<td bgcolor="#AACAEA" colspan="8"> </td>
+</tr>
+<tr>
+<td bgcolor="#F7FAFD">Total</td>
+<td bgcolor="#F7FAFD">220,000</td>
+<td bgcolor="#F7FAFD">124,000</td>
+<td bgcolor="#F7FAFD">56.4</td>
+<td bgcolor="#F7FAFD">18</td>
+<td bgcolor="#F7FAFD">92,000</td>
+<td bgcolor="#F7FAFD">41.8</td>
+<td bgcolor="#F7FAFD">3</td>
+</tr>
+<tr>
+<td colspan="8">Eleven states did not participate in this election.</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
