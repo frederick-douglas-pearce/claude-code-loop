@@ -38,11 +38,13 @@ API-error and ignorable `<synthetic>` lines excluded. If
 `stratum.turns` refuses a session, the whole profile is refused, named.
 
 Every profile prints a `stratum` line (`stratum.py`) beside the `engine era` line.
-A profile is one session. `--table` is the one place this script pools: it prints
-a P2c median only when every admissible session it was given shares one project
-directory, engine era and stratum, and otherwise names the groups and prints none.
+A profile is one session. `--table` pools sessions for P2c: it prints a median
+only when every admissible session it was given shares one project directory,
+engine era and stratum, and otherwise names the groups and prints none.
 Session class is the one grouping it cannot see -- that is the caller's to apply,
 by passing one class per call.
+`replicate_peak()` (#394), a library function, also reads several sessions: one
+replicate's parent files, for their peak context, with no stratum rule.
 
 DETECTION IS THE HARD PART, and it has been wrong three separate ways. Each bug
 was silent and each moved the number in a believable direction, so read
@@ -709,6 +711,83 @@ def profile(path, floor=None):
         "output_total": sum(out), "models": models,
         "stratum": stratum, "weights": weights, "price_refused": refused,
     }
+
+
+def unparseable_lines(path):
+    """How many non-blank lines of `path` are not a JSON object. This module's and
+    `stratum`'s transcript readers skip such lines silently, so a truncated line
+    holding the peak would understate it unseen."""
+    n = 0
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                n += 1
+                continue
+            if not isinstance(rec, dict):
+                n += 1
+    return n
+
+
+def replicate_peak(paths):
+    """Peak parent context for one replicate, over its parent transcript files (#394).
+
+    Pass `replicate.parent_files(replicate.project_dir(rdir))`; this module does not
+    import `replicate`. The peak is the largest `profile(path)["peak_ctx"]` over the
+    files, read only when no parent turn's `message.id` (a string key of `turns()`
+    over a file's non-sidechain lines; an excluded or sidechain line's id is not
+    counted) appears in more than one of them. Turns
+    are de-duplicated per id, so files whose ids are disjoint split cleanly at their
+    boundaries, and the largest per-file peak is then the peak `profile()` would
+    give over their union. Where an id appears in more than one file, each file can
+    keep a different line of that call, so the replicate is refused, as
+    `replicate.py measure` refuses it.
+
+    A file with no parent turns contributes nothing. Refused (`peak_ctx` None, with a
+    `refused` reason), default-deny: no paths; no file with a parent turn; any file
+    on which `profile()` raises `Unpriced`, which `turns()` does for malformed usage
+    and a pricing lever; or a parent turn's `message.id` shared across files. An unknown or
+    unpriced MODEL is not refused: `profile()` catches that into `price_refused` and
+    still returns `peak_ctx`, and a peak needs no price. Any other exception
+    propagates.
+
+    There is no stratum rule here. Outcome 3 reads the peak only on replicates
+    `replicate.py measure` does not refuse, and section 8 of
+    `preregistration-template.md` decides admission; that is what keeps the peak,
+    `usd` and `turns` over one set of replicates. `unparseable` counts non-blank lines
+    that are not a JSON object, which this module's and `stratum`'s transcript readers
+    skip; the caller decides
+    what a non-zero count means."""
+    paths = [str(p) for p in paths]
+    files, unparseable, refused = [], 0, None
+    seen = {}
+    for path in paths:
+        unparseable += unparseable_lines(path)
+        try:
+            records = [r for r in load(path) if isinstance(r, dict) and not r.get("isSidechain")]
+            ids = {t.key for t in turns(records)[0] if isinstance(t.key, str)}
+            p = profile(path)
+        except Unpriced as exc:
+            refused = refused or "%s: %s" % (os.path.basename(path), exc)
+            files.append((os.path.basename(path), None))
+            continue
+        for k in ids:
+            seen[k] = seen.get(k, 0) + 1
+        files.append((os.path.basename(path), p["peak_ctx"] if p else None))
+    peaks = [v for _, v in files if v is not None]
+    shared = sum(1 for n in seen.values() if n > 1)
+    if refused is None and shared:
+        refused = "%d message.id(s) appear in more than one parent session" % shared
+    elif refused is None and not paths:
+        refused = "no parent transcript"
+    elif refused is None and not peaks:
+        refused = "no parent turns in any parent transcript"
+    return {"peak_ctx": None if refused else max(peaks), "files": files,
+            "unparseable": unparseable, "refused": refused}
 
 
 def render(p):

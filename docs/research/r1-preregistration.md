@@ -19,7 +19,7 @@ direction predicted, and the reading that refutes.
 
 ## 2. Fields filled at freeze
 
-Every row is open. The draft cannot be frozen while one is.
+The draft cannot be frozen while any row is open.
 
 | Field | Owed by |
 |---|---|
@@ -37,7 +37,8 @@ Every row is open. The draft cannot be frozen while one is.
 | The transcript script for outcome 1, control arm: finder and re-check launches, and review rounds where readable. `review_launches.py` is built (#393). The row stays open until the script's `FIX_AGENT` hook is set, because until then a control-arm replicate that delegates a fix gets no round count | #288 |
 | The treatment check's count: the fix-agent spawn signature (the script's `FIX_AGENT` hook), in both arms; and each of R1's arm commits (the control's `5391906` and the treatment's) added to the script's `VALIDATED_COMMITS` only after a hand count on a replicate that ran it | #288 |
 | Compliance: what a compliant round is, and the floor below which the run is void | owner |
-| Peak-context instrument: that `engine_cost.profile()` reads a replicate's transcript in both arms | #288 |
+| Peak-context instrument, control arm: `engine_cost.replicate_peak()` reads a replicate's parent transcripts. Hand-checked equal on six re-pilots (`README.md` → *Peak-context hand check*; CLI 2.1.326, `claude-sonnet-5-5`, plugin commit `44e0c69`). All six had one parent file, so the multi-file rule is tested on synthetic transcripts only. `44e0c69` differs from the control's `5391906` under `plugins/dev-loop/` only in `.claude-plugin/plugin.json` and `README.md` (section 3), so these transcripts were written by the control arm's engine. A Claude Code version other than 2.1.326 registered in the version row above reopens this row until `peak_ctx_check.py` passes on one replicate at that version | #394 (closed); if reopened, #288 |
+| Peak-context instrument, treatment arm: that `engine_cost.replicate_peak()` reads a treatment replicate's parent transcripts. R1's fix agent runs in its own worktree, and `project_dir` refuses a second project dir, so the treatment transcript has to be checked to land in the replicate's one project dir | #288 |
 | Where R1's text writes the `over-deletion` tag (outcome 4) | #288 |
 | Redaction list and lever-stop pattern (outcomes 5 and 7) | #288 |
 | The blind evaluator and the stop-type judge: the build, and their model, effort, and prompts | #388 |

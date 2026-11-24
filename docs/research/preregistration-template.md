@@ -101,7 +101,7 @@ analyzed in the arm it was assigned to, and compliance is reported beside the ve
 |---|---|
 | USD per issue, to the endpoint | `replicate.py measure` → `usd` |
 | Turns per issue, to the endpoint | `replicate.py measure` → `turns`. It counts the parent sessions' turns. Cost review §5.1 also names subagent turns, which `measure` does not report. |
-| Peak parent context | `engine_cost.profile()` → `peak_ctx`, over the replicate's parent transcript. `measure` does not report it, so the instance shows at freeze that `profile()` reads a replicate's transcript in both arms. |
+| Peak parent context | `engine_cost.replicate_peak()` → `peak_ctx`, over the replicate's parent transcripts (its docstring states how more than one is read). `measure` does not report it, so the instance shows at freeze that it reads a replicate's transcripts in both arms. |
 | Quality | The blind evaluator's score (`blind-evaluator-protocol.md`), and `quality_outcomes.escalations()` over the captured journal. Of #272's three outcomes these are what a replicate supports: fix-up commits and F-comments need a merged PR and a 14-day window. |
 | Stop type | The stop-type judgment in `blind-evaluator-protocol.md`. |
 
