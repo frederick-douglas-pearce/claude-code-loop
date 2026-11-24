@@ -110,6 +110,8 @@ class Counting(Fixture):
             self.assertIn(word, RECHECK_P)  # rp2-h1's shape: it carries the finder's words
         self.assertEqual(RL.classify({"prompt": RECHECK_P}), ("recheck", ["recheck"]))
         self.assertEqual(RL.classify({"prompt": FINDER_P}), ("finder", ["finder"]))
+        # is_finder's own contract: a re-check is never a finder, whatever classify does.
+        self.assertFalse(RL.is_finder({"prompt": RECHECK_P}))
 
     def test_unclassified_is_listed_never_dropped(self):
         self.write(self.control())
@@ -165,6 +167,9 @@ class Counting(Fixture):
 
     def test_case_rules(self):
         self.assertTrue(RL.is_recheck({"prompt": "Earlier material is not to be Re-Litigated."}))
+        # The signature is the stem: every inflection of the engine's word matches.
+        self.assertTrue(RL.is_recheck({"prompt": "Do not re-litigate earlier verdicts."}))
+        self.assertTrue(RL.is_recheck({"prompt": "No re-litigating of round 1."}))
         self.assertTrue(RL.is_finder({"prompt": "LENS label x. Classes: BLOCKING, EDITORIAL."}))
         # The classes are matched as the engine spells them.
         self.assertFalse(RL.is_finder({"prompt": "lens label x. classes: blocking, editorial."}))
@@ -292,6 +297,17 @@ class NullRounds(Fixture):
         self.assertEqual([c["kind"] for c in r["classified_launches"]],
                          ["finder", "finder", "recheck"])
         self.assertEqual(r["unclassified"], 1)
+
+    def test_unvalidated_commit_nulls_fix_agent_even_with_the_hook_set(self):
+        self.env("0" * 40)
+        with mock.patch.object(RL, "FIX_AGENT", lambda inp: "review fixes" in (inp.get("prompt") or "")):
+            self.write([rec(1, launch("f1", FINDER_P)), rec(10, launch("x1", FIX_P)),
+                        rec(30, launch("r1", RECHECK_P))])
+            r = self.report()
+        self.assertIsNone(r["fix_agent"])
+        self.assertEqual(r["fix_agent_label"], "not validated for this plugin_commit")
+        self.assertEqual([c["kind"] for c in r["classified_launches"]],
+                         ["finder", "fix_agent", "recheck"])
 
     def test_unparseable_line_nulls_rounds(self):
         self.write(self.control(), raw_lines=['{"type": "assistant", "mess'])
