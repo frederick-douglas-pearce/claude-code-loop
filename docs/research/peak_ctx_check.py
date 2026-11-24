@@ -10,9 +10,10 @@ and the largest value over every non-sidechain assistant line, with no
 de-duplication. Nothing is imported from `engine_cost`'s or `stratum`'s counting
 path, so a defect in that path's field list or dedupe cannot pass both sides.
 
-One known definitional difference: `isApiErrorMessage` lines are counted here and
-excluded by `stratum.turns()`, so one carrying a larger usage than any real call is
-reported as a mismatch for a human to look at, never reconciled.
+The two counts are defined differently: the engine de-duplicates turns per
+`message.id` and excludes or refuses lines (an `isApiErrorMessage` line, for
+example) that this count takes as they come. Any disagreement is reported for a
+human to read, never reconciled.
 
 Exits 0 only when every replicate's two figures agree, no line was unparseable on
 either side, and nothing was refused.
@@ -89,8 +90,14 @@ def main(argv=None):
     rc = 0
     for rdir in args:
         r = check(rdir)
-        verdict = "equal" if r["ok"] else ("REFUSED: %s" % r["refused"] if r["refused"]
-                                           else "MISMATCH")
+        if r["ok"]:
+            verdict = "equal"
+        elif r["refused"]:
+            verdict = "REFUSED: %s" % r["refused"]
+        elif r["unparseable"]:
+            verdict = "UNPARSEABLE"
+        else:
+            verdict = "MISMATCH"
         print("%s\t%s\t%s\t%s\t%s\t%s" % (r["replicate"], r["files"], r["replicate_peak"],
                                           r["independent"], r["unparseable"], verdict))
         if not r["ok"]:

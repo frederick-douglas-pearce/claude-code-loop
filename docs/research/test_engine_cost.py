@@ -8,8 +8,10 @@ this respects that while still making the instrument executable rather than
 re-derived by reading, which is exactly the failure `tests/test_mutate_verify.py`
 exists to prevent.
 
-Every case below is a real shape taken from a transcript, and each of the three
-detection bugs is pinned by the case that caught it.
+The detection cases are real shapes taken from a transcript, and each of the
+three detection bugs is pinned by the case that caught it. `ReplicatePeakTests`
+are synthetic, not shapes taken from a real transcript: no re-pilot had more than
+one parent file.
 
     python3 docs/research/test_engine_cost.py
 """
@@ -593,8 +595,8 @@ class TolerancePinTests(unittest.TestCase):
 
 
 class TableTests(unittest.TestCase):
-    """ge.9 and the pooling rule: `--table` is the one place this script pools, so
-    the product path is what these run, not the library underneath it."""
+    """ge.9 and the pooling rule: `--table` is the CLI path that pools sessions for
+    P2c, so the product path is what these run, not the library underneath it."""
 
     def _write(self, d, name, recs):
         import json as _json
@@ -1033,13 +1035,36 @@ class ReplicatePeakTests(unittest.TestCase):
         self.assertEqual(r["peak_ctx"], 90_001)
         self.assertEqual(r["files"], [("a.jsonl", 90_001)])
 
-    def test_a_later_file_replaying_the_first_and_going_higher(self):
-        """Catches a sum (it would double the shared calls) and a reader of the first
+    def test_a_later_file_going_higher(self):
+        """Disjoint ids. Catches a sum of the files' peaks and a reader of the first
         file only."""
+        a = self.write("a.jsonl", [call("m0", 1000), call("m1", 50_000)])
+        b = self.write("b.jsonl", [call("m2", 70_000)])
+        r = ec.replicate_peak([a, b])
+        self.assertIsNone(r["refused"])
+        self.assertEqual(r["peak_ctx"], 70_000)
+
+    def test_an_id_in_two_files_is_refused(self):
+        """A resume that replays the first file's calls into a second one."""
         first = [call("m0", 1000), call("m1", 50_000)]
         a = self.write("a.jsonl", first)
         b = self.write("b.jsonl", first + [call("m2", 70_000)])
-        self.assertEqual(ec.replicate_peak([a, b])["peak_ctx"], 70_000)
+        r = ec.replicate_peak([a, b])
+        self.assertIsNone(r["peak_ctx"])
+        self.assertEqual(r["refused"], "2 message.id(s) appear in more than one parent session")
+
+    def test_one_call_split_across_files_is_refused(self):
+        """Each file would keep a different line of `m0` (the highest output_tokens):
+        500 per file, against 100 over the union. Refused, never either number."""
+        lo = call("m0", 500)
+        lo["message"]["usage"]["output_tokens"] = 1
+        hi = call("m0", 99)
+        hi["message"]["usage"]["output_tokens"] = 50
+        a = self.write("a.jsonl", [lo])
+        b = self.write("b.jsonl", [lo, hi])
+        r = ec.replicate_peak([a, b])
+        self.assertIsNone(r["peak_ctx"])
+        self.assertEqual(r["refused"], "1 message.id(s) appear in more than one parent session")
 
     def test_the_peak_in_the_first_file_is_still_found(self):
         """Catches a reader of the last file only."""
@@ -1080,7 +1105,7 @@ class ReplicatePeakTests(unittest.TestCase):
     def test_malformed_usage_refuses_the_whole_replicate(self):
         """One unpriceable file refuses the replicate, even beside a good one."""
         bad = call("m1", 9000)
-        bad["message"]["usage"] = {"output_tokens": 5, "service_tier": "priority"}
+        bad["message"]["usage"] = {"input_tokens": None, "output_tokens": 5}
         a = self.write("a.jsonl", [call("m0", 400_000)])
         b = self.write("b.jsonl", [bad])
         r = ec.replicate_peak([a, b])
