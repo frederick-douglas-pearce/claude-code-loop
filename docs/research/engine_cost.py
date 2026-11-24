@@ -41,10 +41,10 @@ Every profile prints a `stratum` line (`stratum.py`) beside the `engine era` lin
 A profile is one session. `--table` pools sessions for P2c: it prints a median
 only when every admissible session it was given shares one project directory,
 engine era and stratum, and otherwise names the groups and prints none.
-`replicate_peak()` (#394), a library function, also reads several sessions: one
-replicate's parent files, for their peak context, with no stratum rule.
 Session class is the one grouping it cannot see -- that is the caller's to apply,
 by passing one class per call.
+`replicate_peak()` (#394), a library function, also reads several sessions: one
+replicate's parent files, for their peak context, with no stratum rule.
 
 DETECTION IS THE HARD PART, and it has been wrong three separate ways. Each bug
 was silent and each moved the number in a believable direction, so read
@@ -714,9 +714,9 @@ def profile(path, floor=None):
 
 
 def unparseable_lines(path):
-    """How many non-blank lines of `path` are not a JSON object. The engine's readers
-    skip such lines silently, so a truncated line holding the peak would understate
-    it unseen."""
+    """How many non-blank lines of `path` are not a JSON object. This module's and
+    `stratum`'s transcript readers skip such lines silently, so a truncated line
+    holding the peak would understate it unseen."""
     n = 0
     with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
@@ -738,7 +738,9 @@ def replicate_peak(paths):
 
     Pass `replicate.parent_files(replicate.project_dir(rdir))`; this module does not
     import `replicate`. The peak is the largest `profile(path)["peak_ctx"]` over the
-    files, read only when no `message.id` appears in more than one of them. Turns
+    files, read only when no parent turn's `message.id` (a string key of `turns()`
+    over a file's non-sidechain lines; an excluded or sidechain line's id is not
+    counted) appears in more than one of them. Turns
     are de-duplicated per id, so files whose ids are disjoint split cleanly at their
     boundaries, and the largest per-file peak is then the peak `profile()` would
     give over their union. Where an id appears in more than one file, each file can
@@ -748,7 +750,7 @@ def replicate_peak(paths):
     A file with no parent turns contributes nothing. Refused (`peak_ctx` None, with a
     `refused` reason), default-deny: no paths; no file with a parent turn; any file
     on which `profile()` raises `Unpriced`, which `turns()` does for malformed usage
-    and a pricing lever; or a `message.id` shared across files. An unknown or
+    and a pricing lever; or a parent turn's `message.id` shared across files. An unknown or
     unpriced MODEL is not refused: `profile()` catches that into `price_refused` and
     still returns `peak_ctx`, and a peak needs no price. Any other exception
     propagates.
@@ -757,7 +759,8 @@ def replicate_peak(paths):
     `replicate.py measure` does not refuse, and section 8 of
     `preregistration-template.md` decides admission; that is what keeps the peak,
     `usd` and `turns` over one set of replicates. `unparseable` counts non-blank lines
-    that are not a JSON object, which the engine's readers skip; the caller decides
+    that are not a JSON object, which this module's and `stratum`'s transcript readers
+    skip; the caller decides
     what a non-zero count means."""
     paths = [str(p) for p in paths]
     files, unparseable, refused = [], 0, None

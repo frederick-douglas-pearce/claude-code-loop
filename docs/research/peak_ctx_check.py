@@ -10,7 +10,7 @@ and the largest value over every non-sidechain assistant line, with no
 de-duplication. Nothing is imported from `engine_cost`'s or `stratum`'s counting
 path, so a defect in that path's field list or dedupe cannot pass both sides.
 
-The two counts are defined differently: the engine de-duplicates turns per
+The two counts are defined differently: `replicate_peak()` de-duplicates turns per
 `message.id` and excludes or refuses lines (an `isApiErrorMessage` line, for
 example) that this count takes as they come. Any disagreement is reported for a
 human to read, never reconciled.
@@ -94,10 +94,10 @@ def main(argv=None):
             verdict = "equal"
         elif r["refused"]:
             verdict = "REFUSED: %s" % r["refused"]
-        elif r["unparseable"]:
-            verdict = "UNPARSEABLE"
         else:
-            verdict = "MISMATCH"
+            parts = [n for n, hit in (("MISMATCH", r["replicate_peak"] != r["independent"]),
+                                      ("UNPARSEABLE", bool(r["unparseable"]))) if hit]
+            verdict = "+".join(parts) or "MISMATCH"
         print("%s\t%s\t%s\t%s\t%s\t%s" % (r["replicate"], r["files"], r["replicate_peak"],
                                           r["independent"], r["unparseable"], verdict))
         if not r["ok"]:

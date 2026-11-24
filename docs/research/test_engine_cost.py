@@ -1054,8 +1054,9 @@ class ReplicatePeakTests(unittest.TestCase):
         self.assertEqual(r["refused"], "2 message.id(s) appear in more than one parent session")
 
     def test_one_call_split_across_files_is_refused(self):
-        """Each file would keep a different line of `m0` (the highest output_tokens):
-        500 per file, against 100 over the union. Refused, never either number."""
+        """`a.jsonl` keeps the 500-context line of `m0` and `b.jsonl` the 99-context one
+        (the highest output_tokens), so the max over files is 500, against 99 over the
+        union. Refused, never either number."""
         lo = call("m0", 500)
         lo["message"]["usage"]["output_tokens"] = 1
         hi = call("m0", 99)
