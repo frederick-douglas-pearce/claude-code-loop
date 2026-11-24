@@ -991,5 +991,128 @@ class TurnFilesTests(unittest.TestCase):
         self.assertAlmostEqual(p["turn_files"]["m1"][CORE], 5000)
 
 
+def call(mid, ctx, model="claude-opus-5-5", **extra):
+    """One parent API call whose context (input + cache read + cache write) is `ctx`,
+    split across all three fields so a reader that drops one comes out short."""
+    third = ctx // 3
+    rec = {"type": "assistant", "effort": "high", "message": {
+        "id": mid, "model": model, "usage": {
+            "input_tokens": ctx - 2 * third, "cache_read_input_tokens": third,
+            "cache_creation_input_tokens": third, "output_tokens": 5},
+        "content": [{"type": "text", "text": "."}]}}
+    rec.update(extra)
+    return rec
+
+
+class ReplicatePeakTests(unittest.TestCase):
+    """`replicate_peak` over a replicate's parent files (#394). Every expected peak
+    is a literal, never `profile()`'s own answer."""
+
+    def setUp(self):
+        import tempfile
+        self.root = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.root)
+
+    def write(self, name, recs, raw=()):
+        import json as _json
+        path = os.path.join(self.root, name)
+        with open(path, "w") as fh:
+            for r in recs:
+                fh.write(_json.dumps(r) + "\n")
+            for line in raw:
+                fh.write(line + "\n")
+        return path
+
+    def test_one_file_is_its_largest_call(self):
+        a = self.write("a.jsonl", [call("m0", 1000), call("m1", 90_001), call("m2", 40_000)])
+        r = ec.replicate_peak([a])
+        self.assertIsNone(r["refused"])
+        self.assertEqual(r["peak_ctx"], 90_001)
+        self.assertEqual(r["files"], [("a.jsonl", 90_001)])
+
+    def test_a_later_file_replaying_the_first_and_going_higher(self):
+        """Catches a sum (it would double the shared calls) and a reader of the first
+        file only."""
+        first = [call("m0", 1000), call("m1", 50_000)]
+        a = self.write("a.jsonl", first)
+        b = self.write("b.jsonl", first + [call("m2", 70_000)])
+        self.assertEqual(ec.replicate_peak([a, b])["peak_ctx"], 70_000)
+
+    def test_the_peak_in_the_first_file_is_still_found(self):
+        """Catches a reader of the last file only."""
+        a = self.write("a.jsonl", [call("m0", 120_000)])
+        b = self.write("b.jsonl", [call("m1", 3000), call("m2", 8000)])
+        r = ec.replicate_peak([a, b])
+        self.assertEqual(r["peak_ctx"], 120_000)
+        self.assertEqual(r["files"], [("a.jsonl", 120_000), ("b.jsonl", 8000)])
+
+    def test_a_sidechain_call_is_not_the_parent_peak(self):
+        a = self.write("a.jsonl", [call("m0", 5000), call("s0", 900_000, isSidechain=True)])
+        self.assertEqual(ec.replicate_peak([a])["peak_ctx"], 5000)
+
+    def test_an_api_error_line_is_not_a_call(self):
+        a = self.write("a.jsonl", [call("m0", 5000),
+                                   call("e0", 700_000, isApiErrorMessage=True)])
+        self.assertEqual(ec.replicate_peak([a])["peak_ctx"], 5000)
+
+    def test_a_file_with_no_parent_turns_contributes_nothing(self):
+        a = self.write("a.jsonl", [{"type": "user", "message": {"content": "hi"}}])
+        b = self.write("b.jsonl", [call("m0", 6000)])
+        r = ec.replicate_peak([a, b])
+        self.assertIsNone(r["refused"])
+        self.assertEqual(r["peak_ctx"], 6000)
+        self.assertEqual(r["files"], [("a.jsonl", None), ("b.jsonl", 6000)])
+
+    def test_no_paths_is_refused(self):
+        r = ec.replicate_peak([])
+        self.assertIsNone(r["peak_ctx"])
+        self.assertEqual(r["refused"], "no parent transcript")
+
+    def test_only_files_without_parent_turns_is_refused(self):
+        a = self.write("a.jsonl", [{"type": "user", "message": {"content": "hi"}}])
+        r = ec.replicate_peak([a])
+        self.assertIsNone(r["peak_ctx"])
+        self.assertEqual(r["refused"], "no parent turns in any parent transcript")
+
+    def test_malformed_usage_refuses_the_whole_replicate(self):
+        """One unpriceable file refuses the replicate, even beside a good one."""
+        bad = call("m1", 9000)
+        bad["message"]["usage"] = {"output_tokens": 5, "service_tier": "priority"}
+        a = self.write("a.jsonl", [call("m0", 400_000)])
+        b = self.write("b.jsonl", [bad])
+        r = ec.replicate_peak([a, b])
+        self.assertIsNone(r["peak_ctx"])
+        self.assertTrue(r["refused"].startswith("b.jsonl: "), r["refused"])
+
+    def test_an_unknown_model_is_not_refused(self):
+        """A peak needs no price: `profile()` records the model as unpriced and still
+        returns `peak_ctx`, so this must never refuse (architect B1, #394)."""
+        a = self.write("a.jsonl", [call("m0", 2000, model="claude-nonesuch-9"),
+                                   call("m1", 77_000, model="claude-nonesuch-9")])
+        r = ec.replicate_peak([a])
+        self.assertIsNone(r["refused"])
+        self.assertEqual(r["peak_ctx"], 77_000)
+
+    def test_files_on_different_models_are_not_refused(self):
+        """No stratum rule here: `measure` decides admissibility (template section 8)."""
+        a = self.write("a.jsonl", [call("m0", 10_000)])
+        b = self.write("b.jsonl", [call("m1", 20_000, model="claude-sonnet-5-5")])
+        self.assertEqual(ec.replicate_peak([a, b])["peak_ctx"], 20_000)
+
+    def test_unparseable_lines_are_counted(self):
+        a = self.write("a.jsonl", [call("m0", 4000)], raw=['{"type": "assistant", "mess', "[1, 2]"])
+        b = self.write("b.jsonl", [call("m1", 3000)], raw=["not json"])
+        r = ec.replicate_peak([a, b])
+        self.assertEqual(r["unparseable"], 3)
+        self.assertEqual(r["peak_ctx"], 4000)
+
+    def test_a_missing_file_raises(self):
+        with self.assertRaises(OSError):
+            ec.replicate_peak([os.path.join(self.root, "absent.jsonl")])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

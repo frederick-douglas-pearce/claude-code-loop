@@ -711,6 +711,67 @@ def profile(path, floor=None):
     }
 
 
+def unparseable_lines(path):
+    """How many non-blank lines of `path` are not a JSON object. `load()` skips them
+    silently, so a truncated line holding the peak would understate it unseen."""
+    n = 0
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                n += 1
+                continue
+            if not isinstance(rec, dict):
+                n += 1
+    return n
+
+
+def replicate_peak(paths):
+    """Peak parent context for one replicate, over its parent transcript files (#394).
+
+    Pass `replicate.parent_files(replicate.project_dir(rdir))`; this module does not
+    import `replicate`. The peak is the largest `profile(path)["peak_ctx"]` over the
+    files. That is set arithmetic, not a claim about how a resume writes its records:
+    the largest per-call context over a union of files is the largest of the files'
+    own peaks, whatever the files share. A sum would count a shared `message.id`
+    twice, which is why it is not one.
+
+    A file with no parent turns contributes nothing. Refused (`peak_ctx` None, with a
+    `refused` reason), default-deny: no paths; no file with a parent turn; or any file
+    on which `profile()` raises `Unpriced`, which `turns()` does for malformed usage
+    and a pricing lever. An unknown or unpriced MODEL is not refused: `profile()`
+    catches that into `price_refused` and still returns `peak_ctx`, and a peak needs
+    no price. An `OSError` propagates.
+
+    There is no stratum rule here. Outcome 3 reads the peak only on replicates
+    `replicate.py measure` admits (`preregistration-template.md` section 8), and that
+    is what keeps the peak, `usd` and `turns` over one set of replicates.
+    `unparseable` counts lines `profile()` skipped; the caller decides what a
+    non-zero count means."""
+    paths = [str(p) for p in paths]
+    files, unparseable, refused = [], 0, None
+    for path in paths:
+        unparseable += unparseable_lines(path)
+        try:
+            p = profile(path)
+        except Unpriced as exc:
+            refused = refused or "%s: %s" % (os.path.basename(path), exc)
+            files.append((os.path.basename(path), None))
+            continue
+        files.append((os.path.basename(path), p["peak_ctx"] if p else None))
+    peaks = [v for _, v in files if v is not None]
+    if refused is None and not paths:
+        refused = "no parent transcript"
+    elif refused is None and not peaks:
+        refused = "no parent turns in any parent transcript"
+    return {"peak_ctx": None if refused else max(peaks), "files": files,
+            "unparseable": unparseable, "refused": refused}
+
+
 def render(p):
     n, ing, proc = p["turns"], p["ingested"], p["processed"]
     mixed = " MIXED:%s" % ",".join(sorted(p["eras_seen"])) if len(p["eras_seen"]) > 1 else ""
