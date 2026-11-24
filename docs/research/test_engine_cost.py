@@ -1135,6 +1135,33 @@ class ReplicatePeakTests(unittest.TestCase):
         self.assertEqual(r["unparseable"], 3)
         self.assertEqual(r["peak_ctx"], 4000)
 
+    def test_no_id_calls_at_one_index_in_two_files_are_not_shared(self):
+        """A call with no `message.id` is keyed `("no-id", index)`, so two files
+        each holding one at line 0 collide on that key; it is no id, never shared."""
+        a0 = call("x", 1000)
+        del a0["message"]["id"]
+        b0 = call("x", 2000)
+        del b0["message"]["id"]
+        a = self.write("a.jsonl", [a0, call("m1", 5000)])
+        b = self.write("b.jsonl", [b0, call("m2", 6000)])
+        r = ec.replicate_peak([a, b])
+        self.assertIsNone(r["refused"])
+        self.assertEqual(r["peak_ctx"], 6000)
+
+    def test_a_sidechain_id_in_two_files_is_not_shared(self):
+        """Sidechain lines are not parent turns, so their ids never refuse."""
+        a = self.write("a.jsonl", [call("m0", 1000), call("s0", 900, isSidechain=True)])
+        b = self.write("b.jsonl", [call("m1", 2000), call("s0", 900, isSidechain=True)])
+        r = ec.replicate_peak([a, b])
+        self.assertIsNone(r["refused"])
+        self.assertEqual(r["peak_ctx"], 2000)
+
+    def test_blank_lines_are_not_unparseable(self):
+        a = self.write("a.jsonl", [call("m0", 1000)], raw=["", "   ", "\t"])
+        r = ec.replicate_peak([a])
+        self.assertEqual(r["unparseable"], 0)
+        self.assertEqual(r["peak_ctx"], 1000)
+
     def test_a_missing_file_raises(self):
         with self.assertRaises(OSError):
             ec.replicate_peak([os.path.join(self.root, "absent.jsonl")])
