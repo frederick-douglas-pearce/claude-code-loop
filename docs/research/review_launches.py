@@ -102,8 +102,10 @@ rules (`r1-preregistration.md` section 2):
 * `review_rounds == 2` does not mean round 1 was dirty, or that round 2 was the
   re-check of round 1's fixes. A downstream re-arm with no launch before its
   re-check, such as a CI fix, looks the same as the fix's own commits.
-* A re-check whose prompt carries neither the `RECHECK` signature nor the class
-  words is `unclassified`, and the count then reads 1. Round 1 dirty with
+* A re-check whose prompt carries neither the `RECHECK` nor the `FINDER`
+  signature (`BLOCKING` and `EDITORIAL` without `lens` match neither; two of the
+  three re-pilot re-checks carry them without `lens`) is `unclassified`, and the
+  count then reads 1. Round 1 dirty with
   `review_rounds == 1` and no halt is therefore unreadable without a hand check
   of the unclassified list, never "no round 2".
 * The signatures were validated on one fixture, one orchestrator family, and
