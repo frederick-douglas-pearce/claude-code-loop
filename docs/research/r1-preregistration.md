@@ -19,7 +19,7 @@ direction predicted, and the reading that refutes.
 
 ## 2. Fields filled at freeze
 
-Every row is open unless it names where it closed. The draft cannot be frozen while one is open.
+Every row is open. The draft cannot be frozen while one is.
 
 | Field | Owed by |
 |---|---|
@@ -33,9 +33,9 @@ Every row is open unless it names where it closed. The draft cannot be frozen wh
 | Picks beyond the seven | #288 |
 | Frozen criteria list per pick | #288 |
 | Environment-fixed set: its members | #288 |
-| Classification rules (section 9), including the rule that a replicate reached the endpoint, which halts each of outcome 6's counts takes, and whether round 2 is clean or dirty, read from the re-check's return | #288 |
-| The transcript script for outcome 1 and the treatment check, control-arm counts: review rounds and re-check launches | #393, closed: `review_launches.py` |
-| The fix-agent spawn signature (the script's `FIX_AGENT` hook), and the re-check and finder signatures re-validated against R1's text and treatment commit (the script's `VALIDATED_COMMITS`) | #288 |
+| Classification rules (section 9), including the rule that a replicate reached the endpoint, which halts each of outcome 6's counts takes, whether round 1 is dirty (at risk), and whether round 2 is clean or dirty. The transcript script counts launches and reads neither verdict. A replicate whose round 1 is dirty, with one review round counted and no halt, is unreadable until its unclassified launches are checked by hand, never "no round 2" | #288 |
+| The transcript script for outcome 1, control arm: finder and re-check launches, and review rounds where readable. `review_launches.py` is built (#393). The row stays open until the script's `FIX_AGENT` hook is set, because until then a control-arm replicate that delegates a fix gets no round count | #288 |
+| The treatment check's count: the fix-agent spawn signature (the script's `FIX_AGENT` hook), in both arms; and each of R1's arm commits (the control's `5391906` and the treatment's) added to the script's `VALIDATED_COMMITS` only after a hand count on a replicate that ran it | #288 |
 | Compliance: what a compliant round is, and the floor below which the run is void | owner |
 | Peak-context instrument: that `engine_cost.profile()` reads a replicate's transcript in both arms | #288 |
 | Where R1's text writes the `over-deletion` tag (outcome 4) | #288 |
@@ -78,7 +78,8 @@ As the template fixes it.
 Counted from each replicate's parent transcript, from `Agent` launches, as appendix A §4 counts
 them: fix-agent spawns per dirty code-review round in the treatment arm, and any fix-agent spawn in
 the control arm. Compliance is reported by assigned arm. What makes a round compliant, the floor
-below which the run is void, and the fix-agent spawn signature are section 2 rows.
+below which the run is void, and the fix-agent spawn signature are section 2 rows. The script is
+`review_launches.py`, through its `FIX_AGENT` hook.
 
 ## 7. Outcomes
 
@@ -89,9 +90,10 @@ A pick is **informative** when both arms have at least one at-risk replicate.
 ### Outcome 1 — round 2 clean, given round 1 dirty (primary)
 
 - **Instrument:** review rounds and re-check launches counted from the transcript by
-  `review_launches.py`. Not the journal: the engine writes its `- Code-review:` line for a
-  reader, not for a parser. Whether round 2 is clean is a section 9 classification rule (a
-  section 2 row), not a count: 0.6.0 names no structured verdict in the re-check's return.
+  `review_launches.py` (section 2). Not the journal: the engine writes its `- Code-review:` line
+  for a reader, not for a parser. Whether round 1 is dirty and whether round 2 is clean are
+  section 9 classification rules (section 2), not counts: the script reads launches, not what
+  they return.
 - **Unit:** per pick and arm, the share of at-risk replicates whose round 2 is clean.
 - **Prediction:** higher in the treatment arm. The size is a section 2 row.
 - **Refuted if:** the median over informative picks of the paired difference is zero or below.

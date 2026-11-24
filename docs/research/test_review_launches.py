@@ -6,12 +6,13 @@ NOT part of the shipped suite -- lives under `docs/research/`, not `tests/`, so
 half runs it, and CI does not (#286).
 
 Every transcript here is written by the test; nothing reads a real replicate. The
-cases pin the mechanism: what a launch is (assistant records only, one per
-`tool_use_id`, ordered by time across parent files), the two signatures and the
-re-check's precedence over the finder, that an unmatched launch is listed and
-never dropped, that the fix-agent count is `null` and "not established" while
-the hook is unset and never `0`, and that every shape the round rule cannot read
-gives `null` with a reason.
+cases pin the mechanism: what a launch is (assistant records only, against
+replays and other record types; sidechain records skipped; one per
+`tool_use_id`, within and across files; ordered by time across parent files),
+each term of the two signatures and the re-check's precedence over the finder,
+that an unmatched launch is listed and never dropped, that the fix-agent count
+is `null` and "not established" while the hook is unset and never `0`, and that
+each shape the docstring lists as unreadable gives `null` with a reason.
 
     python3 docs/research/test_review_launches.py
 """
@@ -35,8 +36,8 @@ SLUG = "proj"
 
 FINDER_P = ("You are a READ-ONLY code-review finder, lens label `correctness`. "
             "Classify each finding BLOCKING or EDITORIAL; if unsure, BLOCKING.")
-# A real 0.6.0 re-check prompt carries the finder's words too (lens label
-# `recheck`, the two classes), which is what the precedence exists for.
+# rp2-h1's re-check prompt carries the finder's words (the lens label `recheck`
+# and both classes); the precedence is what keeps such a prompt a re-check.
 RECHECK_P = ("You are a fresh READ-ONLY re-checker (finding-id lens label: `recheck`). "
              "Earlier material carries a verdict and is not re-litigated. "
              "Classify each finding BLOCKING or EDITORIAL.")
@@ -106,7 +107,7 @@ class Counting(Fixture):
     def test_recheck_takes_precedence_over_finder(self):
         self.assertTrue(RL.is_recheck({"prompt": RECHECK_P}))
         for word in ("lens", "BLOCKING", "EDITORIAL"):
-            self.assertIn(word, RECHECK_P)  # the realistic shape: it carries the finder's words
+            self.assertIn(word, RECHECK_P)  # rp2-h1's shape: it carries the finder's words
         self.assertEqual(RL.classify({"prompt": RECHECK_P}), ("recheck", ["recheck"]))
         self.assertEqual(RL.classify({"prompt": FINDER_P}), ("finder", ["finder"]))
 
@@ -117,8 +118,13 @@ class Counting(Fixture):
         self.assertEqual(u["tool_use_id"], "a1")
         self.assertEqual(u["description"], "AC verifier (Class A)")
         self.assertEqual(u["subagent_type"], "general-purpose")
-        self.assertEqual(u["prompt_head"], AC_P[:RL.PROMPT_HEAD])
         self.assertEqual(r["launches"], r["finder"] + r["recheck"] + r["unclassified"])
+
+    def test_prompt_head_is_cut_at_120_characters(self):
+        long_p = "x" * 100 + "0123456789abcdefghijKLMNOP"
+        self.write([rec(1, launch("a1", long_p))])
+        (u,) = self.report()["unclassified_launches"]
+        self.assertEqual(u["prompt_head"], "x" * 100 + "0123456789abcdefghij")
 
     def test_two_signatures_is_unclassified(self):
         # The realistic #288 shape: a fix-agent signature that also matches a
@@ -133,15 +139,29 @@ class Counting(Fixture):
         self.write([rec(1, launch("f1", FINDER_P, name="Task"))])
         self.assertEqual(self.report()["finder"], 1)
 
-    def test_blob_replay_is_not_a_launch(self):
+    def test_only_assistant_records_hold_launches(self):
         self.write([rec(1, launch("f1", FINDER_P)),
-                    rec(2, launch("f9", FINDER_P), rtype="api-request-blob")])
+                    rec(2, launch("f9", FINDER_P), rtype="api-request-blob"),
+                    rec(3, launch("f8", FINDER_P), rtype="user"),
+                    rec(4, launch("f7", FINDER_P), rtype="progress")])
         r = self.report()
         self.assertEqual((r["launches"], r["finder"]), (1, 1))
+
+    def test_sidechain_records_are_skipped(self):
+        side = rec(2, launch("s1", FINDER_P))
+        side["isSidechain"] = True
+        self.write([rec(1, launch("f1", FINDER_P)), side])
+        self.assertEqual(self.report()["launches"], 1)
 
     def test_duplicate_tool_use_id_counted_once(self):
         self.write([rec(1, launch("f1", FINDER_P)), rec(1, launch("f1", FINDER_P))])
         self.assertEqual(self.report()["launches"], 1)
+
+    def test_duplicate_tool_use_id_across_files_counted_once(self):
+        self.write([rec(1, launch("f1", FINDER_P))], name="aaaa.jsonl")
+        self.write([rec(1, launch("f1", FINDER_P))], name="bbbb.jsonl")
+        r = self.report()
+        self.assertEqual((r["parent_transcripts"], r["launches"]), (2, 1))
 
     def test_case_rules(self):
         self.assertTrue(RL.is_recheck({"prompt": "Earlier material is not to be Re-Litigated."}))
@@ -149,6 +169,11 @@ class Counting(Fixture):
         # The classes are matched as the engine spells them.
         self.assertFalse(RL.is_finder({"prompt": "lens label x. classes: blocking, editorial."}))
         self.assertFalse(RL.is_finder({"prompt": "lens label x. BLOCKING only."}))
+        # Each term is required on its own, and each class is matched in its own case.
+        self.assertFalse(RL.is_finder({"prompt": "Classes: BLOCKING, EDITORIAL."}))
+        self.assertFalse(RL.is_finder({"prompt": "lens x. EDITORIAL only."}))
+        self.assertFalse(RL.is_finder({"prompt": "lens x. blocking, EDITORIAL."}))
+        self.assertFalse(RL.is_finder({"prompt": "lens x. BLOCKING, editorial."}))
 
     def test_missing_or_non_string_prompt_is_unclassified(self):
         self.write([rec(1, launch("n1", None), launch("n2", 123), launch("n3", ["x"]))])
@@ -183,6 +208,16 @@ class Counting(Fixture):
         self.write(self.control(), raw_lines=['{"type": "assistant", "mess', "[1, 2]"])
         self.assertEqual(self.report()["unparseable_lines"], 2)
 
+    def test_malformed_record_fields_do_not_crash(self):
+        bad_msg = {"type": "assistant", "timestamp": ts(2), "message": "x"}
+        bad_ts = rec(3, launch("f2", FINDER_P))
+        bad_ts["timestamp"] = 5
+        self.write([rec(1, launch("f1", FINDER_P)), bad_msg, bad_ts])
+        r = self.report()
+        self.assertEqual(r["launches"], 2)
+        self.assertIsNone(r["review_rounds"])
+        self.assertIn("timestamp", r["review_rounds_reason"])
+
 
 class FixAgent(Fixture):
     def test_unset_hook_is_null_never_zero(self):
@@ -212,6 +247,13 @@ class FixAgent(Fixture):
         (line,) = [l for l in out.getvalue().splitlines() if "fix-agent" in l]
         self.assertEqual(line.strip(), "fix-agent spawns: not established (null)")
 
+    def test_set_hook_reports_a_true_zero(self):
+        with mock.patch.object(RL, "FIX_AGENT", lambda inp: False):
+            self.write(self.control())
+            r = self.report()
+        self.assertEqual(r["fix_agent"], 0)
+        self.assertEqual(r["fix_agent_label"], "counted by FIX_AGENT")
+
     def test_set_hook_counts_and_may_sit_between_rounds(self):
         with mock.patch.object(RL, "FIX_AGENT", lambda inp: "review fixes" in (inp.get("prompt") or "")):
             self.write([rec(1, launch("f1", FINDER_P)), rec(10, launch("x1", FIX_P)),
@@ -232,15 +274,59 @@ class NullRounds(Fixture):
         self.assertIsNone(rounds)
         self.assertIn(needle, reason)
 
-    def test_both_seeded_commits_are_validated(self):
-        for commit in (COMMIT, PIN):
-            with self.subTest(commit=commit):
-                self.env(commit)
-                self.assertEqual(self.rounds(self.control()), (2, None))
+    def test_only_the_hand_counted_commit_is_validated(self):
+        self.assertEqual(set(RL.VALIDATED_COMMITS), {COMMIT})
+        self.assertEqual(self.rounds(self.control()), (2, None))
+        # R1's control pin fails closed until a replicate that ran it is hand-counted.
+        self.env(PIN)
+        self.assertNull(self.control(), "not validated against " + PIN)
 
-    def test_unvalidated_commit(self):
+    def test_unvalidated_commit_nulls_every_signature_count(self):
         self.env("0" * 40)
         self.assertNull(self.control(), "not validated against " + "0" * 40)
+        r = self.report()
+        self.assertEqual((r["finder"], r["recheck"], r["fix_agent"]), (None, None, None))
+        self.assertEqual(r["fix_agent_label"], "not validated for this plugin_commit")
+        # The launches are still listed, with the kind each signature gave.
+        self.assertEqual(r["launches"], 4)
+        self.assertEqual([c["kind"] for c in r["classified_launches"]],
+                         ["finder", "finder", "recheck"])
+        self.assertEqual(r["unclassified"], 1)
+
+    def test_unparseable_line_nulls_rounds(self):
+        self.write(self.control(), raw_lines=['{"type": "assistant", "mess'])
+        r = self.report()
+        self.assertIsNone(r["review_rounds"])
+        self.assertIn("1 unparseable", r["review_rounds_reason"])
+
+    def test_send_message_nulls_rounds(self):
+        self.assertNull(self.control() + [rec(70, {"type": "tool_use", "id": "s1",
+                                                    "name": "SendMessage", "input": {"to": "a"}})],
+                        "SendMessage")
+
+    def test_parent_tool_between_finders_nulls_rounds(self):
+        # A second fan-out separated only by the parent's own fix and commit.
+        for tool in ("Edit", "Write", "Bash", "SomeNewTool"):
+            with self.subTest(tool=tool):
+                self.assertNull([rec(1, launch("f1", FINDER_P)),
+                                 rec(10, {"type": "tool_use", "id": "t1", "name": tool, "input": {}}),
+                                 rec(20, launch("f2", FINDER_P))],
+                                "between the first and last finder launch")
+
+    def test_read_only_tools_between_finders_are_allowed(self):
+        self.assertEqual(self.rounds(
+            [rec(1, launch("f1", FINDER_P))]
+            + [rec(2 + i, {"type": "tool_use", "id": "t%d" % i, "name": t, "input": {}})
+               for i, t in enumerate(("Read", "Grep", "Glob"))]
+            + [rec(20, launch("f2", FINDER_P))]), (1, None))
+
+    def test_fixes_after_round_one_are_the_control_shape(self):
+        # The parent's fix and commit sit after the last finder and before the re-check.
+        self.assertEqual(self.rounds(
+            [rec(1, launch("f1", FINDER_P)), rec(2, launch("f2", FINDER_P)),
+             rec(10, {"type": "tool_use", "id": "e1", "name": "Edit", "input": {}}),
+             rec(11, {"type": "tool_use", "id": "b1", "name": "Bash", "input": {}}),
+             rec(30, launch("r1", RECHECK_P))]), (2, None))
 
     def test_unrecorded_commit(self):
         self.env(None)
@@ -262,9 +348,9 @@ class NullRounds(Fixture):
         self.assertNull([rec(1, launch("f1", FINDER_P)), rec(30, launch("r1", RECHECK_P)),
                          rec(60, launch("f2", FINDER_P))], "after a re-check")
 
-    def test_downstream_rearm(self):
+    def test_downstream_rearm_or_delegated_fix(self):
         self.assertNull([rec(1, launch("f1", FINDER_P)), rec(20, launch("a1", AC_P)),
-                         rec(30, launch("r1", RECHECK_P))], "downstream re-arm")
+                         rec(30, launch("r1", RECHECK_P))], "a downstream re-arm, or a delegated fix")
 
     def test_split_finders(self):
         self.assertNull([rec(1, launch("f1", FINDER_P)), rec(20, launch("a1", AC_P)),
@@ -293,6 +379,27 @@ class Errors(unittest.TestCase):
             reps = json.loads(out.getvalue())
             self.assertEqual([("error" in r) for r in reps], [True, True])
             self.assertFalse(any("review_rounds" in r for r in reps))
+
+    def test_malformed_environment_is_an_error_row_and_the_batch_continues(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = []
+            for name, env in (("rp-good", json.dumps({"project_slug": SLUG, "plugin_commit": COMMIT})),
+                              ("rp-torn", "{"),
+                              ("rp-list", json.dumps({"project_slug": SLUG, "plugin_commit": ["x"]})),
+                              ("rp-array", "[1]")):
+                rdir = pathlib.Path(tmp) / name
+                pdir = rdir / "home" / ".claude" / "projects" / SLUG
+                pdir.mkdir(parents=True)
+                (pdir / "a.jsonl").write_text(json.dumps(rec(1, launch("f1", FINDER_P))) + "\n")
+                (rdir / "environment.json").write_text(env)
+                rows.append(str(rdir))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = RL.main(rows + ["--json"])
+            self.assertEqual(code, 1)
+            reps = json.loads(out.getvalue())
+            self.assertEqual([("error" in r) for r in reps], [False, True, True, True])
+            self.assertEqual(reps[0]["finder"], 1)
 
 
 if __name__ == "__main__":
